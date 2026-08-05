@@ -1,0 +1,16 @@
+{
+  "name": "Fog Nudger",
+  "version": "0.1.0",
+  "manifest_version": 1,
+  "author": "Captain Chocolatedessert",
+  "homepage_url": "https://github.com/CaptainChocolatedessert/fog-nudger",
+  "description": "Trace the walls out of a map image and propose them as fog geometry, then nudge them into place.",
+  "background_url": "/fog-nudger/background.html",
+  "action": {
+    "title": "Fog Nudger",
+    "icon": "/fog-nudger/nudge-action.svg",
+    "popover": "/fog-nudger/panel.html",
+    "width": 320,
+    "height": 200
+  }
+}

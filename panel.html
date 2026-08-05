@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fog Nudger</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        padding: 0.9rem 1rem;
+        font-family: system-ui, sans-serif;
+        font-size: 0.85rem;
+        line-height: 1.45;
+      }
+      h1 { font-size: 0.95rem; margin: 0 0 0.5rem; font-weight: 600; }
+      p { margin: 0.4rem 0; }
+      #status { opacity: 0.85; }
+      #status[data-state="bad"] { color: #c0392b; opacity: 1; }
+      code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
+    </style>
+  </head>
+  <body>
+    <h1>Fog Nudger</h1>
+    <!--
+      Deliberately says something in every state, including the boring one. A panel that only
+      speaks when something is wrong cannot tell "fine" from "never ran" — which is the failure
+      this whole panel exists to rule out at this stage.
+    -->
+    <p id="status" data-state="pending">Connecting&hellip;</p>
+    <p><code>Skeleton build — no tools yet.</code></p>
+    <script type="module" src="./src/panel.ts"></script>
+  </body>
+</html>

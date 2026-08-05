@@ -158,6 +158,13 @@ distinct colour and let them delete what is wrong with the existing tools". The 
 cheaper and uses tools the GM already knows. Deferred until Q1 and Q2 land, because they constrain
 it.
 
+**The skeleton already declares an action with a popover, and that is not an answer to this.** It
+is there as a *second signal*: the background page reports through the dev log, the popover reports
+on screen, and two independent signals separate "the manifest never loaded" from "the manifest
+loaded and the background script died" — which one signal cannot do. Whether the shipped surface is
+an action, a tool, or context menu items is still open, and a tool remains the likelier fit for an
+authoring workflow.
+
 ---
 
 ## 5. Constraints inherited from the sibling — verified, not guessed
@@ -268,7 +275,12 @@ Deliberately front-loads the unknowns. Steps 0–2 are cheap and answer whether 
 possible at all; there is no point tuning an extractor before knowing walls can be written.
 
 0. **Skeleton project** — Vite, TypeScript, vitest, manifest, Pages deploy. Copy the sibling's
-   shape; it is known to work and the CI/lockfile traps are already recorded.
+   shape; it is known to work and the CI/lockfile traps are already recorded. Two things get
+   copied close to verbatim because they are load-bearing here from the first probe onward: the
+   dev log shim with its per-client labels, and `describeError`. The second matters more than its
+   size suggests — Q1 is answered by writing walls and reading what Owlbear says back, so a
+   refusal *is* the finding, and a reporter that tests `instanceof Error` throws away every
+   refusal the SDK can produce.
 1. **Answer Q1 and Q2 in a room.** One hand-built wall, added two ways, plus an attempt to edit it.
    Nothing else matters until this lands.
 2. **Trace harness first, extension second.** The sibling's harness — a local page with a file
@@ -302,3 +314,22 @@ tell either project about it. Note fixes in both design records when they happen
 
 **Revisit when** the pipeline here has settled and the two versions have visibly converged — at
 that point extract the common half into a package and take the release overhead knowingly.
+
+---
+
+## 9. Licence — GPL-3.0-or-later
+
+Free-tier Pages requires a public repository, so a licence has to exist before the first push.
+Matching the sibling, and chosen as the option least likely to need changing rather than on
+principle:
+
+- **Nothing is published until the first push**, so up to that point the choice costs nothing to
+  revise.
+- **Relicensing is one-directional in practice.** The copyright holder can relicense at any time,
+  but anyone who took a copy under the old terms keeps those rights to *that copy* permanently, and
+  once outside contributors land code they hold copyright on their parts. With no contributors,
+  moving to something permissive later stays easy; the reverse direction is the one that gets stuck.
+- **Q1 may remove the choice.** Dynamic Fog is GPLv3. Interoperating with it is not deriving from
+  it, but if the answer to Q1 turns out to be (b) — matching its private line format — the
+  relationship gets closer, and any code actually copied rather than merely interoperated with would
+  settle the question outright.
