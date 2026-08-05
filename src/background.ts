@@ -11,7 +11,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 
-installDevLog();
+installDevLog("bg");
 
 OBR.onReady(async () => {
   // Label this surface before anything else logs — every client in the room, and every iframe

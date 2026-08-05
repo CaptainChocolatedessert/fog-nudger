@@ -9,8 +9,9 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
+import { themeVariables } from "./theme";
 
-installDevLog();
+installDevLog("ui");
 
 const status = document.getElementById("status");
 
@@ -18,6 +19,20 @@ function report(text: string, state: "ok" | "bad"): void {
   if (!status) return;
   status.textContent = text;
   status.dataset.state = state;
+}
+
+/**
+ * Paint the page in Owlbear's colours, over the stylesheet's own readable defaults.
+ *
+ * Failure here is deliberately quiet on screen and loud in the log: a panel wearing the wrong
+ * greys is still perfectly usable, so an error message about it would be noise sitting where the
+ * actual content goes.
+ */
+function applyTheme(theme: unknown): void {
+  const style = document.documentElement.style;
+  for (const [property, value] of Object.entries(themeVariables(theme))) {
+    style.setProperty(property, value);
+  }
 }
 
 OBR.onReady(async () => {
@@ -33,6 +48,17 @@ OBR.onReady(async () => {
   }
 
   devLog("info", "panel: connection ready");
+
+  // Subscribe before reading, for the same reason the background page does: a theme changed in the
+  // window between the two would otherwise never be observed. Both paths run `applyTheme`, which
+  // is idempotent, so the overlap costs nothing.
+  OBR.theme.onChange(applyTheme);
+  try {
+    applyTheme(await OBR.theme.getTheme());
+  } catch (error) {
+    devLog("warn", "could not read Owlbear's theme", describeError(error));
+  }
+
   try {
     // A popover's connection going ready is NOT the scene being ready — the sibling lost two days
     // to treating them as the same event. Ask separately, and say which of the two is true.

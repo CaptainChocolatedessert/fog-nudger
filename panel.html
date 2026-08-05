@@ -4,19 +4,44 @@
     <meta charset="utf-8" />
     <title>Fog Nudger</title>
     <style>
-      :root { color-scheme: light dark; }
+      /*
+        A complete, opaque, self-consistent palette, overridden at runtime from Owlbear's own
+        theme. Not `prefers-color-scheme`: Owlbear carries its own light/dark setting and the OS
+        preference can disagree with the surface this panel is sitting on.
+
+        These defaults are load-bearing rather than decorative. The first version set no
+        background at all, which left the iframe transparent — Owlbear's dark popover showed
+        through while the text stayed the UA's black. So the page must read correctly before the
+        theme arrives, if the theme call fails, and if the payload is missing fields.
+
+        Dark, because that is Owlbear's default. Being wrong about that costs a panel that does
+        not match its host; having no background at all costs a panel that cannot be read.
+      */
+      :root {
+        --bg: #222639;
+        --text: #ffffff;
+        --dim: rgba(255, 255, 255, 0.7);
+        --accent: #bb99ff;
+        --danger: #ff8a80;
+      }
       body {
         margin: 0;
         padding: 0.9rem 1rem;
         font-family: system-ui, sans-serif;
         font-size: 0.85rem;
         line-height: 1.45;
+        background: var(--bg);
+        color: var(--text);
       }
       h1 { font-size: 0.95rem; margin: 0 0 0.5rem; font-weight: 600; }
       p { margin: 0.4rem 0; }
-      #status { opacity: 0.85; }
-      #status[data-state="bad"] { color: #c0392b; opacity: 1; }
-      code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
+      #status { color: var(--dim); }
+      #status[data-state="bad"] { color: var(--danger); }
+      code {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 0.9em;
+        color: var(--dim);
+      }
     </style>
   </head>
   <body>

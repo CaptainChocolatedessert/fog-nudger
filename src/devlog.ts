@@ -112,9 +112,19 @@ export function devLog(level: LogLevel, ...args: unknown[]): void {
 
 let installed = false;
 
-export function installDevLog(): void {
+/**
+ * `surface` is taken here, at module load, rather than waiting for the full label.
+ *
+ * The complete label needs the player's role and id, which cost an SDK round trip and are not
+ * available until Owlbear is ready. Anything that fails before then — and a failure during
+ * startup is the one hardest to place afterwards — would otherwise log as a bare `?`,
+ * indistinguishable from the same bare `?` coming out of the other iframe. Half a label
+ * immediately beats a whole one later.
+ */
+export function installDevLog(surface: DevLogSurface): void {
   if (!import.meta.env.DEV || installed) return;
   installed = true;
+  clientLabel = `?/${surface}`;
 
   window.addEventListener("error", (event) => {
     devLog("error", event.message, `${event.filename}:${event.lineno}:${event.colno}`);
