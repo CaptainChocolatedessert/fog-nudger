@@ -7,7 +7,13 @@
  * production builds.
  */
 
-const ENDPOINT = "http://localhost:9999/log";
+/**
+ * Not 9999, which is the sibling project's receiver and is often already running on the same
+ * machine. Sharing it is not a harmless collision: this shim fires and forgets, so posting to
+ * the wrong receiver succeeds, and Fog Nudger's output lands in the other project's log with
+ * nothing anywhere to say so. Must stay in step with `tools/devlog-server.mjs`.
+ */
+const ENDPOINT = "http://localhost:9998/log";
 
 export type LogLevel = "info" | "warn" | "error" | "reject" | "console";
 

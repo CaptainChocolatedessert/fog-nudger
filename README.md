@@ -41,13 +41,17 @@ npm test
 npm run dev
 ```
 
-`npm run dev` serves the extension on `http://localhost:5173/fog-nudger/`; add
-`http://localhost:5173/fog-nudger/manifest.json` as a custom extension in an Owlbear room to load
+`npm run dev` serves the extension on `http://localhost:5273/fog-nudger/`; add
+`http://localhost:5273/fog-nudger/manifest.json` as a custom extension in an Owlbear room to load
 it. Note that the SDK stays inert outside a room — running the dev server and opening it directly
 in a browser executes the code but produces no Owlbear activity, and that silence is correct.
 
-`npm run devlog` starts a small receiver on port 9999 that collects log output from inside the
+`npm run devlog` starts a small receiver on port 9998 that collects log output from inside the
 extension iframe into `dev.log`.
+
+Neither port is the default. Cartographer's Fog uses 5173 and 9999, and both projects get
+developed on the same machine — a shared log receiver would silently file this project's output
+under the other one's.
 
 ## Licence
 

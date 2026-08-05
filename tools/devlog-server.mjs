@@ -11,7 +11,9 @@ import { createServer } from "node:http";
 import { appendFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-const PORT = 9999;
+// Not 9999 — that is the sibling project's receiver, and both get run on the same machine.
+// Must stay in step with the ENDPOINT in src/devlog.ts.
+const PORT = 9998;
 const LOG_FILE = fileURLToPath(new URL("../dev.log", import.meta.url));
 const MAX_BODY_BYTES = 1_000_000;
 

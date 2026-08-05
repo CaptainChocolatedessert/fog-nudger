@@ -11,6 +11,17 @@ export default defineConfig({
   base: "/fog-nudger/",
   server: {
     /**
+     * Not Vite's default 5173, because the sibling project already uses it and both dev
+     * servers get run on the same machine.
+     *
+     * `strictPort` matters more than the number. Vite's default on a taken port is to
+     * quietly pick the next free one, which leaves the URL registered as a custom extension
+     * in Owlbear pointing at the *other* project's dev server — a working page serving the
+     * wrong extension. Failing to start is the readable outcome.
+     */
+    port: 5273,
+    strictPort: true,
+    /**
      * Owlbear fetches the manifest from its own HTTPS origin, so loading the extension
      * from this dev server is a cross-origin request. Vite's default is to refuse those
      * — a deliberate hardening, since otherwise any page visited while developing could
