@@ -7,7 +7,7 @@
  */
 
 import OBR from "@owlbear-rodeo/sdk";
-import { installDevLog, devLog } from "./devlog";
+import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 
 installDevLog();
@@ -21,6 +21,17 @@ function report(text: string, state: "ok" | "bad"): void {
 }
 
 OBR.onReady(async () => {
+  // Same first move as the background page, and for the same reason. This page is a separate
+  // iframe from it, so it has its own copy of the shim with its own unset label — which is how
+  // this was missed the first time: the background page was labelled, the log looked labelled,
+  // and the panel's lines were quietly going out as `?`.
+  try {
+    const role = await OBR.player.getRole();
+    setDevLogLabel(formatDevLogLabel(role, OBR.player.id, "ui"));
+  } catch (error) {
+    devLog("warn", "could not read player role", describeError(error));
+  }
+
   devLog("info", "panel: connection ready");
   try {
     // A popover's connection going ready is NOT the scene being ready — the sibling lost two days

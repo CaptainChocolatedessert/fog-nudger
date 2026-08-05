@@ -8,17 +8,18 @@
  */
 
 import OBR from "@owlbear-rodeo/sdk";
-import { installDevLog, devLog, setDevLogLabel } from "./devlog";
+import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 
 installDevLog();
 
 OBR.onReady(async () => {
-  // Label this client before anything else logs — every client in the room shares one receiver,
-  // and unlabelled interleaved output is actively misleading.
+  // Label this surface before anything else logs — every client in the room, and every iframe
+  // within a client, shares one receiver, and unlabelled interleaved output is actively
+  // misleading rather than merely unhelpful.
   try {
     const role = await OBR.player.getRole();
-    setDevLogLabel(`${role === "GM" ? "GM" : "player"}:${OBR.player.id.slice(0, 4)}`);
+    setDevLogLabel(formatDevLogLabel(role, OBR.player.id, "bg"));
   } catch (error) {
     devLog("warn", "could not read player role", describeError(error));
   }

@@ -32,6 +32,35 @@ export function setDevLogLabel(label: string): void {
 }
 
 /**
+ * Which of a client's iframes a line came from.
+ *
+ * One client runs at least two: the headless background page and whatever UI is open. They are
+ * separate JavaScript realms sharing nothing, so they log independently and their lines interleave
+ * — and the two are easy to confuse, because the same message can plausibly come from either.
+ */
+export type DevLogSurface = "bg" | "ui";
+
+/**
+ * Build the label that identifies one surface of one client.
+ *
+ * Kept here, pure and beside the shim it feeds, so every entry point produces the same shape.
+ * Two of them constructing labels independently is how one of them ends up not constructing one
+ * at all — which is exactly what happened: the panel logged as `?` while the background page was
+ * correctly labelled, and with a second client in the room those anonymous lines would have
+ * interleaved into what reads as a single client.
+ */
+export function formatDevLogLabel(
+  role: string,
+  playerId: string,
+  surface: DevLogSurface,
+): string {
+  // Owlbear's roles are "GM" and "PLAYER". Anything else is unexpected rather than impossible,
+  // and mislabelling it "player" would hide that, so it passes through as itself.
+  const who = role === "GM" ? "GM" : role === "PLAYER" ? "player" : role;
+  return `${who}:${playerId.slice(0, 4)}/${surface}`;
+}
+
+/**
  * Stringify log arguments without throwing. Anything can end up in a log call — circular SDK
  * items, Errors, DOM events — and the shim losing a message is much worse than the message
  * being ugly, since the message is usually why we are looking.
