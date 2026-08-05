@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Dev log shim output (see CLAUDE.md)
+dev.log
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings and tooling
+.claude/settings.local.json
+.claude/launch.json
+
+# Private operating notes for Claude — not project documentation.
+# Project docs live in README.md and DESIGN.md.
+CLAUDE.md
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
