@@ -73,6 +73,28 @@ wall actually is.
 So step one is largely a **re-aim of existing tested code** rather than fresh invention. The tuning
 levers, in the sibling's order of payoff: `minContourLength`, `blurSigma`, `sauvolaRadius`.
 
+### Dynamic Fog does the stroking, so we must not — *read from source, 2026-08-04*
+
+Its wall geometry helper does not treat a drawn line as the wall. It **strokes the path to the
+drawing's own `strokeWidth`** and takes the contour of the stroked result, giving a thin closed loop
+around the stroke. Curves are sampled at a fixed interval, and open doors are subtracted from the
+result with a path operation.
+
+That is the two-lines-per-stroke shape §3 warns against, adopted deliberately — at a stroke a few
+pixels wide the loop is simply a wall with thickness, and a closed loop is better fog geometry than
+an open line because it blocks identically from both sides.
+
+**The consequence for this project is a trap avoided.** Emitting contours of the map's ink would put
+the stroking step in twice: our contour, stroked again into a contour of a contour, yielding walls
+bounding the *edges* of each drawn wall with a hollow gap between them — the failure mode §3 exists
+to prevent, arriving through the back door after the pipeline did the right thing.
+
+So the output stays exactly what the sibling's pipeline already produces: **centrelines, emitted as
+thin drawings**, with the wall's thickness carried by `strokeWidth` and the stroking left to
+Dynamic Fog. This also settles a question that would otherwise have needed answering — the extracted
+ink's measured width is not something we have to reproduce as geometry; it is at most a hint for
+choosing a `strokeWidth`.
+
 ### But the quality bar inverts, and that changes the tuning
 
 In cartographers-fog the output is decoration and approximation is *desirable* — there is a
@@ -93,8 +115,9 @@ consequences, each the reverse of the sibling's choice:
 ### What is genuinely new
 
 - **Joining.** Skeleton chains must become long polylines with clean junctions, not a scatter of
-  short segments. A `Wall` carries `points: Vector2[]`, so an entire room outline can be one item —
-  which matters enormously for the item budget (§5).
+  short segments. Both candidate outputs carry a whole polyline in one item — a `WALL` its `points`,
+  a `PATH` its commands — so an entire room outline can be a single item, which matters enormously
+  for the item budget (§5).
 - **Classification.** Which extracted lines are walls at all? A map's ink includes furniture,
   grids, labels, hatching and compass roses. Some of this can be filtered geometrically; the rest is
   the GM's call, which is the review step.
@@ -104,52 +127,100 @@ consequences, each the reverse of the sibling's choice:
 
 ## 4. Open questions — the ones that block
 
-These are first, because the architecture depends on the answers and none is settled. **Each names
-how to answer it.** The sibling's hardest-won lesson is that a diagnostic which cannot distinguish
-its outcomes will be believed anyway and will invent findings — so these want direct tests, not
-reasoning.
+These are first, because the architecture depends on the answers. **Each names how to answer it.**
+The sibling's hardest-won lesson is that a diagnostic which cannot distinguish its outcomes will be
+believed anyway and will invent findings — so these want direct tests, not reasoning.
 
-### Q1. How is a wall actually written? *(blocks everything)*
+**Most of this section was resolved on 2026-08-04 by reading Dynamic Fog's source**, which is public
+at [owlbear-rodeo/dynamic-fog](https://github.com/owlbear-rodeo/dynamic-fog), GPLv3, and published
+by Owlbear deliberately as an SDK example. That was far cheaper than a room and answered more than
+expected. It carries a standing limit that shapes everything below:
+
+> **Reading Dynamic Fog establishes what Dynamic Fog does. It cannot establish what Owlbear does.**
+> The renderer is in Owlbear's closed client. Anything below phrased as a property of the *renderer*
+> rather than of the *extension* is inference, and is marked as such.
+
+Two smaller caveats on the same reading: the repository was last pushed 2025-08-14, so the deployed
+extension may have moved since; and what was read was the wall reconciliation path, the batching
+layer, the drawing type and the wall geometry helper — not the whole repository.
+
+### Q1. How is a wall actually written? — *narrowed to one test; (b) recommended*
 
 `WALL` is a first-class SDK item type — `points`, `doubleSided`, `blocking` — and the SDK ships a
-`WallBuilder`. So the obvious path is to build `Wall` items and add them to the scene.
+`WallBuilder`. The sibling separately verified by item census that **Dynamic Fog does not store
+walls as `WALL` items**: the networked representation is drawings on the `FOG` layer, and each
+client materialises its own local `WALL` items from them.
 
-But the sibling verified something that complicates it: **Dynamic Fog does not store walls as
-`WALL` items.** It keeps the networked representation as `LINE` and `PATH` items on the `FOG` layer,
-and *each client materialises its own local `WALL` items from them*. Watching an item census while
-drawing made it unambiguous — every new networked `LINE` produced exactly one new local `WALL`.
+**The source confirms that census and supplies the mechanism.** A reactor watches networked items
+matching `layer === "FOG"` and being a shape, path, curve or line. For each, an actor builds `WALL`
+items with the SDK's own `buildWall()`, attached to the source drawing. Every write — add, delete,
+update — goes through a batching layer that targets `OBR.scene.local` exclusively. There is no
+networked write anywhere in that path.
 
-That leaves two candidate write paths, with very different consequences:
+Three things follow, in descending order of confidence:
 
-- **(a) Emit `WALL` items into the scene directly.** No dependency on another extension's private
-  schema. Unknown whether the fog renderer honours scene-level walls, or only client-local ones.
-- **(b) Emit `LINE`/`PATH` items on the `FOG` layer, shaped as Dynamic Fog expects**, and let it
-  materialise the walls. Guaranteed to match what already works, but couples this project to
-  another extension's undocumented metadata — and `doubleSided` / `blocking` have to be encoded
-  somewhere, so there *is* a schema to match.
+- **The fog engine consumes first-class `WALL` items.** Not a private representation. Dynamic Fog
+  is an editor for Owlbear's engine, not the engine.
+- **A `WALL` item in the *local* set occludes.** Proven by Dynamic Fog working at all.
+- **Whether a `WALL` item in the *networked* scene occludes is still unknown.** Dynamic Fog never
+  writes one, so its source is silent, and the code that would answer is closed. Plausible, since a
+  client presumably renders both sets — but that is reasoning, not evidence, and it is exactly the
+  kind of plausible gap this project has agreed not to argue its way across.
 
-**How to answer:** build one `Wall` with `WallBuilder`, add it to the scene in a room with fog
-running, and look at whether it occludes. Then repeat with a local add. Two tests, one variable
-each — the sibling's rule, learned twice the hard way: *a comparison that changes two things at once
-settles nothing.*
+**The correction that matters.** This section previously claimed path (b) would couple us to
+Dynamic Fog's "undocumented metadata", and that `doubleSided`/`blocking` must be encoded somewhere.
+**That was wrong.** The reactor's filter is layer plus item type and nothing else. Dynamic Fog does
+carry a reverse-domain metadata namespace, but it is used for doors and lights — a plain wall needs
+none of it. So (b) means emitting an ordinary drawing on a public layer, which is not a private
+schema at all, and the licence concern raised under Q3 largely dissolves with it.
 
-### Q2. Are walls we create editable by hand? *(decides whether "refining" is possible at all)*
+So the two paths now read:
 
-The product is a proposal the GM corrects. If the answer to Q1 is (a) and raw `WALL` items turn out
-not to be editable with Owlbear's own drawing tools, then the extraction produces geometry nobody
-can nudge — which defeats the point of the project. If (b), editing comes free because the walls
-*are* ordinary drawn lines.
+- **(a) Emit `WALL` items directly.** Networked: may not render — the one open question. Local:
+  renders, but a local item is per-client and not persisted in the scene, so every participant would
+  need this extension running and recomputing. That is a heavy thing to require of an authoring tool
+  used once per map at prep time.
+- **(b) Emit drawings on the `FOG` layer** and let Dynamic Fog materialise the walls. Matches what
+  already works, needs no private schema, and — per Q2 — is the only path where the output is
+  editable. **Recommended.**
 
-**This may well decide Q1 on its own**, regardless of which path renders. Answer it in the same
-room session.
+**What is left to test:** does a `WALL` item added to the networked scene occlude? One test, one
+variable, with a real hypothesis rather than a fishing expedition. Worth doing even though (b) is
+recommended, because a yes would mean the project *can* stand alone, and that is worth knowing
+before accepting a hard dependency.
 
-### Q3. Is Dynamic Fog required, or is fog core to Owlbear now?
+### Q2. Are walls we create editable by hand? — *largely answered, and it decides Q1*
 
-`Wall` and `Light` being first-class SDK types suggests the engine is Owlbear's own and Dynamic Fog
-is an editor for it. If so, this extension can stand alone. If not, it has a hard dependency worth
-stating up front. **Note Dynamic Fog is GPLv3** — interoperating with it is not deriving from it,
-but matching its private data format is a closer relationship than reading public item types, and
-that is one more reason to prefer (a) if it works.
+The product is a proposal the GM corrects, so this was always the question with teeth.
+
+**Dynamic Fog's walls are derived state, not stored state.** On any change to a drawing, the actor
+recomputes the wall's `points` from its parent. A wall is a continuously reconciled projection of a
+networked drawing — which means the thing a GM edits is the *drawing*, and the wall follows.
+
+The consequence for (a) is decisive: Dynamic Fog's reactor filters for drawings, and a `WALL` item
+is not one, so it would ignore ours entirely. Its tools edit drawings. **A raw `WALL` item is
+therefore not editable with them** — the extraction would produce geometry nobody can nudge, which
+defeats the point of the project. Under (b), editing comes free, because the walls *are* ordinary
+drawn lines and the GM already knows the tools.
+
+Not fully closed: whether Dynamic Fog's own line tool will select and edit a `FOG`-layer drawing it
+did not create. Its filter is by layer and type rather than by provenance, so it should — reasoning,
+not evidence, and cheap to confirm in the same room session as Q1.
+
+### Q3. Is Dynamic Fog required, or is fog core to Owlbear now? — *answered, and it cuts both ways*
+
+**The engine is Owlbear's.** `Wall` and `Light` are SDK types, `buildWall` is an SDK builder, and
+Dynamic Fog is published as an example of using them. It is an editor for a renderer it does not own.
+
+But that does not make this extension standalone, and the direction of the dependency is the
+opposite of what it first looks like. **Under (b), Dynamic Fog is a hard runtime dependency** — it
+is the thing that turns our drawings into walls, and without it installed we would emit lines that
+nobody converts. Under (a) there is no dependency, but only if networked walls render, and only at
+the cost of the output being uneditable. **State the dependency up front in the README** rather than
+letting a GM discover it as fog that does nothing.
+
+The GPLv3 concern is much reduced: what (b) matches is a standard item type on a standard layer, not
+a private format. Interoperating at that level is no closer a relationship than using the SDK.
 
 ### Q4. What does the GM actually review, and how?
 
@@ -281,8 +352,11 @@ possible at all; there is no point tuning an extractor before knowing walls can 
    size suggests — Q1 is answered by writing walls and reading what Owlbear says back, so a
    refusal *is* the finding, and a reporter that tests `instanceof Error` throws away every
    refusal the SDK can produce.
-1. **Answer Q1 and Q2 in a room.** One hand-built wall, added two ways, plus an attempt to edit it.
-   Nothing else matters until this lands.
+1. **Close what is left of Q1 and Q2 in a room.** Reading Dynamic Fog's source did most of this
+   from a desk, and the residue is three cheap checks in one session: does a networked `WALL` item
+   occlude; will Dynamic Fog's line tool select and edit a `FOG`-layer drawing it did not create;
+   and does a drawing we emit get picked up and materialised as a wall at all. The first is the only
+   one that could still change the architecture.
 2. **Trace harness first, extension second.** The sibling's harness — a local page with a file
    picker that runs the pipeline on a map image and draws the result — is where the tuning work
    actually happens, and it is far faster than a room. **Known structural limit: the harness never
