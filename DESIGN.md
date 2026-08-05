@@ -230,6 +230,38 @@ The sibling's culture is the reason it works, and it costs almost nothing to ado
 
 ---
 
+### Rejected: scoring extraction against hand-drawn walls — 2026-08-04
+
+Proposed and closed the same day. A map whose walls the GM has already drawn looks like ground
+truth, and the appeal is obvious: it would turn "does this look about right" into a number.
+
+It does not survive contact with what a wall is.
+
+- **Where a wall goes along a stroke of ink is a judgement.** Inner edge, centre and outer edge are
+  all defensible, and whether a gap is a doorway or a break in the linework is a *reading* of the
+  map rather than a fact about it. A diff would score the extractor down for disagreeing with an
+  arbitrary choice, which drives tuning toward reproducing one GM's habits instead of toward being
+  useful (user, 2026-08-04).
+- **One map cannot generalise**, and a different drawing style would score differently for reasons
+  that say nothing about the algorithm. The sibling has already paid for this exact mistake once,
+  in a different costume: its wall margin's safety turned out to be *a property of the test map*,
+  not of the margin — fine on the map it was judged against, a spoiler on a tighter one.
+
+The compounding danger is that such a score would look rigorous while measuring the fixture. That
+is this project's inherited first lesson — a diagnostic that cannot distinguish its outcomes will be
+believed anyway — arriving before any code was written.
+
+**If evaluation is ever revisited, the surviving form is topological, not geometric.** What matters
+for fog is not whether a wall is within some distance of where a human would have put it, but
+whether sight *leaks*. A wall a few pixels off encloses the same room and is harmless; a missing
+wall merges two rooms, which is the failure that ruins a session. Comparing enclosed regions rather
+than coordinates is immune to the wiggle room, because the wiggle does not change what is enclosed.
+
+**Not rejected, and separate from all of this:** dumping one of Dynamic Fog's own `LINE` items, plus
+any scene metadata under its namespace, from a room where walls already exist. That is
+reconnaissance rather than evaluation — a worked example of the thing Q1 does not know how to write
+— and it costs a few lines in the session that answers Q1 and Q2 anyway.
+
 ## 7. Proposed build order
 
 Deliberately front-loads the unknowns. Steps 0–2 are cheap and answer whether the project is
