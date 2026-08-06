@@ -10,13 +10,12 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 import { themeVariables } from "./theme";
-import {
-  inspectFogShapes,
-  logCensus,
-  placeProbeShapes,
-  promoteStaged,
-  removeProbeShapes,
-} from "./probe/fogProbe";
+// `placeProbeShapes`, `promoteStaged` and `removeProbeShapes` are deliberately NOT wired up. They
+// answered roadmap step 1 — every finding is recorded in DESIGN.md §4 — and leaving their buttons
+// on the panel would invite someone to scatter magenta squares across a real map. The code stays
+// so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
+// buttons back, and re-add the markup in panel.html.
+import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 
 installDevLog("ui");
 
@@ -107,11 +106,8 @@ OBR.onReady(async () => {
   }
 
   const buttons = [
-    wireButton("place", placeProbeShapes),
     wireButton("census", logCensus),
-    wireButton("promote", promoteStaged),
     wireButton("inspect", inspectFogShapes),
-    wireButton("remove", removeProbeShapes),
   ];
 
   try {
