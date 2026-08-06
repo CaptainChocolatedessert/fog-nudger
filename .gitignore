@@ -1,6 +1,12 @@
 # Dependencies
 node_modules/
 
+# Third-party source kept locally for reading only — see CLAUDE.md.
+# Deliberately NOT committed: it is someone else's GPLv3 code and vendoring it into this
+# repository would distribute it. Grepping a local clone is far cheaper than fetching files
+# one at a time over the API, which is the only reason it is here.
+reference/
+
 # Build output
 dist/
 dist-ssr/

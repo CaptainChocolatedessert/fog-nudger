@@ -218,6 +218,13 @@ where the nudging comes in, and it sets the safe direction for tuning — **err 
 wall**, because a GM notices a room that looks clipped far more readily than a door they were never
 meant to see.
 
+**Deferred out of the initial pipeline** (user, 2026-08-05). The only automatic implementation
+available is a global outward offset, and a single radius against variable ink width is not expected
+to be reliably right often enough to be worth having on by default. So the first version reveals to
+the ink's inner edge and rooms will look slightly clipped — a known, named cost of shipping the
+simple thing first, not an oversight. The precise version belongs with the tweaking tools (§11),
+where it can be local and GM-invoked.
+
 ### Superseded: centreline extraction — 2026-08-05
 
 The previous design reached for centrelines down the middle of the ink, on the argument that
@@ -260,7 +267,7 @@ re-proposed; it remains the shape of the eventual *door* work (§11).
 ## 5. The pipeline
 
 ```
-load → binarize → fill and label → discard outside → trace boundaries → simplify → offset → place → emit
+load → binarize → fill and label → discard outside → trace boundaries → simplify → place → emit
 ```
 
 ### What transfers from the sibling, and what does not
@@ -296,10 +303,9 @@ So simplification stays conservative, but for a changed reason: not because outw
 wrong, but because it is only correct within a bound the simplifier does not know about. Prefer more
 vertices over fewer; nobody looks at a fog region's vertex count.
 
-The half-wall offset should be a **deliberate, separately-controlled outward offset**, not a side
-effect of simplification. A single global radius is a blunt instrument against variable ink width —
-it under-covers heavy walls and over-covers light ones on the same map — and that bluntness is the
-known cost of this approach, with the precise alternative logged in §11.
+Whatever half-wall coverage eventually arrives must be a **deliberate, separately-controlled**
+stage, never a side effect of loosening simplification — otherwise one parameter is doing two jobs
+and neither can be tuned. It is not in the initial pipeline at all (§4).
 
 ### The two failure modes are not equally bad
 
@@ -320,32 +326,45 @@ will be believed anyway and will invent findings, so these want direct tests.
 **OQ1. Does a programmatically-created filled shape on the `FOG` layer behave as a native revealable
 region?** The whole design assumes yes. Answer by hand-building one and looking. *(room)*
 
-**OQ2. Does Dynamic Fog derive a wall at that shape's boundary, and what `strokeWidth` does it
-need?** Its helper strokes to the drawing's own `style.strokeWidth`; a zero or near-zero width may
-produce a degenerate or empty result. Answer by emitting the same shape at two widths — one
-variable. *(room, with Dynamic Fog installed)*
+**OQ2. Can a GM select and edit one of our emitted shapes by hand?** The entire refining half of the
+product depends on it, and an item created through the SDK is not obviously equivalent to one drawn
+with the fog tool — hit testing, locking and layer behaviour are all plausible places for them to
+differ. *(room)*
 
-**OQ3. Are `WALL` and `LIGHT` actually refused on the networked scene?** Confirms the reported
-local-only restriction. The finding is the rejection payload, which is exactly what `describeError`
-exists to preserve. *(room)*
+**OQ3. Do our shapes appear in the Outliner extension, and are they usable there?** A traced map
+emits tens of items at once. If they list, they need sensible `name` values or they will bury
+everything else a GM has in the scene; if they do not list, that is worth knowing before anyone
+relies on it for bulk selection. *(room, with Outliner installed)*
 
-**OQ4. Do fog shapes support holes?** A room with a central pillar is a region with a hole. A `Path`
+**OQ4. Does Dynamic Fog derive a wall at the shape's boundary, and does that depend on
+`strokeWidth`?** Its helper strokes to the drawing's own `style.strokeWidth`, so a zero width may
+produce a degenerate or empty result. This is **not** an architecture question any more — it is that
+we must pick a value when we emit, and the plausible default of zero could silently produce no walls
+while the fog itself looks perfect. One variable, two shapes. *(room, with Dynamic Fog installed)*
+
+**OQ5. Do fog shapes support holes?** A room with a central pillar is a region with a hole. A `Path`
 with correct winding should express it, and Dynamic Fog's helper explicitly mentions multiple
 contours from "a Path item with multiple inside shapes" — suggestive but not proof about *fog*
 rendering. *(room)*
 
-**OQ5. What partition granularity does a GM actually want?** One region per room, or per room plus
+**OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
 its adjacent corridor stub? Only answerable by running a real map at a real table.
 
-**OQ6. What does the GM review, and how?** The cheap answer is: emit, and let them use the native
-fog tools they already know. A dedicated review surface — accept/reject per region, re-run, revert —
-is more work and may not be needed. Deferred until a real map has been traced.
+**OQ7. What does the GM review, and how?** The cheap answer is: emit, and let them use the native
+fog tools they already know — which is what OQ2 and OQ3 are really probing. A dedicated review
+surface is more work and may not be needed. Deferred until a real map has been traced.
 
 The skeleton project already declares an action with a popover, and **that is not an answer to
-OQ6.** It exists as a second, independent signal: the background page reports through the dev log
+OQ7.** It exists as a second, independent signal: the background page reports through the dev log
 and the popover reports on screen, so the two separate "the manifest never loaded" from "the
 manifest loaded and the background script died". Whether the shipped surface is an action, a tool,
 or context menu items is still open, and a tool remains the likelier fit for an authoring workflow.
+
+### Closed without testing: are networked `WALL` items refused? — 2026-08-05
+
+Previously an open question, and dropped deliberately rather than answered. With fog shapes settled
+as the output, no decision anywhere in this project turns on the answer, so a test would produce a
+fact with nothing attached to it. The reported local-only restriction stands as reported (§3).
 
 ---
 
@@ -409,16 +428,28 @@ The sibling's culture is the reason it works, and it costs almost nothing to ado
 - **Diagnostics that fire unconditionally are worth their noise.** One that only fires when
   something is known to be wrong cannot distinguish "fine" from "never ran".
 
-### The region census — this project's standing diagnostic
+### The region census — cheap, unconditional, and not yet trusted
 
 Every pipeline run reports, unconditionally: region count, the area distribution, the fraction of
 map area in the largest region, and how many regions touch the image border.
 
-It is cheap, it reports in the healthy case as well as the broken one, and it detects the failure
-that matters most without anyone having to look at the map. A single region holding 60% of the map
-area is two dozen rooms merged through a doorway gap. A count of 400 is hatching being traced as
-rooms. Neither is visible by eye on a first glance at a rendered result, and both are obvious in
-four numbers.
+**The claim being made for it is deliberately narrow** (user, 2026-08-05, sceptical and right to
+be). Absolute thresholds across different maps are exactly the "property of the fixture" trap this
+project has already recorded twice, and a healthy count varies wildly between a six-room dungeon and
+a sprawling cave. What it is likely to catch is the catastrophic case — one region holding most of
+the map area, which is rooms merged through a doorway gap — and what it is likely to be *good* at is
+**comparison**: same map, one parameter changed, did the numbers move. That is a much safer claim
+than "these numbers tell you if the output is right", and it is the one to hold until evidence says
+otherwise.
+
+There is a second, more reliable justification that does not depend on it being diagnostic at all:
+it is the **only channel through which the output can be reasoned about without looking at pixels**.
+An image-processing project where every judgement requires rendering and inspecting an image is
+enormously expensive to work on. Numbers are cheap. Even a census that turns out to be a weak
+quality signal earns its place by making the results discussable.
+
+Revisit once it has been run against several real maps. If it is measuring the fixture, say so and
+cut it.
 
 ---
 
@@ -458,11 +489,11 @@ background page and an action popover, Pages deploy workflow, dev log shim with 
 `describeError` with tests. Confirmed loading in a real room on two independent signals.
 
 **1. Validate the emit path in a room, with no pipeline.** Hand-build a handful of shapes through
-the SDK and observe. Answers OQ1–OQ4, each on one variable: does a filled `FOG`-layer shape render
-as revealable fog; does the native reveal tool cut it; does Dynamic Fog produce a wall at its
-boundary; does that depend on `strokeWidth`; does a shape with a hole work; and is a networked
-`WALL` add actually refused. **This validates the entire architecture before a line of pipeline
-exists**, and a failure here is a redesign, not a bug.
+the SDK and observe. Answers OQ1–OQ5, each on one variable: does a filled `FOG`-layer shape render
+as revealable fog; does the native reveal tool cut it; can a GM select and edit it by hand; does it
+appear usefully in Outliner; does Dynamic Fog produce a wall at its boundary and does that depend on
+`strokeWidth`; does a shape with a hole work. **This validates the entire architecture before a line
+of pipeline exists**, and a failure in the first three is a redesign rather than a bug.
 
 **2. Trace harness.** A local page with a file picker that runs the pipeline over a map image and
 draws the result on top of it. Far faster than a room, and where the tuning actually happens. Ships
@@ -481,9 +512,9 @@ per §5 toward splitting rather than merging. Pure, tested, and the census lands
 must include a room with a pillar and two rooms sharing a wall, since a single square room cannot
 distinguish correct code from several kinds of wrong.
 
-**6. Simplify and offset.** Conservative simplification preserving topology, then a separate,
-explicit outward offset for the half-wall reveal. Two stages, not one, so they can be tuned and
-tested independently.
+**6. Simplify.** Conservative simplification preserving topology. **No outward offset** — the
+half-wall reveal is deferred to the tweaking tools (§4, §11), so the first output stops at the ink's
+inner edge and rooms look slightly clipped. Known and accepted.
 
 **7. World placement.** Pixel coordinates to Owlbear world coordinates through the map image's
 transform and grid. **The harness cannot test this** — it is the known blind spot, so it gets a room
@@ -553,14 +584,17 @@ single-pass where possible. Probably fine; worth measuring before it is a compla
 
 ## 11. Future ideas — logged, not scheduled
 
-### Skeleton snapping as a tweaking tool
+### Half-wall coverage, and skeleton snapping as the way to get it
 
-The half-wall offset in §5 is a global dilation radius, which is a blunt instrument against ink of
-varying width. The precise version is a **local** one: run skeletonisation separately, keep the
-centrelines as a non-emitted overlay, and offer a tool that expands a region's boundary outward
-until it meets a nearby centreline — **and never past it**. The centreline is the ceiling for
-expansion, which is the half-wall rule expressed locally instead of globally, and it adapts to
-varying ink width for free.
+The initial pipeline leaves a region's boundary at the ink's inner edge, so a revealed room looks
+slightly clipped (§4). The obvious automatic fix is a global outward offset, and it was considered
+and left out: one radius against variable ink width under-covers heavy walls and over-covers light
+ones on the same map, which is not reliably right often enough to have on by default.
+
+The precise version is a **local** one: run skeletonisation separately, keep the centrelines as a
+non-emitted overlay, and offer a tool that expands a region's boundary outward until it meets a
+nearby centreline — **and never past it**. The centreline is the ceiling for expansion, which is the
+half-wall rule expressed locally instead of globally, and it adapts to varying ink width for free.
 
 This is attractive for three reasons: it recovers the value of the sibling's skeletonisation code
 without putting it on the critical path; it is precisely the kind of *nudging* the project is named
