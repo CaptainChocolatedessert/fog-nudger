@@ -273,8 +273,8 @@ load → binarize → fill and label → discard outside → trace boundaries �
 ### What transfers from the sibling, and what does not
 
 **Transfers:** image loading and the cross-origin pixel path; binarisation (Sauvola adaptive
-threshold, blur); the geometry helpers; polygon simplification, with a changed constraint;
-the harness *shape*; and the whole testing and diagnostic culture, which is the most valuable part.
+threshold, blur); the geometry helpers; polygon simplification, with a changed constraint; and the
+whole testing and diagnostic culture, which is the most valuable part.
 
 **Does not transfer: thinning, skeletonisation and chain chopping** — the expensive, well-tested
 middle of the sibling's pipeline. Region filling does not need a medial axis.
@@ -495,10 +495,36 @@ appear usefully in Outliner; does Dynamic Fog produce a wall at its boundary and
 `strokeWidth`; does a shape with a hole work. **This validates the entire architecture before a line
 of pipeline exists**, and a failure in the first three is a redesign rather than a bug.
 
-**2. Trace harness.** A local page with a file picker that runs the pipeline over a map image and
-draws the result on top of it. Far faster than a room, and where the tuning actually happens. Ships
-the region census from its first run. **Known structural limit, inherited: the harness never leaves
-pixel space, so a world-placement bug is invisible in it by construction.**
+**2. Dry-run mode in the extension.** A control that traces the scene's own map, reports the region
+census to the dev log, and **emits nothing**. This is where tuning happens, and it replaces the
+separate trace harness the roadmap originally called for.
+
+*Rejected: the trace harness — 2026-08-05.* The sibling built one, and the plan here inherited it
+without examining the premise. Two things caught that. The user, who used it, reports looking at it
+once or twice and testing naturally sliding into an Owlbear room instead. And the sibling's own
+record shows why both are true: nearly every mention of its harness is a **number** — stroke costs
+at 1024×768, `fieldMax` and `fieldMean`, a bug found by it returning zero, density targeting
+settled by comparison, seven tuning constants. It was a measurement rig with a viewer attached, and
+the viewer is the part nobody needed.
+
+Numbers do not need a page. Measurement on synthetic input belongs in unit tests — note that the
+sibling measured against a *synthetic parchment map*, which is a generated fixture with a UI wrapped
+around it. Measurement on real maps belongs wherever the real maps already are, which is Owlbear.
+
+The dry run is also strictly better on the point the harness was worst at. The sibling's record
+states that a real bug was diagnosed only after harness and room disagreed *in direction*, because
+the harness never ran the world-placement stage. A dry run inside the extension executes the same
+code the emit path executes, so that class of disagreement cannot arise by construction.
+
+**Kept in reserve, to be built when the question exists:** a throwaway local page that renders an
+intermediate raster. Owlbear cannot display one at all — no textures reach a shader and `data:`
+URLs do not render, both settled — so this is the single capability neither tests nor the dry run
+can supply. It is perhaps thirty lines at the moment something is inexplicable, and building it
+before then would be infrastructure guessing at its own question.
+
+**Known cost of dropping the harness:** trying an unfamiliar map means uploading it to Owlbear
+first. Cheap per map, not free. Mitigable later by letting the dry run accept a pasted asset URL,
+which is what the sibling's harness took anyway.
 
 **3. Binarisation.** Ported from the sibling, plus **polarity handling** — classic dungeon maps are
 frequently light ink on dark ground, and a binarizer assuming dark-on-light silently produces the
@@ -517,9 +543,10 @@ half-wall reveal is deferred to the tweaking tools (§4, §11), so the first out
 inner edge and rooms look slightly clipped. Known and accepted.
 
 **7. World placement.** Pixel coordinates to Owlbear world coordinates through the map image's
-transform and grid. **The harness cannot test this** — it is the known blind spot, so it gets a room
-check of its own with a deliberately asymmetric shape, which a symmetric one could not distinguish
-from a flipped or transposed transform.
+transform and grid. Nothing pure can test this, so it gets a room check of its own with a
+deliberately asymmetric shape — a symmetric one could not distinguish a correct transform from a
+flipped or transposed one, which is the sibling's "too symmetric to fail" lesson in the place it
+matters most here.
 
 **8. Emit.** Build `Path` items on the `FOG` layer, tagged with our own metadata namespace for
 provenance. Meet the 8192 cap by simplifying, never by splitting (§10). Batch and debounce against
