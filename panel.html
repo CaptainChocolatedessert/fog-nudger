@@ -23,6 +23,7 @@
         --dim: rgba(255, 255, 255, 0.7);
         --accent: #bb99ff;
         --danger: #ff8a80;
+        --line: #ffffff1f;
       }
       body {
         margin: 0;
@@ -42,6 +43,38 @@
         font-size: 0.9em;
         color: var(--dim);
       }
+      .probe {
+        margin-top: 0.8rem;
+        padding-top: 0.7rem;
+        border-top: 1px solid var(--line);
+      }
+      .probe h2 {
+        font-size: 0.8rem;
+        margin: 0 0 0.5rem;
+        font-weight: 600;
+        color: var(--dim);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      button {
+        font: inherit;
+        color: var(--text);
+        background: var(--line);
+        border: 1px solid transparent;
+        border-radius: 0.35rem;
+        padding: 0.35rem 0.7rem;
+        margin: 0 0.3rem 0.3rem 0;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) { border-color: var(--accent); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #result {
+        margin-top: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--dim);
+        overflow-wrap: anywhere;
+      }
+      #result[data-state="bad"] { color: var(--danger); }
     </style>
   </head>
   <body>
@@ -52,7 +85,19 @@
       this whole panel exists to rule out at this stage.
     -->
     <p id="status" data-state="pending">Connecting&hellip;</p>
-    <p><code>Skeleton build — no tools yet.</code></p>
+
+    <!--
+      Roadmap step 1. Not product UI — this places hand-built shapes so a human can look at them
+      and answer whether the whole approach works. It goes away once it has.
+    -->
+    <section class="probe">
+      <h2>Fog shape probe</h2>
+      <button id="place" disabled>Place shapes</button>
+      <button id="census" disabled>Census</button>
+      <button id="remove" disabled>Remove</button>
+      <p id="result">Waiting for a scene.</p>
+    </section>
+
     <script type="module" src="./src/panel.ts"></script>
   </body>
 </html>

@@ -18,6 +18,7 @@ describe("themeVariables", () => {
       "--dim": "rgba(255, 255, 255, 0.7)",
       "--accent": "#bb99ff",
       "--danger": "#ff8a80",
+      "--line": "#ffffff1f",
     });
   });
 
@@ -36,9 +37,9 @@ describe("themeVariables", () => {
     expect(dark).not.toBe(light);
   });
 
-  it("leaves the error colour to the stylesheet when the mode is unrecognised", () => {
-    expect(themeVariables({ mode: "SEPIA" })["--danger"]).toBeUndefined();
-    expect(themeVariables({})["--danger"]).toBeUndefined();
+  it("leaves the mode-derived colours to the stylesheet when the mode is unrecognised", () => {
+    expect(themeVariables({ mode: "SEPIA" })).toEqual({});
+    expect(themeVariables({})).toEqual({});
   });
 
   it("prefers the raised surface but accepts the page behind it", () => {
@@ -65,6 +66,7 @@ describe("themeVariables", () => {
     expect(themeVariables({ mode: "LIGHT", text: { primary: "#111" } })).toEqual({
       "--text": "#111",
       "--danger": "#b3261e",
+      "--line": "#00000024",
     });
   });
 

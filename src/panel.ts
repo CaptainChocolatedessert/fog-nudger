@@ -10,15 +10,56 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 import { themeVariables } from "./theme";
+import { logCensus, placeProbeShapes, removeProbeShapes } from "./probe/fogProbe";
 
 installDevLog("ui");
 
 const status = document.getElementById("status");
+const result = document.getElementById("result");
 
 function report(text: string, state: "ok" | "bad"): void {
   if (!status) return;
   status.textContent = text;
   status.dataset.state = state;
+}
+
+function reportResult(text: string, state: "ok" | "bad"): void {
+  if (!result) return;
+  result.textContent = text;
+  result.dataset.state = state;
+}
+
+/**
+ * Wire a probe button.
+ *
+ * Buttons are disabled while their action runs. Not politeness: every one of these writes to the
+ * scene, and a second click landing mid-write would place two sets of shapes or race a delete
+ * against the add that created them.
+ *
+ * A failure is reported in plain words on the panel and in full to the console, through
+ * `describeError` — the SDK rejects with a raw payload rather than an `Error`, so reading
+ * `.message` would print `undefined` for every refusal it can produce, which is the whole class of
+ * outcome this probe exists to observe.
+ */
+function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement | null {
+  const button = document.getElementById(id);
+  if (!(button instanceof HTMLButtonElement)) return null;
+
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    reportResult("Working…", "ok");
+    void run()
+      .then((message) => reportResult(message, "ok"))
+      .catch((error: unknown) => {
+        const detail = describeError(error);
+        reportResult(`Failed: ${detail}`, "bad");
+        console.error(`Fog Nudger — probe failed: ${detail}`);
+      })
+      .finally(() => {
+        button.disabled = false;
+      });
+  });
+  return button;
 }
 
 /**
@@ -59,6 +100,12 @@ OBR.onReady(async () => {
     devLog("warn", "could not read Owlbear's theme", describeError(error));
   }
 
+  const buttons = [
+    wireButton("place", placeProbeShapes),
+    wireButton("census", logCensus),
+    wireButton("remove", removeProbeShapes),
+  ];
+
   try {
     // A popover's connection going ready is NOT the scene being ready — the sibling lost two days
     // to treating them as the same event. Ask separately, and say which of the two is true.
@@ -67,6 +114,15 @@ OBR.onReady(async () => {
       ready ? "Connected. Scene open." : "Connected. No scene open.",
       "ok",
     );
+
+    // Subscribe as well as check, for the usual reason: a scene opened while the popover is already
+    // up would otherwise leave the buttons dead with no explanation.
+    const setEnabled = (sceneReady: boolean): void => {
+      for (const button of buttons) if (button) button.disabled = !sceneReady;
+      reportResult(sceneReady ? "Ready." : "Waiting for a scene.", "ok");
+    };
+    OBR.scene.onReadyChange(setEnabled);
+    setEnabled(ready);
   } catch (error) {
     // Plain text on screen, full detail to the console. The SDK's rejections are not `Error`s, so
     // this goes through `describeError` rather than reading `.message`, which would be undefined.

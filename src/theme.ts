@@ -61,6 +61,12 @@ export function themeVariables(theme: unknown): Record<string, string> {
   if (record.mode === "LIGHT") out["--danger"] = "#b3261e";
   else if (record.mode === "DARK") out["--danger"] = "#ff8a80";
 
+  // Separator and button-fill tint, likewise ours rather than the theme's. A translucent black over
+  // a light surface and a translucent white over a dark one, so it reads as the same faint step in
+  // both rather than as a colour.
+  if (record.mode === "LIGHT") out["--line"] = "#00000024";
+  else if (record.mode === "DARK") out["--line"] = "#ffffff1f";
+
   return out;
 }
 
