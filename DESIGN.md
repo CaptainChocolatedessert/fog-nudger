@@ -1,6 +1,7 @@
 # fog-nudger — design record
 
-An Owlbear Rodeo extension: **tools for creating and refining the walls that drive dynamic fog.**
+An Owlbear Rodeo extension: **trace a map image into the fog regions a GM reveals room by room —
+and, with Dynamic Fog installed, the walls that block sight, from the same shapes.**
 
 This file is the design record — architecture, constraints, rejected alternatives, open questions,
 build order. It is the place reasoning lives. Operating context for Claude lives in `CLAUDE.md`,
@@ -8,33 +9,42 @@ which is private and gitignored; where the two disagree, this one wins.
 
 **Sibling project.** `../W - cartographers-fog` is a working Owlbear extension by the same author,
 public at [CaptainChocolatedessert/cartographers-fog](https://github.com/CaptainChocolatedessert/cartographers-fog).
-It is readable from here and it is the single most valuable asset this project has: a year of
-Owlbear SDK facts that were expensive to learn, a tested trace pipeline that does most of what step
-one needs, and a testing culture worth copying wholesale. **Read its `DESIGN.md` before designing
-anything here.** Much of what looks like a fresh decision has already been made and measured there.
+It is readable from here and it remains this project's most valuable asset: a year of Owlbear SDK
+facts that were expensive to learn, and a testing culture worth copying wholesale. **Read its
+`DESIGN.md` before designing anything here.** Note that its *pipeline* turns out to transfer less
+than first assumed — see §5.
 
 ---
 
 ## 1. What this is for
 
-A map image shows walls. Owlbear's dynamic fog needs walls as *geometry*. Today a GM draws them by
-hand, one line at a time, over every room and corridor of every map they run — the single most
-tedious piece of prep in the tool.
+Owlbear's fog is **subtractive**. The whole map starts hidden, and shapes drawn on the `FOG` layer
+are the regions that *can* be revealed. Anything falling inside no shape stays hidden permanently —
+which is the correct behaviour for the solid space between rooms, and it means the artifact a GM
+prepares is essentially **one shape per room and corridor**.
 
-The proposition: the map already contains the walls, drawn in ink. A trace pipeline can extract
-their centrelines. The GM's job then changes from *drawing* walls to *correcting* them.
+Drawing those by hand, over every room of every map, is the single most tedious piece of prep in the
+tool. But the map already shows where the rooms are — they are drawn on it, in ink. A trace pipeline
+can turn the ink into the regions.
+
+**One artifact, two payoffs.** Those same shapes are what Dynamic Fog derives walls from: it strokes
+each drawing on the `FOG` layer and takes the contour, so a region's boundary becomes a wall (§3). So
+the tracing produces a complete manual fog-of-war map on vanilla Owlbear with no extension at all,
+and line-of-sight occlusion for free the moment Dynamic Fog is present. Nothing extra is emitted for
+the second case.
 
 That framing sets the shape of the whole project, and it is why this is a nudger rather than an
 extractor:
 
 - **Automatic extraction will never be perfect** on a hand-drawn map. Doors, arches, curtains,
-  windows, secret passages and rubble all read as ink and none of them mean "solid wall".
+  windows, secret passages and rubble all read as ink and none of them means "solid wall".
 - So the output is a **proposal**, not a result. It must be reviewable, editable piece by piece, and
   rejectable in pieces without discarding the rest.
 - A tool that gets a GM 85% of the way in one click and lets them fix the rest is a large win. A
-  tool that claims 100% and is wrong in three places nobody notices is *worse than nothing*,
-  because a wall in the wrong place is an invisible bug that only surfaces mid-session as a room
-  the party can see into.
+  tool that claims 100% and is wrong in three places nobody notices is *worse than nothing*, because
+  the failures are invisible until play: a gap in the ink merges two rooms into one region, so
+  revealing one reveals three, and a region grown slightly too far shows a secret door that was
+  meant to stay hidden.
 
 ---
 
@@ -44,7 +54,7 @@ Both trace a map image, and the temptation to merge them should be resisted:
 
 | | cartographers-fog | fog-nudger |
 |---|---|---|
-| Relationship to walls | **consumes** them, to compute visibility | **produces** them |
+| Relationship to fog | **consumes** visibility, to draw where the party has been | **produces** the regions and, downstream, the walls |
 | When it runs | continuously, all session, on every client | once per map, GM only, at prep time |
 | Output | aesthetic — a hand-drawn sketch | functional — geometry the fog engine obeys |
 | Cost of being slightly wrong | a slightly ugly line | a room the party can see into |
@@ -54,191 +64,292 @@ would mean a play-time extension carrying an authoring tool's weight on every cl
 
 ---
 
-## 3. The pipeline mostly exists — and it aims almost the right way
+## 3. How Owlbear and Dynamic Fog handle fog and walls
 
-cartographers-fog turns a map image into centrelines through a chain that is pure, tested, and
-already tuned against real maps:
+The foundation everything else rests on. Assembled 2026-08-04/05 from three sources of very
+different strength, and marked accordingly throughout:
+
+> - **Read from Dynamic Fog's source** — [owlbear-rodeo/dynamic-fog](https://github.com/owlbear-rodeo/dynamic-fog),
+>   GPLv3, published by Owlbear as an SDK example. Strong, but it establishes what *Dynamic Fog*
+>   does, never what *Owlbear* does — the renderer is in Owlbear's closed client. The repository was
+>   last pushed 2025-08-14, so the deployed extension may have moved; and the wall, door and light
+>   reactors, the reconciler, the batching layer and the wall geometry helper were read, not the
+>   whole repository.
+> - **Read from the SDK's own type definitions** — strongest available, since it is what we compile
+>   against.
+> - **Reported** — from Owlbear's documentation, relayed 2026-08-05, not verified here. Consistent
+>   with everything else but flagged where load-bearing.
+
+### Fog is subtractive, and fog shapes are ordinary items
+
+Everything is hidden by default; shapes on the `FOG` layer are the revealable regions. Space in no
+shape can never be shown, which is what makes "fog the rooms, not the rock" correct rather than
+merely convenient.
+
+**There is no fog-shape API.** The SDK's fog API is styling only — get and set the fog colour, the
+stroke width and whether fog is filled, plus a change subscription. Nothing creates, reads or
+enumerates fog shapes. They are ordinary `Shape`/`Path`/`Curve`/`Line` items on the `FOG` layer,
+distinguished by nothing else. This is what collapses the "emit native fog shapes" and "emit
+drawings Dynamic Fog can read" options into a single act.
+
+### Walls and lights are first-class SDK types, and local-only
+
+`Wall` carries `points`, `doubleSided` and `blocking`; `Light` carries an attenuation radius, source
+radius, falloff, inner and outer angles, and a `PRIMARY | SECONDARY | AUXILIARY` type. The wall
+builder defaults `doubleSided` and `blocking` to `true`, puts the item on the `FOG` layer, and sets
+`zIndex` 0 with auto-z disabled.
+
+**Reported: both types can only be added to `OBR.scene.local`, not the networked scene.** Consistent
+with everything observed — the sibling's item census found Dynamic Fog's walls and lights only in
+the local set, and Dynamic Fog writes only there. If true it closes the old "do networked walls
+occlude" question from a different direction: the SDK refuses them outright. Worth confirming,
+because the confirmation is a thrown rejection rather than a judgement about a screen (§6, OQ3).
+
+**Reported: `zIndex` on walls and lights is not draw order in the usual sense.** It gates which
+walls affect which lights — a light only sees walls at or above its own `zIndex`, intended for
+multi-storey maps — and decides whether the item draws under or over static fog. Not relevant yet;
+recorded so the builder's default of 0 is not mistaken for meaningless.
+
+### Dynamic Fog is an editor for Owlbear's engine, not the engine
+
+It builds ordinary `WALL` items with the SDK's own `buildWall()`. The occlusion rendering is
+Owlbear's.
+
+Its architecture is a **one-way binding** from the shared scene to local children. A `Reconciler`
+subscribes to networked item changes; registered `Reactor`s filter for items they care about; each
+matching item gets an `Actor` that owns the derived local items; a `Patcher` batches the writes,
+every one of which targets `OBR.scene.local`. Its own source comment states the constraint that
+follows: because it cannot observe the local scene, its children must be unselectable and
+non-copyable, or an item added or deleted outside the reconciler leaves it in an invalid state.
+
+**That is Dynamic Fog deliberately making its walls un-clickable**, and it is why editing means
+editing the drawing rather than the wall.
+
+### The wall filter is layer plus type, and nothing else
 
 ```
-field → binarize → thin → skeleton → chop
+WallReactor.filter(item) === item.layer === "FOG" && isDrawing(item)
+isDrawing === isShape || isPath || isCurve || isLine
 ```
 
-It reaches for **centrelines**, not contours, and that decision is the whole reason it is reusable
-here. Its `DESIGN.md` records why, and it is worth restating because the wrong instinct is strong:
-**contour/edge detection traces the silhouette of ink, giving two lines for every drawn line.** A
-wall drawn 8px wide becomes two walls 8px apart with a hollow gap between them, and the party can
-stand inside it. Centreline extraction gives one line down the middle of the ink, which is what a
-wall actually is.
+The reconciler applies the reactor's filter and no condition of its own; the entry point registers
+the reactors plainly. **No metadata is involved.** An ordinary drawing on the `FOG` layer, from any
+source, becomes walls.
 
-So step one is largely a **re-aim of existing tested code** rather than fresh invention. The tuning
-levers, in the sibling's order of payoff: `minContourLength`, `blurSigma`, `sauvolaRadius`.
+**Correction on record.** An earlier draft of this document asserted that feeding Dynamic Fog would
+mean matching undocumented metadata, and that `doubleSided`/`blocking` had to be encoded somewhere.
+That was wrong, and it was one of two stated reasons for preferring to emit `WALL` items directly.
+The reasoning that survived it should be trusted no more strongly than it was.
 
-### Dynamic Fog does the stroking, so we must not — *read from source, 2026-08-04*
+### Walls are derived state, recomputed from the drawing
 
-Its wall geometry helper does not treat a drawn line as the wall. It **strokes the path to the
-drawing's own `strokeWidth`** and takes the contour of the stroked result, giving a thin closed loop
-around the stroke. Curves are sampled at a fixed interval, and open doors are subtracted from the
-result with a path operation.
+On any change, the actor recomputes the wall's `points` from the parent drawing, adding or deleting
+walls as the contour count changes. The geometry helper:
 
-That is the two-lines-per-stroke shape §3 warns against, adopted deliberately — at a stroke a few
-pixels wide the loop is simply a wall with thickness, and a closed loop is better fog geometry than
-an open line because it blocks identically from both sides.
+- converts the drawing to a path,
+- **strokes it to the drawing's own `style.strokeWidth`** and takes the contour of the stroked
+  result — so a boundary becomes a thin closed band, two contours a stroke-width apart,
+- samples curves at a fixed interval (10 units by default),
+- subtracts every *open* door from the result with a boolean path operation, in world space, after
+  simplification (its comment notes subtraction interacts badly with curves).
 
-**The consequence for this project is a trap avoided.** Emitting contours of the map's ink would put
-the stroking step in twice: our contour, stroked again into a contour of a contour, yielding walls
-bounding the *edges* of each drawn wall with a hollow gap between them — the failure mode §3 exists
-to prevent, arriving through the back door after the pipeline did the right thing.
+Heavy lifting is Skia compiled to WebAssembly.
 
-So the output stays exactly what the sibling's pipeline already produces: **centrelines, emitted as
-thin drawings**, with the wall's thickness carried by `strokeWidth` and the stroking left to
-Dynamic Fog. This also settles a question that would otherwise have needed answering — the extracted
-ink's measured width is not something we have to reproduce as geometry; it is at most a hint for
-choosing a `strokeWidth`.
+**So the wall lands at the boundary of whatever shape is on the `FOG` layer.** A filled region's
+edge becomes its wall. That is the mechanism the whole design depends on, and it is the one thing
+here that most wants confirming in a room (§6, OQ2).
 
-### But the quality bar inverts, and that changes the tuning
+### Doors ride on the same drawings; lights do not
 
-In cartographers-fog the output is decoration and approximation is *desirable* — there is a
-deliberate wobble applied to make strokes look hand-drawn. Here the output is load-bearing. Three
-consequences, each the reverse of the sibling's choice:
+`DoorReactor` filters on **exactly the same condition as walls** — `FOG` layer plus being a drawing.
+Doors are therefore annotations carried on the drawings themselves, and the wall derivation
+subtracts the open ones. Whatever their metadata shape is (unread), it lives on items we would
+already own.
 
-- **No wobble, ever.** Not a setting, not a default — the concept does not belong here.
-- **Simplification must be conservative, and its direction matters.** The sibling learned this on
-  the parchment overlay: a simplifier cuts concave corners *outward*, and outward beside a wall
-  means into the next room. There it was paid for with an erosion step. Here, an outward error puts
-  a wall somewhere the map does not have one. Prefer more vertices over fewer; a wall is not a
-  drawing and nobody looks at its vertex count.
-- **The short-segment filter changes meaning.** `minContourLength` drops specks; for a sketch a
-  missing squiggle is invisible, but for walls a dropped short segment is a **missing doorframe or
-  pillar** — a hole in a room's perimeter, which is exactly the failure mode that leaks sight.
-  Expect to want this far lower here, and to need a different guard against noise.
+`LightReactor` is the exception: it filters on `rodeo.owlbear.dynamic-fog/light` being present in an
+item's metadata. **There is no metadata-free route to a light.** Walls are free; lights are gated
+behind Dynamic Fog's private namespace. Do not assume symmetry.
 
-### What is genuinely new
+### Forecast — noted, not pursued
 
-- **Joining.** Skeleton chains must become long polylines with clean junctions, not a scatter of
-  short segments. Both candidate outputs carry a whole polyline in one item — a `WALL` its `points`,
-  a `PATH` its commands — so an entire room outline can be a single item, which matters enormously
-  for the item budget (§5).
-- **Classification.** Which extracted lines are walls at all? A map's ink includes furniture,
-  grids, labels, hatching and compass roses. Some of this can be filtered geometrically; the rest is
-  the GM's call, which is the review step.
-- **Editing.** "Refining" is half the product and has no counterpart in the sibling at all.
+Owlbear 2.4 shipped a first-party computer-vision pipeline that fogs a battlemap automatically,
+[announced here](https://blog.owlbear.rodeo/owlbear-rodeo-2-4-release-notes/), in beta and limited
+to a paid tier, with the caveat that it "won't always get 100% of the way there". It produces the
+same artifact this project produces, which is a strong independent signal that the artifact is the
+right one.
+
+**Deliberately not treated as a blocker** (user, 2026-08-05): this project is primarily for its
+author's own use, that tier is not available to them, and the work is largely done. Revisit if it
+becomes broadly available — the interesting question then is whether this becomes the *nudging* half
+on top of Forecast's extraction, which is the half nobody ships.
 
 ---
 
-## 4. Open questions — the ones that block
+## 4. The decision: emit filled regions on the `FOG` layer
 
-These are first, because the architecture depends on the answers. **Each names how to answer it.**
-The sibling's hardest-won lesson is that a diagnostic which cannot distinguish its outcomes will be
-believed anyway and will invent findings — so these want direct tests, not reasoning.
+Settled 2026-08-05. One artifact — filled shapes, one per enclosed walkable area — placed on the
+`FOG` layer of the networked scene.
 
-**Most of this section was resolved on 2026-08-04 by reading Dynamic Fog's source**, which is public
-at [owlbear-rodeo/dynamic-fog](https://github.com/owlbear-rodeo/dynamic-fog), GPLv3, and published
-by Owlbear deliberately as an SDK example. That was far cheaper than a room and answered more than
-expected. It carries a standing limit that shapes everything below:
+**Why this and not the alternatives:**
 
-> **Reading Dynamic Fog establishes what Dynamic Fog does. It cannot establish what Owlbear does.**
-> The renderer is in Owlbear's closed client. Anything below phrased as a property of the *renderer*
-> rather than of the *extension* is inference, and is marked as such.
+- It is **useful with nothing else installed**. Vanilla Owlbear renders it as manual fog of war and
+  the GM reveals room by room.
+- It **degrades gracefully rather than failing**. Dynamic Fog adds line-of-sight; any other fog
+  extension that follows the same convention gets the same input; neither is required.
+- It is **not coupled to a private schema**. The filter that matters is layer plus item type.
+- The GM edits it **with tools they already have** — the native fog tools — and editing the region
+  edits the fog and the wall together, because the wall is derived from the region.
 
-Two smaller caveats on the same reading: the repository was last pushed 2025-08-14, so the deployed
-extension may have moved since; and what was read was the wall reconciliation path, the batching
-layer, the drawing type and the wall geometry helper — not the whole repository.
+### Fog the rooms, not the rock
 
-### Q1. How is a wall actually written? — *narrowed to one test; (b) recommended*
+The wall geometry is identical either way, since the boundary curve between rock and room is shared.
+But only fogging the enclosed walkable areas produces useful native behaviour: unexplored rooms
+hidden, revealed one at a time. Fogging the solid material would hide decoration and nothing else.
 
-`WALL` is a first-class SDK item type — `points`, `doubleSided`, `blocking` — and the SDK ships a
-`WallBuilder`. The sibling separately verified by item census that **Dynamic Fog does not store
-walls as `WALL` items**: the networked representation is drawings on the `FOG` layer, and each
-client materialises its own local `WALL` items from them.
+### Reveal about half the wall
 
-**The source confirms that census and supplies the mechanism.** A reactor watches networked items
-matching `layer === "FOG"` and being a shape, path, curve or line. For each, an actor builds `WALL`
-items with the SDK's own `buildWall()`, attached to the source drawing. Every write — add, delete,
-update — goes through a batching layer that targets `OBR.scene.local` exclusively. There is no
-networked write anywhere in that path.
+A revealed region should extend into the wall, roughly to its centre, rather than stopping at the
+ink's inner edge (user, 2026-08-05). The reasoning is a product judgement, not a technical one: the
+wall is part of the drawing and makes the room look complete, sometimes carries detail worth seeing,
+and a region that stops at the floor reads as though the party is being shown a partial room.
 
-Three things follow, in descending order of confidence:
+The risk is symmetrical and understood: too much wall can reveal a secret door. That is exactly
+where the nudging comes in, and it sets the safe direction for tuning — **err toward showing less
+wall**, because a GM notices a room that looks clipped far more readily than a door they were never
+meant to see.
 
-- **The fog engine consumes first-class `WALL` items.** Not a private representation. Dynamic Fog
-  is an editor for Owlbear's engine, not the engine.
-- **A `WALL` item in the *local* set occludes.** Proven by Dynamic Fog working at all.
-- **Whether a `WALL` item in the *networked* scene occludes is still unknown.** Dynamic Fog never
-  writes one, so its source is silent, and the code that would answer is closed. Plausible, since a
-  client presumably renders both sets — but that is reasoning, not evidence, and it is exactly the
-  kind of plausible gap this project has agreed not to argue its way across.
+### Superseded: centreline extraction — 2026-08-05
 
-**The correction that matters.** This section previously claimed path (b) would couple us to
-Dynamic Fog's "undocumented metadata", and that `doubleSided`/`blocking` must be encoded somewhere.
-**That was wrong.** The reactor's filter is layer plus item type and nothing else. Dynamic Fog does
-carry a reverse-domain metadata namespace, but it is used for doors and lights — a plain wall needs
-none of it. So (b) means emitting an ordinary drawing on a public layer, which is not a private
-schema at all, and the licence concern raised under Q3 largely dissolves with it.
+The previous design reached for centrelines down the middle of the ink, on the argument that
+contour tracing gives two lines per drawn wall with a hollow gap between them that the party can
+stand inside. **That argument was correct in its context and does not apply here**, and the reason
+matters enough to write down so it is not re-litigated:
 
-So the two paths now read:
+- Under region tracing, two adjacent rooms' boundaries do sit on opposite inner edges of the wall
+  between them. But the gap between those boundaries is **inside solid ink** — unreachable, and
+  falling inside no fog shape, so it stays hidden permanently. It is not a place anything can stand,
+  and sight is blocked by either boundary.
+- The original failure was two lines derived from the silhouette of a *thin drawn line*, then
+  treated as two independent walls with walkable space between them. That is a different geometry
+  from the boundary of an enclosed region.
 
-- **(a) Emit `WALL` items directly.** Networked: may not render — the one open question. Local:
-  renders, but a local item is per-client and not persisted in the scene, so every participant would
-  need this extension running and recomputing. That is a heavy thing to require of an authoring tool
-  used once per map at prep time.
-- **(b) Emit drawings on the `FOG` layer** and let Dynamic Fog materialise the walls. Matches what
-  already works, needs no private schema, and — per Q2 — is the only path where the output is
-  editable. **Recommended.**
+### Superseded: centrelines emitted as thin drawings — 2026-08-05
 
-**What is left to test:** does a `WALL` item added to the networked scene occlude? One test, one
-variable, with a real hypothesis rather than a fishing expedition. Worth doing even though (b) is
-recommended, because a yes would mean the project *can* stand alone, and that is worth knowing
-before accepting a hard dependency.
+A late variant: emit centrelines as thin `FOG`-layer drawings and let Dynamic Fog stroke them into
+walls. Correct walls, but **a thin line emitted as fog is a thin revealable sliver** — visually
+useless on its own, so the whole thing did nothing unless Dynamic Fog was installed. Regions do
+something in both cases. This was a hard dependency traded away for nothing.
 
-### Q2. Are walls we create editable by hand? — *largely answered, and it decides Q1*
+### Rejected: emitting `WALL` items directly — 2026-08-05
 
-The product is a proposal the GM corrects, so this was always the question with teeth.
+Three independent reasons, any one sufficient:
 
-**Dynamic Fog's walls are derived state, not stored state.** On any change to a drawing, the actor
-recomputes the wall's `points` from its parent. A wall is a continuously reconciled projection of a
-networked drawing — which means the thing a GM edits is the *drawing*, and the wall follows.
+- Reported to be impossible on the networked scene at all (§3).
+- Local walls are per-client and unpersisted, so **every participant would need this extension
+  running**, which is absurd for an authoring tool used once per map at prep time.
+- Dynamic Fog's tools edit drawings and would ignore a `WALL` item entirely, so the output would be
+  geometry nobody can nudge — which defeats the project.
 
-The consequence for (a) is decisive: Dynamic Fog's reactor filters for drawings, and a `WALL` item
-is not one, so it would ignore ours entirely. Its tools edit drawings. **A raw `WALL` item is
-therefore not editable with them** — the extraction would produce geometry nobody can nudge, which
-defeats the point of the project. Under (b), editing comes free, because the walls *are* ordinary
-drawn lines and the GM already knows the tools.
+### Rejected: mimicking Dynamic Fog's private format for walls — 2026-08-05
 
-Not fully closed: whether Dynamic Fog's own line tool will select and edit a `FOG`-layer drawing it
-did not create. Its filter is by layer and type rather than by provenance, so it should — reasoning,
-not evidence, and cheap to confirm in the same room session as Q1.
-
-### Q3. Is Dynamic Fog required, or is fog core to Owlbear now? — *answered, and it cuts both ways*
-
-**The engine is Owlbear's.** `Wall` and `Light` are SDK types, `buildWall` is an SDK builder, and
-Dynamic Fog is published as an example of using them. It is an editor for a renderer it does not own.
-
-But that does not make this extension standalone, and the direction of the dependency is the
-opposite of what it first looks like. **Under (b), Dynamic Fog is a hard runtime dependency** — it
-is the thing that turns our drawings into walls, and without it installed we would emit lines that
-nobody converts. Under (a) there is no dependency, but only if networked walls render, and only at
-the cost of the output being uneditable. **State the dependency up front in the README** rather than
-letting a GM discover it as fog that does nothing.
-
-The GPLv3 concern is much reduced: what (b) matches is a standard item type on a standard layer, not
-a private format. Interoperating at that level is no closer a relationship than using the SDK.
-
-### Q4. What does the GM actually review, and how?
-
-Options span from "a panel listing extracted walls with accept/reject" to "draw the proposal in a
-distinct colour and let them delete what is wrong with the existing tools". The latter is far
-cheaper and uses tools the GM already knows. Deferred until Q1 and Q2 land, because they constrain
-it.
-
-**The skeleton already declares an action with a popover, and that is not an answer to this.** It
-is there as a *second signal*: the background page reports through the dev log, the popover reports
-on screen, and two independent signals separate "the manifest never loaded" from "the manifest
-loaded and the background script died" — which one signal cannot do. Whether the shipped surface is
-an action, a tool, or context menu items is still open, and a tool remains the likelier fit for an
-authoring workflow.
+Unnecessary. There is no private format for walls to mimic. Retained here only so the option is not
+re-proposed; it remains the shape of the eventual *door* work (§11).
 
 ---
 
-## 5. Constraints inherited from the sibling — verified, not guessed
+## 5. The pipeline
+
+```
+load → binarize → fill and label → discard outside → trace boundaries → simplify → offset → place → emit
+```
+
+### What transfers from the sibling, and what does not
+
+**Transfers:** image loading and the cross-origin pixel path; binarisation (Sauvola adaptive
+threshold, blur); the geometry helpers; polygon simplification, with a changed constraint;
+the harness *shape*; and the whole testing and diagnostic culture, which is the most valuable part.
+
+**Does not transfer: thinning, skeletonisation and chain chopping** — the expensive, well-tested
+middle of the sibling's pipeline. Region filling does not need a medial axis.
+
+**That cost should be stated plainly rather than minimised.** The head start on this project is real
+but it is concentrated in the parts that were never going to be hard. The stages that took the
+sibling the longest are the ones we are not using. Skeletonisation may return later as a *tweaking*
+tool (§11), which would recover some of the value, but not on the critical path.
+
+### Connectivity — the pairing is not optional
+
+Connected-component labelling must use **8-connectivity for ink and 4-connectivity for space** (or
+the reverse, consistently). Using the same connectivity for both produces the classic paradox: a
+one-pixel diagonal touch simultaneously connects the ink and fails to separate the space, so regions
+leak diagonally through walls that look closed. This is a correctness requirement, not a tuning
+knob.
+
+### Simplification — the direction inverts, again
+
+The sibling's warning was that a simplifier cuts concave corners *outward*, and outward beside a
+wall means into the next room. Here, outward means **into the wall**, which is desirable up to about
+half the ink width and harmful past it — and at a doorway gap, outward growth can bridge into a
+corridor and merge two regions.
+
+So simplification stays conservative, but for a changed reason: not because outward error is always
+wrong, but because it is only correct within a bound the simplifier does not know about. Prefer more
+vertices over fewer; nobody looks at a fog region's vertex count.
+
+The half-wall offset should be a **deliberate, separately-controlled outward offset**, not a side
+effect of simplification. A single global radius is a blunt instrument against variable ink width —
+it under-covers heavy walls and over-covers light ones on the same map — and that bluntness is the
+known cost of this approach, with the precise alternative logged in §11.
+
+### The two failure modes are not equally bad
+
+- **Merging** (a leak through a doorway gap) puts several rooms in one region, so revealing one
+  reveals all of them. Ruins a scene.
+- **Splitting** (one room emitted as several regions) costs the GM extra clicks.
+
+Bias toward splitting. This is the opposite of what "be conservative" suggests at first glance, and
+it is worth stating because it decides several parameter choices — minimum region area especially.
+
+---
+
+## 6. Open questions
+
+Each names how to answer it. The inherited rule: a diagnostic that cannot distinguish its outcomes
+will be believed anyway and will invent findings, so these want direct tests.
+
+**OQ1. Does a programmatically-created filled shape on the `FOG` layer behave as a native revealable
+region?** The whole design assumes yes. Answer by hand-building one and looking. *(room)*
+
+**OQ2. Does Dynamic Fog derive a wall at that shape's boundary, and what `strokeWidth` does it
+need?** Its helper strokes to the drawing's own `style.strokeWidth`; a zero or near-zero width may
+produce a degenerate or empty result. Answer by emitting the same shape at two widths — one
+variable. *(room, with Dynamic Fog installed)*
+
+**OQ3. Are `WALL` and `LIGHT` actually refused on the networked scene?** Confirms the reported
+local-only restriction. The finding is the rejection payload, which is exactly what `describeError`
+exists to preserve. *(room)*
+
+**OQ4. Do fog shapes support holes?** A room with a central pillar is a region with a hole. A `Path`
+with correct winding should express it, and Dynamic Fog's helper explicitly mentions multiple
+contours from "a Path item with multiple inside shapes" — suggestive but not proof about *fog*
+rendering. *(room)*
+
+**OQ5. What partition granularity does a GM actually want?** One region per room, or per room plus
+its adjacent corridor stub? Only answerable by running a real map at a real table.
+
+**OQ6. What does the GM review, and how?** The cheap answer is: emit, and let them use the native
+fog tools they already know. A dedicated review surface — accept/reject per region, re-run, revert —
+is more work and may not be needed. Deferred until a real map has been traced.
+
+The skeleton project already declares an action with a popover, and **that is not an answer to
+OQ6.** It exists as a second, independent signal: the background page reports through the dev log
+and the popover reports on screen, so the two separate "the manifest never loaded" from "the
+manifest loaded and the background script died". Whether the shipped surface is an action, a tool,
+or context menu items is still open, and a tool remains the likelier fit for an authoring workflow.
+
+---
+
+## 7. Constraints inherited from the sibling — verified, not guessed
 
 Every item here was measured in a real room by the sibling project. Do not re-derive them.
 
@@ -249,62 +360,65 @@ Every item here was measured in a real room by the sibling project. Do not re-de
   erased and therefore safe. This is not negotiable without adding jsdom, and the sibling's entire
   trace pipeline is testable precisely because it obeyed this from the start.
 - **Items cap at exactly 8192 array entries.** Bisected to the single command: 8192 accepted, 8193
-  refused. A fixed constant, not a shared budget. **This is a live concern here** — a `Wall`'s
-  `points` array is subject to it, so a traced room perimeter must be chunked if it is long enough.
+  refused. A fixed constant, not a shared budget. **Live concern here** — a traced room boundary at
+  pixel resolution can exceed it easily, and see §10 for why the obvious remedy is a trap.
 - **Writes are rate limited** (`RateLimitHit: "Too many requests"`), and this is *distinct* from
   validation failure. Distinguish them at every call site: retrying a size failure is futile, giving
-  up on a throttle loses data. Committing hundreds of extracted walls is exactly the workload that
-  will hit this.
+  up on a throttle loses data. Committing sixty regions at once is exactly this workload.
 - **SDK rejections are not `Error`s.** The SDK rejects with the parent frame's raw payload —
   `{ error: { name, message } }` — so `instanceof Error` is false for every failure it can hand
-  back, and `.message` on the rejection is `undefined`. The sibling has a small pure `describeError`
-  worth copying verbatim. A handler testing for `Error` silently discards the cause.
+  back, and `.message` on the rejection is `undefined`. `describeError` is already ported.
 - **Dynamic Fog's walls and lights are LOCAL items.** Read via `OBR.scene.local.getItems()`;
   querying the scene returns zero in a room where the fog plainly works. `scene.items.onChange`
   never fires for them.
 - **Walls are not there at startup.** Dynamic Fog materialises them ~1.2s after a fresh load.
-  Nothing may assume they exist on load.
+  Nothing may assume they exist on load — including a probe checking whether our shapes produced any.
 - **Check-then-subscribe is a race.** Subscribe *before* checking `isReady()`, and make the
   operation idempotent — checking first leaves a window where the transition happens unobserved and
   the work silently never runs. A popover's connection going ready is **not** the scene being ready;
   the sibling lost two days to that one.
-- **Scene metadata has no limit below 512KB per key** — measured. An earlier "reportedly 16KB"
-  figure was wrong and shaped several decisions before it was corrected.
+- **Scene metadata has no limit below 512KB per key** — measured.
 - **The grid covers only MAP-layer images.** Anything outside the map image is outside the grid.
 - **No textures can ever reach a shader**, and **raster rendering is not available** — `data:` URLs
-  do not render. Both are settled; do not re-propose. Less likely to bite here than in the sibling,
-  but the extraction preview has to be vector geometry for the same reasons.
+  do not render. Both are settled; do not re-propose. The extraction preview has to be vector
+  geometry for the same reasons.
 - **Map pixel access works** cross-origin, and the sibling ships a startup probe that asserts it.
   The trace harness there can take a pasted Owlbear asset URL to exercise the real path.
 
 ---
 
-## 6. Testing and diagnostic practice — copy it
+## 8. Testing and diagnostic practice — copy it
 
 The sibling's culture is the reason it works, and it costs almost nothing to adopt from day one.
 
 - **Mutation testing earns its keep.** Break the code deliberately and confirm a test fails. A green
-  suite on first run is evidence about the *tests*, not the code. This caught real defects at every
-  stage there.
+  suite on first run is evidence about the *tests*, not the code.
 - **A fixture that is easy to read can be too symmetric to fail.** A tangent test on a horizontal
   run cannot detect a search being disabled when the fallback is `(1, 0)` — the right answer for
-  that fixture. Sampling has to actually visit the discontinuity it claims to check.
+  that fixture. Sampling has to actually visit the discontinuity it claims to check. **Applies
+  immediately here:** a fixture of one square room cannot distinguish correct region labelling from
+  code that returns the whole image.
 - **8-connectivity means single-pixel junctions barely exist.** Every pixel beside a junction is
-  itself degree 3+, so a tee traces to eight chains, not three. **This one bites here immediately**,
-  because junction handling is exactly what wall joining has to get right. Do not write fixtures
-  assuming a clean degree-3 node.
+  itself degree 3+, so a tee traces to eight chains, not three. Less central than it was now that
+  skeletonisation is off the critical path, but it returns with §11.
 - **A diagnostic that cannot distinguish its outcomes will be believed anyway and will invent
-  findings.** The sibling paid for this seven times in five disguises: a probe that could not tell
-  its failure modes apart, one that saturated, one that could not produce a partial result, one
-  gated on the bug not happening, and one sharing fate with what it measured. Its `CLAUDE.md` lists
-  them; read that list before building any diagnostic here.
+  findings.** The sibling paid for this seven times in five disguises. Its `CLAUDE.md` lists them;
+  read that list before building any diagnostic here.
 - **Change one variable at a time.** A question was called closed twice before it was, both times
   after changing two things at once.
-- **Log a census when a pipeline runs but finds nothing** — every item by `type:layer` across both
-  `scene.items` and `scene.local`. That is what revealed Dynamic Fog's local items in one line,
-  after a wrong guess that it was not installed.
-- **Diagnostics that fire unconditionally are worth their noise.** A diagnostic that only fires when
+- **Diagnostics that fire unconditionally are worth their noise.** One that only fires when
   something is known to be wrong cannot distinguish "fine" from "never ran".
+
+### The region census — this project's standing diagnostic
+
+Every pipeline run reports, unconditionally: region count, the area distribution, the fraction of
+map area in the largest region, and how many regions touch the image border.
+
+It is cheap, it reports in the healthy case as well as the broken one, and it detects the failure
+that matters most without anyone having to look at the map. A single region holding 60% of the map
+area is two dozen rooms merged through a doorway gap. A count of 400 is hatching being traced as
+rooms. Neither is visible by eye on a first glance at a rendered result, and both are obvious in
+four numbers.
 
 ---
 
@@ -325,73 +439,178 @@ It does not survive contact with what a wall is.
   in a different costume: its wall margin's safety turned out to be *a property of the test map*,
   not of the margin — fine on the map it was judged against, a spoiler on a tighter one.
 
-The compounding danger is that such a score would look rigorous while measuring the fixture. That
-is this project's inherited first lesson — a diagnostic that cannot distinguish its outcomes will be
-believed anyway — arriving before any code was written.
+The compounding danger is that such a score would look rigorous while measuring the fixture.
 
-**If evaluation is ever revisited, the surviving form is topological, not geometric.** What matters
-for fog is not whether a wall is within some distance of where a human would have put it, but
-whether sight *leaks*. A wall a few pixels off encloses the same room and is harmless; a missing
-wall merges two rooms, which is the failure that ruins a session. Comparing enclosed regions rather
-than coordinates is immune to the wiggle room, because the wiggle does not change what is enclosed.
-
-**Not rejected, and separate from all of this:** dumping one of Dynamic Fog's own `LINE` items, plus
-any scene metadata under its namespace, from a room where walls already exist. That is
-reconnaissance rather than evaluation — a worked example of the thing Q1 does not know how to write
-— and it costs a few lines in the session that answers Q1 and Q2 anyway.
-
-## 7. Proposed build order
-
-Deliberately front-loads the unknowns. Steps 0–2 are cheap and answer whether the project is
-possible at all; there is no point tuning an extractor before knowing walls can be written.
-
-0. **Skeleton project** — Vite, TypeScript, vitest, manifest, Pages deploy. Copy the sibling's
-   shape; it is known to work and the CI/lockfile traps are already recorded. Two things get
-   copied close to verbatim because they are load-bearing here from the first probe onward: the
-   dev log shim with its per-client labels, and `describeError`. The second matters more than its
-   size suggests — Q1 is answered by writing walls and reading what Owlbear says back, so a
-   refusal *is* the finding, and a reporter that tests `instanceof Error` throws away every
-   refusal the SDK can produce.
-1. **Close what is left of Q1 and Q2 in a room.** Reading Dynamic Fog's source did most of this
-   from a desk, and the residue is three cheap checks in one session: does a networked `WALL` item
-   occlude; will Dynamic Fog's line tool select and edit a `FOG`-layer drawing it did not create;
-   and does a drawing we emit get picked up and materialised as a wall at all. The first is the only
-   one that could still change the architecture.
-2. **Trace harness first, extension second.** The sibling's harness — a local page with a file
-   picker that runs the pipeline on a map image and draws the result — is where the tuning work
-   actually happens, and it is far faster than a room. **Known structural limit: the harness never
-   leaves pixel space, so a world-placement bug is invisible in it by construction.** Where harness
-   and room disagree about direction, look at the stage the harness does not run.
-3. **Port the trace pipeline** and re-tune for walls: wobble removed, simplification conservative,
-   short-segment filter reconsidered.
-4. **Join skeleton chains into polylines** with real junction handling. The new work.
-5. **Emit walls**, chunked against the 8192 cap and debounced against the rate limiter.
-6. **Review and refine** — whatever Q4 resolves to.
+**The surviving form of evaluation is topological, not geometric** — and the direction taken since
+makes that more natural rather than less. What matters is not whether a boundary is within some
+distance of where a human would have put it, but whether regions *merge*. The region census above is
+that idea in its cheapest possible form, and it is already the plan.
 
 ---
 
-## 8. Code sharing with the sibling — decided: copy, for now
+## 9. Roadmap
 
-The genuinely shared surface is the pure trace pipeline and the geometry helpers. Both are already
-pure and tested, so extracting them into a package is *technically* easy.
+Front-loads the unknowns: nothing downstream is worth tuning before the emit path is known to work,
+and the emit path can be tested with hand-built geometry before any pipeline exists.
 
-**Not doing it yet.** The two projects want different things from the same code — the sibling wants
-centrelines it can make wobble, this one wants centrelines it must not — so the tuning will diverge
-before it converges, and a shared abstraction would spend its life being pulled in two directions.
-Extracting a package also has real cost: versioning, a release step, a second lockfile, and CI for
-both. That cost buys nothing until both projects want the *same* behaviour and are stable enough to
-agree on it.
+**0. Skeleton project — done, verified in a room.** Vite, TypeScript, vitest, manifest with a
+background page and an action popover, Pages deploy workflow, dev log shim with per-surface labels,
+`describeError` with tests. Confirmed loading in a real room on two independent signals.
+
+**1. Validate the emit path in a room, with no pipeline.** Hand-build a handful of shapes through
+the SDK and observe. Answers OQ1–OQ4, each on one variable: does a filled `FOG`-layer shape render
+as revealable fog; does the native reveal tool cut it; does Dynamic Fog produce a wall at its
+boundary; does that depend on `strokeWidth`; does a shape with a hole work; and is a networked
+`WALL` add actually refused. **This validates the entire architecture before a line of pipeline
+exists**, and a failure here is a redesign, not a bug.
+
+**2. Trace harness.** A local page with a file picker that runs the pipeline over a map image and
+draws the result on top of it. Far faster than a room, and where the tuning actually happens. Ships
+the region census from its first run. **Known structural limit, inherited: the harness never leaves
+pixel space, so a world-placement bug is invisible in it by construction.**
+
+**3. Binarisation.** Ported from the sibling, plus **polarity handling** — classic dungeon maps are
+frequently light ink on dark ground, and a binarizer assuming dark-on-light silently produces the
+exact complement of the right answer. Pure, tested.
+
+**4. Fill and label.** Connected-component labelling of the non-ink space with the connectivity
+pairing from §5. Discard the region outside the map's structure. Apply a minimum-area filter, biased
+per §5 toward splitting rather than merging. Pure, tested, and the census lands here.
+
+**5. Boundary tracing.** One closed polygon per region, plus holes. Pure, tested — and the fixtures
+must include a room with a pillar and two rooms sharing a wall, since a single square room cannot
+distinguish correct code from several kinds of wrong.
+
+**6. Simplify and offset.** Conservative simplification preserving topology, then a separate,
+explicit outward offset for the half-wall reveal. Two stages, not one, so they can be tuned and
+tested independently.
+
+**7. World placement.** Pixel coordinates to Owlbear world coordinates through the map image's
+transform and grid. **The harness cannot test this** — it is the known blind spot, so it gets a room
+check of its own with a deliberately asymmetric shape, which a symmetric one could not distinguish
+from a flipped or transposed transform.
+
+**8. Emit.** Build `Path` items on the `FOG` layer, tagged with our own metadata namespace for
+provenance. Meet the 8192 cap by simplifying, never by splitting (§10). Batch and debounce against
+the rate limiter, distinguishing throttle from validation failure at the call site.
+
+**9. Re-run and review.** Idempotency — replace our own shapes, never touch the GM's — and whatever
+OQ6 resolves to. A re-run destroys hand edits, so it must be deliberate and warned.
+
+---
+
+## 10. Likely pitfalls
+
+Named in advance so they are recognised rather than discovered. Roughly in order of how expensive
+they are to find late.
+
+**Splitting a region to fit the item cap creates a wall across the middle of a room.** Dynamic Fog
+derives a wall from *every* shape boundary, so cutting one oversized region into two adjacent shapes
+puts a boundary — and therefore a wall — down the join. The cap must be met by simplifying harder,
+and an oversized region is a signal that simplification is too timid, not an invitation to chunk.
+This is the sharpest trap in the design, because chunking is the obvious remedy and is correct
+everywhere else in Owlbear.
+
+**Inverted polarity produces a confident, complete, exactly wrong answer.** Light-on-dark maps fog
+the rock and reveal the rooms. Spectacular when noticed, and the census will not catch it — the
+region statistics of a correct answer and its complement can look similar.
+
+**The outside region.** The largest fill component is usually the space outside the dungeon, and it
+must be discarded. Identifying it by "touches the image border" fails on maps whose rooms run to the
+edge, which is common. Make the rule explicit and reported rather than silent, so a wrong choice is
+visible in the census rather than as a mysteriously fogged map.
+
+**Diagonal leaks.** The connectivity pairing in §5. A one-pixel diagonal gap in ink is invisible to
+the eye and merges two rooms.
+
+**Holes and winding direction.** A room with a pillar needs a `Path` whose inner contour winds
+opposite to its outer one. Get it wrong and either the hole fills or the region inverts. The
+fixtures must include one; nothing else will catch it.
+
+**`strokeWidth` of zero.** A fog shape with no stroke may render as fog perfectly well and produce
+no walls at all — a failure invisible without Dynamic Fog installed, and invisible *with* it unless
+someone specifically looks for occlusion.
+
+**Hatching and texture traced as rooms.** Cross-hatching outside walls encloses hundreds of tiny
+areas. The minimum-area filter is the guard, and it is the sibling's `minContourLength` trap in a
+new costume: set high enough to kill hatching, it eventually eats a genuine closet.
+
+**Re-running over hand edits.** Once a GM has nudged the output, a re-run that replaces everything
+destroys their work silently. Our own metadata tag makes "replace only ours" possible; making it
+*safe* is a product decision, not a technical one.
+
+**Which map.** A scene can hold several `MAP` images — one of them may be a GM-only overlay that
+must not be traced. The sibling needed an explicit nomination flow for exactly this and so will we.
+
+**Pre-existing fog.** A scene may already have fog shapes, drawn by the GM or by Forecast. Ours add
+to them rather than replace them, and Dynamic Fog derives walls from theirs too. Neither is wrong,
+but the interaction should be a decision rather than a surprise.
+
+**Performance.** Labelling and tracing a 4000×4000 map in JavaScript. Typed arrays throughout,
+single-pass where possible. Probably fine; worth measuring before it is a complaint.
+
+---
+
+## 11. Future ideas — logged, not scheduled
+
+### Skeleton snapping as a tweaking tool
+
+The half-wall offset in §5 is a global dilation radius, which is a blunt instrument against ink of
+varying width. The precise version is a **local** one: run skeletonisation separately, keep the
+centrelines as a non-emitted overlay, and offer a tool that expands a region's boundary outward
+until it meets a nearby centreline — **and never past it**. The centreline is the ceiling for
+expansion, which is the half-wall rule expressed locally instead of globally, and it adapts to
+varying ink width for free.
+
+This is attractive for three reasons: it recovers the value of the sibling's skeletonisation code
+without putting it on the critical path; it is precisely the kind of *nudging* the project is named
+for; and it fails safe, because a tool the GM invokes on a region they are looking at cannot quietly
+corrupt a map.
+
+Risks to design against: the nearest centreline may belong to a *different* wall across a thin
+partition, so it needs a maximum search distance and an outward-only constraint; and where the
+skeleton is noisy — thick filled walls, hatching — it will propose nonsense, which is survivable
+only because it is GM-invoked rather than automatic. Recompute the skeleton from the map image on
+demand rather than persisting it; pixel access is verified to work, and a stored skeleton goes stale
+the moment the map changes.
+
+### Doors
+
+Wanted as soon as the fog works well. Dynamic Fog's door reactor filters on the same condition as
+walls, so doors are metadata on drawings we already own — the smallest possible version of the
+coupling, and it changes nothing about what we emit today. It does mean writing into
+`rodeo.owlbear.dynamic-fog/…`, which is the one place this project would touch a private namespace.
+Read `DoorActor` before committing to it; it is the one part of the wall/door path still unread.
+
+### Lights — declined
+
+Not extracted from map images, and nothing consumes a light without Dynamic Fog anyway. Dropping
+them removes the only place where its private namespace was unavoidable.
+
+---
+
+## 12. Code sharing with the sibling — decided: copy, and the case has weakened
+
+The genuinely shared surface is now **smaller than it was**: image loading, binarisation, the
+geometry helpers. The middle of the sibling's pipeline — thinning, skeletonisation, chain chopping —
+is not on this project's critical path at all.
+
+**Still copying, and the reasoning holds but for a different reason.** It is no longer "the tuning
+will diverge before it converges"; it is that the overlap has turned out to be small enough that a
+shared package would be mostly ceremony. Versioning, a release step, a second lockfile and CI for
+both is real cost, and it would buy sharing for a few hundred lines of well-tested pure functions.
 
 **The cost of copying is real and should not be dressed up as a virtue: bug fixes will not
-propagate.** A defect found in the thinning step here will still be present there, and nothing will
-tell either project about it. Note fixes in both design records when they happen.
+propagate.** A defect found in binarisation here will still be present there, and nothing will tell
+either project about it. Note fixes in both design records when they happen. This has already been
+paid once — two dev-log defects found here in the first session exist unfixed in the sibling.
 
-**Revisit when** the pipeline here has settled and the two versions have visibly converged — at
-that point extract the common half into a package and take the release overhead knowingly.
+**Revisit if** §11's skeleton tool lands, since that would put the two projects back on genuinely
+shared ground.
 
 ---
 
-## 9. Licence — GPL-3.0-or-later
+## 13. Licence — GPL-3.0-or-later
 
 Free-tier Pages requires a public repository, so a licence has to exist before the first push.
 Matching the sibling, and chosen as the option least likely to need changing rather than on
@@ -403,7 +622,7 @@ principle:
   but anyone who took a copy under the old terms keeps those rights to *that copy* permanently, and
   once outside contributors land code they hold copyright on their parts. With no contributors,
   moving to something permissive later stays easy; the reverse direction is the one that gets stuck.
-- **Q1 may remove the choice.** Dynamic Fog is GPLv3. Interoperating with it is not deriving from
-  it, but if the answer to Q1 turns out to be (b) — matching its private line format — the
-  relationship gets closer, and any code actually copied rather than merely interoperated with would
-  settle the question outright.
+- **The coupling that would have forced it has mostly dissolved.** What this project emits is a
+  standard item type on a standard layer, which is no closer a relationship to Dynamic Fog than
+  using the SDK is. The exception is the door work (§11), which would write into its namespace —
+  still interoperation rather than derivation, but the closest this project gets.

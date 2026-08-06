@@ -1,18 +1,25 @@
 # Fog Nudger
 
-An [Owlbear Rodeo](https://www.owlbear.rodeo/) extension: **tools for creating and refining the
-walls that drive dynamic fog.**
+An [Owlbear Rodeo](https://www.owlbear.rodeo/) extension: **trace a map image into the fog regions
+you reveal room by room.**
 
 > **Pre-release.** There is nothing to install yet. This repository currently holds a project
 > skeleton and its design record.
 
 ## The idea
 
-Owlbear's dynamic fog needs walls as geometry. Today a GM draws them by hand, one line at a time,
-over every room and corridor of every map they run.
+Owlbear's fog is subtractive: the whole map starts hidden, and the shapes you draw on the fog layer
+are the regions that can be revealed. So preparing a map means drawing one shape per room and
+corridor, by hand, every time.
 
-But the map already shows the walls — they are drawn on it, in ink. A trace pipeline can pull out
-their centrelines, which turns the GM's job from *drawing* walls into *correcting* them.
+But the map already shows where the rooms are — they are drawn on it, in ink. A trace pipeline can
+turn the ink into the regions, which changes the job from *drawing* them to *correcting* them.
+
+**One artifact, two payoffs.** Those same shapes are what
+[Dynamic Fog](https://extensions.owlbear.rodeo/dynamic-fog) derives its walls from. So the output is
+a complete manual fog-of-war map on vanilla Owlbear with nothing else installed, and line-of-sight
+occlusion for free the moment Dynamic Fog is present. Dynamic Fog is a bonus, not a requirement, and
+nothing extra is emitted for it.
 
 ## Why "nudger" and not "extractor"
 
@@ -23,8 +30,9 @@ rest.
 
 A tool that gets a GM most of the way in one click and lets them fix the remainder is a large win.
 A tool that claims to be finished and is wrong in three places nobody notices is worse than
-nothing — a wall in the wrong place is an invisible bug that only surfaces mid-session, as a room
-the party can see into.
+nothing — the failures are invisible until play. A gap in the inked wall merges two rooms into one
+region, so revealing one reveals three; a region grown a little too far shows a secret door that was
+meant to stay hidden.
 
 ## Relationship to Cartographer's Fog
 
