@@ -14,6 +14,7 @@ import {
   inspectFogShapes,
   logCensus,
   placeProbeShapes,
+  promoteStaged,
   removeProbeShapes,
 } from "./probe/fogProbe";
 
@@ -108,6 +109,7 @@ OBR.onReady(async () => {
   const buttons = [
     wireButton("place", placeProbeShapes),
     wireButton("census", logCensus),
+    wireButton("promote", promoteStaged),
     wireButton("inspect", inspectFogShapes),
     wireButton("remove", removeProbeShapes),
   ];

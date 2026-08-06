@@ -262,6 +262,65 @@ Three independent reasons, any one sufficient:
 Unnecessary. There is no private format for walls to mimic. Retained here only so the option is not
 re-proposed; it remains the shape of the eventual *door* work (§11).
 
+### What an emitted fog shape must look like — measured in a room, 2026-08-06
+
+Roadmap step 1 placed hand-built shapes and compared them against one drawn with Owlbear's own fog
+tool. The differences that matter:
+
+| | ours | Owlbear's fog tool | decision |
+|---|---|---|---|
+| `fillOpacity` | 0.5 | **1** | **match — required** |
+| `visible` | true | **false** | **match** |
+| `fillRule` | evenodd | nonzero | **differ, deliberately** |
+| `strokeWidth` | 9 | 5 | free |
+
+- **`fillOpacity` must be 1.** Below that, ground the party has *revealed* keeps a translucent tint
+  of the fog colour — for the GM and for players alike. Confirmed from both directions: a probe
+  shape at opacity 1 had no tint, and Owlbear's own tool sets 1.
+- **`visible: false`**, because that is what Owlbear's fog tool produces. Not known to be
+  load-bearing — our `visible: true` shapes behaved correctly as fog — but there is no reason to
+  differ from the tool we are imitating, and an unexplained difference is one that surprises
+  someone later.
+- **`fillRule: "evenodd"`, deliberately unlike Owlbear's `nonzero`.** Under even-odd an inner ring
+  cuts a hole regardless of winding, so winding direction never has to be got right. Dynamic Fog
+  maps anything that is not `"nonzero"` onto Skia's even-odd, so the two ends agree. **This retires
+  the winding-direction pitfall from §10 entirely.**
+- **`strokeWidth` is free, including zero.** Measured per shape, not inferred from a total: a
+  zero-stroke shape produced exactly as many walls as a stroked one. The silent failure this was
+  guarding against does not exist.
+- **A `SHAPE` is positioned from its corner; a `PATH`'s commands are relative to its position.**
+  Found by a control shape sitting half its width down and right of where its path equivalent
+  landed. Costs nothing since we emit paths, and it confirms the positioning semantics world
+  placement (§9 step 7) depends on.
+
+### Review by staging on another layer — settled 2026-08-06
+
+**Fog shapes ignore their own colour.** They render in the scene's fog colour whatever the item
+says, which kills the cheapest review option this record ever considered: draw the proposal in a
+distinct colour and let the GM delete what is wrong.
+
+**The workaround is better than the thing it replaces** (user, 2026-08-06). Emit proposals onto the
+`DRAWING` layer with `visible: false`, and promote them to `FOG` when accepted. Measured:
+
+- On `DRAWING`, an item **does** render in its own colour, so proposals are visibly distinct.
+- With `visible: false`, the **GM sees it ghosted and players do not see it at all** — so a staged
+  proposal does not leak the dungeon's layout during prep. With `visible: true` players see it,
+  which is why the flag is not optional.
+- A ghosted staged item is still **selectable and editable**, so the GM can nudge a proposal before
+  accepting it.
+- Staged items produce **zero walls**. Dynamic Fog filters on the `FOG` layer, so a proposal is
+  inert by construction rather than by our being careful — it cannot affect play until promoted.
+
+**Accepting is a property update, not a re-emission**: layer to `FOG`, `visible` to false,
+`fillOpacity` to 1. Ids survive, and sixty items are one call rather than sixty. The magenta is
+left in place deliberately, so demoting back to `DRAWING` restores the marking with no extra
+bookkeeping.
+
+**This makes provenance metadata load-bearing** (user, 2026-08-06). Promote, remove and re-run all
+need to find exactly our items and never the GM's, so every emitted item carries a key under
+`io.github.captainchocolatedessert.fog-nudger`. That is already how the probe's removal avoids
+touching hand-drawn fog, and it is the same mechanism §10's re-run pitfall depends on.
+
 ---
 
 ## 5. The pipeline
@@ -323,36 +382,27 @@ it is worth stating because it decides several parameter choices — minimum reg
 Each names how to answer it. The inherited rule: a diagnostic that cannot distinguish its outcomes
 will be believed anyway and will invent findings, so these want direct tests.
 
-**OQ1. Does a programmatically-created filled shape on the `FOG` layer behave as a native revealable
-region?** The whole design assumes yes. Answer by hand-building one and looking. *(room)*
+### OQ1–OQ5 — closed in a room, 2026-08-06
 
-**OQ2. Can a GM select and edit one of our emitted shapes by hand?** The entire refining half of the
-product depends on it, and an item created through the SDK is not obviously equivalent to one drawn
-with the fog tool — hit testing, locking and layer behaviour are all plausible places for them to
-differ. *(room)*
+All five settled by roadmap step 1, and every answer was the one the design needed. Details and the
+resulting emission spec are in §4; in brief:
 
-**OQ3. Do our shapes appear in the Outliner extension, and are they usable there?** A traced map
-emits tens of items at once. If they list, they need sensible `name` values or they will bury
-everything else a GM has in the scene; if they do not list, that is worth knowing before anyone
-relies on it for bulk selection. *(room, with Outliner installed)*
-
-**OQ4. Does Dynamic Fog derive a wall at the shape's boundary, and does that depend on
-`strokeWidth`?** Its helper strokes to the drawing's own `style.strokeWidth`, so a zero width may
-produce a degenerate or empty result. This is **not** an architecture question any more — it is that
-we must pick a value when we emit, and the plausible default of zero could silently produce no walls
-while the fog itself looks perfect. One variable, two shapes. *(room, with Dynamic Fog installed)*
-
-**OQ5. Do fog shapes support holes?** A room with a central pillar is a region with a hole. A `Path`
-with correct winding should express it, and Dynamic Fog's helper explicitly mentions multiple
-contours from "a Path item with multiple inside shapes" — suggestive but not proof about *fog*
-rendering. *(room)*
+- **A programmatically-created filled `PATH` on the `FOG` layer is fog.** It renders as fog rather
+  than as a drawing, propagates to the networked scene, reaches players, and reveals correctly.
+- **A GM can select and edit one by hand**, so the refining half of the product is possible.
+- **They list properly in Outliner**, named, on the fog layer, unlocked.
+- **Dynamic Fog walls them**, at two wall items per closed contour. Measured per shape rather than
+  inferred from a total, which the first run's single number could not have supported.
+- **Holes work**, under an even-odd fill rule: the ring is revealable and the hole is not.
 
 **OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
 its adjacent corridor stub? Only answerable by running a real map at a real table.
 
-**OQ7. What does the GM review, and how?** The cheap answer is: emit, and let them use the native
-fog tools they already know — which is what OQ2 and OQ3 are really probing. A dedicated review
-surface is more work and may not be needed. Deferred until a real map has been traced.
+**OQ7. What does the GM review, and how?** *Largely answered by the staging decision in §4* — emit
+onto the `DRAWING` layer where proposals are visibly distinct and inert, let the GM edit them with
+tools they already know, and promote to `FOG` on acceptance. What remains open is only whether a
+*bulk* surface is needed on top — accept-all, revert, re-run, jump to the next suspect region — and
+that is best judged after a real map has been traced rather than guessed at now.
 
 The skeleton project already declares an action with a popover, and **that is not an answer to
 OQ7.** It exists as a second, independent signal: the background page reports through the dev log
@@ -581,13 +631,12 @@ visible in the census rather than as a mysteriously fogged map.
 **Diagonal leaks.** The connectivity pairing in §5. A one-pixel diagonal gap in ink is invisible to
 the eye and merges two rooms.
 
-**Holes and winding direction.** A room with a pillar needs a `Path` whose inner contour winds
-opposite to its outer one. Get it wrong and either the hole fills or the region inverts. The
-fixtures must include one; nothing else will catch it.
+**~~Holes and winding direction.~~** *Retired 2026-08-06.* Under an even-odd fill rule an inner ring
+cuts a hole whichever way it winds, and even-odd is what we emit (§4). Fixtures should still include
+a room with a pillar, but for the hole itself rather than for its winding.
 
-**`strokeWidth` of zero.** A fog shape with no stroke may render as fog perfectly well and produce
-no walls at all — a failure invisible without Dynamic Fog installed, and invisible *with* it unless
-someone specifically looks for occlusion.
+**~~`strokeWidth` of zero.~~** *Retired 2026-08-06.* Measured: a zero-stroke shape produced exactly
+as many walls as a stroked one. Stroke width is free.
 
 **Hatching and texture traced as rooms.** Cross-hatching outside walls encloses hundreds of tiny
 areas. The minimum-area filter is the guard, and it is the sibling's `minContourLength` trap in a

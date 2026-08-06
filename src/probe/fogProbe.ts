@@ -24,8 +24,10 @@
 import OBR, {
   buildPath,
   Command,
+  isPath,
   type Item,
   type Layer,
+  type Path,
   type Vector2,
 } from "@owlbear-rodeo/sdk";
 
@@ -125,6 +127,50 @@ export async function placeProbeShapes(): Promise<string> {
   );
 
   return `Placed ${items.length} shapes. Give Dynamic Fog a moment, then take a census.`;
+}
+
+/**
+ * Accept a staged proposal: move our drawing-layer shapes onto the `FOG` layer.
+ *
+ * This is the whole "accept" gesture in miniature, and it is a property update rather than a
+ * delete-and-recreate — so ids survive, and a batch of sixty is one call rather than sixty.
+ *
+ * Three properties change together, because staged and accepted want different values for each:
+ *
+ * - **layer** — the actual promotion. Dynamic Fog's filter is layer plus type, so walls appear on
+ *   arrival and did not exist a moment earlier. Measured: staged shapes produce zero walls.
+ * - **`fillOpacity` → 1** — a fog shape below full opacity leaves a translucent tint over ground
+ *   the party has revealed. Measured against Owlbear's own fog tool, which sets 1.
+ * - **`visible` → false** — matching what Owlbear's fog tool produces. Not known to be load-bearing,
+ *   since our `visible: true` shapes behaved correctly as fog, but there is no reason to differ
+ *   from the tool we are imitating and an unexplained difference is one that surprises someone
+ *   later.
+ *
+ * The magenta is deliberately left alone. Fog rendering ignores an item's own colour, so it costs
+ * nothing here — and it means demoting back to the drawing layer restores the visual marking with
+ * no extra bookkeeping.
+ */
+export async function promoteStaged(): Promise<string> {
+  if (!(await OBR.scene.isReady())) return "No scene open.";
+
+  const staged = await OBR.scene.items.getItems<Path>(
+    (item) => PROBE_KEY in item.metadata && item.layer === "DRAWING" && isPath(item),
+  );
+  if (staged.length === 0) {
+    return "Nothing staged on the drawing layer to promote.";
+  }
+
+  await OBR.scene.items.updateItems<Path>(staged, (drafts) => {
+    for (const draft of drafts) {
+      draft.layer = "FOG";
+      draft.visible = false;
+      draft.style.fillOpacity = 1;
+    }
+  });
+
+  const labels = staged.map(labelOf).join(", ");
+  devLog("info", `probe: promoted ${staged.length} staged shapes to FOG — ${labels}`);
+  return `Promoted ${staged.length} (${labels}). Wait a moment, then census for walls.`;
 }
 
 /** Remove only the items this probe created. */
