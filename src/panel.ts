@@ -10,7 +10,12 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 import { themeVariables } from "./theme";
-import { logCensus, placeProbeShapes, removeProbeShapes } from "./probe/fogProbe";
+import {
+  inspectFogShapes,
+  logCensus,
+  placeProbeShapes,
+  removeProbeShapes,
+} from "./probe/fogProbe";
 
 installDevLog("ui");
 
@@ -103,6 +108,7 @@ OBR.onReady(async () => {
   const buttons = [
     wireButton("place", placeProbeShapes),
     wireButton("census", logCensus),
+    wireButton("inspect", inspectFogShapes),
     wireButton("remove", removeProbeShapes),
   ];
 

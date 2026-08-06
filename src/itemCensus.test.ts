@@ -1,6 +1,60 @@
 import { describe, expect, it } from "vitest";
 
-import { summariseItems } from "./itemCensus";
+import { attributeByParent, summariseItems } from "./itemCensus";
+
+describe("attributeByParent", () => {
+  const parents = [
+    { id: "a", label: "baseline" },
+    { id: "b", label: "hairline" },
+  ];
+
+  it("counts derived items against the parent that produced them", () => {
+    expect(
+      attributeByParent(
+        [{ attachedTo: "a" }, { attachedTo: "a" }, { attachedTo: "b" }],
+        parents,
+      ),
+    ).toBe("baseline×2, hairline×1");
+  });
+
+  /**
+   * The point of the whole function.
+   *
+   * A parent that produced nothing is the most interesting result it can return — it is exactly
+   * what "stroke width zero yields no walls" looks like. Omitting it would make that finding
+   * indistinguishable from the parent not being checked at all.
+   */
+  it("reports a parent that produced nothing as zero rather than omitting it", () => {
+    expect(attributeByParent([{ attachedTo: "a" }], parents)).toBe(
+      "baseline×1, hairline×0",
+    );
+  });
+
+  it("does not credit us with walls from someone else's fog", () => {
+    // A GM's own hand-drawn fog produces walls too. Folding those into our counts would inflate
+    // them invisibly, and the inflation would look like success.
+    expect(
+      attributeByParent([{ attachedTo: "a" }, { attachedTo: "gm-drew-this" }], parents),
+    ).toBe("baseline×1, hairline×0, other-parents×1");
+  });
+
+  it("counts items attached to nothing separately", () => {
+    expect(attributeByParent([{ attachedTo: undefined }, {}], parents)).toBe(
+      "baseline×0, hairline×0, unattached×2",
+    );
+  });
+
+  it("keeps parent order stable so two runs can be diffed", () => {
+    const forwards = attributeByParent([{ attachedTo: "b" }], parents);
+    const backwards = attributeByParent([{ attachedTo: "b" }], [...parents]);
+    expect(forwards).toBe(backwards);
+    expect(forwards.indexOf("baseline")).toBeLessThan(forwards.indexOf("hairline"));
+  });
+
+  it("says nothing misleading when there are no parents at all", () => {
+    expect(attributeByParent([{ attachedTo: "a" }], [])).toBe("other-parents×1");
+  });
+});
 
 describe("summariseItems", () => {
   it("counts by type and layer", () => {

@@ -36,3 +36,66 @@ export function summariseItems(items: readonly CensusItem[]): string {
     .map(([key, count]) => `${key}×${count}`)
     .join(", ");
 }
+
+/** A derived item — a Dynamic Fog wall — and the id of the drawing it was built from. */
+export interface AttachedItem {
+  readonly attachedTo?: string | undefined;
+}
+
+/** One of our own items, and the human-readable label we gave it. */
+export interface LabelledParent {
+  readonly id: string;
+  readonly label: string;
+}
+
+/**
+ * Count derived items per parent, so "how many walls did *this* shape produce" is measured rather
+ * than inferred from a total.
+ *
+ * ## Why a total is not good enough
+ *
+ * The first run of the probe reported ten walls from four shapes. That is consistent with the
+ * decomposition we expected, and consistent with others we did not — so it could not actually
+ * establish the thing it was run to establish. Reading a total and assuming a split is the
+ * inherited failure of a diagnostic that cannot distinguish its outcomes, arriving in arithmetic
+ * rather than in code.
+ *
+ * ## Zero must be reported, not omitted
+ *
+ * A parent that produced nothing is the single most interesting result this can return — it is what
+ * "stroke width zero yields no walls" would look like. So every known parent appears in the output
+ * with its count, including `×0`. An absent line and a zero line must never be the same thing.
+ *
+ * Anything attached to something we do not recognise is counted separately: a GM's own hand-drawn
+ * fog produces walls too, and folding those into ours would inflate the numbers invisibly.
+ */
+export function attributeByParent(
+  derived: readonly AttachedItem[],
+  parents: readonly LabelledParent[],
+): string {
+  const labelById = new Map(parents.map((parent) => [parent.id, parent.label]));
+  const counts = new Map<string, number>(parents.map((parent) => [parent.label, 0]));
+
+  let foreign = 0;
+  let unattached = 0;
+
+  for (const item of derived) {
+    if (!item.attachedTo) {
+      unattached += 1;
+      continue;
+    }
+    const label = labelById.get(item.attachedTo);
+    if (label === undefined) {
+      foreign += 1;
+      continue;
+    }
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+
+  // Parent order is preserved rather than sorted by count: these are compared against expectations
+  // shape by shape, and a stable order makes two runs diffable.
+  const parts = [...counts.entries()].map(([label, count]) => `${label}×${count}`);
+  if (foreign > 0) parts.push(`other-parents×${foreign}`);
+  if (unattached > 0) parts.push(`unattached×${unattached}`);
+  return parts.join(", ");
+}

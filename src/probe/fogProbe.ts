@@ -1,39 +1,37 @@
 /**
  * Roadmap step 1 — validate the emit path in a room, with no pipeline.
  *
- * Places a handful of hand-built shapes on the `FOG` layer of the networked scene and lets a human
- * look at them. It answers OQ1–OQ5 in `DESIGN.md` §6, and a failure in the first three is a
- * redesign rather than a bug, which is why this comes before any pipeline exists.
+ * Places hand-built shapes on the networked scene and lets a human look at them. What the first
+ * run settled (2026-08-06): our shapes render as fog rather than as drawings, propagate to players,
+ * reveal correctly, carry holes under an even-odd fill, list properly in Outliner, and can be
+ * selected and edited by hand. The design's core assumptions hold.
  *
- * Each shape isolates one variable:
+ * What this second set is for:
  *
- * - **baseline** — a filled `PATH` with a visible stroke. Does it render as revealable fog; can a
- *   GM select and edit it; does it appear usefully in Outliner; does Dynamic Fog wall its edge.
- * - **hairline** — identical but `strokeWidth: 0`. The only difference from baseline, so any
- *   difference in the walls Dynamic Fog derives is attributable to the stroke width and nothing
- *   else. This matters because zero is a plausible default for a filled region, and it could
- *   silently produce no walls while the fog itself looks perfect.
- * - **holed** — a room with a pillar, as two same-wound rings under an even-odd fill rule.
- * - **control** — a `SHAPE` rather than a `PATH`, otherwise the same. Only interesting if the
- *   `PATH` cases fail: it separates "fog shapes do not work this way" from "paths do not".
- *
- * The fill colour is deliberately **magenta**. If the shapes render magenta they are being drawn as
- * ordinary drawings; if they take the scene's fog colour they are being treated as fog. Without a
- * distinctive colour those two outcomes could look the same, which is the diagnostic failure this
- * project has a standing warning about.
+ * - **`fillOpacity`** — a revealed area kept a translucent tint of the fog colour, and a hand-drawn
+ *   fog shape does not do that, so it is ours. `opaque` differs from `baseline` in fill opacity
+ *   alone.
+ * - **Wall attribution** — the first census reported a total, which was consistent with the split
+ *   we expected *and* with splits we did not. Walls are now counted per parent shape (see
+ *   `attributeByParent`), so "stroke width zero still makes walls" is measured rather than inferred.
+ * - **Layer staging** — fog shapes ignore their own colour, so a proposal cannot be marked by
+ *   appearance while it sits on the `FOG` layer. Staging proposals on another layer and moving them
+ *   across when accepted would restore that. The open question is whether players see them while
+ *   staged, which would leak the whole dungeon during prep; `staged` and `staged-hidden` differ in
+ *   `visible` alone to answer it.
  */
 
 import OBR, {
   buildPath,
-  buildShape,
   Command,
   type Item,
+  type Layer,
   type Vector2,
 } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { summariseItems } from "../itemCensus";
+import { attributeByParent, summariseItems } from "../itemCensus";
 import {
   PathOp,
   ringsToCommands,
@@ -61,7 +59,36 @@ const NAMESPACE = "io.github.captainchocolatedessert.fog-nudger";
 /** Marks an item as ours, so removal never touches anything the GM drew. */
 export const PROBE_KEY = `${NAMESPACE}/probe`;
 
+/**
+ * Ignored entirely by fog rendering — confirmed in a room — and therefore useful twice over. It
+ * still distinguishes a shape staged on a non-fog layer, and if a `FOG`-layer shape ever *does*
+ * come out magenta, something has changed about how Owlbear treats them.
+ */
 const MAGENTA = "#ff00ff";
+
+interface ProbeSpec {
+  readonly label: string;
+  readonly rings: (size: number) => readonly Ring[];
+  readonly strokeWidth: (stroke: number) => number;
+  readonly fillOpacity: number;
+  readonly layer: Layer;
+  readonly visible: boolean;
+}
+
+/**
+ * Laid out in two rows of three. Each row varies one thing at a time against `baseline`; nothing
+ * varies two.
+ */
+const SPECS: readonly ProbeSpec[] = [
+  { label: "baseline", rings: (s) => [squareRing(s)], strokeWidth: (w) => w, fillOpacity: 0.5, layer: "FOG", visible: true },
+  { label: "hairline", rings: (s) => [squareRing(s)], strokeWidth: () => 0, fillOpacity: 0.5, layer: "FOG", visible: true },
+  { label: "holed", rings: (s) => squareWithHoleRings(s, s / 3), strokeWidth: (w) => w, fillOpacity: 0.5, layer: "FOG", visible: true },
+  { label: "opaque", rings: (s) => [squareRing(s)], strokeWidth: (w) => w, fillOpacity: 1, layer: "FOG", visible: true },
+  { label: "staged", rings: (s) => [squareRing(s)], strokeWidth: (w) => w, fillOpacity: 0.5, layer: "DRAWING", visible: true },
+  { label: "staged-hidden", rings: (s) => [squareRing(s)], strokeWidth: (w) => w, fillOpacity: 0.5, layer: "DRAWING", visible: false },
+];
+
+const COLUMNS = 3;
 
 /** Place the probe shapes into the current scene. */
 export async function placeProbeShapes(): Promise<string> {
@@ -76,17 +103,18 @@ export async function placeProbeShapes(): Promise<string> {
   const spacing = dpi * 4;
   const stroke = Math.max(2, Math.round(dpi / 16));
 
-  // Laid out left to right across the middle of what the GM is currently looking at, so they are
-  // found without hunting. Placement in world space is roadmap step 7's problem, not this one's.
-  const left = centre.x - spacing * 1.5;
-  const at = (index: number): Vector2 => ({ x: left + spacing * index, y: centre.y });
+  // Centred on what the GM is currently looking at, so they are found without hunting. Placement in
+  // world space is roadmap step 7's problem, not this one's.
+  const rows = Math.ceil(SPECS.length / COLUMNS);
+  const originX = centre.x - (spacing * (COLUMNS - 1)) / 2;
+  const originY = centre.y - (spacing * (rows - 1)) / 2;
 
-  const items: Item[] = [
-    pathItem("baseline", [squareRing(size)], at(0), stroke),
-    pathItem("hairline", [squareRing(size)], at(1), 0),
-    pathItem("holed", squareWithHoleRings(size, size / 3), at(2), stroke),
-    shapeItem("control", at(3), size, stroke),
-  ];
+  const items = SPECS.map((spec, index) =>
+    pathItem(spec, size, stroke, {
+      x: originX + spacing * (index % COLUMNS),
+      y: originY + spacing * Math.floor(index / COLUMNS),
+    }),
+  );
 
   await OBR.scene.items.addItems(items);
   devLog(
@@ -103,7 +131,7 @@ export async function placeProbeShapes(): Promise<string> {
 export async function removeProbeShapes(): Promise<string> {
   if (!(await OBR.scene.isReady())) return "No scene open.";
 
-  const ours = await OBR.scene.items.getItems((item) => PROBE_KEY in item.metadata);
+  const ours = await ourItems();
   if (ours.length === 0) return "Nothing of ours in the scene to remove.";
 
   await OBR.scene.items.deleteItems(ours.map((item) => item.id));
@@ -112,80 +140,107 @@ export async function removeProbeShapes(): Promise<string> {
 }
 
 /**
- * Report what is in the scene and in this client's local set.
+ * Report what is in the scene, what is in this client's local set, and which of our shapes produced
+ * which walls.
  *
  * Fires unconditionally and reports in every case, including the boring one — a census that only
  * spoke when something was wrong could not tell "no walls were derived" from "the census never
- * ran". Both sets are reported because Dynamic Fog's walls live only in the local one, which is the
- * finding this whole census style came from.
+ * ran". Both item sets are reported because Dynamic Fog's walls live only in the local one, which
+ * is the finding this census style came from.
  */
 export async function logCensus(): Promise<string> {
   if (!(await OBR.scene.isReady())) return "No scene open.";
 
-  const [networked, local] = await Promise.all([
+  const [networked, local, ours] = await Promise.all([
     OBR.scene.items.getItems(),
     OBR.scene.local.getItems(),
+    ourItems(),
   ]);
 
   const networkedSummary = summariseItems(networked);
   const localSummary = summariseItems(local);
 
+  // Per shape, not as a total. A total is consistent with the split we expect and with splits we do
+  // not, so it cannot settle what it was run to settle.
+  const walls = local.filter((item) => item.type === "WALL");
+  const perShape = attributeByParent(
+    walls,
+    ours.map((item) => ({ id: item.id, label: labelOf(item) })),
+  );
+
   devLog("info", `census — networked: ${networkedSummary}`);
   devLog("info", `census — local:     ${localSummary}`);
+  devLog("info", `census — walls by parent: ${perShape}`);
 
-  // Called out separately because it is the answer to OQ4 and the one number worth reading off the
-  // panel rather than the log. It is also inside the local summary above, deliberately — two views
-  // of the same fact cannot drift apart without it being obvious.
-  const walls = local.filter((item) => item.type === "WALL").length;
-  const wallNote = walls > 0 ? `${walls} local walls` : "no local walls";
+  return `Walls by shape: ${perShape}. (networked ${networkedSummary}; local ${localSummary})`;
+}
 
-  return `Networked: ${networkedSummary}. Local: ${localSummary}. (${wallNote})`;
+/**
+ * Dump the full style of every `FOG`-layer item, ours and the GM's alike.
+ *
+ * Reconnaissance rather than a test. A hand-drawn fog shape does not leave the tint ours does, so
+ * the difference is in a property we set — and reading Owlbear's own values beats guessing at which
+ * one, field by field.
+ */
+export async function inspectFogShapes(): Promise<string> {
+  if (!(await OBR.scene.isReady())) return "No scene open.";
+
+  const fogItems = await OBR.scene.items.getItems((item) => item.layer === "FOG");
+  if (fogItems.length === 0) {
+    return "No FOG-layer items at all — draw one by hand to compare against.";
+  }
+
+  let theirs = 0;
+  for (const item of fogItems) {
+    const ours = PROBE_KEY in item.metadata;
+    if (!ours) theirs += 1;
+    devLog(
+      "info",
+      `fog item [${ours ? labelOf(item) : "GM-drawn"}]`,
+      `type=${item.type}`,
+      `visible=${item.visible}`,
+      `zIndex=${item.zIndex}`,
+      `fillRule=${(item as { fillRule?: unknown }).fillRule ?? "n/a"}`,
+      `style=`,
+      (item as { style?: unknown }).style ?? "n/a",
+    );
+  }
+
+  return `Logged ${fogItems.length} fog items (${theirs} not ours). Compare the styles in dev.log.`;
+}
+
+function ourItems(): Promise<Item[]> {
+  return OBR.scene.items.getItems((item) => PROBE_KEY in item.metadata);
+}
+
+function labelOf(item: Item): string {
+  const label = item.metadata[PROBE_KEY];
+  return typeof label === "string" ? label : "unlabelled";
 }
 
 function pathItem(
-  label: string,
-  rings: readonly Ring[],
+  spec: ProbeSpec,
+  size: number,
+  stroke: number,
   position: Vector2,
-  strokeWidth: number,
 ): Item {
   return buildPath()
-    .commands(toSdkCommands(ringsToCommands(rings)))
+    .commands(toSdkCommands(ringsToCommands(spec.rings(size))))
     // Even-odd, so a hole is a hole regardless of which way its ring winds. Dynamic Fog maps
     // anything that is not "nonzero" onto Skia's even-odd fill type, so this matches on both sides.
     .fillRule("evenodd")
     .fillColor(MAGENTA)
-    .fillOpacity(0.5)
+    .fillOpacity(spec.fillOpacity)
     .strokeColor(MAGENTA)
     .strokeOpacity(1)
-    .strokeWidth(strokeWidth)
-    .layer("FOG")
+    .strokeWidth(spec.strokeWidth(stroke))
+    .layer(spec.layer)
+    .visible(spec.visible)
     .position(position)
-    // Named for Outliner (OQ3). Sixty of these will eventually land in one scene, so whether they
-    // are legible in a list is a real question and not a cosmetic one.
-    .name(`Fog Nudger probe — ${label}`)
-    .metadata({ [PROBE_KEY]: label })
-    .build();
-}
-
-function shapeItem(
-  label: string,
-  position: Vector2,
-  size: number,
-  strokeWidth: number,
-): Item {
-  return buildShape()
-    .shapeType("RECTANGLE")
-    .width(size)
-    .height(size)
-    .fillColor(MAGENTA)
-    .fillOpacity(0.5)
-    .strokeColor(MAGENTA)
-    .strokeOpacity(1)
-    .strokeWidth(strokeWidth)
-    .layer("FOG")
-    .position(position)
-    .name(`Fog Nudger probe — ${label}`)
-    .metadata({ [PROBE_KEY]: label })
+    // Named for Outliner. Sixty of these will eventually land in one scene, so whether they are
+    // legible in a list is a real question and not a cosmetic one.
+    .name(`Fog Nudger probe — ${spec.label}`)
+    .metadata({ [PROBE_KEY]: spec.label })
     .build();
 }
 
