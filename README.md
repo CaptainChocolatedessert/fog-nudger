@@ -57,9 +57,10 @@ in a browser executes the code but produces no Owlbear activity, and that silenc
 `npm run devlog` starts a small receiver on port 9998 that collects log output from inside the
 extension iframe into `dev.log`.
 
-Neither port is the default. Cartographer's Fog uses 5173 and 9999, and both projects get
-developed on the same machine — a shared log receiver would silently file this project's output
-under the other one's.
+Neither port is Vite's default. 5173 is left free deliberately, because it is what any
+unconfigured project picks up by accident; the dev server is also set to fail rather than quietly
+move to another port, so a URL registered in Owlbear can never end up pointing at a different
+project's server.
 
 ## Licence
 

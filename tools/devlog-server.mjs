@@ -33,7 +33,10 @@ import { createServer } from "node:http";
 import { appendFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-// Not 9999 — that is the sibling project's receiver, and both get run on the same machine.
+// Registered in ../project setup notes.md, which is where ports are claimed across every project
+// in this folder. 9999 is cartographers-fog's. Binds explicitly and fails rather than moving, so it
+// needs no equivalent of Vite's strictPort — but it does need a distinct number, because two
+// projects sharing a receiver interleave into one file with no way to tell them apart.
 // Must stay in step with the ENDPOINT in src/devlog.ts.
 const PORT = 9998;
 const LOG_FILE = fileURLToPath(new URL("../dev.log", import.meta.url));

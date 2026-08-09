@@ -11,13 +11,22 @@ export default defineConfig({
   base: "/fog-nudger/",
   server: {
     /**
-     * Not Vite's default 5173, because the sibling project already uses it and both dev
-     * servers get run on the same machine.
+     * Claimed in `../project setup notes.md`, which is where ports are registered across every
+     * project in this folder. That file is the authority; read it before changing this, and
+     * claim there before configuring anything new.
      *
-     * `strictPort` matters more than the number. Vite's default on a taken port is to
-     * quietly pick the next free one, which leaves the URL registered as a custom extension
-     * in Owlbear pointing at the *other* project's dev server — a working page serving the
-     * wrong extension. Failing to start is the readable outcome.
+     * **Deliberately not 5173, and not because someone else holds it.** Nobody does — it is kept
+     * empty on purpose. It is the port every *unconfigured* project takes: a scratch repo, a
+     * tutorial, a one-off clone, anything run before ports were thought about. Sitting on it means
+     * colliding with whatever gets started next by accident, so it is left free for exactly those.
+     *
+     * **`strictPort` is the half that matters more than the number.** Vite's default on a taken
+     * port is to quietly move to the next free one, which leaves the URL registered as a custom
+     * extension in Owlbear pointing at whichever project *did* get the port — a working page
+     * serving someone else's extension, with nothing anywhere reporting a problem. That has
+     * already happened once between two of these projects and a run of measurements was taken
+     * against a stale build before anyone noticed. Failing to start is the readable outcome and
+     * costs seconds.
      */
     port: 5273,
     strictPort: true,

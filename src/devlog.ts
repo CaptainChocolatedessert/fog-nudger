@@ -8,10 +8,14 @@
  */
 
 /**
- * Not 9999, which is the sibling project's receiver and is often already running on the same
- * machine. Sharing it is not a harmless collision: this shim fires and forgets, so posting to
- * the wrong receiver succeeds, and Fog Nudger's output lands in the other project's log with
- * nothing anywhere to say so. Must stay in step with `tools/devlog-server.mjs`.
+ * Registered in `../project setup notes.md` alongside the Vite port. 9999 belongs to
+ * cartographers-fog, whose receiver is often already running on this machine.
+ *
+ * Sharing a receiver is not a harmless collision: this shim fires and forgets, so posting to the
+ * wrong one *succeeds*, and Fog Nudger's output lands in another project's log interleaved with
+ * its lines and nothing anywhere saying so.
+ *
+ * Must stay in step with `tools/devlog-server.mjs`.
  */
 const ENDPOINT = "http://localhost:9998/log";
 
