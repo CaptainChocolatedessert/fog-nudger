@@ -16,7 +16,7 @@
 
 // Aliased: the SDK's `Image` item type would otherwise shadow the DOM `Image` constructor that
 // `loadImage` needs, and a type-only binding cannot be called.
-import OBR, { isImage, type Image as ImageItem } from "@owlbear-rodeo/sdk";
+import OBR, { isImage, type Image as ImageItem, type Item } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
 import { key } from "../namespace";
@@ -102,6 +102,21 @@ export async function listMapImages(): Promise<MapImageSummary[]> {
       plausible: kept.some((candidate) => candidate.id === map.id),
     }))
     .sort((a, b) => b.width * b.height - a.width * a.height);
+}
+
+/**
+ * A cheap fingerprint of the map-layer images in a set of items.
+ *
+ * Exists so a watcher can tell "the maps changed" from "something else in the scene moved" without
+ * a round trip per image for bounds. Kept here rather than in the panel deliberately: what counts
+ * as a map image is decided in one place, and two places deciding it is how they drift apart.
+ */
+export function mapSignature(items: readonly Item[]): string {
+  return items
+    .filter((item) => isImage(item) && item.layer === "MAP")
+    .map((item) => `${item.id}:${item.name}`)
+    .sort()
+    .join("|");
 }
 
 /** The GM's nominated map id for this scene, or `null` if they have not chosen. */

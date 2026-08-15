@@ -17,7 +17,12 @@ import { themeVariables } from "./theme";
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 import { dryRun } from "./dryRun";
-import { listMapImages, nominateMap, readNominatedMapId } from "./map/mapImage";
+import {
+  listMapImages,
+  mapSignature,
+  nominateMap,
+  readNominatedMapId,
+} from "./map/mapImage";
 
 installDevLog("ui");
 
@@ -76,18 +81,30 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
  * run reads it. The popover is dismissed by clicking anywhere outside it, so a choice held in the
  * page would be lost by the most ordinary gesture there is.
  */
-function wireMapPicker(): HTMLSelectElement | null {
-  const select = document.getElementById("map");
-  if (!(select instanceof HTMLSelectElement)) return null;
+function wireMapPicker(): HTMLElement | null {
+  const container = document.getElementById("maps");
+  if (!container) return null;
 
-  select.addEventListener("change", () => {
-    void nominateMap(select.value || null).catch((error: unknown) => {
+  // Delegated, so the rows can be rebuilt whenever the scene's maps change without rebinding —
+  // and so a rebuild that lands between the click and the handler cannot drop the event.
+  container.addEventListener("change", (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.checked) return;
+
+    void nominateMap(input.value || null).catch((error: unknown) => {
       const detail = describeError(error);
       reportResult(`Could not save the map choice: ${detail}`, "bad");
       console.error(`Fog Nudger — nominating a map failed: ${detail}`);
     });
   });
-  return select;
+  return container;
+}
+
+/** Enable or disable the picker as a whole. Radios carry no group-level disabled state of their own. */
+function setPickerEnabled(container: HTMLElement | null, enabled: boolean): void {
+  if (!container) return;
+  container.setAttribute("aria-disabled", String(!enabled));
+  for (const input of container.querySelectorAll("input")) input.disabled = !enabled;
 }
 
 /**
@@ -98,8 +115,13 @@ function wireMapPicker(): HTMLSelectElement | null {
  * because on a scene with two plausible maps the size is often the only thing distinguishing the
  * real one from a GM overlay.
  */
-async function refreshMaps(select: HTMLSelectElement | null): Promise<void> {
-  if (!select) return;
+async function refreshMaps(container: HTMLElement | null): Promise<void> {
+  if (!container) {
+    // Said out loud because the alternative is a picker that is empty for one reason and looks
+    // exactly like a picker that is empty for a completely different one.
+    devLog("warn", "panel: no map picker element — the markup and the wiring disagree");
+    return;
+  }
 
   try {
     const [maps, nominated] = await Promise.all([
@@ -107,31 +129,85 @@ async function refreshMaps(select: HTMLSelectElement | null): Promise<void> {
       readNominatedMapId(),
     ]);
 
-    select.replaceChildren();
-    const auto = new Option("Auto", "");
-    select.append(auto);
+    // Preserved across the rebuild, since this also runs when the scene's items change and
+    // discarding a GM's choice because an unrelated token moved would be its own bug.
+    const checked = container.querySelector<HTMLInputElement>("input:checked");
+    const previous = checked?.value ?? "";
+    const enabled = container.getAttribute("aria-disabled") !== "true";
 
-    for (const map of maps) {
-      const label =
-        `${map.name} — ${map.width}×${map.height}` +
-        (map.plausible ? "" : " (too small?)") +
-        (map.locked ? " (locked)" : "") +
-        (map.visible ? "" : " (hidden)");
-      select.append(new Option(label, map.id));
-    }
-
-    // A nomination naming an id this scene does not contain is left unselected rather than added
-    // as a phantom entry, which matches what the resolver does with it: warn, and fall through.
-    select.value = nominated && maps.some((map) => map.id === nominated) ? nominated : "";
+    container.replaceChildren();
 
     if (maps.length === 0) {
-      auto.text = "No MAP-layer image in this scene";
+      const empty = document.createElement("p");
+      empty.textContent = "No MAP-layer image in this scene.";
+      empty.className = "note";
+      container.append(empty);
+    } else {
+      // A nomination naming an id this scene does not contain selects nothing rather than adding a
+      // phantom row, which matches what the resolver does with it: warn, and fall through.
+      const wanted = previous || nominated || "";
+      const known = maps.some((map) => map.id === wanted);
+
+      container.append(
+        mapRow("", "Auto", known ? "" : "refuses if two look alike", !known),
+      );
+      for (const map of maps) {
+        const notes = [
+          `${map.width}×${map.height}`,
+          map.plausible ? "" : "too small?",
+          map.locked ? "locked" : "",
+          map.visible ? "" : "hidden",
+        ].filter(Boolean);
+        container.append(mapRow(map.id, map.name, notes.join(", "), map.id === wanted));
+      }
     }
+
+    setPickerEnabled(container, enabled);
+
+    // Unconditional, including the zero case. An empty picker was reported as a bug precisely
+    // because nothing here spoke: "found no maps" and "never asked" produced identical silence.
+    devLog(
+      "info",
+      `panel: map picker listed ${maps.length} map image${maps.length === 1 ? "" : "s"}` +
+        (maps.length > 0
+          ? ` — ${maps.map((map) => `${map.name} ${map.width}x${map.height}${map.plausible ? "" : " (small)"}`).join("; ")}`
+          : "") +
+        `; nomination ${nominated ?? "auto"}, rows ${container.querySelectorAll("input").length}, ` +
+        `enabled ${enabled}`,
+    );
   } catch (error) {
     const detail = describeError(error);
     reportResult(`Could not list the scene's maps: ${detail}`, "bad");
     console.error(`Fog Nudger — listing maps failed: ${detail}`);
   }
+}
+
+/** One choosable row. Built as DOM rather than markup so a map's name cannot be read as HTML. */
+function mapRow(
+  value: string,
+  name: string,
+  note: string,
+  checked: boolean,
+): HTMLLabelElement {
+  const label = document.createElement("label");
+
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = "map";
+  input.value = value;
+  input.checked = checked;
+
+  const text = document.createElement("span");
+  text.textContent = name;
+
+  label.append(input, text);
+  if (note) {
+    const hint = document.createElement("span");
+    hint.className = "note";
+    hint.textContent = note;
+    label.append(hint);
+  }
+  return label;
 }
 
 /**
@@ -193,7 +269,7 @@ OBR.onReady(async () => {
     // up would otherwise leave the buttons dead with no explanation.
     const setEnabled = (sceneReady: boolean): void => {
       for (const button of buttons) if (button) button.disabled = !sceneReady;
-      if (mapSelect) mapSelect.disabled = !sceneReady;
+      setPickerEnabled(mapSelect, sceneReady);
       reportResult(sceneReady ? "Ready." : "Waiting for a scene.", "ok");
       // Repopulated on every transition rather than once: the list belongs to the scene, so a
       // scene change makes the previous one's maps stale, and a stale nomination silently pointing
@@ -202,6 +278,23 @@ OBR.onReady(async () => {
     };
     OBR.scene.onReadyChange(setEnabled);
     setEnabled(ready);
+
+    // Populating once at open is not enough, and that is what left the picker empty on its first
+    // outing. A popover is a fresh iframe every time it is opened, and the scene being *ready* is
+    // not the same event as this iframe having received the scene's items — so the first query can
+    // legitimately answer "no maps" a moment before the answer becomes two. Watching for the items
+    // makes the race moot rather than betting on having won it.
+    //
+    // Guarded by a signature so the select is rebuilt only when the map images themselves change.
+    // Items change constantly in a live room, and rebuilding on every one of them would collapse
+    // the dropdown under the GM's cursor as they tried to use it.
+    let signature: string | null = null;
+    OBR.scene.items.onChange((items) => {
+      const next = mapSignature(items);
+      if (next === signature) return;
+      signature = next;
+      void refreshMaps(mapSelect);
+    });
   } catch (error) {
     // Plain text on screen, full detail to the console. The SDK's rejections are not `Error`s, so
     // this goes through `describeError` rather than reading `.message`, which would be undefined.

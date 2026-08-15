@@ -76,17 +76,34 @@
         letter-spacing: 0.05em;
         margin-bottom: 0.25rem;
       }
-      select {
-        font: inherit;
-        color: var(--text);
-        background: var(--line);
-        border: 1px solid transparent;
+      /*
+        A list rather than a <select>, deliberately.
+
+        The dropdown this replaces rendered its options white-on-white and looked empty. Firefox
+        paints a native popup against the *system* background, not the page's, so `--line` at 12%
+        alpha stopped being a dark grey the moment the list escaped this iframe. Explicit opaque
+        option colours would have fixed that particular symptom, but a native popup inside a
+        sandboxed third-party iframe is a rendering path we do not control and cannot style
+        reliably.
+
+        It is also better for the job. There are typically two candidates and the choice between
+        them is a *comparison* — name, size, whether one is hidden. A dropdown hides exactly the
+        information the GM needs to choose with.
+      */
+      .maps { margin-bottom: 0.5rem; }
+      .maps label {
+        display: flex;
+        align-items: baseline;
+        gap: 0.4rem;
+        padding: 0.25rem 0.4rem;
         border-radius: 0.35rem;
-        padding: 0.35rem 0.5rem;
-        margin-bottom: 0.5rem;
-        max-width: 100%;
+        cursor: pointer;
       }
-      select:disabled { opacity: 0.5; }
+      .maps label:hover { background: var(--line); }
+      .maps input { margin: 0; accent-color: var(--accent); }
+      .maps .note { color: var(--dim); font-size: 0.8em; }
+      .maps[aria-disabled="true"] { opacity: 0.5; }
+      .maps[aria-disabled="true"] label { cursor: default; }
       #result {
         margin-top: 0.5rem;
         font-size: 0.8rem;
@@ -113,10 +130,10 @@
     -->
     <section class="probe">
       <h2>Dry run</h2>
-      <label class="field" for="map">Map</label>
-      <select id="map" disabled>
-        <option value="">Auto</option>
-      </select>
+      <p class="field">Map</p>
+      <div class="maps" id="maps" aria-disabled="true">
+        <p class="note">Waiting for a scene&hellip;</p>
+      </div>
       <button id="dry-run" disabled>Trace, emit nothing</button>
       <p id="result">Waiting for a scene.</p>
     </section>
