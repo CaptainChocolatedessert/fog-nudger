@@ -16,6 +16,8 @@ import { themeVariables } from "./theme";
 // so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
+import { dryRun } from "./dryRun";
+import { listMapImages, nominateMap, readNominatedMapId } from "./map/mapImage";
 
 installDevLog("ui");
 
@@ -68,6 +70,71 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
 }
 
 /**
+ * The map nomination control.
+ *
+ * Writes the choice to scene metadata as soon as it changes, rather than holding it until the dry
+ * run reads it. The popover is dismissed by clicking anywhere outside it, so a choice held in the
+ * page would be lost by the most ordinary gesture there is.
+ */
+function wireMapPicker(): HTMLSelectElement | null {
+  const select = document.getElementById("map");
+  if (!(select instanceof HTMLSelectElement)) return null;
+
+  select.addEventListener("change", () => {
+    void nominateMap(select.value || null).catch((error: unknown) => {
+      const detail = describeError(error);
+      reportResult(`Could not save the map choice: ${detail}`, "bad");
+      console.error(`Fog Nudger — nominating a map failed: ${detail}`);
+    });
+  });
+  return select;
+}
+
+/**
+ * Fill the picker from the scene, marking anything the area filter thinks is too small to be a map.
+ *
+ * The filter's verdict is shown rather than enforced — a stray token on the map layer is listed,
+ * marked, and still choosable, because the filter is a heuristic and the GM is not. Sizes are shown
+ * because on a scene with two plausible maps the size is often the only thing distinguishing the
+ * real one from a GM overlay.
+ */
+async function refreshMaps(select: HTMLSelectElement | null): Promise<void> {
+  if (!select) return;
+
+  try {
+    const [maps, nominated] = await Promise.all([
+      listMapImages(),
+      readNominatedMapId(),
+    ]);
+
+    select.replaceChildren();
+    const auto = new Option("Auto", "");
+    select.append(auto);
+
+    for (const map of maps) {
+      const label =
+        `${map.name} — ${map.width}×${map.height}` +
+        (map.plausible ? "" : " (too small?)") +
+        (map.locked ? " (locked)" : "") +
+        (map.visible ? "" : " (hidden)");
+      select.append(new Option(label, map.id));
+    }
+
+    // A nomination naming an id this scene does not contain is left unselected rather than added
+    // as a phantom entry, which matches what the resolver does with it: warn, and fall through.
+    select.value = nominated && maps.some((map) => map.id === nominated) ? nominated : "";
+
+    if (maps.length === 0) {
+      auto.text = "No MAP-layer image in this scene";
+    }
+  } catch (error) {
+    const detail = describeError(error);
+    reportResult(`Could not list the scene's maps: ${detail}`, "bad");
+    console.error(`Fog Nudger — listing maps failed: ${detail}`);
+  }
+}
+
+/**
  * Paint the page in Owlbear's colours, over the stylesheet's own readable defaults.
  *
  * Failure here is deliberately quiet on screen and loud in the log: a panel wearing the wrong
@@ -106,9 +173,12 @@ OBR.onReady(async () => {
   }
 
   const buttons = [
+    wireButton("dry-run", dryRun),
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
   ];
+
+  const mapSelect = wireMapPicker();
 
   try {
     // A popover's connection going ready is NOT the scene being ready — the sibling lost two days
@@ -123,7 +193,12 @@ OBR.onReady(async () => {
     // up would otherwise leave the buttons dead with no explanation.
     const setEnabled = (sceneReady: boolean): void => {
       for (const button of buttons) if (button) button.disabled = !sceneReady;
+      if (mapSelect) mapSelect.disabled = !sceneReady;
       reportResult(sceneReady ? "Ready." : "Waiting for a scene.", "ok");
+      // Repopulated on every transition rather than once: the list belongs to the scene, so a
+      // scene change makes the previous one's maps stale, and a stale nomination silently pointing
+      // at an id from another scene is exactly the confusion the picker exists to remove.
+      if (sceneReady) void refreshMaps(mapSelect);
     };
     OBR.scene.onReadyChange(setEnabled);
     setEnabled(ready);

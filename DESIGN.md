@@ -147,8 +147,8 @@ On any change, the actor recomputes the wall's `points` from the parent drawing,
 walls as the contour count changes. The geometry helper:
 
 - converts the drawing to a path,
-- **strokes it to the drawing's own `style.strokeWidth`** and takes the contour of the stroked
-  result — so a boundary becomes a thin closed band, two contours a stroke-width apart,
+- **strokes it to the drawing's own `style.strokeWidth`**, in Skia's sense of the word — `stroke()`
+  does not draw a stroke, it *replaces the path with the outline of the stroked region*. See below,
 - samples curves at a fixed interval (10 units by default),
 - subtracts every *open* door from the result with a boolean path operation, in world space, after
   simplification (its comment notes subtraction interacts badly with curves).
@@ -156,8 +156,38 @@ walls as the contour count changes. The geometry helper:
 Heavy lifting is Skia compiled to WebAssembly.
 
 **So the wall lands at the boundary of whatever shape is on the `FOG` layer.** A filled region's
-edge becomes its wall. That is the mechanism the whole design depends on, and it is the one thing
-here that most wants confirming in a room (§6, OQ2).
+edge becomes its wall. That is the mechanism the whole design depends on, and it is **confirmed in a
+room** — roadmap step 1, §6.
+
+### Two walls per contour, and why — 2026-08-15
+
+Stroking a *closed* loop yields an annulus, and an annulus has two boundaries: an outer contour
+offset `+strokeWidth/2` and an inner one offset `−strokeWidth/2`. Each becomes its own polyline and
+each polyline becomes its own `Wall`. So the rule is **two wall items per closed contour** — not per
+shape, and not by anyone's decision. It falls out of the geometry.
+
+- **They do not look like two walls** because they are exactly `strokeWidth` apart. Owlbear's fog
+  tool uses 5, against a grid cell of typically 150 world units — about 3% of a cell, which at any
+  normal zoom is one line rendered slightly fat.
+- **This explains the zero-stroke measurement** (§4), which was recorded as a fact with no mechanism
+  under it: at width 0 the two offsets coincide precisely, so the stroker still emits two contours
+  and they superimpose. Observation and source agree, which is as strong as an explanation gets
+  here.
+- **A shape with a hole has two contours, so it yields four walls.** The count scales with contours,
+  not regions — see §10.
+
+**Walls are built with the `VISIBLE` and `COPY` attachment behaviours explicitly disabled.** This is
+load-bearing for us and was very nearly an untested assumption: we emit with `visible: false` to
+match Owlbear's fog tool (§4), but every step 1 measurement was taken with `visible: true`. An
+invisible fog shape still produces a live wall *because Dynamic Fog opts out of visibility
+inheritance*, not by luck. Worth one confirming glance in a room, but it is no longer a gamble.
+
+**Dynamic Fog does not draw walls, and there is nothing to imitate.** The thin white lines a GM sees
+while the fog tool is active are **Owlbear's own rendering of `WALL` items**. Walls are constructed
+in exactly one place in Dynamic Fog, carrying no styling at all — points, attachment, and the
+parent's transform. Its overlay system, which activates on the fog tool, registers only light and
+door overlays. So wall visualisation comes free with emitting walls, and costs us nothing to
+provide.
 
 ### Doors ride on the same drawings; lights do not
 
@@ -343,6 +373,52 @@ but it is concentrated in the parts that were never going to be hard. The stages
 sibling the longest are the ones we are not using. Skeletonisation may return later as a *tweaking*
 tool (§11), which would recover some of the value, but not on the critical path.
 
+### Resolution — native, decided 2026-08-15
+
+**We trace at the map's own resolution.** The cap that exists is a memory limit, not a speed limit,
+and on an ordinary map it does not bite at all.
+
+The sibling traces at 1024 pixels wide, and it would have been easy to inherit that as prudence. Its
+actual reason does not transfer: **its tuning constants are raw pixel values measured at that
+raster**, so changing the width silently invalidates every one of them. The width is a calibration
+lock-in wearing the costume of a performance budget. We have no tuned pixel constants yet, so
+adopting the same number would not be caution — it would *manufacture* the same trap, since we would
+then tune against it and be stuck there permanently for a reason nobody could later reconstruct.
+
+The positive case is stronger than the absence of a reason to downscale. **Downscaling resamples the
+ink, and the ink's topology is the answer this project computes.** Averaging a thin dark line into
+its lighter surroundings lowers its contrast, and any stretch that then falls below threshold opens
+a gap that is not on the map — a manufactured leak between rooms, the failure mode this record
+biases hardest against. The same averaging can also close a genuine doorway gap. Both artifacts are
+real, they push in opposite directions, and which dominates on a given map is not predictable. At
+native resolution neither is introduced.
+
+The cost side inverts too. The sibling's downscale bought *thinning* — iterative and expensive per
+pixel — and thinning is exactly the stage we dropped. Fill and label is a couple of passes, and this
+runs GM-only, once per map, at prep time, where a slow answer is affordable.
+
+**The cap is memory.** Roughly four bytes per pixel for the decoded image, one for the mask, four
+for the labels, inside a third-party iframe. The budget is stated in megapixels, reported on every
+run whether or not it bit, and when it bits the reduction is by an **integer** factor so it is
+uniform across the image — a fractional ratio resamples different regions against different
+sub-pixel phases and thins linework unevenly.
+
+**Named cost:** when the budget does bite, the reduction is done by the browser's own resampler
+during the draw, not by a box filter of ours. A box average would be better, but computing one needs
+the full-resolution pixels in memory, which is precisely what the budget exists to avoid.
+
+**The lesson worth carrying.** The sibling's real trap was denominating its parameters in raster
+pixels, which made the raster load-bearing forever. Ours should be denominated in **measured ink
+width** — already this project's natural unit, since the half-wall coverage target in §4 is stated
+as a fraction of the wall's own thickness. Keep it that way and the raster never becomes something
+we cannot change.
+
+*Rejected: choosing the raster to hit a target pixels-per-grid-square density.* The sibling tried
+it, reasoning that pixel-denominated constants are only meaningful against the ink scale they were
+tuned on. It broke on a map spanning 5.4 grid squares, where the rule picked a raster 174 pixels
+wide and thinned every line out of existence. Grid-derived sizing is a trap in its naive form; ink
+width is the unit that survives.
+
 ### Connectivity — the pairing is not optional
 
 Connected-component labelling must use **8-connectivity for ink and 4-connectivity for space** (or
@@ -392,7 +468,9 @@ resulting emission spec are in §4; in brief:
 - **A GM can select and edit one by hand**, so the refining half of the product is possible.
 - **They list properly in Outliner**, named, on the fog layer, unlocked.
 - **Dynamic Fog walls them**, at two wall items per closed contour. Measured per shape rather than
-  inferred from a total, which the first run's single number could not have supported.
+  inferred from a total, which the first run's single number could not have supported. The *why* was
+  read out of the source afterwards and is in §3: stroking a closed loop produces an annulus with
+  two boundaries.
 - **Holes work**, under an even-odd fill rule: the ring is revealable and the hole is not.
 
 **OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
@@ -545,9 +623,33 @@ appear usefully in Outliner; does Dynamic Fog produce a wall at its boundary and
 `strokeWidth`; does a shape with a hole work. **This validates the entire architecture before a line
 of pipeline exists**, and a failure in the first three is a redesign rather than a bug.
 
-**2. Dry-run mode in the extension.** A control that traces the scene's own map, reports the region
-census to the dev log, and **emits nothing**. This is where tuning happens, and it replaces the
-separate trace harness the roadmap originally called for.
+**2. Dry-run mode in the extension — built 2026-08-15, not yet run in a room.** A control that
+traces the scene's own map, reports to the dev log, and **emits nothing**. This is where tuning
+happens, and it replaces the separate trace harness the roadmap originally called for.
+
+*What it does not yet report, stated plainly:* the roadmap called for the **region** census, and
+regions do not exist until steps 4 and 5. What is built is the rig around the hole they will fill —
+map selection, pixels, transform, luminance — and calling that a census would let a smaller set of
+numbers wear a name it has not earned. Delivered:
+
+- **Map selection**, closing §10's "which map". Candidates ranked by world area with anything far
+  smaller than the largest discarded as a token stranded on the map layer; two comparable images
+  means **refuse and name them**, since one may be a GM overlay. A panel picker carries the
+  nomination because a scene map is normally locked and so cannot be nominated by clicking it, which
+  is how the sibling's selection-based flow became unreachable in exactly the scene that needed it.
+  The choice lives in scene metadata — local storage is partitioned in a third-party iframe and can
+  vanish.
+- **Pixels** at native resolution, per §5. `crossOrigin = "anonymous"` is mandatory regardless of
+  what the CDN sends, or the canvas is tainted; that failure reports through `console.error` rather
+  than the dev log, since the dev log compiles away in a production build and this is the one
+  failure about the platform rather than the map.
+- **Placement**, which is step 7's arithmetic arriving early because the dry run must *report* the
+  transform even though nothing goes through it. Per-axis scaling, aspect mismatch with rotation
+  named as the likely cause, and the far corner logged — the only corner that disagrees under every
+  wrong transform.
+- **A luminance histogram and a global Otsu split**, which is the one number here that is not
+  bookkeeping: it answers step 3's polarity question by measurement rather than assumption. Not
+  binarisation and no substitute for it — step 3 wants Sauvola, which is adaptive and local.
 
 *Rejected: the trace harness — 2026-08-05.* The sibling built one, and the plan here inherited it
 without examining the premise. Two things caught that. The user, who used it, reports looking at it
@@ -652,6 +754,12 @@ must not be traced. The sibling needed an explicit nomination flow for exactly t
 **Pre-existing fog.** A scene may already have fog shapes, drawn by the GM or by Forecast. Ours add
 to them rather than replace them, and Dynamic Fog derives walls from theirs too. Neither is wrong,
 but the interaction should be a decision rather than a surprise.
+
+**Wall count is twice the contour count, not the region count.** Every closed contour we emit
+becomes two `Wall` items (§3), and a region with a pillar has two contours. Sixty rooms, three of
+them with a pillar, is 126 walls rather than 60 — so any budget, rate-limit or performance
+estimate reasoned from "one shape per room" is out by rather more than a factor of two. Cheap to
+know now, expensive to discover at scale.
 
 **Performance.** Labelling and tracing a 4000×4000 map in JavaScript. Typed arrays throughout,
 single-pass where possible. Probably fine; worth measuring before it is a complaint.

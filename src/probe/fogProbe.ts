@@ -34,6 +34,7 @@ import OBR, {
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { attributeByParent, summariseItems } from "../itemCensus";
+import { key } from "../namespace";
 import {
   PathOp,
   ringsToCommands,
@@ -56,10 +57,8 @@ const _pathOpsMatchSdk: [Command.MOVE, Command.LINE, Command.CLOSE] = [
 ];
 void _pathOpsMatchSdk;
 
-const NAMESPACE = "io.github.captainchocolatedessert.fog-nudger";
-
 /** Marks an item as ours, so removal never touches anything the GM drew. */
-export const PROBE_KEY = `${NAMESPACE}/probe`;
+export const PROBE_KEY = key("probe");
 
 /**
  * Ignored entirely by fog rendering — confirmed in a room — and therefore useful twice over. It

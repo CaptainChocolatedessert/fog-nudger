@@ -68,6 +68,25 @@
       }
       button:hover:not(:disabled) { border-color: var(--accent); }
       button:disabled { opacity: 0.5; cursor: default; }
+      .field {
+        display: block;
+        font-size: 0.7rem;
+        color: var(--dim);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.25rem;
+      }
+      select {
+        font: inherit;
+        color: var(--text);
+        background: var(--line);
+        border: 1px solid transparent;
+        border-radius: 0.35rem;
+        padding: 0.35rem 0.5rem;
+        margin-bottom: 0.5rem;
+        max-width: 100%;
+      }
+      select:disabled { opacity: 0.5; }
       #result {
         margin-top: 0.5rem;
         font-size: 0.8rem;
@@ -87,6 +106,22 @@
     <p id="status" data-state="pending">Connecting&hellip;</p>
 
     <!--
+      Roadmap step 2. The picker exists because a scene can hold more than one MAP-layer image and
+      one of them may be a GM overlay — and because a scene map is normally locked, so it cannot be
+      nominated by clicking it. "Auto" leaves the resolver to decide, which it will refuse to do
+      when the scene is genuinely ambiguous.
+    -->
+    <section class="probe">
+      <h2>Dry run</h2>
+      <label class="field" for="map">Map</label>
+      <select id="map" disabled>
+        <option value="">Auto</option>
+      </select>
+      <button id="dry-run" disabled>Trace, emit nothing</button>
+      <p id="result">Waiting for a scene.</p>
+    </section>
+
+    <!--
       Not product UI. Step 1's shape-placing buttons are gone now that it is closed; these two
       earned a longer stay because they answer "what is actually in this scene" for every stage
       that follows.
@@ -95,7 +130,6 @@
       <h2>Diagnostics</h2>
       <button id="census" disabled>Census</button>
       <button id="inspect" disabled>Inspect fog</button>
-      <p id="result">Waiting for a scene.</p>
     </section>
 
     <script type="module" src="./src/panel.ts"></script>
