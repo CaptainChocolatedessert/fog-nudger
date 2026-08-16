@@ -236,6 +236,56 @@ The wall geometry is identical either way, since the boundary curve between rock
 But only fogging the enclosed walkable areas produces useful native behaviour: unexplored rooms
 hidden, revealed one at a time. Fogging the solid material would hide decoration and nothing else.
 
+### Emit the outside as well, rather than working out which region it is — 2026-08-16
+
+User's decision, and it dissolves a problem rather than solving one. The pipeline does **not**
+classify regions into interior and exterior. It emits every enclosed region it finds, and the space
+outside the dungeon becomes one more revealable shape — or one large one wrapping the rest.
+
+- **The classification is not reliably solvable.** "Touches the image border" fails on maps whose
+  rooms run to the edge. Tone fails because the convention varies by map: on this author's style
+  room interiors are largely white and the surrounding area is flooded with a mid tone, but shaded
+  interiors with white margins are just as plausible elsewhere (user, 2026-08-16). **Do not
+  generalise from one style** — that is the sibling's "property of the fixture" trap wearing a new
+  costume.
+- **Nothing needs the answer.** Fog is subtractive, so an unrevealed exterior region is visually
+  identical to space in no shape at all. A GM who simply never reveals it sees exactly what they
+  would have seen had we discarded it.
+- **So the worst case disappears.** A wrong classification on an unusually-styled map would have
+  discarded every room and kept the rock. That failure mode no longer exists, because no decision is
+  taken.
+
+**Costs, stated rather than minimised.** The exterior's boundary runs alongside every room's outer
+wall, so Dynamic Fog derives a second wall pair a wall-thickness away from each — roughly doubling
+the wall count, redundant for occlusion but not free. And the exterior is the most complex path in
+the output: an outer boundary plus one hole per enclosed room cluster.
+
+**Both are cheaper than they look, because the exterior is exempt from the rules that protect
+rooms.** §10's "never split to meet the cap" exists because a join between two adjacent regions
+becomes a wall across a room; outside the dungeon there is no room to cut in half and nobody to cut
+off, so the exterior may be **chunked freely** — which defuses the 8192-entry cap on precisely the
+item most likely to hit it. Simplification conservatism protects doorway gaps and room shape;
+neither applies out here, so the exterior can be simplified far harder than any room. Whatever
+tuning the rooms get, the exterior should be a separate and much looser setting.
+
+### There are two polarity questions, and only one still matters
+
+Worth separating, because the record previously ran them together:
+
+1. **Ink polarity** — is the linework darker or lighter than the ground it sits on? Real, must be
+   handled (§10), and answerable by measurement: the dry run's global split reports which class is
+   the minority, and on line art the ink is the minority.
+2. **Fill polarity** — is the enclosed interior lighter or darker than the exterior? Varies by
+   drawing style with no reliable signal, and **no longer needs an answer** given the decision
+   above.
+
+**Colour is discarded and that is a real loss.** Binarisation runs on luminance, so a water-filled
+room drawn in a mid tone can land in the same band as this style's exterior — separable by hue,
+which we have thrown away (user, 2026-08-16). It does not affect *connectivity*, since regions are
+separated by ink rather than by tone, so such a room is still its own region. The live risk is
+narrower: if a mid-tone fill ever falls on the ink side of the threshold, that room fills with
+"ink" and vanishes as a region entirely. Watch for it; hue is the reserve if it happens.
+
 ### Reveal about half the wall
 
 A revealed region should extend into the wall, roughly to its centre, rather than stopping at the
@@ -683,8 +733,9 @@ frequently light ink on dark ground, and a binarizer assuming dark-on-light sile
 exact complement of the right answer. Pure, tested.
 
 **4. Fill and label.** Connected-component labelling of the non-ink space with the connectivity
-pairing from §5. Discard the region outside the map's structure. Apply a minimum-area filter, biased
-per §5 toward splitting rather than merging. Pure, tested, and the census lands here.
+pairing from §5. **No interior/exterior classification** — the outside is emitted like any other
+region (§4), which removes the one stage here that had no reliable rule. Apply a minimum-area
+filter, biased per §5 toward splitting rather than merging. Pure, tested, and the census lands here.
 
 **5. Boundary tracing.** One closed polygon per region, plus holes. Pure, tested — and the fixtures
 must include a room with a pillar and two rooms sharing a wall, since a single square room cannot
@@ -721,14 +772,17 @@ and an oversized region is a signal that simplification is too timid, not an inv
 This is the sharpest trap in the design, because chunking is the obvious remedy and is correct
 everywhere else in Owlbear.
 
-**Inverted polarity produces a confident, complete, exactly wrong answer.** Light-on-dark maps fog
-the rock and reveal the rooms. Spectacular when noticed, and the census will not catch it — the
-region statistics of a correct answer and its complement can look similar.
+**Inverted ink polarity produces a confident, complete, exactly wrong answer.** A binarizer assuming
+dark ink on a light ground, run on light-on-dark linework, traces the complement of the structure.
+Spectacular when noticed, and the census will not catch it — the region statistics of a correct
+answer and its complement can look similar. Note this is *ink* polarity specifically; the second
+polarity question, interior versus exterior brightness, is retired by §4 and is not a hazard.
 
-**The outside region.** The largest fill component is usually the space outside the dungeon, and it
-must be discarded. Identifying it by "touches the image border" fails on maps whose rooms run to the
-edge, which is common. Make the rule explicit and reported rather than silent, so a wrong choice is
-visible in the census rather than as a mysteriously fogged map.
+**~~The outside region.~~** *Retired 2026-08-16.* It was to be identified and discarded, and no rule
+for identifying it survived contact with real maps — border-touching fails when rooms run to the
+edge, tone fails because the convention varies by drawing style. The outside is now **emitted like
+any other region** (§4), so nothing has to recognise it. The census should still report the largest
+region's share of the map, but as information rather than as a decision waiting to be made.
 
 **Diagonal leaks.** The connectivity pairing in §5. A one-pixel diagonal gap in ink is invisible to
 the eye and merges two rooms.

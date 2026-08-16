@@ -153,7 +153,7 @@ async function refreshMaps(container: HTMLElement | null): Promise<void> {
       );
       for (const map of maps) {
         const notes = [
-          `${map.width}×${map.height}`,
+          `${map.width}×${map.height} squares`,
           map.plausible ? "" : "too small?",
           map.locked ? "locked" : "",
           map.visible ? "" : "hidden",

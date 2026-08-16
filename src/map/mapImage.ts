@@ -51,7 +51,15 @@ export interface MapRaster {
 export interface MapImageSummary {
   readonly id: string;
   readonly name: string;
-  /** World-space size, rounded — what distinguishes a real map from a token on the wrong layer. */
+  /**
+   * Size in **grid squares**, not pixels and not world units.
+   *
+   * World units were shown first and were actively misleading: a map reading "10308×7965" next to
+   * its name is read as an image resolution by anyone who has ever seen one, and this map's image
+   * is in fact 3300×2550. Grid squares are the only one of the three a GM can check against the map
+   * in front of them, and they still do the job the number is here for — telling a real map apart
+   * from a token stranded on the map layer.
+   */
   readonly width: number;
   readonly height: number;
   readonly locked: boolean;
@@ -82,7 +90,7 @@ export async function listMapImages(): Promise<MapImageSummary[]> {
   );
   if (maps.length === 0) return [];
 
-  const measured = await measure(maps);
+  const [measured, dpi] = await Promise.all([measure(maps), OBR.scene.grid.getDpi()]);
   const kept = selectMapCandidates(
     measured.map(({ map, bounds }) => ({
       id: map.id,
@@ -91,12 +99,16 @@ export async function listMapImages(): Promise<MapImageSummary[]> {
     })),
   );
 
+  // Ranking still happens on world area. Only the *displayed* figure is converted, so a dpi of
+  // zero degrades to showing zeroes rather than silently reordering the list.
+  const squares = (units: number): number => (dpi > 0 ? Math.round(units / dpi) : 0);
+
   return measured
     .map(({ map, bounds }) => ({
       id: map.id,
       name: map.name || "unnamed",
-      width: Math.round(bounds.width),
-      height: Math.round(bounds.height),
+      width: squares(bounds.width),
+      height: squares(bounds.height),
       locked: map.locked,
       visible: map.visible,
       plausible: kept.some((candidate) => candidate.id === map.id),
