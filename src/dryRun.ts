@@ -39,12 +39,37 @@ import {
   meanLuminance,
   otsuSplit,
 } from "./trace/luminance";
+import { blur, luminanceField } from "./trace/field";
+import { detectPolarity } from "./trace/polarity";
 
 /**
  * Beyond this the world bounds are not a scaled copy of the image and a uniform placement is wrong.
  * One percent absorbs rounding in the raster height without admitting a real rotation.
  */
 const MAX_ASPECT_MISMATCH = 0.01;
+
+/**
+ * Gaussian blur before binarisation, in raster pixels. The texture-suppression control, and
+ * deliberately its own stage rather than a side effect of raster size (DESIGN.md §5).
+ */
+const BLUR_SIGMA = 1;
+
+/**
+ * Sauvola's window radius, **as a fraction of a grid square**.
+ *
+ * Denominated this way on purpose. Tying it to raster pixels is exactly what left the sibling
+ * unable to change its resolution afterwards, and a grid square is the one length that means the
+ * same thing on every map — walls are drawn at a fairly consistent fraction of one. The window wants
+ * to be comfortably wider than the linework is thick, and a quarter square is several times a
+ * typical wall.
+ *
+ * Ink width would be the better unit still, and nothing measures it yet. When something does, this
+ * should move to it.
+ */
+const SAUVOLA_RADIUS_SQUARES = 0.25;
+
+/** Sauvola's sensitivity. The value his paper settles on; no reason yet to differ. */
+const SAUVOLA_K = 0.34;
 
 /**
  * Trace the scene's map as far as the pipeline currently goes, and report.
@@ -118,13 +143,15 @@ export async function dryRun(): Promise<string> {
   // numbers above and lands the bottom-right of the map somewhere absurd. Deliberately the opposite
   // corner from the origin: it is the only one that disagrees under every wrong transform.
   const farCorner = toWorldPoint(placement, plan.width, plan.height);
+  const squaresAcross = dpi > 0 ? worldWidth / dpi : 0;
+  const pxPerSquare = squaresAcross > 0 ? plan.width / squaresAcross : 0;
   devLog(
     "info",
     `dry run: raster (0,0) -> world (${bounds.min.x.toFixed(1)}, ${bounds.min.y.toFixed(1)}), ` +
       `raster (${plan.width},${plan.height}) -> world ` +
       `(${farCorner.x.toFixed(1)}, ${farCorner.y.toFixed(1)}); ` +
-      `map spans ${dpi > 0 ? (worldWidth / dpi).toFixed(1) : "?"} grid squares at dpi ${dpi}, ` +
-      `so ${dpi > 0 ? (plan.width / (worldWidth / dpi)).toFixed(1) : "?"} raster px per square`,
+      `map spans ${squaresAcross.toFixed(1)} grid squares at dpi ${dpi}, ` +
+      `so ${pxPerSquare.toFixed(1)} raster px per square`,
   );
 
   // ## Luminance
@@ -164,6 +191,60 @@ export async function dryRun(): Promise<string> {
     );
   }
 
+  // ## Binarisation
+  //
+  // Both polarities are computed and compared. The decision is made on how *thin* each reading's ink
+  // is, not on which class is smaller — see `polarity.ts` for the map style that breaks the obvious
+  // rule.
+  const binarizeStarted = performance.now();
+  const radius = Math.min(64, Math.max(4, Math.round(SAUVOLA_RADIUS_SQUARES * pxPerSquare)));
+  const field = blur(luminanceField(pixels), BLUR_SIGMA);
+  const reading = detectPolarity(field, { radius, k: SAUVOLA_K });
+  const binarizeMs = Math.round(performance.now() - binarizeStarted);
+
+  const chosenCoverage =
+    reading.polarity === "dark-ink" ? reading.darkCoverage : reading.lightCoverage;
+
+  devLog(
+    "info",
+    `dry run: binarized in ${binarizeMs}ms — Sauvola radius ${radius}px ` +
+      `(${SAUVOLA_RADIUS_SQUARES} square at ${pxPerSquare.toFixed(1)} px/square), k ${SAUVOLA_K}, ` +
+      `blur sigma ${BLUR_SIGMA}`,
+  );
+  devLog(
+    "info",
+    `dry run: polarity ${reading.polarity}${reading.confident ? "" : " (NOT CONFIDENT)"} — ` +
+      `dark reading ${(reading.darkCoverage * 100).toFixed(1)}% ink at thinness ` +
+      `${reading.darkThinness.toFixed(3)}; light reading ` +
+      `${(reading.lightCoverage * 100).toFixed(1)}% ink at thinness ` +
+      `${reading.lightThinness.toFixed(3)}; chose the thinner`,
+  );
+
+  if (!reading.confident) {
+    devLog(
+      "warn",
+      "dry run: the two polarity readings are too close to separate. Neither looks clearly more " +
+        "like linework, which usually means this is not line art — a photograph, a heavily " +
+        "textured render, or a blank asset. Treat everything downstream as suspect.",
+    );
+  }
+
+  // Cross-checked against the histogram deliberately. The two use different evidence — area versus
+  // shape — so agreement is worth something and disagreement is worth much more: it means this is
+  // one of the maps where the obvious rule would have inverted the whole trace.
+  if (split) {
+    const byMinority: typeof reading.polarity =
+      split.darkShare > 0.5 ? "light-ink" : "dark-ink";
+    if (byMinority !== reading.polarity) {
+      devLog(
+        "warn",
+        `dry run: the histogram's minority class says ${byMinority} and the linework shape says ` +
+          `${reading.polarity}. Trusting shape. This is the case that rule was replaced for — ` +
+          `worth looking at the map to see which is right.`,
+      );
+    }
+  }
+
   const elapsed = Math.round(performance.now() - started);
   // The explicit statement that nothing was written. A dry run and a dry run that silently failed
   // to reach this point look identical without it.
@@ -172,7 +253,8 @@ export async function dryRun(): Promise<string> {
   return (
     `"${raster.name}" ${plan.width}x${plan.height}` +
     (plan.capped ? ` (reduced ${plan.factor}x)` : " (native)") +
-    `, ${split ? `${(split.darkShare * 100).toFixed(0)}% dark` : "flat"}` +
+    `, ${reading.polarity}${reading.confident ? "" : "?"}` +
+    `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
     `, ${elapsed}ms. Nothing emitted — detail in dev.log.`
   );
 }

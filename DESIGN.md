@@ -728,9 +728,40 @@ before then would be infrastructure guessing at its own question.
 first. Cheap per map, not free. Mitigable later by letting the dry run accept a pasted asset URL,
 which is what the sibling's harness took anyway.
 
-**3. Binarisation.** Ported from the sibling, plus **polarity handling** — classic dungeon maps are
-frequently light ink on dark ground, and a binarizer assuming dark-on-light silently produces the
-exact complement of the right answer. Pure, tested.
+**3. Binarisation — built 2026-08-16, not yet run in a room.** Sauvola's local threshold over
+summed-area tables, ported from the sibling, with an explicit Gaussian blur ahead of it as the
+texture-suppression control. Plus **polarity handling**, which turned out to be the substantial part.
+
+*Rejected: deciding polarity from which luminance class is the minority.* The obvious rule, and the
+histogram already reports what it needs. It fails on a map with dark walls, light floors and a
+**dark fill outside the rooms** — ink and exterior both land on the dark side, so "dark" is most of
+the image while the ink is plainly still dark, and the rule inverts a map that needed nothing done
+to it. This project's own test map is the near miss: its exterior is a mid tone, light enough to
+fall on the ground side, and shading it a little darker would flip the verdict with nothing about
+the linework having changed.
+
+*What replaced it: ink is thin, not rare.* Linework is thin everywhere by construction; floors,
+fills and exteriors are not, and that property survives whatever a map does with its tones. Measured
+by eroding each candidate mask by one pixel and scoring the share of ink that fails to survive — a
+hairline scores 1, a three-pixel stroke about two thirds, a blob near zero. The higher score is the
+more line-like reading and therefore the polarity. Readings covering more than half the image are
+disqualified outright, since ink is never most of a map.
+
+Both polarities come from **one pass**: variance is invariant under negation, so a single pair of
+summed-area tables yields both thresholds and the second mask is nearly free. The two masks are
+*not* complements — Sauvola's threshold is asymmetric about the mean — which is itself why the
+decision has to inspect the masks rather than reason about the histogram.
+
+The dry run reports both readings, the verdict, whether the margin was wide enough to be confident,
+and **whether the retired minority rule would have disagreed** — that disagreement is the signal
+that this is one of the maps the rule was replaced for.
+
+*Consequence for §5's memory budget:* the summed-area tables are eight bytes per pixel and there are
+two of them, live at once, and they cannot be narrowed to 32-bit — the running total reaches the
+pixel count while every window statistic is a difference of two such totals, so the answer lives in
+the low bits that a 24-bit mantissa has already spent. Real peak is around 34 bytes per pixel, so
+the megapixel budget dropped from 48 to 16. Tiling the binarisation with an overlap of the Sauvola
+radius is the reserve if a larger map ever turns up.
 
 **4. Fill and label.** Connected-component labelling of the non-ink space with the connectivity
 pairing from §5. **No interior/exterior classification** — the outside is emitted like any other

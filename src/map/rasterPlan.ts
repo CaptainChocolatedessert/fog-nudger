@@ -27,9 +27,9 @@
  *
  * ## So the cap here is about memory, not time
  *
- * Roughly, per pixel: four bytes for the decoded image, one for the binary mask, four for the label
- * array. At the budget below that is a few hundred megabytes at peak, inside a third-party iframe.
- * Browsers also cap canvas dimensions outright. Neither limit is about how long anyone waits.
+ * The arithmetic is on `MEGAPIXEL_BUDGET` below, and it is dominated by something not obvious until
+ * binarisation was written: Sauvola's two summed-area tables, at eight bytes per pixel each. Browsers
+ * also cap canvas dimensions outright. Neither limit is about how long anyone waits.
  *
  * **The lesson worth carrying forward:** the sibling's real trap was denominating its parameters in
  * raster pixels, which made the raster load-bearing forever. Ours should be denominated in measured
@@ -39,13 +39,28 @@
  */
 
 /**
- * Megapixels we are willing to hold. A 4000×4000 map is 16, which is the common case and passes
- * untouched; 8000×8000 is 64 and gets halved.
+ * Megapixels we are willing to hold.
  *
- * The first real map that trips this should move the number rather than be quietly accepted at half
- * resolution, which is why the plan reports whether it bit on every run and not only when it did.
+ * **Lowered from 48 on 2026-08-16, once binarisation existed and the real cost could be counted
+ * rather than guessed.** The first figure was sized against the obvious arrays — four bytes of
+ * image, one of mask, four of labels. Sauvola's summed-area tables dwarf all of it: two of them,
+ * eight bytes per pixel each, both live at once because the variance needs the sum and the sum of
+ * squares together. They cannot be narrowed to `Float32Array` either, for the precision reason set
+ * out in `binarize.ts`.
+ *
+ * Counting properly, per pixel: 4 image + 4 luminance + 4 blurred (+4 transient) + **16 integral**
+ * + 2 masks ≈ 34 bytes at peak. So the budget below is roughly half a gigabyte, in a third-party
+ * iframe, which is already the outer edge of reasonable. The old 48 would have been about 1.6GB and
+ * would simply have failed.
+ *
+ * 16 megapixels still covers a 4000×4000 map untouched, and this project's test map — 3300×2550, or
+ * 8.4 — sits comfortably inside it.
+ *
+ * **The reserve, if a larger map turns up:** tile the binarisation with an overlap of the Sauvola
+ * radius, which bounds the tables to a tile rather than the image. That is real work and there is no
+ * reason to do it before a map demands it.
  */
-export const MEGAPIXEL_BUDGET = 48;
+export const MEGAPIXEL_BUDGET = 16;
 
 /**
  * Canvas dimension ceiling. Well under what browsers allow, and it only ever binds on an image so

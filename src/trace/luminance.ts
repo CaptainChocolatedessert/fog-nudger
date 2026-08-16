@@ -11,16 +11,10 @@
  * local. What is here is a global summary — a statistic to read in a log, not a mask to trace. The
  * two share no code and the global split below would be the wrong tool for the real job.
  *
- * Pure: no DOM, no SDK. `PixelImage` is structural so tests can pass a plain object and so
- * `ImageData` satisfies it without an import.
+ * Pure: no DOM, no SDK.
  */
 
-/** The layout `CanvasRenderingContext2D.getImageData()` returns: RGBA, row-major. */
-export interface PixelImage {
-  readonly width: number;
-  readonly height: number;
-  readonly data: Uint8ClampedArray | Uint8Array | readonly number[];
-}
+import type { PixelImage } from "./field";
 
 export const HISTOGRAM_BUCKETS = 256;
 

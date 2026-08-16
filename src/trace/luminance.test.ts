@@ -5,8 +5,8 @@ import {
   luminanceHistogram,
   meanLuminance,
   otsuSplit,
-  type PixelImage,
 } from "./luminance";
+import type { PixelImage } from "./field";
 
 /**
  * Fixtures are built in code, never loaded. That is a standing rule for this project rather than a

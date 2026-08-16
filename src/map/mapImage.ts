@@ -22,7 +22,7 @@ import { devLog } from "../devlog";
 import { key } from "../namespace";
 import { selectMapCandidates } from "./mapCandidates";
 import { planRaster, type RasterPlan } from "./rasterPlan";
-import type { PixelImage } from "../trace/luminance";
+import type { PixelImage } from "../trace/field";
 import type { WorldBounds } from "./placement";
 
 /**
