@@ -47,6 +47,27 @@ export function greyImage(
  * downstream needs a fixture that has one and a fixture that does not, and a single closed box
  * cannot tell correct code from several kinds of wrong.
  */
+export function rooms(options: {
+  readonly width: number;
+  readonly height: number;
+  readonly wall: number;
+  readonly ink: number;
+  readonly ground: number;
+  /** Where the shared wall sits, as an x coordinate. */
+  readonly divide: number;
+  /** Half-open y range left un-inked in the shared wall — the doorway. */
+  readonly gap?: readonly [number, number];
+}): ScalarField {
+  const { width, height, wall, ink, ground, divide, gap } = options;
+
+  return field(width, height, (x, y) => {
+    const onOuter = x < wall || y < wall || x >= width - wall || y >= height - wall;
+    const onDivide = x >= divide && x < divide + wall;
+    if (gap && onDivide && !onOuter && y >= gap[0] && y < gap[1]) return ground;
+    return onOuter || onDivide ? ink : ground;
+  });
+}
+
 export function room(options: {
   readonly width: number;
   readonly height: number;

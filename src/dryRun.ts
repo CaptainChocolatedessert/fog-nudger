@@ -41,6 +41,8 @@ import {
 } from "./trace/luminance";
 import { blur, luminanceField } from "./trace/field";
 import { detectPolarity } from "./trace/polarity";
+import { labelSpace } from "./trace/label";
+import { censusStats, describeCensus } from "./trace/regionCensus";
 
 /**
  * Beyond this the world bounds are not a scaled copy of the image and a uniform placement is wrong.
@@ -80,6 +82,17 @@ const SAUVOLA_K = 0.34;
  * this project's test map at about four and a half.
  */
 const MIN_WINDOW_RATIO = 3;
+
+/**
+ * Smallest region to keep, as a fraction of a **grid square's area**.
+ *
+ * Denominated against the grid for the usual reason, and set low on purpose. §5's bias is toward
+ * splitting rather than merging: a spurious extra region costs the GM one click, a room the filter
+ * ate costs them a room, and they will not know it is missing. Raising this is how cross-hatching
+ * gets killed, and it is also how a genuine closet eventually gets killed — there is no setting that
+ * does one without risking the other, which is why the census reports what was dropped.
+ */
+const MIN_REGION_SQUARES = 0.1;
 
 /**
  * Trace the scene's map as far as the pipeline currently goes, and report.
@@ -296,6 +309,38 @@ export async function dryRun(): Promise<string> {
     }
   }
 
+  // ## Fill and label
+  //
+  // The space, not the ink, and 4-connected so the ink is 8-connected — the pairing that stops two
+  // rooms leaking into each other through a one-pixel diagonal. Nothing here classifies a region as
+  // interior or exterior; the outside is labelled and will be emitted like anything else.
+  const labelStarted = performance.now();
+  const minArea = Math.max(1, Math.round(MIN_REGION_SQUARES * pxPerSquare ** 2));
+  const labelled = labelSpace(reading.mask, { minArea });
+  const labelMs = Math.round(performance.now() - labelStarted);
+
+  const stats = censusStats(labelled, { pxPerSquare });
+
+  devLog(
+    "info",
+    `dry run: labelled in ${labelMs}ms — minimum region ${minArea}px ` +
+      `(${MIN_REGION_SQUARES} of a grid square at ${pxPerSquare.toFixed(1)} px/square)`,
+  );
+  devLog("info", `dry run: census — ${describeCensus(stats)}`);
+
+  // The merge signal, spelled out rather than left for a reader to reconstruct. With the exterior
+  // kept, the largest region is normally the outside and its share being big is correct — so the
+  // number that matters is the *second*, which is the largest thing that ought to be a single room.
+  if (stats.topShares.length >= 2) {
+    const second = stats.topShares[1]!;
+    devLog(
+      "info",
+      `dry run: largest region ${(stats.topShares[0]! * 100).toFixed(1)}% (expected to be the ` +
+        `outside, which is kept deliberately); second ${(second * 100).toFixed(1)}% — that is the ` +
+        `one to watch, since rooms merging into each other show up there`,
+    );
+  }
+
   const elapsed = Math.round(performance.now() - started);
   // The explicit statement that nothing was written. A dry run and a dry run that silently failed
   // to reach this point look identical without it.
@@ -307,6 +352,7 @@ export async function dryRun(): Promise<string> {
     `, ${reading.polarity}${reading.confident ? "" : "?"}` +
     `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
     (reading.inkWidth === null ? "" : ` ~${reading.inkWidth.toFixed(1)}px wide`) +
+    `, ${stats.count} regions (${stats.roomSized} room-sized)` +
     `, ${elapsed}ms. Nothing emitted — detail in dev.log.`
   );
 }

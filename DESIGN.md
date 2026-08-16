@@ -792,10 +792,32 @@ the low bits that a 24-bit mantissa has already spent. Real peak is around 34 by
 the megapixel budget dropped from 48 to 16. Tiling the binarisation with an overlap of the Sauvola
 radius is the reserve if a larger map ever turns up.
 
-**4. Fill and label.** Connected-component labelling of the non-ink space with the connectivity
-pairing from §5. **No interior/exterior classification** — the outside is emitted like any other
-region (§4), which removes the one stage here that had no reliable rule. Apply a minimum-area
-filter, biased per §5 toward splitting rather than merging. Pure, tested, and the census lands here.
+**4. Fill and label — built 2026-08-16, not yet run in a room.** Two-pass connected-component
+labelling of the non-ink space over union-find, with the connectivity pairing from §5, a minimum-area
+filter denominated in grid squares, and the census. **No interior/exterior classification** — the
+outside is labelled and kept like anything else (§4), which removes the one stage here that had no
+reliable rule.
+
+*The checkerboard is the fixture that matters.* Under 4-connected space every light cell is its own
+region; under 8-connected space they all join through the diagonals into one. A single number
+separates the correct rule from the wrong one, on a fixture nothing else in the suite could
+distinguish — and it doubles as pressure on the union-find, allocating a few thousand provisional
+labels.
+
+*Where the merge signal moved, now that the outside is kept.* The census was designed around "the
+fraction of map area in the largest region", on the reasoning that one region holding most of the map
+means rooms merged through a doorway gap. That reading is dead: **the largest region is now normally
+the exterior, and its large share is correct.** Treating it as an alarm would fire on every healthy
+map, which is how a diagnostic gets ignored. The signal moved rather than vanished — rooms merging
+into each other show up in the *second* largest region growing; a room merging with the exterior
+through a gap in an outer wall shows up in the largest growing while the count falls. Neither has an
+absolute threshold, and both are obvious comparing two runs, which is the claim §8 makes for the
+census anyway.
+
+*Reported per run:* region count, coverage, the largest few shares, how many clear a whole grid
+square, the median area, how many touch the raster border, and what the minimum-area filter dropped.
+Border contact is **reported and never acted on** — it was the candidate rule for finding the
+exterior and it fails on any map whose rooms run to the edge.
 
 **5. Boundary tracing.** One closed polygon per region, plus holes. Pure, tested — and the fixtures
 must include a room with a pillar and two rooms sharing a wall, since a single square room cannot

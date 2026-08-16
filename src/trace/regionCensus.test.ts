@@ -1,0 +1,109 @@
+import { describe, expect, it } from "vitest";
+
+import { emptyMask, type BinaryMask } from "./binarize";
+import { labelSpace } from "./label";
+import { censusStats, describeCensus } from "./regionCensus";
+
+function mask(
+  width: number,
+  height: number,
+  ink: (x: number, y: number) => boolean,
+): BinaryMask {
+  const out = emptyMask(width, height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) out.data[y * width + x] = ink(x, y) ? 1 : 0;
+  }
+  return out;
+}
+
+/**
+ * Two rooms of clearly different sizes sharing a wall, inside a closed rectangle, with the space
+ * outside it as a third region.
+ *
+ * The outer wall has to be the *perimeter* of a rectangle rather than four full-width lines. Four
+ * lines spanning the whole raster cut the outside into eight separate pieces, which is correct
+ * labelling of a fixture that does not mean what it looks like — and is exactly why DESIGN.md §9
+ * insists the fixtures include two rooms sharing a wall rather than one box.
+ */
+const twoRooms = () =>
+  labelSpace(
+    mask(40, 20, (x, y) => {
+      const insideRect = x >= 2 && x <= 37 && y >= 2 && y <= 17;
+      const onPerimeter = x === 2 || x === 37 || y === 2 || y === 17;
+      const divide = x === 12 && y > 2 && y < 17;
+      return insideRect && (onPerimeter || divide);
+    }),
+  );
+
+describe("censusStats", () => {
+  it("counts regions and their shares largest first", () => {
+    const stats = censusStats(twoRooms(), { pxPerSquare: 10 });
+    expect(stats.count).toBe(3);
+    expect(stats.topShares[0]!).toBeGreaterThan(stats.topShares[1]!);
+    expect(stats.topShares[1]!).toBeGreaterThan(stats.topShares[2]!);
+  });
+
+  it("reports coverage below 1, since ink holds the rest", () => {
+    const stats = censusStats(twoRooms(), { pxPerSquare: 10 });
+    expect(stats.coverage).toBeGreaterThan(0.8);
+    expect(stats.coverage).toBeLessThan(1);
+  });
+
+  it("counts only room-sized regions against the grid", () => {
+    // The count that is worth watching across runs. Total region count is dominated by speckle;
+    // this one is not, because a grid square is a floor a genuine room clears and noise does not.
+    const labelled = labelSpace(mask(60, 30, (x) => x === 30));
+    const stats = censusStats(labelled, { pxPerSquare: 10 });
+    expect(stats.count).toBe(2);
+    expect(stats.roomSized).toBe(2);
+
+    // At a much coarser grid the same regions no longer clear a square.
+    expect(censusStats(labelled, { pxPerSquare: 100 }).roomSized).toBe(0);
+  });
+
+  it("reports areas in grid squares, not pixels", () => {
+    const labelled = labelSpace(mask(20, 20, () => false));
+    expect(censusStats(labelled, { pxPerSquare: 10 }).medianSquares).toBeCloseTo(4, 6);
+  });
+
+  it("carries the filter's droppings through", () => {
+    const labelled = labelSpace(
+      mask(30, 10, (x, y) => x === 20 || (x > 20 && y !== 5)),
+      { minArea: 10 },
+    );
+    const stats = censusStats(labelled, { pxPerSquare: 10 });
+    expect(stats.discarded).toBe(1);
+    expect(stats.discardedShare).toBeGreaterThan(0);
+  });
+
+  it("does not divide by zero when the grid is unknown", () => {
+    // A dpi of zero is a real state for a scene with no grid, and a NaN here would propagate into
+    // the log as the word "NaN" beside numbers that look fine.
+    const stats = censusStats(twoRooms(), { pxPerSquare: 0 });
+    expect(Number.isFinite(stats.medianSquares)).toBe(true);
+    expect(stats.roomSized).toBe(0);
+  });
+
+  it("survives having no regions", () => {
+    const stats = censusStats(labelSpace(mask(8, 8, () => true)), { pxPerSquare: 10 });
+    expect(stats.count).toBe(0);
+    expect(stats.coverage).toBe(0);
+    expect(Number.isFinite(stats.medianSquares)).toBe(true);
+  });
+});
+
+describe("describeCensus", () => {
+  it("says so when there are no regions at all", () => {
+    // An empty census and a census that never ran must not look the same in a log. This project has
+    // already been bitten once by a silent surface, in the map picker.
+    const stats = censusStats(labelSpace(mask(8, 8, () => true)), { pxPerSquare: 10 });
+    expect(describeCensus(stats)).toMatch(/no regions at all/);
+  });
+
+  it("leads with the count and the shares", () => {
+    const line = describeCensus(censusStats(twoRooms(), { pxPerSquare: 10 }));
+    expect(line).toMatch(/^3 regions covering/);
+    expect(line).toMatch(/largest first/);
+    expect(line).toMatch(/touch the border/);
+  });
+});
