@@ -756,6 +756,35 @@ The dry run reports both readings, the verdict, whether the margin was wide enou
 and **whether the retired minority rule would have disagreed** — that disagreement is the signal
 that this is one of the maps the rule was replaced for.
 
+*Measured 2026-08-16, on the test map:* dark reading 7.1% ink at thinness 0.357, light reading 12.6%
+at 0.235 — dark ink, correctly, but by a margin of 0.122 against a confidence threshold of 0.1. The
+verdict is right and the daylight is narrower than an easy case deserves. Binarisation of 8.4
+megapixels took 708ms, both polarities included.
+
+### Ink width — the unit §5 asked for, free from the polarity measure
+
+Eroding a stroke of width `w` leaves `w - 2`, so a long straight stroke has `thinness = 2 / w` and
+the width is `2 / thinness`. The polarity decision already computes thinness, so the width costs
+nothing beyond the arithmetic — and it is exactly the denomination §5 says every parameter in this
+project should use instead of raster pixels.
+
+On the test map: **ink about 5.6px wide at 48 raster px per grid square**, or 0.12 of a square,
+which is a plausible wall. The Sauvola window at 25px is about 4.5× that, comfortably clearing the
+condition the radius is supposed to satisfy — and the dry run now checks that ratio rather than
+assuming it, warning below 3×. Below that a heavy stroke fills enough of its own window to become
+the local *ground*, and Sauvola declines to call it ink; the failure loses the boldest linework on
+the map, which is the opposite of what anyone predicts.
+
+**What the figure will not support.** For a mask holding several stroke widths the result is the
+area-weighted *harmonic* mean, which is dominated by its smallest terms — so a scattering of
+one-pixel noise specks drags it below the real linework. And it **saturates at 2px**, since erosion
+removes a one-pixel and a two-pixel stroke alike. Read it as a checkable indicator, not a
+measurement: a map with visibly heavy walls has no business reporting 2.
+
+*Not done, and worth considering later:* deriving the Sauvola radius from the measured ink width
+rather than from a grid fraction. It is circular in one pass — the mask is needed to measure the
+ink — but a second pass at a corrected radius would cost only another binarisation.
+
 *Consequence for §5's memory budget:* the summed-area tables are eight bytes per pixel and there are
 two of them, live at once, and they cannot be narrowed to 32-bit — the running total reaches the
 pixel count while every window statistic is a difference of two such totals, so the answer lives in

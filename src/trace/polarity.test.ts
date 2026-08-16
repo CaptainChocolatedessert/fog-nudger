@@ -1,51 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { emptyMask, type BinaryMask } from "./binarize";
 import { field, room } from "./fixtures";
-import { detectPolarity, thinness } from "./polarity";
-
-function mask(
-  width: number,
-  height: number,
-  ink: (x: number, y: number) => boolean,
-): BinaryMask {
-  const out = emptyMask(width, height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) out.data[y * width + x] = ink(x, y) ? 1 : 0;
-  }
-  return out;
-}
-
-describe("thinness", () => {
-  it("scores a hairline at 1", () => {
-    // Nothing survives eroding a one-pixel line, which is the definition this measure rests on.
-    expect(thinness(mask(20, 20, (_x, y) => y === 10))).toBe(1);
-  });
-
-  it("scores a solid blob near 0", () => {
-    // A filled square loses only its rim, so most of it survives.
-    expect(thinness(mask(40, 40, () => true))).toBeLessThan(0.15);
-  });
-
-  it("puts a thick stroke between the two", () => {
-    const thin = thinness(mask(40, 40, (_x, y) => y === 20));
-    const thick = thinness(mask(40, 40, (_x, y) => y >= 18 && y <= 22));
-    const solid = thinness(mask(40, 40, () => true));
-
-    expect(thin).toBeGreaterThan(thick);
-    expect(thick).toBeGreaterThan(solid);
-  });
-
-  it("is 0 for a mask with no ink, rather than NaN", () => {
-    // A division by zero here would propagate into the comparison and make an empty reading win.
-    expect(thinness(emptyMask(10, 10))).toBe(0);
-  });
-
-  it("treats the image edge as ground", () => {
-    // Conservative on purpose: it can only make a shape look thinner, never thicker.
-    expect(thinness(mask(5, 5, () => true))).toBeGreaterThan(0);
-  });
-});
+import { detectPolarity } from "./polarity";
 
 describe("detectPolarity", () => {
   const options = { radius: 8, k: 0.34 };
@@ -100,6 +56,22 @@ describe("detectPolarity", () => {
     const reading = detectPolarity(field(30, 30, () => 0.5), options);
     expect(reading.confident).toBe(false);
     expect(reading.mask.width).toBe(30);
+  });
+
+  it("reports an ink width matching the wall it was given", () => {
+    // The readout is derived from the *chosen* polarity's thinness, so this also checks it is not
+    // quietly reporting the losing reading's figure.
+    const walls = room({ width: 60, height: 60, wall: 6, ink: 0.1, ground: 0.9 });
+    const reading = detectPolarity(walls, options);
+    expect(reading.polarity).toBe("dark-ink");
+    expect(reading.inkWidth).not.toBeNull();
+    expect(reading.inkWidth!).toBeGreaterThan(3);
+    expect(reading.inkWidth!).toBeLessThan(10);
+  });
+
+  it("reports a null ink width when the chosen reading found nothing", () => {
+    const reading = detectPolarity(field(30, 30, () => 0.5), options);
+    expect(reading.inkWidth).toBeNull();
   });
 
   it("disqualifies a reading that would call most of the map ink", () => {

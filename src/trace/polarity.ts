@@ -24,16 +24,17 @@
  * Not that it is rare — that it is **thin**. Linework is thin everywhere by construction; fills,
  * floors and exteriors are not. That property survives whatever the map does with its tones.
  *
- * Measured by erosion: a mask is eroded by one pixel and the share of ink that *fails to survive* is
- * the score. A one-pixel line loses everything and scores 1. A three-pixel stroke keeps only its
- * spine and scores about two thirds. A large blob loses only its rim and scores near zero. So the
- * higher score is the more line-like reading, and that is the polarity.
+ * Measured by erosion, in `inkMetrics.ts`: a mask is eroded by one pixel and the share of ink that
+ * *fails to survive* is the score. A one-pixel line loses everything and scores 1. A three-pixel
+ * stroke keeps only its spine and scores about two thirds. A large blob loses only its rim and
+ * scores near zero. So the higher score is the more line-like reading, and that is the polarity.
  *
  * Pure: no DOM, no SDK.
  */
 
 import { countInk, sauvolaBothPolarities, type BinaryMask, type SauvolaOptions } from "./binarize";
 import type { ScalarField } from "./field";
+import { inkWidthFromThinness, thinness } from "./inkMetrics";
 
 export type Polarity = "dark-ink" | "light-ink";
 
@@ -63,44 +64,14 @@ export interface PolarityReading {
   readonly confident: boolean;
   /** The mask for the chosen polarity, already computed — no reason to make the caller redo it. */
   readonly mask: BinaryMask;
-}
-
-/**
- * Share of ink that does not survive a one-pixel erosion: 0 for a solid blob, 1 for a hairline.
- *
- * Erosion here is the strict form — a pixel survives only if all eight neighbours are ink — and
- * anything off the edge of the image counts as ground, so ink running to the border is treated as
- * having an edge there. That is the conservative reading: it can only make a shape look *thinner*,
- * never thicker, and a mask hugging the border is not the case this measure exists to judge.
- */
-export function thinness(mask: BinaryMask): number {
-  const { width, height, data } = mask;
-  let ink = 0;
-  let survivors = 0;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (data[y * width + x] !== 1) continue;
-      ink += 1;
-
-      let eroded = false;
-      for (let dy = -1; dy <= 1 && !eroded; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx;
-          const ny = y + dy;
-          const inside = nx >= 0 && ny >= 0 && nx < width && ny < height;
-          if (!inside || data[ny * width + nx] !== 1) {
-            eroded = true;
-            break;
-          }
-        }
-      }
-      if (!eroded) survivors += 1;
-    }
-  }
-
-  if (ink === 0) return 0;
-  return (ink - survivors) / ink;
+  /**
+   * Mean ink width of the chosen reading, in pixels, or `null` if it found no ink.
+   *
+   * Free: it is the chosen thinness reinterpreted, not a second pass over the mask. See
+   * `inkMetrics.ts` for what the figure can and cannot support — it is biased thin and saturates at
+   * two pixels.
+   */
+  readonly inkWidth: number | null;
 }
 
 /**
@@ -154,5 +125,8 @@ export function detectPolarity(
     lightCoverage,
     confident,
     mask: polarity === "dark-ink" ? dark : light,
+    inkWidth: inkWidthFromThinness(
+      polarity === "dark-ink" ? darkThinness : lightThinness,
+    ),
   };
 }

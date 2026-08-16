@@ -72,6 +72,16 @@ const SAUVOLA_RADIUS_SQUARES = 0.25;
 const SAUVOLA_K = 0.34;
 
 /**
+ * How many times the ink's width the Sauvola *window* should be, at minimum.
+ *
+ * Below this a heavy stroke occupies enough of its own window to become the local ground, and
+ * Sauvola stops calling it ink — which quietly loses the boldest linework on the map, the opposite
+ * of what anyone would predict. Three is a floor rather than a target; the current settings put
+ * this project's test map at about four and a half.
+ */
+const MIN_WINDOW_RATIO = 3;
+
+/**
  * Trace the scene's map as far as the pipeline currently goes, and report.
  *
  * @returns a one-line summary for the panel. Detail goes to the dev log, where it can be read
@@ -220,6 +230,47 @@ export async function dryRun(): Promise<string> {
       `${reading.lightThinness.toFixed(3)}; chose the thinner`,
   );
 
+  // ## Ink width
+  //
+  // The unit DESIGN.md §5 asks every parameter here to be denominated in, and it costs nothing —
+  // it is the chosen thinness reinterpreted, not a second pass. Reported in both pixels and grid
+  // squares, because the pixel figure is what the Sauvola window has to clear and the grid figure
+  // is the one that means the same thing on the next map.
+  const window = radius * 2 + 1;
+  if (reading.inkWidth === null) {
+    devLog("warn", "dry run: no ink at all in the chosen reading — nothing to measure or trace");
+  } else {
+    const squares = pxPerSquare > 0 ? reading.inkWidth / pxPerSquare : 0;
+    devLog(
+      "info",
+      `dry run: ink width ~${reading.inkWidth.toFixed(1)}px (${squares.toFixed(3)} of a grid ` +
+        `square); Sauvola window ${window}px is ${(window / reading.inkWidth).toFixed(1)}x that. ` +
+        `Biased thin and saturates at 2px — see inkMetrics.ts`,
+    );
+
+    // The condition the radius is supposed to satisfy, checked rather than assumed. A stroke that
+    // fills a large share of its own window becomes the local *ground*, and Sauvola then declines
+    // to call it ink — which loses exactly the heaviest linework on the map, silently.
+    if (window < reading.inkWidth * MIN_WINDOW_RATIO) {
+      devLog(
+        "warn",
+        `dry run: the Sauvola window (${window}px) is not comfortably wider than the ink ` +
+          `(~${reading.inkWidth.toFixed(1)}px). Heavy linework can fill its own window and be ` +
+          `read as ground. Raise SAUVOLA_RADIUS_SQUARES.`,
+      );
+    }
+    // Saturation is a real limit rather than a small one: at or below two pixels the measure cannot
+    // tell one width from another, and every length derived from it inherits that.
+    if (reading.inkWidth <= 2.05) {
+      devLog(
+        "warn",
+        "dry run: ink measures at the floor of what erosion can see (2px). The linework is " +
+          "hairline-thin at this resolution, so anything denominated in ink width is unreliable " +
+          "here — and a stroke this thin is one threshold wobble away from developing gaps.",
+      );
+    }
+  }
+
   if (!reading.confident) {
     devLog(
       "warn",
@@ -255,6 +306,7 @@ export async function dryRun(): Promise<string> {
     (plan.capped ? ` (reduced ${plan.factor}x)` : " (native)") +
     `, ${reading.polarity}${reading.confident ? "" : "?"}` +
     `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
+    (reading.inkWidth === null ? "" : ` ~${reading.inkWidth.toFixed(1)}px wide`) +
     `, ${elapsed}ms. Nothing emitted — detail in dev.log.`
   );
 }
