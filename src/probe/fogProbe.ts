@@ -38,14 +38,13 @@ import { key } from "../namespace";
 import {
   PathOp,
   ringsToCommands,
-  squareRing,
-  squareWithHoleRings,
   type PathCommandLike,
   type Ring,
-} from "./fogProbeGeometry";
+} from "../geometry/ring";
+import { squareRing, squareWithHoleRings } from "./fogProbeGeometry";
 
 /**
- * Compile-time assertion that the numbers mirrored in `fogProbeGeometry` still match the SDK's
+ * Compile-time assertion that the numbers mirrored in `geometry/ring` still match the SDK's
  * enum. That module cannot import the enum — it is a runtime value, and importing it would drag the
  * SDK into a node test and kill it. This is the cheap guard: if Owlbear ever renumbers `Command`,
  * the build breaks here instead of the probe silently emitting a path made of the wrong opcodes.
