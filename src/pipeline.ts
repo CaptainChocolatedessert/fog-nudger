@@ -62,6 +62,7 @@ import { detectPolarity } from "./trace/polarity";
 import { labelSpace } from "./trace/label";
 import { censusStats, describeCensus } from "./trace/regionCensus";
 import { contourStats, describeContours, traceRegions } from "./trace/contours";
+import { doubleSignedArea } from "./geometry/ring";
 import {
   describeSimplification,
   simplifyRegions,
@@ -447,6 +448,32 @@ export async function runTrace(): Promise<TraceOutcome> {
       `trace: ${contours.areaMismatches} regions traced to a boundary enclosing a different area ` +
         `than the region holds. The geometry does not describe the regions it claims to, and ` +
         `nothing downstream of this is worth reading.`,
+    );
+  }
+
+  // The holes that survived, and how big they are — the number that says whether an unfilled pocket
+  // a GM reports is decoration-sized or room-sized. The largest region is excluded because its holes
+  // are the enclosed room clusters and are supposed to be there; every other region's holes are
+  // pockets inside something the GM will reveal, and each one shows through as bare map.
+  const pocketSquares: number[] = [];
+  for (const region of traced.slice(1)) {
+    for (const ring of region.rings) {
+      const area = doubleSignedArea(ring) / 2;
+      if (area < 0 && pxPerSquare > 0) pocketSquares.push(-area / pxPerSquare ** 2);
+    }
+  }
+  pocketSquares.sort((a, b) => a - b);
+  if (pocketSquares.length === 0) {
+    devLog("info", "trace: no holes kept inside any region but the largest — nothing shows through");
+  } else {
+    const at = (share: number) => pocketSquares[Math.floor(pocketSquares.length * share)] ?? 0;
+    devLog(
+      "info",
+      `trace: ${pocketSquares.length} holes kept inside regions other than the largest — these ` +
+        `render as bare map inside a revealed room. Sizes in grid squares: min ` +
+        `${pocketSquares[0]!.toFixed(2)}, median ${at(0.5).toFixed(2)}, max ` +
+        `${pocketSquares[pocketSquares.length - 1]!.toFixed(2)}. Decoration-sized means the hole ` +
+        `filter is too timid; room-sized means they are enclosed spaces and correct.`,
     );
   }
 

@@ -391,12 +391,14 @@ distinct colour and let the GM delete what is wrong.
 - Staged items produce **zero walls**. Dynamic Fog filters on the `FOG` layer, so a proposal is
   inert by construction rather than by our being careful — it cannot affect play until promoted.
 
-**Fog renders above `DRAWING`, so review happens with fog hidden — measured 2026-08-22.** Proposals
-are invisible while fog is on, because `DRAWING` is third in the layer stack and `FOG` is eleventh.
-No ordinary layer sits above `FOG`; the four that do are `POINTER`, `POST_PROCESS`, `CONTROL` and
-`POPOVER`, none of them a place for editable content. **So this is forced rather than chosen**, and
-it is mild: hiding fog is one toggle, and a GM comparing proposals against the map art wants the art
-visible anyway. Full detail in §9's first-run notes.
+**Full coverage, not the fog layer, is what makes a proposal hard to see — corrected 2026-08-22.**
+The first guess was that fog paints over `DRAWING`, which it does sit above; the GM's own reading is
+better and the evidence is theirs. **Owlbear's fog is transparent**, so a proposal underneath it is
+not hidden. What defeats the eye is that the proposals cover *everything* except the ink — the
+exterior is emitted like any other region (below) — so there is nothing for a filled shape to
+contrast against and the whole map reads as one flat tint. Hiding fog helps only because it removes
+one of the two tints. See §9's first-run notes; the fix belongs in how a proposal is *drawn*, not in
+which layer it sits on.
 
 **Accepting is a property update, not a re-emission**: layer to `FOG`, `visible` to false,
 `fillOpacity` to 1. Ids survive, and sixty items are one call rather than sixty. The magenta is
@@ -1083,6 +1085,39 @@ one a first emit path has no business answering quietly. The remedy is the expli
 The first time anything this pipeline computes has been looked at. Three findings, one of which
 changes a design decision.
 
+**Measured, 2026-08-22 — the whole chain on *Lair Of The Lamb*.** The map has been resized in the
+scene since step 4's run, so it now spans 64.7 grid squares rather than 68.7 and the raster density
+is 51.0 px per square rather than 48. Constants moved because the map moved, not because the code
+did.
+
+> 269 regions covering 92.7%; largest 74.9%, then 1.5%, 1.2%, 0.5%, 0.5%; 113 at least a grid
+> square, median 0.74 sq; dropped 260 below the minimum (0.1% of the raster). Traced to 367 rings
+> (98 holes, **0** diagonal pinches), 49,110 vertices, **area check exact**. Simplified to 10,298
+> vertices in 10,665 commands across 269 items; worst item 2,029 of 8,192; **nothing escalated**.
+> Whole trace 1.3s; staging 269 shapes in 12 batches 1.6s; accept 2.9s; remove 2.6s. **No throttling
+> at any point, and no warnings.**
+
+**Placement is exact and confirmed by eye.** The placed geometry fills the map's world box with zero
+shortfall on both axes, and the GM reports the shapes sitting correctly on the map **in all four
+corners** — which is what a numeric check cannot establish, since a mirror fills the same box.
+**Step 7 is settled.** The one thing this scene still cannot exercise is per-axis scaling: the aspect
+mismatch is 0.000%, so a single uniform scale would produce identical numbers.
+
+**Accept and remove behave correctly**, so the review cycle works end to end.
+
+**The command cap is not a live concern on this map, and the synthetic benchmark overstated it
+threefold.** The exterior carries 55 rings and costs 2,029 commands against a cap of 8,192 — where
+the generated raster of the same size predicted 4,673 for 132 rings. Its raggedness was a sine wave
+and vertex count is exactly what raggedness drives, so that figure was a property of the fixture,
+as it was labelled at the time. Real linework is cheaper than invented linework.
+
+**Diagonal pinches: zero.** The turn rule has a fixture and a correctness argument and, on this map,
+nothing to do. Worth knowing before anyone spends effort there.
+
+**The batch limits are untested rather than validated.** Twelve batches went out with no throttling,
+which means the limiter was never reached — so 24 items / 20,000 commands is *at most* conservative,
+and where the ceiling actually sits is still unknown.
+
 **The floor grid is traced as walls, and the GM counts that as correct.** Step 4 listed "a printed
 grid picked up in patches" as one of three candidate explanations for its sub-square fragments, and
 this is it, confirmed by eye rather than inferred from a count. The user's judgement is that nothing
@@ -1099,28 +1134,51 @@ therefore possible in principle; it is not free, because ink width is an area-we
 over the whole mask rather than a per-stroke measurement (§9 step 3), so a real version needs a
 per-component thickness. Logged, not scheduled.
 
-**Fog renders above the staging layer, so proposals are invisible until fog is hidden.** The GM had
-to turn fog off to see them. Not, as first supposed, the fog colour drowning the magenta — the
-colour was intact the moment fog was off, so nothing removed it. The layer stack is the whole story:
-`DRAWING` is third and `FOG` is eleventh, so fog paints over the proposals.
+**Proposals are hard to see, and the cause is coverage rather than layering.** The first reading was
+that fog paints over the staging layer — `DRAWING` is third in the stack and `FOG` is eleventh, so it
+does sit above. **That is not the operative cause**, and the correction is the GM's: Owlbear's fog is
+*transparent*, so being under it does not hide anything.
 
-**This is not fixable by choosing a different staging layer.** Every ordinary layer sits below
-`FOG`; the only four above it are `POINTER`, `POST_PROCESS`, `CONTROL` and `POPOVER`, none of which
-is a place to put editable content. So **"review with fog hidden" is forced by the layer stack**
-rather than chosen, and the honest thing is to document it as the workflow rather than to keep
-looking for a layer that does not exist. It is a mild cost: hiding fog is one toggle, and a GM
-checking proposals against the map art wants the art visible anyway.
+What actually defeats the eye is that the proposals **cover the whole map**. The exterior is emitted
+like any other region (§4), so every pixel that is not ink is under a magenta fill, and a fill with
+nothing to contrast against is a flat wash rather than a shape. Turning fog off helped only by
+removing one of the two tints laid over the same art.
 
-*Step 1 could not have caught this*, and it is worth seeing why rather than treating it as an
+**So the fix belongs in how a proposal is drawn, not in where it sits.** Which is fortunate, because
+there is nowhere else to put it: every ordinary layer is below `FOG`, and the four above it —
+`POINTER`, `POST_PROCESS`, `CONTROL`, `POPOVER` — are not places for editable content.
+
+*Step 1 could not have caught this*, and it is worth seeing why rather than filing it as an
 oversight. It placed six hand-built shapes at the viewport centre and asked whether a staged item
 renders in its own colour, hides from players, stays editable, and derives no walls. Every one of
-those answers is still correct. The question it never asked was what sits *on top* — which only
-arises once the shapes cover a map that has fog on it.
+those answers is still correct. The question it never asked was what a proposal looks like when
+there are two hundred of them and they tile the map, which is not a question six shapes can raise.
 
-**A second reviewability problem, independent of fog.** Because the exterior is emitted like any
-other region (§4), the proposals tile the entire map with no gaps. Even with fog hidden, a half-
-opacity fill over everything is a uniform wash, and the only thing carrying the partition is the
-stroke between shapes. The fill is working against the one job staging has.
+**Decorative features inside rooms show through as bare map, and the hole filter is why.** The GM
+reported small areas inside rooms left unfilled. They are **kept holes**: of the 98 holes traced,
+54 belong to the exterior and are the enclosed room clusters, which is correct — the other **44 sit
+inside rooms**, and each one renders as untouched map inside an area the GM will reveal.
+
+A hole is kept when it encloses at least the minimum region area, which is the same threshold used
+to discard a region. **The two numbers are equal and do not mean the same thing**, which is the
+error: a region's area is its own pixels, while a hole's area is everything its ring encloses —
+the thing inside *plus the ink ring around it*. So there is a band where a feature is too small to
+survive as a region and its hole is too big to be filled, and every feature in that band leaves a
+white pocket.
+
+**The obvious fix is wrong.** Raising the hole threshold to something room-sized would cover these
+pockets and would also cover any *surviving* region that happens to be enclosed — and a room shape
+covering another region means revealing the one reveals the other, which is the merge failure §5
+says to bias hardest against. 156 of the 269 regions here are under a grid square, so this is not a
+remote possibility.
+
+**The rule that is actually right is about containment, not size:** keep a hole when it encloses a
+surviving region, fill it when it encloses only ink and discarded specks. That is exact, it cannot
+merge anything, and it costs a containment test the pipeline does not currently do. Not yet built.
+
+*Reported from the next run onward:* the count and size spread of holes kept inside anything but the
+largest region, so decoration-sized and room-sized can be told apart without anyone looking at
+pixels.
 
 **Rotation pivots about the bounding-box centre**, which is what step 7 anchored regions on the
 assumption of. Note precisely what this does and does not establish: our anchor *is* the geometry's

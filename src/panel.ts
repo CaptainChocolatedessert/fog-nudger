@@ -17,7 +17,7 @@ import { themeVariables } from "./theme";
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 import { dryRun } from "./pipeline";
-import { acceptStaged, removeOurs, stageRegions } from "./emit/emitRegions";
+import { acceptStaged, removeOurs, returnToStaging, stageRegions } from "./emit/emitRegions";
 import {
   listMapImages,
   mapSignature,
@@ -254,6 +254,7 @@ OBR.onReady(async () => {
     wireButton("dry-run", dryRun),
     wireButton("stage", stageRegions),
     wireButton("accept", acceptStaged),
+    wireButton("unaccept", returnToStaging),
     wireButton("remove", removeOurs),
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),

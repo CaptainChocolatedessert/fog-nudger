@@ -3,6 +3,7 @@
  *
  * **Stage** runs the pipeline and writes proposals to the `DRAWING` layer. **Accept** promotes them
  * to `FOG`, which is where they become fog and where Dynamic Fog starts deriving walls from them.
+ * **Return to staging** is accept's exact inverse, keeping the items and every hand edit on them.
  * **Remove** deletes ours and touches nothing else.
  *
  * Everything about *what* a shape is lives next door in `fogShapes.ts`, where it can be tested.
@@ -42,6 +43,7 @@ import {
   PROPOSAL_COLOUR,
   REGION_KEY,
   stageShapes,
+  STAGED_FILL_OPACITY,
   totalCommands,
   type FogShapeSpec,
 } from "./fogShapes";
@@ -216,6 +218,49 @@ export async function acceptStaged(): Promise<string> {
   return (
     `Accepted ${staged.length}. They are fog now — if Dynamic Fog is installed, give it a ` +
     `moment and expect roughly two walls per contour.`
+  );
+}
+
+/**
+ * Send accepted shapes back to staging: ours from `FOG` onto `DRAWING`.
+ *
+ * The exact inverse of accepting, and it costs nothing extra because the shapes never stopped being
+ * magenta — fog rendering ignores an item's own colour, so the marking survived promotion unused and
+ * is simply visible again on arrival. That was the reason §4 chose to leave the colour in place.
+ *
+ * Worth having as its own gesture rather than telling a GM to remove and re-run. A re-run recomputes
+ * the geometry and destroys any hand edits made since; demoting keeps the items, their ids, and
+ * every nudge. The two look similar from the panel and are not remotely the same operation.
+ */
+export async function returnToStaging(): Promise<string> {
+  if (!(await OBR.scene.isReady())) return "No scene open.";
+
+  const accepted = await OBR.scene.items.getItems<Path>(
+    (item) => REGION_KEY in item.metadata && item.layer === "FOG" && isPath(item),
+  );
+  if (accepted.length === 0) return "Nothing of ours on the fog layer.";
+
+  try {
+    await writeWithBackoff(
+      () =>
+        OBR.scene.items.updateItems<Path>(accepted, (drafts) => {
+          for (const draft of drafts) {
+            draft.layer = "DRAWING";
+            draft.style.fillOpacity = STAGED_FILL_OPACITY;
+          }
+        }),
+      "return to staging",
+    );
+  } catch (error) {
+    const detail = describeError(error);
+    console.error(`Fog Nudger — returning shapes to staging failed: ${detail}`);
+    return `Could not return to staging: ${detail}`;
+  }
+
+  devLog("info", `emit: returned ${accepted.length} shapes to the DRAWING layer`);
+  return (
+    `Returned ${accepted.length} to staging. They are proposals again — no walls, no fog — and ` +
+    `every hand edit is still on them.`
   );
 }
 
