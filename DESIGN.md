@@ -1201,33 +1201,52 @@ says whether anything inside it survives.
 region. Under the new rule every one of those encloses a nested region, which is unusual enough to
 be worth seeing.
 
-**Every scene item except the map itself renders above a staged proposal — 2026-08-22.** A GM
-reported unfilled white pockets still appearing after the containment fix, and the numbers rule out
-the pipeline as their source:
+**Unfilled pockets are ink, not gaps — settled 2026-08-22 after two wrong answers.** A GM reported
+small light areas inside rooms left unfilled, and the first two explanations were both wrong:
+staging under the fog layer, and then the tokens rendering above it. Each was plausible, each was
+argued from the layer stack, and neither was checked against a number that could have refuted it.
 
-- **A bare patch of floor cannot exceed the minimum region area**, which is 260px — about 16×16 —
-  because the only floor left uncovered is a speck the minimum-area filter dropped that no filled
-  hole swallowed. Every surviving region is emitted in full. The reported pockets are far larger
-  than that, so they are not uncovered floor.
-- **They are not kept holes either.** After the containment fix there are 16 holes in the whole map
-  and 5 outside the largest region, and each encloses a surviving region that is drawn in its own
-  colour.
+**What settled it was making the pipeline state its own coverage.** The emitted shapes are disjoint —
+regions do not overlap, and a filled hole belongs to exactly the one region enclosing it — so their
+total area is the sum of the traced areas, exactly. Measured on the test map:
 
-**What they are: the tokens.** `DRAWING` is third in the layer stack, and `PROP`, `MOUNT`,
-`CHARACTER`, `ATTACHMENT`, `NOTE`, `TEXT` and `RULER` are all above it. So a staged proposal sits
-underneath **every** item in the scene bar the map and the grid, and a token's own artwork — a
-creature on a light disc, say — reads exactly like a hole in the fill. The pockets in the report sit
-centred on creatures.
+> emitted shapes cover 93.6% of the raster; 6.4% is uncovered against 7.2% ink, so **0.00% of the
+> raster is floor left bare**
 
-**This is a real cost of staging on `DRAWING`, and it reverses on acceptance.** `FOG` is eleventh, so
-an accepted shape covers all of those instead. A proposal is therefore hardest to see in exactly the
-places a GM has put something, and the appearance changes the moment it is promoted. Reviewing with
-tokens hidden is the workaround; there is no layer that avoids it, for the reason above.
+Every floor pixel is under a shape. The pockets are therefore **not uncovered floor at all** — they
+are areas the binariser called ink, and ink is never a region and never covered by anything.
 
-*The pipeline now states this rather than leaving it to be deduced.* Every run reports how much of
-the raster the emitted shapes cover against how much is ink, and therefore how much floor is left
-bare — a figure that is essentially zero on a healthy map, and that turns "there is a gap" into
-"the gap is not ours" without anyone reading a census.
+**This is the one cost of discarding colour, arriving exactly where §4 said it would.** Binarisation
+runs on luminance, so a filled feature whose tone lands on the ink side of the local threshold
+becomes ink. It then has no region, is covered by nothing, and shows through as bare map inside a
+revealed room — which looks identical to a hole, which is why two other stages were investigated
+first.
+
+**The census cannot see this, and that is worth being explicit about.** From the region statistics'
+point of view nothing is missing: the area never existed, so no count is short, no share moved, and
+the arithmetic still closes. A diagnostic that could not distinguish this outcome from a healthy one
+is exactly the trap §8 lists, and it took a human looking at a map to break the tie.
+
+*So the pipeline now looks for it directly.* Every run reports **compact ink** — connected ink whose
+narrow side is at least three measured ink widths and which fills most of its own bounding box —
+with each one's size and position as a share of the map, so a GM can look straight at it. A pillar
+or a block of rubble is a correct answer; a lightly-tinted feature is the failure above.
+
+*Two measures, not one, and a test caught why before a map did.* Bounding-box fill alone is wrong: a
+**straight, axis-aligned** stroke fills its box completely and scores identically to a solid square.
+That is most of the linework on an architectural map, so fill alone would have flagged every wall.
+Thickness is the load-bearing measure and fill only excludes wandering strokes.
+
+*Named limitation:* a filled feature **touching a wall** joins the wall's connected component, and
+that component is thin, so it is invisible to this. Free-standing features are the common case and
+are what was reported.
+
+**Staged proposals do sit under every scene item but the map and the grid**, which is true, was
+found while chasing the wrong explanation, and is worth keeping. `DRAWING` is third in the layer
+stack; props, mounts, characters, attachments, notes, text and rulers are all above it, and `FOG` is
+eleventh — so acceptance reverses the order and a proposal's appearance changes on promotion. A
+proposal is hardest to see exactly where a GM has put something. No layer avoids it: everything
+above `FOG` is special-purpose. Review with tokens hidden.
 
 **Rotation pivots about the bounding-box centre**, which is what step 7 anchored regions on the
 assumption of. Note precisely what this does and does not establish: our anchor *is* the geometry's

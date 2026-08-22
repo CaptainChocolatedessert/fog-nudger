@@ -60,6 +60,7 @@ import {
 import { blur, luminanceField } from "./trace/field";
 import { detectPolarity } from "./trace/polarity";
 import { labelSpace } from "./trace/label";
+import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
 import { contourStats, describeContours, traceRegions } from "./trace/contours";
 import { doubleSignedArea } from "./geometry/ring";
@@ -119,6 +120,24 @@ const MIN_WINDOW_RATIO = 3;
  * does one without risking the other, which is why the census reports what was dropped.
  */
 const MIN_REGION_SQUARES = 0.1;
+
+/**
+ * Smallest solid ink shape worth naming in the log, in grid squares.
+ *
+ * A diagnostic threshold rather than a pipeline one — nothing behaves differently because of it, and
+ * its only job is to keep a list a human reads down to things a human could find on a map.
+ */
+const MIN_BLOB_SQUARES = 0.05;
+
+/**
+ * How many measured ink widths across its narrow side a shape must be before it stops being
+ * plausible as linework.
+ *
+ * Three, which is comfortably past any stroke and well below anything drawn as a filled feature.
+ * The unit is the point: a stroke is one ink width across by definition, so this needs no tuning
+ * per map (DESIGN.md §5).
+ */
+const BLOB_INK_WIDTHS = 3;
 
 /**
  * Simplification tolerance, **as a fraction of the measured ink width**.
@@ -397,6 +416,27 @@ export async function runTrace(): Promise<TraceOutcome> {
       );
     }
   }
+
+  // ## Ink that is not linework
+  //
+  // Runs before labelling because it explains a class of result labelling cannot: a filled area
+  // whose tone fell on the ink side of the threshold is *ink*, so it never becomes a region, is
+  // never covered, and shows through as bare map inside a revealed room. The census cannot see it —
+  // from the region statistics' point of view nothing is missing, because the area never existed.
+  //
+  // Denominated in measured ink width, since a stroke is one ink width across its narrow side by
+  // definition and a filled shape is several.
+  const blobStarted = performance.now();
+  const blobs = findInkBlobs(reading.mask, {
+    pxPerSquare,
+    minSquares: MIN_BLOB_SQUARES,
+    minThickness: (reading.inkWidth ?? pxPerSquare * 0.1) * BLOB_INK_WIDTHS,
+  });
+  devLog(
+    "info",
+    `trace: ink shape check in ${Math.round(performance.now() - blobStarted)}ms — ` +
+      `${describeInkBlobs(blobs, plan.width, plan.height)}`,
+  );
 
   // ## Fill and label
   //
