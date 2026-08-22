@@ -1201,6 +1201,34 @@ says whether anything inside it survives.
 region. Under the new rule every one of those encloses a nested region, which is unusual enough to
 be worth seeing.
 
+**Every scene item except the map itself renders above a staged proposal — 2026-08-22.** A GM
+reported unfilled white pockets still appearing after the containment fix, and the numbers rule out
+the pipeline as their source:
+
+- **A bare patch of floor cannot exceed the minimum region area**, which is 260px — about 16×16 —
+  because the only floor left uncovered is a speck the minimum-area filter dropped that no filled
+  hole swallowed. Every surviving region is emitted in full. The reported pockets are far larger
+  than that, so they are not uncovered floor.
+- **They are not kept holes either.** After the containment fix there are 16 holes in the whole map
+  and 5 outside the largest region, and each encloses a surviving region that is drawn in its own
+  colour.
+
+**What they are: the tokens.** `DRAWING` is third in the layer stack, and `PROP`, `MOUNT`,
+`CHARACTER`, `ATTACHMENT`, `NOTE`, `TEXT` and `RULER` are all above it. So a staged proposal sits
+underneath **every** item in the scene bar the map and the grid, and a token's own artwork — a
+creature on a light disc, say — reads exactly like a hole in the fill. The pockets in the report sit
+centred on creatures.
+
+**This is a real cost of staging on `DRAWING`, and it reverses on acceptance.** `FOG` is eleventh, so
+an accepted shape covers all of those instead. A proposal is therefore hardest to see in exactly the
+places a GM has put something, and the appearance changes the moment it is promoted. Reviewing with
+tokens hidden is the workaround; there is no layer that avoids it, for the reason above.
+
+*The pipeline now states this rather than leaving it to be deduced.* Every run reports how much of
+the raster the emitted shapes cover against how much is ink, and therefore how much floor is left
+bare — a figure that is essentially zero on a healthy map, and that turns "there is a gap" into
+"the gap is not ours" without anyone reading a census.
+
 **Rotation pivots about the bounding-box centre**, which is what step 7 anchored regions on the
 assumption of. Note precisely what this does and does not establish: our anchor *is* the geometry's
 bounding-box centre, so "rotates about `position`" and "rotates about the bounding box" name the

@@ -451,6 +451,32 @@ export async function runTrace(): Promise<TraceOutcome> {
     );
   }
 
+  // ## What is left uncovered, which is the only way to answer "why is there a gap"
+  //
+  // The emitted shapes are disjoint — regions do not overlap, and a filled hole belongs to exactly
+  // the one region that encloses it — so their total area is the sum of the traced areas, exactly.
+  // Everything else in the raster is uncovered.
+  //
+  // Uncovered space should be **almost all ink**. When a GM reports a gap that is not ink, this line
+  // is what says whether the gap is ours at all: if uncovered barely exceeds the ink, then every
+  // piece of floor is under a shape and whatever they are looking at is either on a layer above
+  // ours or is not on the map image we traced.
+  const coveredArea = traced.reduce((total, region) => total + region.tracedArea, 0);
+  const rasterArea = plan.width * plan.height;
+  const uncoveredShare = rasterArea > 0 ? 1 - coveredArea / rasterArea : 0;
+  const nonInk = uncoveredShare - chosenCoverage;
+  devLog(
+    "info",
+    `trace: emitted shapes cover ${((coveredArea / rasterArea) * 100).toFixed(1)}% of the raster; ` +
+      `${(uncoveredShare * 100).toFixed(1)}% is uncovered against ${(chosenCoverage * 100).toFixed(1)}% ink, ` +
+      `so ${(Math.max(0, nonInk) * 100).toFixed(2)}% of the raster is floor left bare. ` +
+      (nonInk <= 0.002
+        ? `That is nothing — a gap a GM can see is not an uncovered region, so look above the ` +
+          `DRAWING layer or at whether the traced map is the one on screen.`
+        : `That is enough to be visible; the minimum-area filter dropped ` +
+          `${(labelled.discardedArea / rasterArea * 100).toFixed(2)}% and is the likeliest source.`),
+  );
+
   // Holes are now kept only where they enclose a surviving region, so every one of these is a
   // region nested inside another — a vault inside a room, or a room cluster inside the outside. The
   // largest region is excluded because its holes are the ordinary case; anywhere else, a nested
