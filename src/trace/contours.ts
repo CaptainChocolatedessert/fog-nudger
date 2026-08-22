@@ -63,6 +63,7 @@
 
 import type { Ring } from "../geometry/ring";
 import { doubleSignedArea } from "../geometry/ring";
+import type { BinaryMask } from "./binarize";
 import type { LabelledSpace, Region } from "./label";
 
 export interface RegionContours {
@@ -88,6 +89,15 @@ export interface RegionContours {
    */
   readonly filledHoles: number;
   readonly filledHoleArea: number;
+  /**
+   * Of the filled area, how much was *floor* rather than ink.
+   *
+   * Needed to say how much floor is left bare anywhere on the map, which cannot be worked out from
+   * totals: uncovered area is ink-not-swallowed plus discarded-floor-not-swallowed, and subtracting
+   * the ink total from the uncovered total conflates the two. A coverage figure built that way
+   * reported "0.00% bare" on a map that had visible bare patches, and was believed.
+   */
+  readonly filledHoleFloorArea: number;
 }
 
 /** Steps for the four directions, indexed by the direction codes used below. */
@@ -101,11 +111,19 @@ const STEP_Y = [0, 1, 0, -1] as const;
  * actually occupy rather than to the raster times the region count. The exterior's box is the whole
  * raster and there is no avoiding that; every other region is small.
  */
-export function traceRegions(labelled: LabelledSpace): RegionContours[] {
-  return labelled.regions.map((region) => traceRegion(labelled, region));
+export function traceRegions(labelled: LabelledSpace, mask?: BinaryMask): RegionContours[] {
+  return labelled.regions.map((region) => traceRegion(labelled, region, mask));
 }
 
-export function traceRegion(labelled: LabelledSpace, region: Region): RegionContours {
+/**
+ * The mask is optional and is read for one purpose only: telling filled ink from filled floor, so a
+ * caller can say how much floor is left bare anywhere on the map. Tracing itself never consults it.
+ */
+export function traceRegion(
+  labelled: LabelledSpace,
+  region: Region,
+  mask?: BinaryMask,
+): RegionContours {
   const { labels, width, height } = labelled;
 
   // A one-pixel margin all round, so the pixel outside the region's box is always readable and
@@ -174,6 +192,7 @@ export function traceRegion(labelled: LabelledSpace, region: Region): RegionCont
   // be revealed separately there. If not, the region covers it.
   let filledHoles = 0;
   let filledHoleArea = 0;
+  let filledHoleFloorArea = 0;
   const component: number[] = [];
 
   for (let seed = 0; seed < inside.length; seed++) {
@@ -214,7 +233,16 @@ export function traceRegion(labelled: LabelledSpace, region: Region): RegionCont
     }
 
     if (!enclosesRegion) {
-      for (const i of component) inside[i] = 1;
+      for (const i of component) {
+        inside[i] = 1;
+        if (mask) {
+          const sx = (i % boxWidth) + originX;
+          const sy = ((i / boxWidth) | 0) + originY;
+          if (sx >= 0 && sy >= 0 && sx < width && sy < height && mask.data[sy * width + sx] === 0) {
+            filledHoleFloorArea += 1;
+          }
+        }
+      }
       filledHoles += 1;
       filledHoleArea += component.length;
     }
@@ -277,6 +305,7 @@ export function traceRegion(labelled: LabelledSpace, region: Region): RegionCont
     tracedArea: tracedDoubleArea / 2,
     filledHoles,
     filledHoleArea,
+    filledHoleFloorArea,
   };
 }
 

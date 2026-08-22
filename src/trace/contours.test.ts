@@ -11,8 +11,9 @@ import { labelSpace, type LabelOptions } from "./label";
  * comb whose teeth are secretly joined.
  */
 function trace(rows: readonly string[], options?: Partial<LabelOptions>) {
-  const labelled = labelSpace(maskFromRows(rows), { minArea: options?.minArea ?? 0 });
-  return { labelled, contours: traceRegions(labelled) };
+  const mask = maskFromRows(rows);
+  const labelled = labelSpace(mask, { minArea: options?.minArea ?? 0 });
+  return { labelled, contours: traceRegions(labelled, mask) };
 }
 
 const asPairs = (ring: Ring) => ring.map((point) => [point.x, point.y]);
@@ -239,6 +240,11 @@ describe("traceRegions", () => {
     // The whole three-by-three block, ink ring included.
     expect(room!.filledHoleArea).toBe(9);
     expect(room!.tracedArea).toBe(labelled.regions[0]!.area + 9);
+    // Of those nine, exactly one was floor — the discarded interior. That split is what lets the
+    // pipeline say how much floor is left bare anywhere on the map, which cannot be got from totals:
+    // a coverage figure that subtracted the ink total from the uncovered total reported "0.00% bare"
+    // on a map with visible bare patches, and was believed for two rounds.
+    expect(room!.filledHoleFloorArea).toBe(1);
   });
 
   it("costs one command per vertex plus a move and a close per ring", () => {

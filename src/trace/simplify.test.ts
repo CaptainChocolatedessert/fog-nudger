@@ -167,6 +167,7 @@ describe("simplifyRegion", () => {
       tracedArea: 0,
       filledHoles: 0,
       filledHoleArea: 0,
+      filledHoleFloorArea: 0,
     };
   }
 
@@ -266,6 +267,7 @@ describe("simplifyRegion", () => {
       tracedArea: 0,
       filledHoles: 0,
       filledHoleArea: 0,
+      filledHoleFloorArea: 0,
     };
     const simplified = simplifyRegion(region, { tolerance: 10, maxTolerance: 10 });
 

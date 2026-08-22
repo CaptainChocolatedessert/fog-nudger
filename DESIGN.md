@@ -1201,45 +1201,59 @@ says whether anything inside it survives.
 region. Under the new rule every one of those encloses a nested region, which is unusual enough to
 be worth seeing.
 
-**Unfilled pockets are ink, not gaps — settled 2026-08-22 after two wrong answers.** A GM reported
-small light areas inside rooms left unfilled, and the first two explanations were both wrong:
-staging under the fog layer, and then the tokens rendering above it. Each was plausible, each was
-argued from the layer stack, and neither was checked against a number that could have refuted it.
+**Bare patches are discarded floor, and the diagnostic that ruled that out was broken — 2026-08-22.**
+A GM reported light areas inside rooms showing through. Five explanations were offered before the
+answer arrived, and the last four were all rejections of the right one:
 
-**What settled it was making the pipeline state its own coverage.** The emitted shapes are disjoint —
-regions do not overlap, and a filled hole belongs to exactly the one region enclosing it — so their
-total area is the sum of the traced areas, exactly. Measured on the test map:
+1. Fog painting over the staging layer. Wrong: Owlbear's fog is transparent.
+2. Tokens rendering above it. Wrong: they are map details.
+3. Holes kept by a size rule. **Half right** — it was a real defect and fixing it removed 39 of the
+   44 pockets, but it was not what remained.
+4. A filled tone landing on the ink side of the threshold. Wrong, and the GM refuted it in one
+   sentence: the patches are *white*, and a local threshold marks a pixel ink for being **darker**
+   than its window's mean. No composition of that window calls white ink.
 
-> emitted shapes cover 93.6% of the raster; 6.4% is uncovered against 7.2% ink, so **0.00% of the
-> raster is floor left bare**
+**The answer came from pointing at one pixel:**
 
-Every floor pixel is under a shape. The pockets are therefore **not uncovered floor at all** — they
-are areas the binariser called ink, and ink is never a region and never covered by anything.
+> raster (772, 1640) luminance 0.991 is floor, but its region was below the minimum area and was
+> discarded, so no shape covers it
 
-**This is the one cost of discarding colour, arriving exactly where §4 said it would.** Binarisation
-runs on luminance, so a filled feature whose tone lands on the ink side of the local threshold
-becomes ink. It then has no region, is covered by nothing, and shows through as bare map inside a
-revealed room — which looks identical to a hole, which is why two other stages were investigated
-first.
+Floor, genuinely white, discarded by the minimum-area filter — the one stage nobody had questioned,
+because a diagnostic said it could not be responsible.
 
-**The census cannot see this, and that is worth being explicit about.** From the region statistics'
-point of view nothing is missing: the area never existed, so no count is short, no share moved, and
-the arithmetic still closes. A diagnostic that could not distinguish this outcome from a healthy one
-is exactly the trap §8 lists, and it took a human looking at a map to break the tie.
+**That diagnostic was wrong, and it is the more important finding.** The coverage line computed bare
+floor as *uncovered area minus total ink*. But some ink **is** covered — the containment fill
+swallows ink whenever it fills a hole — so subtracting the whole ink total oversubtracts, and the
+result went negative and was clamped to `0.00%`. It read as "nothing is bare" on a map with visible
+bare patches, and it was believed twice.
 
-*So the pipeline now looks for it directly.* Every run reports **compact ink** — connected ink whose
-narrow side is at least three measured ink widths and which fills most of its own bounding box —
-with each one's size and position as a share of the map, so a GM can look straight at it. A pillar
-or a block of rubble is a correct answer; a lightly-tinted feature is the failure above.
+The failure is the one §8 names, in its most expensive form: **a diagnostic that cannot distinguish
+its outcomes will be believed anyway**. This one could not distinguish "no bare floor" from "bare
+floor exists and the arithmetic conflated two quantities", it was consulted precisely when that
+mattered, and it was used to reject the correct explanation. Building it felt like the disciplined
+move; it cost two rounds.
 
-*Two measures, not one, and a test caught why before a map did.* Bounding-box fill alone is wrong: a
-**straight, axis-aligned** stroke fills its box completely and scores identically to a solid square.
-That is most of the linework on an architectural map, so fill alone would have flagged every wall.
-Thickness is the load-bearing measure and fill only excludes wandering strokes.
+*Fixed by measuring rather than inferring.* Tracing now counts, per filled hole, how much of what it
+swallowed was **floor** rather than ink. Bare floor is then exactly the area the minimum-area filter
+discarded less the floor that fills reached, and the run says so in pixels and grid squares and
+warns when it is not zero.
 
-*Named limitation:* a filled feature **touching a wall** joins the wall's connected component, and
-that component is thin, so it is invisible to this. Free-standing features are the common case and
-are what was reported.
+**Why the containment fill does not reach these.** A feature whose ink joins the wall linework is
+*not enclosed* by the room — the flood reaches its interior from outside the region, so it is no
+component's hole and no fill ever sees it. Its interior is simply a region below the minimum,
+discarded, covered by nothing. The same geometry makes it invisible to the compact-ink check, which
+is recorded there as a limitation.
+
+**The lever is the minimum area, and §5's bias points at lowering it.** A spurious region costs the
+GM one click; a bare patch is a visible defect in a revealed room. The threshold is 0.1 grid squares
+and every discarded region is by definition smaller than that, so the question is only how far down
+to go — which is a judgement about *this* map's noise, and now has a number attached to it on every
+run.
+
+**And the lesson about instruments, which is worth more than the fix.** Every diagnostic this project
+had reported a *total*, and a total cannot say what is happening at the place a human is pointing.
+Four wrong explanations were argued from aggregates. The point probe — "what is here?", answering
+region / ink / discarded floor with the luminance actually read — settled it on the first use.
 
 **Staged proposals do sit under every scene item but the map and the grid**, which is true, was
 found while chasing the wrong explanation, and is worth keeping. `DRAWING` is third in the layer

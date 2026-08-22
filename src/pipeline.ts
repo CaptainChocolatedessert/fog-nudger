@@ -529,7 +529,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   // faces and neither claims half a pixel of it. The area check is the one exact tie between this
   // stage and the last: every region's ring areas must sum to the pixel count that produced it.
   const traceStarted = performance.now();
-  const traced = traceRegions(labelled);
+  const traced = traceRegions(labelled, reading.mask);
   const traceMs = Math.round(performance.now() - traceStarted);
   const contours = contourStats(labelled, traced);
 
@@ -557,18 +557,32 @@ export async function runTrace(): Promise<TraceOutcome> {
   const coveredArea = traced.reduce((total, region) => total + region.tracedArea, 0);
   const rasterArea = plan.width * plan.height;
   const uncoveredShare = rasterArea > 0 ? 1 - coveredArea / rasterArea : 0;
-  const nonInk = uncoveredShare - chosenCoverage;
+  // Bare floor is measured, not inferred. Every surviving region is emitted whole, so the only
+  // floor left uncovered is what the minimum-area filter discarded and no filled hole swallowed.
+  const swallowedFloor = traced.reduce((total, region) => total + region.filledHoleFloorArea, 0);
+  const bareFloor = Math.max(0, labelled.discardedArea - swallowedFloor);
+  const bareSquares = pxPerSquare > 0 ? bareFloor / pxPerSquare ** 2 : 0;
   devLog(
     "info",
-    `trace: emitted shapes cover ${((coveredArea / rasterArea) * 100).toFixed(1)}% of the raster; ` +
-      `${(uncoveredShare * 100).toFixed(1)}% is uncovered against ${(chosenCoverage * 100).toFixed(1)}% ink, ` +
-      `so ${(Math.max(0, nonInk) * 100).toFixed(2)}% of the raster is floor left bare. ` +
-      (nonInk <= 0.002
-        ? `That is nothing — a gap a GM can see is not an uncovered region, so look above the ` +
-          `DRAWING layer or at whether the traced map is the one on screen.`
-        : `That is enough to be visible; the minimum-area filter dropped ` +
-          `${(labelled.discardedArea / rasterArea * 100).toFixed(2)}% and is the likeliest source.`),
+    `trace: emitted shapes cover ${((coveredArea / rasterArea) * 100).toFixed(1)}% of the raster ` +
+      `(${(uncoveredShare * 100).toFixed(1)}% uncovered, against ${(chosenCoverage * 100).toFixed(1)}% ink); ` +
+      `the minimum-area filter discarded ${labelled.discarded} regions holding ` +
+      `${labelled.discardedArea} px, of which filled holes swallowed ${swallowedFloor} px — ` +
+      `leaving ${bareFloor} px (${bareSquares.toFixed(2)} grid squares) of floor bare.`,
   );
+  if (bareFloor > 0) {
+    // Named as a real defect rather than a rounding remark. Every one of these pixels is a patch of
+    // map inside a room the GM will reveal, showing through untouched — which is exactly what gets
+    // reported as "an unfilled pocket".
+    devLog(
+      "warn",
+      `trace: ${bareSquares.toFixed(2)} grid squares of floor are covered by nothing. These are ` +
+        `regions below the ${MIN_REGION_SQUARES}-square minimum that no filled hole reached — a ` +
+        `feature whose ink joins a wall is not enclosed by anything, so the containment fill never ` +
+        `sees it. Lowering the minimum is the direct lever, and §5's bias favours it: a spurious ` +
+        `region costs a click, a bare patch is a visible defect.`,
+    );
+  }
 
   // Holes are now kept only where they enclose a surviving region, so every one of these is a
   // region nested inside another — a vault inside a room, or a room cluster inside the outside. The
