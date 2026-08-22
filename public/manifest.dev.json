@@ -1,15 +1,15 @@
 {
-  "name": "Fog Nudger",
+  "name": "Fog Nudger (dev)",
   "version": "0.1.0",
   "manifest_version": 1,
   "author": "Captain Chocolatedessert",
   "homepage_url": "https://github.com/CaptainChocolatedessert/fog-nudger",
-  "icon": "/fog-nudger/logo.png",
-  "description": "Trace a map image into the fog regions you reveal room by room, then nudge them into place. Walls come free with Dynamic Fog.",
+  "icon": "/fog-nudger/logo-dev.png",
+  "description": "DEV BUILD, served from localhost. Shares scene data with the published extension — keep only one enabled so you know which one you clicked.",
   "background_url": "/fog-nudger/background.html",
   "action": {
-    "title": "Fog Nudger",
-    "icon": "/fog-nudger/nudge-action.svg",
+    "title": "Fog Nudger (dev)",
+    "icon": "/fog-nudger/nudge-action-dev.svg",
     "popover": "/fog-nudger/panel.html",
     "width": 320,
     "height": 200

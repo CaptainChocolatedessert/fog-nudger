@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <!--
+    The action icon for the dev build: `nudge-action.svg` with a filled dot, so the room's button
+    says which build is live without reading a tooltip. Keep the two glyphs in step — this exists to
+    differ in exactly one mark, and any other difference makes the comparison it is for misleading.
+
+    A corner badge is enough *here* and is not enough for the extensions-list logo, which is why the
+    two builds differ from each other in two different ways. This icon is loaded live by the running
+    extension and rendered at the size it was drawn for. The list icon is a stored record rendered
+    through whatever mask and downscale the list applies, and the sibling project measured a corner
+    badge disappearing in exactly that step — so `logo-dev.png` inverts the whole plate instead.
+
+    The badge strokes with `currentColor` like the rest, so Owlbear colours it with its own chrome.
+  -->
+  <!-- A room's corner traced out of the map, with one vertex being nudged off it. -->
+  <path d="M4 20V6.5h11" />
+  <path d="M4 20h10" />
+  <path d="M17.5 6.5 20 4" stroke-dasharray="1 2.4" />
+  <circle cx="20" cy="4" r="1.7" />
+  <circle cx="20" cy="20" r="3.4" fill="currentColor" stroke="none" />
+</svg>

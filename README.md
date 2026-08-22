@@ -54,10 +54,17 @@ npm test
 npm run dev
 ```
 
-`npm run dev` serves the extension on `http://localhost:5273/fog-nudger/`; add
-`http://localhost:5273/fog-nudger/manifest.json` as a custom extension in an Owlbear room to load
-it. Note that the SDK stays inert outside a room — running the dev server and opening it directly
-in a browser executes the code but produces no Owlbear activity, and that silence is correct.
+`npm run dev` serves the extension on `http://localhost:5273/fog-nudger/`. Add
+`http://localhost:5273/fog-nudger/manifest.dev.json` as a custom extension in an Owlbear room to
+load it. Note that the SDK stays inert outside a room — running the dev server and opening it
+directly in a browser executes the code but produces no Owlbear activity, and that silence is
+correct.
+
+The dev manifest exists so the development build can sit installed **alongside** the published one
+and be told apart on sight: it carries "(dev)" on its name and button, an action icon with a filled
+dot, and an inverted logo in the extensions list. Both builds read and write the same scene data,
+so keep one enabled at a time — not because they corrupt anything, but because two identical panels
+is a good way to spend ten minutes wondering why an edit did not appear.
 
 `npm run devlog` starts a small receiver on port 9998 that collects log output from inside the
 extension iframe into `dev.log`.

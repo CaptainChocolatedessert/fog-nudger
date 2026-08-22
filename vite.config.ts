@@ -4,8 +4,12 @@ import { defineConfig } from "vite";
  * `base` must match the GitHub Pages project subpath. Project Pages serve from
  * /<repo>/, and assets resolve against the origin root otherwise.
  *
- * The same prefix is hardcoded in public/manifest.json, which Vite does not rewrite —
- * `public/` is copied verbatim. If this changes, change all three fields there too.
+ * The same prefix is hardcoded in both manifests under `public/`, which Vite does not
+ * rewrite — `public/` is copied verbatim. That is four fields each (`icon`,
+ * `background_url`, `action.icon`, `action.popover`) across `manifest.json` and
+ * `manifest.dev.json`, plus the dev URL registered in Owlbear. Change this, change all
+ * of them. Drift is loud rather than subtle: a stale path 404s and the extension simply
+ * fails to load.
  */
 export default defineConfig({
   base: "/fog-nudger/",
