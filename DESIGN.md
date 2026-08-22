@@ -971,15 +971,56 @@ anything about real ink. The raggedness is a sine wave, and vertex count is exac
 raggedness drives, so the reduction figure is a property of the fixture. The real numbers come from
 a room.
 
-**7. World placement — next.** Pixel coordinates to Owlbear world coordinates through the map image's
-transform and grid. Nothing pure can test this, so it gets a room check of its own with a
-deliberately asymmetric shape — a symmetric one could not distinguish a correct transform from a
-flipped or transposed one, which is the sibling's "too symmetric to fail" lesson in the place it
-matters most here.
+**7. World placement — built and tested as far as anything pure can be; the room check is
+outstanding.** Raster pixels to Owlbear world coordinates, per axis, with each region anchored at
+the centre of its own world box and its rings expressed relative to that anchor — which is the
+contract a `Path` wants, since its commands are relative to its `position` (§4, measured in a room).
 
-**8. Emit.** Build `Path` items on the `FOG` layer, tagged with our own metadata namespace for
-provenance. Meet the 8192 cap by simplifying, never by splitting (§10). Batch and debounce against
-the rate limiter, distinguishing throttle from validation failure at the call site.
+*The transform is not composed by hand, and that is inherited rather than decided here.* It comes
+from `getItemBounds`, because dpi, grid offset, image scale and rotation compose in an order the SDK
+documents nowhere and this pair of projects has paid for guessing at an undocumented convention
+once. The cost is that the box is axis-aligned, so a **rotated** map image reports the box its
+corners span instead of its own footprint; the aspect mismatch is the signal, and the dry run warns
+on it.
+
+*Anchoring at the region's centre has one solid reason and one that is reasoning.* Solid: command
+magnitudes stay small and symmetric about zero, so a wrong number looks wrong in a log rather than
+being a small perturbation of a large world coordinate. Reasoning, and **unchecked**: an item's
+`rotation` and `scale` almost certainly pivot about its `position`, so a GM rotating a proposed
+region would swing it about its own middle rather than about a distant shared origin. Worth
+confirming in the same room session as everything else here, since it is the difference between a
+nudging tool that behaves and one that flings a closet across the map.
+
+*What the tests establish, and what they cannot.* Per-axis scaling, the relative-to-position
+contract, holes sharing their region's anchor, and an asymmetric shape keeping its orientation are
+all covered — on a fixture whose two axes scale by deliberately different factors, since the test
+map's 0.000% aspect mismatch would leave the per-axis machinery unexercised and a square fixture
+could not tell a correct transform from a transposed one. **What no test here can settle is that
+raster (0,0) is the world box's minimum corner.** That is a claim about Owlbear's conventions, and a
+flip or a transpose fills exactly the same box, so every number the pipeline can produce is happy
+with a mirrored map.
+
+*So the pre-room diagnostic is aimed at that specific gap.* The dry run reports where each of the
+largest regions landed as a **fraction across and down the map**, plus its size in grid squares —
+figures a GM can check against the map in front of them without anything being emitted. Stated as
+shares rather than world units deliberately: this project has already had world units read as image
+pixels once. Alongside it, the placed geometry's world box is compared against the map's own and the
+shortfall reported in raster pixels, which catches a scale error, the one class of failure that does
+not need eyes on a map.
+
+**Verifying this properly needs the emit path.** A transform nobody can see is not verified, and the
+asymmetric shape §9 asks for has to be *looked at*. So step 7's room check is really step 8's first
+run, the same way step 5 was unusable without step 6.
+
+**8. Emit — next, and it carries step 7's room check with it.** Build `Path` items on the `FOG`
+layer, tagged with our own metadata namespace for provenance. Meet the 8192 cap by simplifying,
+never by splitting (§10). Batch and debounce against the rate limiter, distinguishing throttle from
+validation failure at the call site.
+
+Staged on `DRAWING` first, per §4: a proposal there renders in its own colour, is invisible to
+players while `visible` is false, is editable, and derives **zero** walls — so the first run in a
+room cannot affect play whatever it gets wrong. That inertness is what makes it safe to use as step
+7's verification, which is the whole reason the two steps land together.
 
 **9. Re-run and review.** Idempotency — replace our own shapes, never touch the GM's — and whatever
 OQ6 resolves to. A re-run destroys hand edits, so it must be deliberate and warned.

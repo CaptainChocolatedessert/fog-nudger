@@ -34,6 +34,12 @@ import {
   toWorldPoint,
 } from "./map/placement";
 import {
+  boundsCentre,
+  fractionWithin,
+  placeRegions,
+  placedBounds,
+} from "./map/placeRegions";
+import {
   describeHistogram,
   luminanceHistogram,
   meanLuminance,
@@ -465,10 +471,68 @@ export async function dryRun(): Promise<string> {
     );
   }
 
+  // ## World placement
+  //
+  // The last stage before anything could be seen, and the one nothing pure can fully check. The
+  // arithmetic is testable and is; that raster (0,0) is the world box's minimum corner is a claim
+  // about Owlbear's conventions, and a flip or a transpose would satisfy every number below.
+  const placed = placeRegions(simplified, placement);
+  const filled = placedBounds(placed);
+
+  if (!filled) {
+    devLog("warn", "dry run: nothing to place — no region survived with any geometry");
+  } else {
+    // A scale error is the failure this *can* catch. The outside normally runs to all four edges of
+    // the raster, so the placed geometry should fill the map's own box; a box a fraction of the
+    // map's, or larger than it, means the transform is wrong by a factor.
+    const slackX = Math.max(
+      Math.abs(filled.min.x - bounds.min.x),
+      Math.abs(filled.max.x - bounds.max.x),
+    );
+    const slackY = Math.max(
+      Math.abs(filled.min.y - bounds.min.y),
+      Math.abs(filled.max.y - bounds.max.y),
+    );
+    devLog(
+      "info",
+      `dry run: placed ${placed.length} regions filling world ` +
+        `(${filled.min.x.toFixed(1)}, ${filled.min.y.toFixed(1)}) to ` +
+        `(${filled.max.x.toFixed(1)}, ${filled.max.y.toFixed(1)}); the map's own box is short by ` +
+        `${slackX.toFixed(1)} x ${slackY.toFixed(1)} world units, which is ` +
+        `${(slackX / placement.unitsPerPixelX).toFixed(1)} x ` +
+        `${(slackY / placement.unitsPerPixelY).toFixed(1)} raster pixels`,
+    );
+
+    // The one diagnostic that can catch a flip without emitting anything, because it is checkable
+    // against the map the GM is looking at. Deliberately stated as a share of the map rather than in
+    // world units — this project has already had world units read as image pixels once.
+    const namedRegions = placed.slice(0, 5).map((region) => {
+      const centre = fractionWithin(bounds, boundsCentre(region.bounds));
+      const acrossSquares = (region.bounds.max.x - region.bounds.min.x) / (dpi || 1);
+      const downSquares = (region.bounds.max.y - region.bounds.min.y) / (dpi || 1);
+      return (
+        `#${region.id} ${(centre.x * 100).toFixed(0)}% across ` +
+        `${(centre.y * 100).toFixed(0)}% down, ${acrossSquares.toFixed(1)}x` +
+        `${downSquares.toFixed(1)} squares`
+      );
+    });
+    devLog(
+      "info",
+      `dry run: where the largest regions landed — ${namedRegions.join("; ")}. ` +
+        `Check these against the map by eye: a mirrored or transposed placement fills the same box ` +
+        `and disagrees only about which region is where.`,
+    );
+  }
+
   const elapsed = Math.round(performance.now() - started);
   // The explicit statement that nothing was written. A dry run and a dry run that silently failed
-  // to reach this point look identical without it.
-  devLog("info", `dry run: complete in ${elapsed}ms — emitted nothing`);
+  // to reach this point look identical without it. Now that geometry reaches world coordinates the
+  // wording has to be exact: it was placed, and placing is not emitting.
+  devLog(
+    "info",
+    `dry run: complete in ${elapsed}ms — geometry placed in world coordinates, nothing written to ` +
+      `the scene`,
+  );
 
   return (
     `"${raster.name}" ${plan.width}x${plan.height}` +
@@ -479,6 +543,6 @@ export async function dryRun(): Promise<string> {
     `, ${stats.count} regions (${stats.roomSized} room-sized)` +
     `, ${simplification.vertices} vertices in ${simplification.commands} commands` +
     (simplification.overCap > 0 ? ` (${simplification.overCap} OVER CAP)` : "") +
-    `, ${elapsed}ms. Nothing emitted — detail in dev.log.`
+    `, ${elapsed}ms. Placed but not emitted — detail in dev.log.`
   );
 }
