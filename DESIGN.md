@@ -391,6 +391,13 @@ distinct colour and let the GM delete what is wrong.
 - Staged items produce **zero walls**. Dynamic Fog filters on the `FOG` layer, so a proposal is
   inert by construction rather than by our being careful — it cannot affect play until promoted.
 
+**Fog renders above `DRAWING`, so review happens with fog hidden — measured 2026-08-22.** Proposals
+are invisible while fog is on, because `DRAWING` is third in the layer stack and `FOG` is eleventh.
+No ordinary layer sits above `FOG`; the four that do are `POINTER`, `POST_PROCESS`, `CONTROL` and
+`POPOVER`, none of them a place for editable content. **So this is forced rather than chosen**, and
+it is mild: hiding fog is one toggle, and a GM comparing proposals against the map art wants the art
+visible anyway. Full detail in §9's first-run notes.
+
 **Accepting is a property update, not a re-emission**: layer to `FOG`, `visible` to false,
 `fillOpacity` to 1. Ids survive, and sixty items are one call rather than sixty. The magenta is
 left in place deliberately, so demoting back to `DRAWING` restores the marking with no extra
@@ -1070,6 +1077,57 @@ one a first emit path has no business answering quietly. The remedy is the expli
 - **What the batch limits should actually be**, and whether the rate limiter is reached at all at
   260 items.
 - **Whether 115 room-sized regions is right for this map**, carried forward unanswered since step 4.
+
+#### First staging run in a room — 2026-08-22
+
+The first time anything this pipeline computes has been looked at. Three findings, one of which
+changes a design decision.
+
+**The floor grid is traced as walls, and the GM counts that as correct.** Step 4 listed "a printed
+grid picked up in patches" as one of three candidate explanations for its sub-square fragments, and
+this is it, confirmed by eye rather than inferred from a count. The user's judgement is that nothing
+could have known better, and that stands.
+
+*What it costs, stated rather than waved past:* grid lines detected in patches are the worst of the
+three outcomes for region shape — a fully-detected grid would at least be uniform, and an
+undetected one leaves rooms whole, while a partial one wanders a boundary along a line that is not a
+wall. It is a splitting failure rather than a merging one (§5), which is the side to fail on.
+
+*And there is a signal, which is worth knowing even though nothing acts on it.* Grid rules are
+thinner than walls, and the pipeline already measures ink width. A thickness-based filter is
+therefore possible in principle; it is not free, because ink width is an area-weighted harmonic mean
+over the whole mask rather than a per-stroke measurement (§9 step 3), so a real version needs a
+per-component thickness. Logged, not scheduled.
+
+**Fog renders above the staging layer, so proposals are invisible until fog is hidden.** The GM had
+to turn fog off to see them. Not, as first supposed, the fog colour drowning the magenta — the
+colour was intact the moment fog was off, so nothing removed it. The layer stack is the whole story:
+`DRAWING` is third and `FOG` is eleventh, so fog paints over the proposals.
+
+**This is not fixable by choosing a different staging layer.** Every ordinary layer sits below
+`FOG`; the only four above it are `POINTER`, `POST_PROCESS`, `CONTROL` and `POPOVER`, none of which
+is a place to put editable content. So **"review with fog hidden" is forced by the layer stack**
+rather than chosen, and the honest thing is to document it as the workflow rather than to keep
+looking for a layer that does not exist. It is a mild cost: hiding fog is one toggle, and a GM
+checking proposals against the map art wants the art visible anyway.
+
+*Step 1 could not have caught this*, and it is worth seeing why rather than treating it as an
+oversight. It placed six hand-built shapes at the viewport centre and asked whether a staged item
+renders in its own colour, hides from players, stays editable, and derives no walls. Every one of
+those answers is still correct. The question it never asked was what sits *on top* — which only
+arises once the shapes cover a map that has fog on it.
+
+**A second reviewability problem, independent of fog.** Because the exterior is emitted like any
+other region (§4), the proposals tile the entire map with no gaps. Even with fog hidden, a half-
+opacity fill over everything is a uniform wash, and the only thing carrying the partition is the
+stroke between shapes. The fill is working against the one job staging has.
+
+**Rotation pivots about the bounding-box centre**, which is what step 7 anchored regions on the
+assumption of. Note precisely what this does and does not establish: our anchor *is* the geometry's
+bounding-box centre, so "rotates about `position`" and "rotates about the bounding box" name the
+same point here and the observation cannot separate them. It does not need to — both give the
+behaviour the anchor was chosen for, and the ambiguity is now permanently harmless rather than
+merely unresolved.
 
 **9. Re-run and review — next.** Idempotency — replace our own shapes, never touch the GM's — and
 whatever OQ6 resolves to. A re-run destroys hand edits, so it must be deliberate and warned. Step 8
