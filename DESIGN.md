@@ -606,10 +606,22 @@ The sibling's culture is the reason it works, and it costs almost nothing to ado
 - **Diagnostics that fire unconditionally are worth their noise.** One that only fires when
   something is known to be wrong cannot distinguish "fine" from "never ran".
 
-### The region census — cheap, unconditional, and not yet trusted
+### The region census — a troubleshooting instrument, not a quality signal
 
-Every pipeline run reports, unconditionally: region count, the area distribution, the fraction of
-map area in the largest region, and how many regions touch the image border.
+Every pipeline run reports, unconditionally: region count, coverage, the largest few shares, how many
+regions clear a whole grid square, the median area, how many touch the raster border, and what the
+minimum-area filter dropped.
+
+**Settled 2026-08-17, and it settles the "revisit later" below.** The GM will judge the output by
+looking at it; that was always going to be true and the census cannot substitute for it. Its role is
+the *reverse* direction — when the user reports something wrong, the census is what makes the fault
+diagnosable, and possibly autotunable, without either party looking at pixels together. So it stays
+as it is and gets **no further investment for its own sake** (user, 2026-08-17). Add to it when a
+specific fault needs a number it does not yet report.
+
+*Declined on the same basis:* reporting bounding-box fill alongside area for the largest regions, to
+tell long thin slivers apart from compact cells. It would answer a live question about the test map
+(below) and it is a few lines, but it is diagnostic polish ahead of the first visible output.
 
 **The claim being made for it is deliberately narrow** (user, 2026-08-05, sceptical and right to
 be). Absolute thresholds across different maps are exactly the "property of the fixture" trap this
@@ -626,8 +638,9 @@ An image-processing project where every judgement requires rendering and inspect
 enormously expensive to work on. Numbers are cheap. Even a census that turns out to be a weak
 quality signal earns its place by making the results discussable.
 
-Revisit once it has been run against several real maps. If it is measuring the fixture, say so and
-cut it.
+*Superseded 2026-08-17: "revisit once it has been run against several real maps; if it is measuring
+the fixture, say so and cut it." It is not being cut, and it is not being trusted either — it is
+being kept at exactly its current size for the troubleshooting role above.*
 
 ---
 
@@ -673,7 +686,7 @@ appear usefully in Outliner; does Dynamic Fog produce a wall at its boundary and
 `strokeWidth`; does a shape with a hole work. **This validates the entire architecture before a line
 of pipeline exists**, and a failure in the first three is a redesign rather than a bug.
 
-**2. Dry-run mode in the extension — built 2026-08-15, not yet run in a room.** A control that
+**2. Dry-run mode in the extension — done, run in a room 2026-08-15.** A control that
 traces the scene's own map, reports to the dev log, and **emits nothing**. This is where tuning
 happens, and it replaces the separate trace harness the roadmap originally called for.
 
@@ -728,7 +741,7 @@ before then would be infrastructure guessing at its own question.
 first. Cheap per map, not free. Mitigable later by letting the dry run accept a pasted asset URL,
 which is what the sibling's harness took anyway.
 
-**3. Binarisation — built 2026-08-16, not yet run in a room.** Sauvola's local threshold over
+**3. Binarisation — done, run in a room 2026-08-16.** Sauvola's local threshold over
 summed-area tables, ported from the sibling, with an explicit Gaussian blur ahead of it as the
 texture-suppression control. Plus **polarity handling**, which turned out to be the substantial part.
 
@@ -792,7 +805,7 @@ the low bits that a 24-bit mantissa has already spent. Real peak is around 34 by
 the megapixel budget dropped from 48 to 16. Tiling the binarisation with an overlap of the Sauvola
 radius is the reserve if a larger map ever turns up.
 
-**4. Fill and label — built 2026-08-16, not yet run in a room.** Two-pass connected-component
+**4. Fill and label — done, run in a room 2026-08-17.** Two-pass connected-component
 labelling of the non-ink space over union-find, with the connectivity pairing from §5, a minimum-area
 filter denominated in grid squares, and the census. **No interior/exterior classification** — the
 outside is labelled and kept like anything else (§4), which removes the one stage here that had no
@@ -819,9 +832,59 @@ square, the median area, how many touch the raster border, and what the minimum-
 Border contact is **reported and never acted on** — it was the candidate rule for finding the
 exterior and it fails on any map whose rooms run to the edge.
 
-**5. Boundary tracing.** One closed polygon per region, plus holes. Pure, tested — and the fixtures
-must include a room with a pillar and two rooms sharing a wall, since a single square room cannot
-distinguish correct code from several kinds of wrong.
+#### Measured in a room, 2026-08-17 — *Lair Of The Lamb*
+
+> 260 regions covering 92.8% of the raster; largest first 75.0%, 1.5%, 1.2%, 0.6%, 0.5%; 115 at
+> least a grid square, median 0.84 sq; 1 touches the border; dropped 247 below the minimum (0.1% of
+> the raster). Labelled in 342ms; whole dry run 1259ms.
+
+**No catastrophic merge.** The second largest region is 1.5% — about 55 grid squares. Wholesale
+leaking through doorway gaps would have put it in the 5–15% range. This is the one thing the census
+was built to catch and it says the ink is holding.
+
+**The arithmetic closes**, which is a real check: 92.8% space + 7.1% ink + 0.1% dropped ≈ 100%.
+
+**The minimum-area filter is doing its job and only its job** — 247 regions dropped holding 0.1% of
+the raster between them, so it is eating specks rather than threatening a closet.
+
+Open, and carried into step 5 rather than resolved:
+
+- **Whether 115 room-sized regions is right for this map.** Only the GM knows how many rooms the
+  dungeon has, and the question was asked and not yet answered. Excluding the exterior, 259 regions
+  share 17.8% of the raster: mean 2.5 squares, median 0.84, with 144 of them *smaller than a single
+  grid square*. That skew is normal; the absolute count may not be.
+- **What the sub-square fragments are.** Candidates: walls drawn as double lines, leaving the gap
+  between them as a thin region; furniture leaving slivers against a wall; a printed grid picked up
+  in patches. A printed grid caught properly would give many hundreds of cells rather than 260, so
+  at most it is partial. Bounding-box fill would separate slivers from compact cells and has been
+  declined for now (§8).
+- **A room merging with the *exterior* has no single-run signal.** It would show as the largest
+  going 75% → 78% with the count down by one, indistinguishable from a correct result. Only a
+  comparison between runs catches it.
+- **That the 75% region is the exterior is an assumption, not a measurement.** Consistent with the
+  histogram's 79% mid-tone and with only one region touching the border; not confirmed.
+
+**5. Boundary tracing — next.** One closed polygon per region, plus holes. Pure, tested — and the
+fixtures must include a room with a pillar and two rooms sharing a wall, since a single square room
+cannot distinguish correct code from several kinds of wrong. Two of step 4's fixtures were wrong
+before its code was, so **build the fixtures first and check they mean what they look like**: a comb
+whose teeth were all joined along the top row, and an outer wall of four full-width lines that
+quietly diced the *outside* into eight pieces.
+
+Three things it has to get right:
+
+- **Corner coordinates, not pixel centres**, so two regions sharing a wall produce boundaries that
+  agree exactly rather than overlapping by half a pixel each.
+- **Holes.** A room with a pillar is one region with an outer contour and an inner one. The far end
+  is already settled — even-odd fill was confirmed in a room in step 1, so a ring reveals and its
+  hole does not, whichever way either winds.
+- **The exterior's shape.** One outer contour plus a hole per enclosed room cluster, which makes it
+  by far the most complex path emitted, and is why §4 exempts it from the never-split rule.
+
+**Steps 5 and 6 are effectively a pair.** An item's command array caps at exactly 8192 entries (§7)
+and a region traced at native resolution has a vertex per pixel step, so the largest rooms will run
+to tens of thousands. Step 5 alone produces polygons that are correct and unusable; nothing is
+visible in a room until simplification exists. Do not read step 5's vertex counts as a problem.
 
 **6. Simplify.** Conservative simplification preserving topology. **No outward offset** — the
 half-wall reveal is deferred to the tweaking tools (§4, §11), so the first output stops at the ink's

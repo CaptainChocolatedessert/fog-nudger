@@ -3,8 +3,9 @@
 An [Owlbear Rodeo](https://www.owlbear.rodeo/) extension: **trace a map image into the fog regions
 you reveal room by room.**
 
-> **Pre-release.** There is nothing to install yet. This repository currently holds a project
-> skeleton and its design record.
+> **Pre-release.** There is nothing to install yet. The trace pipeline reads a scene's map and
+> reports what it finds — resolution, placement, ink polarity and width, and the regions it would
+> emit — but it does not yet write anything to a scene.
 
 ## The idea
 
