@@ -43,6 +43,13 @@ import { blur, luminanceField } from "./trace/field";
 import { detectPolarity } from "./trace/polarity";
 import { labelSpace } from "./trace/label";
 import { censusStats, describeCensus } from "./trace/regionCensus";
+import { contourStats, describeContours, traceRegions } from "./trace/contours";
+import {
+  describeSimplification,
+  simplifyRegions,
+  simplifyStats,
+  COMMAND_CAP,
+} from "./trace/simplify";
 
 /**
  * Beyond this the world bounds are not a scaled copy of the image and a uniform placement is wrong.
@@ -93,6 +100,31 @@ const MIN_WINDOW_RATIO = 3;
  * does one without risking the other, which is why the census reports what was dropped.
  */
 const MIN_REGION_SQUARES = 0.1;
+
+/**
+ * Simplification tolerance, **as a fraction of the measured ink width**.
+ *
+ * The unit DESIGN.md §5 asks for, and here it is not merely portable — it is the safety argument.
+ * Douglas–Peucker moves the boundary by at most the tolerance, so a tolerance below *half* the ink
+ * width cannot carry a room's edge past the centre of the wall beside it and into the next room.
+ * A quarter sits comfortably inside that, leaving room for the ink-width figure itself to be off.
+ *
+ * Set low on purpose for the other reason too: outward error is desirable up to half a wall and
+ * harmful past it, and nobody looks at a fog region's vertex count (DESIGN.md §5).
+ */
+const SIMPLIFY_INK_WIDTHS = 0.25;
+
+/**
+ * Ceiling on the tolerance a region may be escalated to in order to fit the 8192-command cap, again
+ * in ink widths.
+ *
+ * Far past the half-width safety bound, deliberately. Only a region whose boundary wraps most of the
+ * map ever climbs this far, which in practice means the outside — and DESIGN.md §4 says the outside
+ * can be simplified far harder than any room, since there is no room out there to clip. What this
+ * setting cannot do is *know* that, so every region that escalates past the bound is named in the
+ * log rather than trusted to be the exterior.
+ */
+const MAX_SIMPLIFY_INK_WIDTHS = 8;
 
 /**
  * Trace the scene's map as far as the pipeline currently goes, and report.
@@ -341,6 +373,98 @@ export async function dryRun(): Promise<string> {
     );
   }
 
+  // ## Boundary tracing
+  //
+  // Corners rather than pixel centres, so two rooms either side of a wall meet it from opposite
+  // faces and neither claims half a pixel of it. The area check is the one exact tie between this
+  // stage and the last: every region's ring areas must sum to the pixel count that produced it.
+  const traceStarted = performance.now();
+  const traced = traceRegions(labelled, { minHoleArea: minArea });
+  const traceMs = Math.round(performance.now() - traceStarted);
+  const contours = contourStats(labelled, traced);
+
+  devLog("info", `dry run: traced in ${traceMs}ms — ${describeContours(contours)}`);
+
+  if (contours.areaMismatches > 0) {
+    devLog(
+      "error",
+      `dry run: ${contours.areaMismatches} regions traced to a boundary enclosing a different area ` +
+        `than the region holds. The geometry does not describe the regions it claims to, and ` +
+        `nothing downstream of this is worth reading.`,
+    );
+  }
+
+  // ## Simplification
+  //
+  // Denominated in ink width, which is what makes the bound statable: the boundary moves by at most
+  // the tolerance, so under half an ink width it cannot cross the centre of a wall.
+  const inkWidth = reading.inkWidth ?? pxPerSquare * 0.1;
+  if (reading.inkWidth === null) {
+    devLog(
+      "warn",
+      `dry run: no ink width to denominate simplification in, so the tolerance falls back to ` +
+        `${inkWidth.toFixed(1)}px from the grid. The half-wall safety bound is not being checked ` +
+        `against anything measured.`,
+    );
+  }
+
+  const simplifyStarted = performance.now();
+  const tolerance = SIMPLIFY_INK_WIDTHS * inkWidth;
+  const safeTolerance = inkWidth / 2;
+  const simplified = simplifyRegions(traced, {
+    tolerance,
+    maxTolerance: MAX_SIMPLIFY_INK_WIDTHS * inkWidth,
+  });
+  const simplifyMs = Math.round(performance.now() - simplifyStarted);
+  const simplification = simplifyStats(simplified);
+
+  devLog(
+    "info",
+    `dry run: simplified in ${simplifyMs}ms — tolerance ${tolerance.toFixed(2)}px ` +
+      `(${SIMPLIFY_INK_WIDTHS} of a ${inkWidth.toFixed(1)}px ink width; the bound that stops a ` +
+      `boundary crossing a wall is ${safeTolerance.toFixed(2)}px)`,
+  );
+  devLog("info", `dry run: ${describeSimplification(simplification)}`);
+
+  // The regions most likely to be a problem at emit time, listed rather than summarised. Which
+  // region escalated matters more than how many did: one enormous outside is expected, and a room
+  // in the list is a map far noisier than this pipeline is tuned for.
+  const heaviest = [...simplified].sort((a, b) => b.commands - a.commands).slice(0, 5);
+  if (heaviest.length > 0) {
+    devLog(
+      "info",
+      `dry run: heaviest items — ` +
+        heaviest
+          .map(
+            (region) =>
+              `#${region.id} ${region.commands} cmds / ${region.rings.length} rings` +
+              (region.escalations > 0 ? ` @${region.tolerance.toFixed(1)}px` : ""),
+          )
+          .join(", "),
+    );
+  }
+
+  const pastBound = simplified.filter((region) => region.tolerance > safeTolerance);
+  if (pastBound.length > 0) {
+    devLog(
+      "warn",
+      `dry run: ${pastBound.length} regions had to be simplified past half the ink width to fit ` +
+        `the command cap (${pastBound.map((region) => `#${region.id}`).join(", ")}). Their ` +
+        `boundaries may cross the middle of a wall. This is expected for the outside, which wraps ` +
+        `every room on the map; a room in that list is not expected.`,
+    );
+  }
+
+  if (simplification.overCap > 0) {
+    devLog(
+      "warn",
+      `dry run: ${simplification.overCap} regions still exceed the ${COMMAND_CAP}-command cap at ` +
+        `the ceiling tolerance and could not be emitted as they stand. Splitting them is not the ` +
+        `remedy — the join becomes a wall across a room — so this is either far noisier ink than ` +
+        `expected or a region that has merged into something enormous.`,
+    );
+  }
+
   const elapsed = Math.round(performance.now() - started);
   // The explicit statement that nothing was written. A dry run and a dry run that silently failed
   // to reach this point look identical without it.
@@ -353,6 +477,8 @@ export async function dryRun(): Promise<string> {
     `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
     (reading.inkWidth === null ? "" : ` ~${reading.inkWidth.toFixed(1)}px wide`) +
     `, ${stats.count} regions (${stats.roomSized} room-sized)` +
+    `, ${simplification.vertices} vertices in ${simplification.commands} commands` +
+    (simplification.overCap > 0 ? ` (${simplification.overCap} OVER CAP)` : "") +
     `, ${elapsed}ms. Nothing emitted — detail in dev.log.`
   );
 }

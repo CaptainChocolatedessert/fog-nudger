@@ -488,6 +488,11 @@ So simplification stays conservative, but for a changed reason: not because outw
 wrong, but because it is only correct within a bound the simplifier does not know about. Prefer more
 vertices over fewer; nobody looks at a fog region's vertex count.
 
+*Since built, that bound has a number* (step 6). Douglas–Peucker moves the boundary by at most the
+tolerance, so a tolerance under **half the measured ink width** cannot carry a region's edge past
+the centre of the wall beside it. The parameter therefore has to be denominated in ink width for the
+sentence to mean anything, which is the same conclusion §5 reaches from portability alone.
+
 Whatever half-wall coverage eventually arrives must be a **deliberate, separately-controlled**
 stage, never a side effect of loosening simplification — otherwise one parameter is doing two jobs
 and neither can be tuned. It is not in the initial pipeline at all (§4).
@@ -864,33 +869,109 @@ Open, and carried into step 5 rather than resolved:
 - **That the 75% region is the exterior is an assumption, not a measurement.** Consistent with the
   histogram's 79% mid-tone and with only one region touching the border; not confirmed.
 
-**5. Boundary tracing — next.** One closed polygon per region, plus holes. Pure, tested — and the
-fixtures must include a room with a pillar and two rooms sharing a wall, since a single square room
-cannot distinguish correct code from several kinds of wrong. Two of step 4's fixtures were wrong
-before its code was, so **build the fixtures first and check they mean what they look like**: a comb
-whose teeth were all joined along the top row, and an outer wall of four full-width lines that
-quietly diced the *outside* into eight pieces.
+**5. Boundary tracing — built and tested, not yet run in a room.** One closed polygon per region,
+plus a ring per hole, traced along the *cracks between* pixels so every vertex lands on an integer
+lattice corner. All three of the things it had to get right are done:
 
-Three things it has to get right:
+- **Corner coordinates, not pixel centres.** Two rooms either side of a wall meet it from opposite
+  faces — the left one stops at the wall's left edge, the right one begins at its right — so neither
+  claims half a pixel of the wall and neither claims a sliver of the other.
+- **Holes**, falling out of the traversal rather than needing a containment test. The walk keeps the
+  region on a fixed hand throughout, so an outer boundary has positive signed area and a hole
+  negative, and the sign *is* the classification.
+- **The exterior's shape**, one outer contour plus a hole per enclosed cluster, with no stage
+  anywhere deciding that it is the exterior.
 
-- **Corner coordinates, not pixel centres**, so two regions sharing a wall produce boundaries that
-  agree exactly rather than overlapping by half a pixel each.
-- **Holes.** A room with a pillar is one region with an outer contour and an inner one. The far end
-  is already settled — even-odd fill was confirmed in a room in step 1, so a ring reveals and its
-  hole does not, whichever way either winds.
-- **The exterior's shape.** One outer contour plus a hole per enclosed room cluster, which makes it
-  by far the most complex path emitted, and is why §4 exempts it from the never-split rule.
+*The invariant that ties this stage to the last.* A region's ring areas sum exactly to its pixel
+count — a room of 900 pixels with a 25-pixel pillar traces to +925 and −25. Every coordinate is an
+integer, so this is exact rather than approximate, and a hole traced the wrong way round, a boundary
+off by one, or a ring silently lost all break it. It is asserted per region in the tests and
+reported on every dry run as "area check exact".
 
-**Steps 5 and 6 are effectively a pair.** An item's command array caps at exactly 8192 entries (§7)
-and a region traced at native resolution has a vertex per pixel step, so the largest rooms will run
-to tens of thousands. Step 5 alone produces polygons that are correct and unusable; nothing is
-visible in a room until simplification exists. Do not read step 5's vertex counts as a problem.
+*The diagonal pinch, and the turn rule that decides it.* Where two pixels of one region touch only
+at a corner, the traversal can continue two ways, and the choice decides whether the geometry treats
+that touch as a join or a seal. Space is 4-connected, so it must be a seal: the contour turns toward
+the region, hugging the pixel it is on. Getting this backwards writes a diagonal leak into the
+geometry after the labeller has correctly refused one — the same paradox from §5, one stage later.
+**A single number separates the rules on the fixture built for it**: the correct rule gives one
+ring, the wrong one cuts a spurious hole loose and gives two.
 
-**6. Simplify.** Conservative simplification preserving topology. **No outward offset** — the
-half-wall reveal is deferred to the tweaking tools (§4, §11), so the first output stops at the ink's
-inner edge and rooms look slightly clipped. Known and accepted.
+*Holes get the same minimum area as regions, and that is not optional.* The minimum-area filter in
+step 4 does not delete a speck, it turns it into a **hole** in whatever encloses it. On the test map
+that is 247 of them, each of which would otherwise cost vertices against the command cap and give
+Dynamic Fog two walls to derive around a speck of noise. So anything too small to be its own region
+is too small to be a hole in someone else's.
 
-**7. World placement.** Pixel coordinates to Owlbear world coordinates through the map image's
+*Fixtures are drawn, not computed.* Step 4 paid for this: two of its fixtures were wrong before its
+code was, and both were predicates. A grid drawn as text cannot hide a comb whose teeth are secretly
+joined, and the whole of step 5's suite is built that way.
+
+**Steps 5 and 6 are a pair.** An item's command array caps at exactly 8192 entries (§7), and step 5
+alone produces polygons that are correct and unusable. Do not read its vertex counts as a problem.
+
+**6. Simplify — built and tested, not yet run in a room.** Douglas–Peucker, ported from the sibling,
+with the tolerance denominated in **measured ink width** rather than raster pixels (§5).
+
+*That unit is the safety argument, not just portability.* Douglas–Peucker keeps a subset of the
+original vertices and discards only points within the tolerance of the chord replacing them, so the
+simplified boundary stays inside a band of that width either side of the traced one. Inward error
+eats into the room and is merely ugly; outward error runs into the wall, which §4 *wants* up to
+about half its thickness and which becomes a merge past it. So the rule is one inequality: **keep
+the tolerance below half the measured ink width and the boundary provably cannot cross the centre of
+a wall.** The default is a quarter, leaving room for the ink-width figure itself to be off.
+
+**Named as a bound on displacement, not a promise about topology.** A doorway notch shallower than
+the tolerance can still be cut off, and Douglas–Peucker on a closed ring can in principle
+self-intersect. Both need a tolerance comparable to a room feature, which the default is far below —
+but neither is excluded by the argument above, and saying so is cheaper than discovering it.
+
+*Meeting the cap by simplifying harder, never by splitting.* A region over 8192 commands has its
+tolerance doubled and is re-simplified, up to a ceiling of eight ink widths. Splitting is the
+obvious remedy and it is §10's sharpest trap. A region still over the cap at the ceiling is
+**reported rather than fixed** — emitting it fails at the SDK boundary, splitting it puts a wall
+through a room, and crushing it further produces a room shaped like nothing on the map.
+
+*The exterior gets no special case, though §4 grants it one.* It cannot: the pipeline deliberately
+does not know which region the exterior is. The escalation ladder covers it without a guess — only a
+region with an enormous boundary escalates at all, and the exterior's boundary wraps every room on
+the map. It ends up loosely simplified because it is large, not because something decided it was the
+outside. Every region escalated past the half-width bound is **named individually in the log**,
+because "the outside" is the expected answer and a room in that list is not.
+
+*Simplification never removes a ring.* A ring small against the tolerance flattens onto its own
+diagonal and stops being a shape — for a hole that means the region covers what the hole was hiding,
+for a small room it means the room is simply absent from the output. The original is kept instead,
+which costs a handful of commands, because a ring that collapses is by definition tiny. Vertices are
+the cheap thing here and a room is not.
+
+*Checked rather than assumed: a rising tolerance ladder gives the same answer either way.*
+Re-simplifying from the previous pass and re-simplifying from the original produce identical
+polygons, because Douglas–Peucker's split point in an interval does not depend on the tolerance, so
+the retained sets nest. Two hundred thousand random polylines found no rising ladder that differed,
+and a *falling* one differed within four trials — which is what says the search could see a
+difference at all. The code re-simplifies from the original anyway, so the tolerance a region
+reports is the one its shape is within, with no appeal to that property needed to read it.
+
+**No outward offset** — the half-wall reveal is deferred to the tweaking tools (§4, §11), so the
+first output stops at the ink's inner edge and rooms look slightly clipped. Known and accepted.
+
+#### Measured on a synthetic map-sized raster, 2026-08-22
+
+Not a real map, and it is worth being clear about what it can and cannot say. A generated raster of
+3300×2550 with wobbled walls and 91 regions, of which the outside carries 132 holes:
+
+> label 1368ms, trace 507ms, simplify 144ms. 222 rings, 153,056 vertices; area check exact.
+> Simplified to 18,008 vertices in 18,230 commands across 91 items — 88% of the vertices gone.
+> Worst item is the outside at 4,673 commands of 8,192, reached after one escalation to 2.8px.
+> Nothing over the cap.
+
+**What this establishes:** tracing is cheap next to labelling, the escalation ladder works at scale,
+and an exterior carrying over a hundred holes fits the cap with headroom. **What it does not:**
+anything about real ink. The raggedness is a sine wave, and vertex count is exactly the quantity
+raggedness drives, so the reduction figure is a property of the fixture. The real numbers come from
+a room.
+
+**7. World placement — next.** Pixel coordinates to Owlbear world coordinates through the map image's
 transform and grid. Nothing pure can test this, so it gets a room check of its own with a
 deliberately asymmetric shape — a symmetric one could not distinguish a correct transform from a
 flipped or transposed one, which is the sibling's "too symmetric to fail" lesson in the place it
