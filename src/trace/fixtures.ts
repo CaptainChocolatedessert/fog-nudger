@@ -6,6 +6,7 @@
  * a small grid produced by a function, so a failure is readable as numbers.
  */
 
+import { emptyMask, type BinaryMask } from "./binarize";
 import type { PixelImage, ScalarField } from "./field";
 
 /** A field from a shade function returning 0..1. */
@@ -87,4 +88,39 @@ export function room(options: {
     if (gap && y < wall && x >= gap[0] && x < gap[1]) return ground;
     return ink;
   });
+}
+
+/**
+ * A binary mask drawn as text: `#` is ink, everything else is space.
+ *
+ * This exists because of a specific, expensive lesson. Two of step 4's fixtures were **wrong before
+ * its code was** — a comb whose teeth were all quietly joined along the top row, and an outer wall
+ * of four full-width lines that diced the *outside* into eight pieces nobody had noticed. Both were
+ * built from predicates, and a predicate is exactly as readable as the reasoning that produced it,
+ * which is to say not at all once it is a line long.
+ *
+ * A drawn grid cannot hide that class of mistake: the teeth are visibly joined or visibly not. It
+ * is the same argument the project makes for the region census, applied one level down.
+ *
+ * Rows must all be the same length, and a ragged fixture throws rather than padding — padding would
+ * silently invent the space at the end of a short row, which is precisely the kind of accident this
+ * is here to prevent.
+ */
+export function maskFromRows(rows: readonly string[]): BinaryMask {
+  const height = rows.length;
+  const width = height === 0 ? 0 : rows[0]!.length;
+  for (const row of rows) {
+    if (row.length !== width) {
+      throw new Error(
+        `ragged fixture: expected every row to be ${width} wide, found one of ${row.length}`,
+      );
+    }
+  }
+
+  const mask = emptyMask(width, height);
+  for (let y = 0; y < height; y++) {
+    const row = rows[y]!;
+    for (let x = 0; x < width; x++) mask.data[y * width + x] = row[x] === "#" ? 1 : 0;
+  }
+  return mask;
 }
