@@ -5,7 +5,7 @@
   "author": "Captain Chocolatedessert",
   "homepage_url": "https://github.com/CaptainChocolatedessert/fog-nudger",
   "icon": "/fog-nudger/logo.png",
-  "description": "Trace a map image into the fog regions you reveal room by room, then nudge them into place. Walls come free with Dynamic Fog.",
+  "description": "Trace a map image into the fog regions you reveal room by room. Walls come free with Dynamic Fog.",
   "background_url": "/fog-nudger/background.html",
   "action": {
     "title": "Fog Nudger",

@@ -5,7 +5,7 @@
   "author": "Captain Chocolatedessert",
   "homepage_url": "https://github.com/CaptainChocolatedessert/fog-nudger",
   "icon": "/fog-nudger/logo-dev.png",
-  "description": "DEV BUILD, served from localhost. Shares scene data with the published extension — keep only one enabled so you know which one you clicked.",
+  "description": "DEV BUILD from localhost. Same scene data as the published extension; keep only one enabled.",
   "background_url": "/fog-nudger/background.html",
   "action": {
     "title": "Fog Nudger (dev)",
