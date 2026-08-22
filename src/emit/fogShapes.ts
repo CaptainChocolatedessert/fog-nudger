@@ -42,21 +42,43 @@ import type { PlacedRegion } from "../map/placeRegions";
 export const REGION_KEY = key("region");
 
 /**
- * Ignored entirely by fog rendering — measured in a room — and useful because of it. On `DRAWING` a
- * proposal is unmistakably magenta; promoted to `FOG` the colour stops mattering and is left alone,
- * so demoting brings the marking back for free.
+ * Colours a proposal can be drawn in, cycled so that neighbouring regions differ.
+ *
+ * **One colour was a mistake, found in a room 2026-08-22.** Every proposal was magenta and the
+ * proposals cover the whole map — the exterior is emitted like any other region — so there was
+ * nothing for a fill to contrast against and the map read as one flat tint. The partition, which is
+ * the only thing a GM is being asked to judge, was invisible.
+ *
+ * Ignored entirely by fog rendering, which is what makes this free: an accepted shape keeps whatever
+ * colour it was given and renders in the scene's fog colour regardless, so demoting brings the
+ * marking back with no bookkeeping.
+ *
+ * *Assigned by region index, which is a heuristic and not a graph colouring.* Two adjacent regions
+ * can land on the same colour. Doing it properly needs a region-adjacency graph the pipeline does
+ * not build, and the stroke separates them anyway; regions are numbered by descending area, which
+ * bears no relation to position, so neighbours scatter across the palette in practice.
  */
-export const PROPOSAL_COLOUR = "#ff00ff";
+export const PROPOSAL_COLOURS = [
+  "#ff00ff",
+  "#00e5ff",
+  "#7cff2a",
+  "#ff8a1e",
+  "#b58bff",
+  "#ffe600",
+] as const;
 
 /**
- * Staged fill opacity.
+ * Staged fill opacity — low, so the map art stays readable underneath.
  *
- * Half, which is what step 1 placed and what a GM could see and select. Promotion raises it to 1,
- * and that value is **required** rather than aesthetic: a fog shape below full opacity leaves a
- * translucent tint of the fog colour over ground the party has already revealed, for players as
- * well as the GM. Owlbear's own fog tool sets 1.
+ * Was 0.5, which is what step 1 placed and judged against six shapes on open ground. At two hundred
+ * shapes tiling a whole map it is a wash. What carries the partition now is the difference between
+ * neighbouring colours and the stroke between them, and the fill only has to tint.
+ *
+ * Promotion raises it to 1, and *that* value is **required** rather than aesthetic: a fog shape
+ * below full opacity leaves a translucent tint of the fog colour over ground the party has already
+ * revealed, for players as well as the GM. Owlbear's own fog tool sets 1.
  */
-export const STAGED_FILL_OPACITY = 0.5;
+export const STAGED_FILL_OPACITY = 0.22;
 export const ACCEPTED_FILL_OPACITY = 1;
 
 export interface RegionProvenance {
@@ -82,6 +104,7 @@ export interface FogShapeSpec {
   readonly provenance: RegionProvenance;
   readonly fillOpacity: number;
   readonly strokeWidth: number;
+  readonly colour: string;
 }
 
 export interface StageOptions {
@@ -138,6 +161,7 @@ export function stageShapes(
       },
       fillOpacity: STAGED_FILL_OPACITY,
       strokeWidth: options.strokeWidth,
+      colour: PROPOSAL_COLOURS[shapes.length % PROPOSAL_COLOURS.length]!,
     });
   }
 

@@ -436,7 +436,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   // faces and neither claims half a pixel of it. The area check is the one exact tie between this
   // stage and the last: every region's ring areas must sum to the pixel count that produced it.
   const traceStarted = performance.now();
-  const traced = traceRegions(labelled, { minHoleArea: minArea });
+  const traced = traceRegions(labelled);
   const traceMs = Math.round(performance.now() - traceStarted);
   const contours = contourStats(labelled, traced);
 
@@ -451,10 +451,11 @@ export async function runTrace(): Promise<TraceOutcome> {
     );
   }
 
-  // The holes that survived, and how big they are — the number that says whether an unfilled pocket
-  // a GM reports is decoration-sized or room-sized. The largest region is excluded because its holes
-  // are the enclosed room clusters and are supposed to be there; every other region's holes are
-  // pockets inside something the GM will reveal, and each one shows through as bare map.
+  // Holes are now kept only where they enclose a surviving region, so every one of these is a
+  // region nested inside another — a vault inside a room, or a room cluster inside the outside. The
+  // largest region is excluded because its holes are the ordinary case; anywhere else, a nested
+  // region is unusual enough to be worth seeing, and it is also the only remaining way a hole can
+  // show through as bare map.
   const pocketSquares: number[] = [];
   for (const region of traced.slice(1)) {
     for (const ring of region.rings) {
@@ -464,16 +465,18 @@ export async function runTrace(): Promise<TraceOutcome> {
   }
   pocketSquares.sort((a, b) => a - b);
   if (pocketSquares.length === 0) {
-    devLog("info", "trace: no holes kept inside any region but the largest — nothing shows through");
+    devLog(
+      "info",
+      "trace: no regions nested inside any region but the largest — no bare map inside a room",
+    );
   } else {
     const at = (share: number) => pocketSquares[Math.floor(pocketSquares.length * share)] ?? 0;
     devLog(
       "info",
-      `trace: ${pocketSquares.length} holes kept inside regions other than the largest — these ` +
-        `render as bare map inside a revealed room. Sizes in grid squares: min ` +
-        `${pocketSquares[0]!.toFixed(2)}, median ${at(0.5).toFixed(2)}, max ` +
-        `${pocketSquares[pocketSquares.length - 1]!.toFixed(2)}. Decoration-sized means the hole ` +
-        `filter is too timid; room-sized means they are enclosed spaces and correct.`,
+      `trace: ${pocketSquares.length} holes kept inside regions other than the largest — each one ` +
+        `encloses a region that will be revealed separately, so the ink around it stays bare. ` +
+        `Sizes in grid squares: min ${pocketSquares[0]!.toFixed(2)}, median ${at(0.5).toFixed(2)}, ` +
+        `max ${pocketSquares[pocketSquares.length - 1]!.toFixed(2)}.`,
     );
   }
 

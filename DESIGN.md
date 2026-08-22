@@ -905,11 +905,29 @@ geometry after the labeller has correctly refused one — the same paradox from 
 **A single number separates the rules on the fixture built for it**: the correct rule gives one
 ring, the wrong one cuts a spurious hole loose and gives two.
 
-*Holes get the same minimum area as regions, and that is not optional.* The minimum-area filter in
-step 4 does not delete a speck, it turns it into a **hole** in whatever encloses it. On the test map
-that is 247 of them, each of which would otherwise cost vertices against the command cap and give
-Dynamic Fog two walls to derive around a speck of noise. So anything too small to be its own region
-is too small to be a hole in someone else's.
+*A hole is kept because of what is inside it, never because of how big it is — revised 2026-08-22
+after a room.* A hole renders as bare map inside an area the GM has revealed. That is right when
+something else will be revealed separately there, and wrong everywhere else.
+
+**So the test is containment**: keep a hole when it encloses a surviving region, fill it when it
+encloses only ink and specks the minimum-area filter discarded. Filling happens before any boundary
+is traced — the pixels simply become part of the region — so no ring is produced and nothing
+downstream knows it happened. A pillar is filled in under this rule, which is correct rather than
+incidental: nothing is revealed separately inside solid ink, and an unrevealed pillar-shaped blob in
+a revealed room reads as a bug.
+
+*Rejected: keeping a hole when it clears the region minimum.* The first rule, on the reasoning that
+anything too small to be a region is too small to be a hole. It does not hold, and a GM found the
+symptom before the reasoning was re-examined: **a region's area is its own pixels, a hole's area is
+everything its ring encloses — the thing inside plus the ink ring around it.** Equal thresholds
+therefore leave a band where a feature is too small to survive as a region and its hole too big to
+fill, and 44 decorative features on the test map showed through as white pockets because of it.
+
+*And raising the threshold would have been worse than leaving it.* A hole big enough to clear a
+room-sized cutoff can contain a **surviving** region, and a region covering another region means
+revealing the one reveals the other — the merge failure §5 biases hardest against. 156 of the test
+map's 269 regions are under a grid square. Containment cannot make that mistake and needs no
+threshold at all, which is one fewer thing to tune.
 
 *Fixtures are drawn, not computed.* Step 4 paid for this: two of its fixtures were wrong before its
 code was, and both were predicates. A grid drawn as text cannot hide a comb whose teeth are secretly
@@ -1172,13 +1190,16 @@ covering another region means revealing the one reveals the other, which is the 
 says to bias hardest against. 156 of the 269 regions here are under a grid square, so this is not a
 remote possibility.
 
-**The rule that is actually right is about containment, not size:** keep a hole when it encloses a
-surviving region, fill it when it encloses only ink and discarded specks. That is exact, it cannot
-merge anything, and it costs a containment test the pipeline does not currently do. Not yet built.
+**Fixed the same day, by containment rather than by size:** keep a hole when it encloses a surviving
+region, fill it when it encloses only ink and discarded specks. Exact, incapable of merging
+anything, and it removes the threshold rather than retuning it. Full reasoning at §9 step 5. The
+mechanism is a flood of the region's complement inward from its bounding box — whatever the flood
+cannot reach is enclosed, each enclosed component is exactly one hole, and one look at the label map
+says whether anything inside it survives.
 
-*Reported from the next run onward:* the count and size spread of holes kept inside anything but the
-largest region, so decoration-sized and room-sized can be told apart without anyone looking at
-pixels.
+*Reported from now on:* the count and size spread of holes kept inside anything but the largest
+region. Under the new rule every one of those encloses a nested region, which is unusual enough to
+be worth seeing.
 
 **Rotation pivots about the bounding-box centre**, which is what step 7 anchored regions on the
 assumption of. Note precisely what this does and does not establish: our anchor *is* the geometry's

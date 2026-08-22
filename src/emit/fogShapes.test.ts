@@ -6,6 +6,7 @@ import { NAMESPACE } from "../namespace";
 import {
   planBatches,
   REGION_KEY,
+  PROPOSAL_COLOURS,
   stageShapes,
   STAGED_FILL_OPACITY,
   totalCommands,
@@ -92,6 +93,30 @@ describe("stageShapes", () => {
     expect(shape!.fillOpacity).toBeLessThan(1);
   });
 
+  it("gives consecutive regions different colours", () => {
+    // One colour was a mistake found in a room: proposals cover the whole map, so a single fill has
+    // nothing to contrast against and the partition — the only thing a GM is judging — is
+    // invisible. Neighbouring regions differing is what makes it legible.
+    const many = Array.from({ length: PROPOSAL_COLOURS.length + 2 }, (_, i) =>
+      region({ id: i + 1 }),
+    );
+    const colours = stageShapes(many, options).shapes.map((shape) => shape.colour);
+
+    for (let i = 1; i < colours.length; i++) {
+      expect(colours[i]).not.toBe(colours[i - 1]);
+    }
+    expect(new Set(colours).size).toBe(PROPOSAL_COLOURS.length);
+  });
+
+  it("assigns colours by emitted order, so a skipped region does not repeat one", () => {
+    // Indexing on the region id instead would leave a gap in the cycle wherever a region was
+    // skipped, and a gap of exactly the palette length puts two neighbours on the same colour.
+    const some = [region({ id: 1 }), region({ id: 2, overCap: true }), region({ id: 3 })];
+    const colours = stageShapes(some, options).shapes.map((shape) => shape.colour);
+
+    expect(colours).toEqual([PROPOSAL_COLOURS[0], PROPOSAL_COLOURS[1]]);
+  });
+
   it("skips a region over the cap and names it, rather than attempting it", () => {
     // Owlbear refuses an oversized item, and the refusal fails the whole batch it travelled in —
     // so attempting one known-invalid shape takes a few dozen valid ones down with it.
@@ -122,6 +147,7 @@ describe("planBatches", () => {
       provenance: { run: "r", map: "m", region: i + 1, squares: 1 },
       fillOpacity: 0.5,
       strokeWidth: 1,
+      colour: "#ff00ff",
     }));
   }
 

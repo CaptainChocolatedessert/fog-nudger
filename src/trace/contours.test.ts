@@ -10,12 +10,9 @@ import { labelSpace, type LabelOptions } from "./label";
  * fixtures were wrong before its code was, and both were predicates. A drawn grid cannot hide a
  * comb whose teeth are secretly joined.
  */
-function trace(rows: readonly string[], options?: Partial<LabelOptions> & { minHoleArea?: number }) {
+function trace(rows: readonly string[], options?: Partial<LabelOptions>) {
   const labelled = labelSpace(maskFromRows(rows), { minArea: options?.minArea ?? 0 });
-  return {
-    labelled,
-    contours: traceRegions(labelled, { minHoleArea: options?.minHoleArea }),
-  };
+  return { labelled, contours: traceRegions(labelled) };
 }
 
 const asPairs = (ring: Ring) => ring.map((point) => [point.x, point.y]);
@@ -84,10 +81,10 @@ describe("traceRegions", () => {
     ]);
   });
 
-  it("traces a room with a pillar as an outer ring and a hole", () => {
-    // Step 5's second requirement. The region is eight pixels: nine of floor less the pillar. The
-    // outer ring encloses nine and the hole subtracts one, and the hole comes out negative without
-    // anything having tested for containment.
+  it("fills in a pillar, because nothing is revealed separately inside it", () => {
+    // A pillar is solid ink with nothing behind it. Keeping a hole there would leave an unrevealed
+    // pillar-shaped blob in the middle of a revealed room, which reads as a bug — so the room
+    // covers it, and the pillar's own art shows through as map.
     const { labelled, contours } = trace([
       "#####",
       "#...#",
@@ -98,10 +95,13 @@ describe("traceRegions", () => {
 
     const [room] = contours;
     expect(room!.outerCount).toBe(1);
-    expect(room!.holeCount).toBe(1);
+    expect(room!.holeCount).toBe(0);
+    expect(room!.filledHoles).toBe(1);
+    expect(room!.filledHoleArea).toBe(1);
+    // The area check absorbs the fill rather than being excused from it: the shape really does
+    // cover nine pixels now, and the region held eight.
+    expect(room!.tracedArea).toBe(labelled.regions[0]!.area + 1);
     expect(doubleSignedArea(room!.rings[0]!) / 2).toBe(9);
-    expect(doubleSignedArea(room!.rings[1]!) / 2).toBe(-1);
-    expect(room!.tracedArea).toBe(labelled.regions[0]!.area);
   });
 
   it("traces the outside as one boundary with a hole per enclosed cluster", () => {
@@ -194,30 +194,51 @@ describe("traceRegions", () => {
     expect(contours.length).toBeGreaterThan(2);
     for (const region of contours) {
       const area = labelled.regions.find((r) => r.id === region.id)!.area;
-      expect(region.tracedArea).toBe(area);
+      expect(region.tracedArea).toBe(area + region.filledHoleArea);
     }
   });
 
-  it("fills in holes below the minimum area and says what it filled", () => {
-    // The filter that stops step 4's dropped specks reappearing here as rings. A one-pixel pillar
-    // is below a four-pixel minimum, so the room simply covers it — reported, because a filter that
-    // does not say what it ate cannot be tuned.
-    const rows = ["#####", "#...#", "#.#.#", "#...#", "#####"];
-    const { contours } = trace(rows, { minHoleArea: 4 });
+  /**
+   * A room with a sealed vault inside it. One fixture, one parameter, opposite answers — which is
+   * the whole case for deciding a hole by containment rather than by size.
+   */
+  const withVault = [
+    "#########",
+    "#.......#",
+    "#..###..#",
+    "#..#.#..#",
+    "#..###..#",
+    "#.......#",
+    "#########",
+  ];
 
-    expect(contours[0]!.holeCount).toBe(0);
-    expect(contours[0]!.droppedHoles).toBe(1);
-    expect(contours[0]!.droppedHoleArea).toBe(1);
-    // Reported before the filter, so the invariant above still reads true against labelling.
-    expect(contours[0]!.tracedArea).toBe(8);
+  it("keeps a hole around a region that survives, however small that region is", () => {
+    // The merge guard, and the case a size threshold gets wrong. The vault's interior is a single
+    // pixel and it survives as its own region, so it will be revealed separately — if the room
+    // covered it, revealing the room would reveal the vault, which is the failure DESIGN.md §5
+    // biases hardest against.
+    const { labelled, contours } = trace(withVault);
+
+    expect(labelled.regions).toHaveLength(2);
+    const [room] = contours;
+    expect(room!.holeCount).toBe(1);
+    expect(room!.filledHoles).toBe(0);
+    expect(room!.tracedArea).toBe(labelled.regions[0]!.area);
   });
 
-  it("keeps a hole that clears the minimum", () => {
-    const rows = ["######", "#....#", "#.##.#", "#.##.#", "#....#", "######"];
-    const { contours } = trace(rows, { minHoleArea: 4 });
+  it("fills the same hole once the region inside it has been discarded", () => {
+    // Identical fixture, minimum area raised. The vault's interior is now below it, so nothing
+    // survives inside and nothing will be revealed there — the room covers the lot. A hole exists
+    // to protect something, and there is no longer anything to protect.
+    const { labelled, contours } = trace(withVault, { minArea: 4 });
 
-    expect(contours[0]!.holeCount).toBe(1);
-    expect(contours[0]!.droppedHoles).toBe(0);
+    expect(labelled.regions).toHaveLength(1);
+    const [room] = contours;
+    expect(room!.holeCount).toBe(0);
+    expect(room!.filledHoles).toBe(1);
+    // The whole three-by-three block, ink ring included.
+    expect(room!.filledHoleArea).toBe(9);
+    expect(room!.tracedArea).toBe(labelled.regions[0]!.area + 9);
   });
 
   it("costs one command per vertex plus a move and a close per ring", () => {
@@ -225,8 +246,8 @@ describe("traceRegions", () => {
     // shape whose vertices can be counted by hand.
     const { contours } = trace(["#####", "#...#", "#.#.#", "#...#", "#####"]);
 
-    // Four corners outside, four around the pillar, plus MOVE and CLOSE for each ring.
-    expect(commandCount(contours[0]!.rings)).toBe(10);
+    // The pillar is filled in, so this is one ring of four corners: a MOVE, three LINEs, a CLOSE.
+    expect(commandCount(contours[0]!.rings)).toBe(5);
   });
 
   it("traces nothing for a raster with no space in it", () => {

@@ -165,8 +165,8 @@ describe("simplifyRegion", () => {
       holeCount: 0,
       vertices: points,
       tracedArea: 0,
-      droppedHoles: 0,
-      droppedHoleArea: 0,
+      filledHoles: 0,
+      filledHoleArea: 0,
     };
   }
 
@@ -264,8 +264,8 @@ describe("simplifyRegion", () => {
       holeCount: 1,
       vertices: 52,
       tracedArea: 0,
-      droppedHoles: 0,
-      droppedHoleArea: 0,
+      filledHoles: 0,
+      filledHoleArea: 0,
     };
     const simplified = simplifyRegion(region, { tolerance: 10, maxTolerance: 10 });
 

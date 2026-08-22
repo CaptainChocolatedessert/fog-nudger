@@ -40,7 +40,6 @@ import { runTrace } from "../pipeline";
 import {
   ACCEPTED_FILL_OPACITY,
   planBatches,
-  PROPOSAL_COLOUR,
   REGION_KEY,
   stageShapes,
   STAGED_FILL_OPACITY,
@@ -83,10 +82,11 @@ const RETRY_BACKOFF_MS = [250, 750, 2_000] as const;
  *
  * Free, including zero — a zero-stroke shape produced exactly as many walls as a stroked one, and
  * that was measured per shape rather than inferred from a total (DESIGN.md §4). So this is purely
- * about a GM being able to see a proposal's boundary, and thin is right: hundreds of these overlap
- * along every wall on the map.
+ * about a GM being able to see a proposal's boundary, and after a room reported the output reading
+ * as one flat tint it is the *boundaries* doing most of the work. Doubled from a twenty-fourth of a
+ * grid square to a twelfth for that reason.
  */
-const STROKE_SQUARES = 1 / 24;
+const STROKE_SQUARES = 1 / 12;
 
 /**
  * Trace the scene's map and stage the result as proposals on the `DRAWING` layer.
@@ -166,7 +166,7 @@ export async function stageRegions(): Promise<string> {
   return (
     `${run.summary}. Staged ${written} proposals` +
     (skipped.length > 0 ? `, skipped ${skipped.length} over the cap` : "") +
-    `. Magenta, GM-only, no walls — accept to turn them into fog.`
+    `. Coloured, GM-only, no walls — neighbouring regions differ so the partition is visible.`
   );
 }
 
@@ -327,9 +327,9 @@ function stagedItem(shape: FogShapeSpec): Item {
     // direction as something this pipeline has to get right. Dynamic Fog maps anything that is not
     // "nonzero" onto Skia's even-odd, so both ends agree.
     .fillRule("evenodd")
-    .fillColor(PROPOSAL_COLOUR)
+    .fillColor(shape.colour)
     .fillOpacity(shape.fillOpacity)
-    .strokeColor(PROPOSAL_COLOUR)
+    .strokeColor(shape.colour)
     .strokeOpacity(1)
     .strokeWidth(shape.strokeWidth)
     .layer("DRAWING")
