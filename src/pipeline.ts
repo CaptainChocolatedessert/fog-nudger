@@ -57,7 +57,11 @@ import {
   meanLuminance,
   otsuSplit,
 } from "./trace/luminance";
-import { blur, luminanceField } from "./trace/field";
+import { blur, luminanceField, type ScalarField } from "./trace/field";
+import type { BinaryMask } from "./trace/binarize";
+import type { LabelledSpace } from "./trace/label";
+import type { RasterPlacement } from "./map/placement";
+import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity } from "./trace/polarity";
 import { labelSpace } from "./trace/label";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
@@ -163,6 +167,46 @@ const SIMPLIFY_INK_WIDTHS = 0.25;
  * log rather than trusted to be the exterior.
  */
 const MAX_SIMPLIFY_INK_WIDTHS = 8;
+
+/**
+ * The last run's intermediates, so a point can be asked about without tracing again.
+ *
+ * A deliberate cache of things the pipeline otherwise discards. It goes stale the moment the map or
+ * the parameters change, which is survivable because the probe says which run it is answering from
+ * and the remedy is to trace again.
+ */
+let lastRun: {
+  rawField: ScalarField;
+  mask: BinaryMask;
+  labelled: LabelledSpace;
+  placement: RasterPlacement;
+  pxPerSquare: number;
+  name: string;
+} | null = null;
+
+/**
+ * What the pipeline computed at one world point.
+ *
+ * The diagnostic every other one in this project could not be: all of them report a total, and a
+ * total cannot say what is happening *there*. Four wrong explanations for a GM's report of bare
+ * patches were argued from aggregates before this existed.
+ */
+export function probeWorldPoint(x: number, y: number): string {
+  if (!lastRun) return "Nothing traced yet in this session — run a trace first, then probe.";
+
+  const { rawField, mask, labelled, placement, pxPerSquare, name } = lastRun;
+  const rasterX =
+    placement.unitsPerPixelX === 0 ? 0 : (x - placement.origin.x) / placement.unitsPerPixelX;
+  const rasterY =
+    placement.unitsPerPixelY === 0 ? 0 : (y - placement.origin.y) / placement.unitsPerPixelY;
+
+  const line = describePoint(
+    readPoint(rawField, mask, labelled, rasterX, rasterY),
+    pxPerSquare,
+  );
+  devLog("info", `probe: world (${x.toFixed(0)}, ${y.toFixed(0)}) on "${name}" — ${line}`);
+  return line;
+}
 
 /** One region, carrying everything the emit path needs and nothing it does not. */
 export interface TracedRegion {
@@ -329,7 +373,11 @@ export async function runTrace(): Promise<TraceOutcome> {
   // rule.
   const binarizeStarted = performance.now();
   const radius = Math.min(64, Math.max(4, Math.round(SAUVOLA_RADIUS_SQUARES * pxPerSquare)));
-  const field = blur(luminanceField(pixels), BLUR_SIGMA);
+  // Kept unblurred as well, purely so the point probe can report the tone the *map* has rather than
+  // the tone the binariser read. When the question is "is this actually white", a value softened by
+  // a one-pixel Gaussian is the wrong number to answer it with.
+  const rawField = luminanceField(pixels);
+  const field = blur(rawField, BLUR_SIGMA);
   const reading = detectPolarity(field, { radius, k: SAUVOLA_K });
   const binarizeMs = Math.round(performance.now() - binarizeStarted);
 
@@ -446,6 +494,11 @@ export async function runTrace(): Promise<TraceOutcome> {
   const labelStarted = performance.now();
   const minArea = Math.max(1, Math.round(MIN_REGION_SQUARES * pxPerSquare ** 2));
   const labelled = labelSpace(reading.mask, { minArea });
+
+  // Held for the point probe. Everything above is thrown away when this function returns, and
+  // re-deriving it costs a second and a half — which is fine once, and not fine for a control whose
+  // whole value is being able to ask about one spot and then another.
+  lastRun = { rawField, mask: reading.mask, labelled, placement, pxPerSquare, name: raster.name };
   const labelMs = Math.round(performance.now() - labelStarted);
 
   const stats = censusStats(labelled, { pxPerSquare });

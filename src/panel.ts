@@ -16,7 +16,7 @@ import { themeVariables } from "./theme";
 // so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
-import { dryRun } from "./pipeline";
+import { dryRun, probeWorldPoint } from "./pipeline";
 import { acceptStaged, removeOurs, returnToStaging, stageRegions } from "./emit/emitRegions";
 import {
   listMapImages,
@@ -26,6 +26,21 @@ import {
 } from "./map/mapImage";
 
 installDevLog("ui");
+
+/**
+ * Ask the pipeline what it computed where the GM is looking.
+ *
+ * The viewport centre rather than a click or a selection, because it needs no new interaction to
+ * learn and no item to exist: centre the view on the thing that looks wrong and press the button.
+ */
+async function probeViewportCentre(): Promise<string> {
+  const [width, height] = await Promise.all([
+    OBR.viewport.getWidth(),
+    OBR.viewport.getHeight(),
+  ]);
+  const centre = await OBR.viewport.inverseTransformPoint({ x: width / 2, y: height / 2 });
+  return probeWorldPoint(centre.x, centre.y);
+}
 
 const status = document.getElementById("status");
 const result = document.getElementById("result");
@@ -252,6 +267,7 @@ OBR.onReady(async () => {
 
   const buttons = [
     wireButton("dry-run", dryRun),
+    wireButton("probe", probeViewportCentre),
     wireButton("stage", stageRegions),
     wireButton("accept", acceptStaged),
     wireButton("unaccept", returnToStaging),
