@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeError } from "./describeError";
+import { describeError, errorName, isRateLimited } from "./describeError";
 
 describe("describeError", () => {
   it("describes the SDK's own rejection shape", () => {
@@ -77,5 +77,48 @@ describe("describeError", () => {
     expect(
       describeError({ error: { error: { message: "No scene found" } } }),
     ).toBe("No scene found");
+  });
+});
+
+describe("errorName", () => {
+  it("unwraps the SDK's envelope", () => {
+    expect(errorName({ error: { name: "RateLimitHit", message: "Too many requests" } })).toBe(
+      "RateLimitHit",
+    );
+  });
+
+  it("reads a real Error", () => {
+    expect(errorName(new TypeError("bad"))).toBe("TypeError");
+  });
+
+  it("says nothing rather than guessing", () => {
+    expect(errorName("a string")).toBe("");
+    expect(errorName(undefined)).toBe("");
+    expect(errorName({ message: "no name here" })).toBe("");
+  });
+});
+
+describe("isRateLimited", () => {
+  it("recognises the throttle Owlbear actually sends", () => {
+    expect(isRateLimited({ error: { name: "RateLimitHit", message: "Too many requests" } })).toBe(
+      true,
+    );
+  });
+
+  it("recognises it from either half alone", () => {
+    // Loose on purpose. A throttle read as a refusal abandons writes that would have succeeded;
+    // a refusal read as a throttle costs a few retries and then reports itself anyway.
+    expect(isRateLimited({ error: { name: "RateLimitHit", message: "" } })).toBe(true);
+    expect(isRateLimited({ error: { name: "Whatever", message: "Too many requests" } })).toBe(true);
+  });
+
+  it("does not mistake a validation failure for a throttle", () => {
+    // The distinction that matters: retrying this one forever is a hang, not a recovery.
+    expect(
+      isRateLimited({ error: { name: "ValidationError", message: "commands: too long" } }),
+    ).toBe(false);
+    expect(isRateLimited({ error: { name: "MissingDataError", message: "No scene found" } })).toBe(
+      false,
+    );
   });
 });

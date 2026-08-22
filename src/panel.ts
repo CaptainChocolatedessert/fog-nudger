@@ -16,7 +16,8 @@ import { themeVariables } from "./theme";
 // so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
-import { dryRun } from "./dryRun";
+import { dryRun } from "./pipeline";
+import { acceptStaged, removeOurs, stageRegions } from "./emit/emitRegions";
 import {
   listMapImages,
   mapSignature,
@@ -42,11 +43,12 @@ function reportResult(text: string, state: "ok" | "bad"): void {
 }
 
 /**
- * Wire a probe button.
+ * Wire a panel button.
  *
- * Buttons are disabled while their action runs. Not politeness: every one of these writes to the
+ * Buttons are disabled while their action runs. Not politeness: several of these write to the
  * scene, and a second click landing mid-write would place two sets of shapes or race a delete
- * against the add that created them.
+ * against the add that created them. Staging in particular can take seconds on a large map, which
+ * is exactly long enough for someone to click again.
  *
  * A failure is reported in plain words on the panel and in full to the console, through
  * `describeError` — the SDK rejects with a raw payload rather than an `Error`, so reading
@@ -250,6 +252,9 @@ OBR.onReady(async () => {
 
   const buttons = [
     wireButton("dry-run", dryRun),
+    wireButton("stage", stageRegions),
+    wireButton("accept", acceptStaged),
+    wireButton("remove", removeOurs),
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
   ];

@@ -1,5 +1,16 @@
 /**
- * Roadmap step 2 — the dry run.
+ * The trace pipeline, and the two modes that run it.
+ *
+ * `runTrace` does the whole chain — pick a map, read pixels, binarise, label, trace, simplify,
+ * place — and reports every stage to the dev log. It writes nothing to the scene; whether anything
+ * is written is the caller's decision, which is what makes the dry run and the emit path *the same
+ * code* rather than two implementations that will drift.
+ *
+ * That mattering is not hypothetical. The sibling's trace harness diagnosed a real bug only after
+ * it and a real room disagreed **in direction**, because the harness never ran the world-placement
+ * stage. Anything running a second copy of the chain re-opens that gap.
+ *
+ * ## Roadmap step 2 — the dry run
  *
  * Reads the scene's own map, reports what it finds, and **writes nothing to the scene**. This is
  * where tuning happens from here on, and it is what replaces the separate trace harness the roadmap
@@ -38,6 +49,7 @@ import {
   fractionWithin,
   placeRegions,
   placedBounds,
+  type PlacedRegion,
 } from "./map/placeRegions";
 import {
   describeHistogram,
@@ -132,25 +144,63 @@ const SIMPLIFY_INK_WIDTHS = 0.25;
  */
 const MAX_SIMPLIFY_INK_WIDTHS = 8;
 
+/** One region, carrying everything the emit path needs and nothing it does not. */
+export interface TracedRegion {
+  readonly id: number;
+  readonly placed: PlacedRegion;
+  /** The region's true area in grid squares — its pixel count, not its bounding box. */
+  readonly squares: number;
+  readonly commands: number;
+  readonly tolerance: number;
+  /** Over the command cap even at the ceiling tolerance, so it cannot be emitted as it stands. */
+  readonly overCap: boolean;
+}
+
+export interface TraceRun {
+  readonly mapId: string;
+  readonly mapName: string;
+  readonly dpi: number;
+  readonly regions: readonly TracedRegion[];
+  /** One line for the panel. Detail is already in the dev log by the time this is returned. */
+  readonly summary: string;
+}
+
 /**
- * Trace the scene's map as far as the pipeline currently goes, and report.
+ * Either the run, or the plain-words reason there is not one.
  *
- * @returns a one-line summary for the panel. Detail goes to the dev log, where it can be read
- * beside the numbers from the previous run.
+ * A discriminated result rather than a thrown error, because "no map nominated" and "two maps look
+ * alike" are ordinary answers a GM needs to read, not failures — and routing them through the same
+ * channel as an SDK rejection would make the panel report both the same way.
  */
-export async function dryRun(): Promise<string> {
+export type TraceOutcome =
+  | { readonly ok: false; readonly message: string }
+  | { readonly ok: true; readonly run: TraceRun };
+
+/**
+ * Trace the scene's map through every stage the pipeline has, and report each one.
+ *
+ * Writes nothing. Reports everything, including the boring values — a diagnostic that only speaks
+ * when something is wrong cannot tell "fine" from "never ran".
+ */
+export async function runTrace(): Promise<TraceOutcome> {
   const started = performance.now();
 
   const map = await resolveTraceMap();
   if (!map) {
     // The resolver has already logged which case this was and named the candidates, so repeating
     // that here would only make the panel's one line unreadable.
-    return "No map to trace — see dev.log for which case this was, or pick one above.";
+    return {
+      ok: false,
+      message: "No map to trace — see dev.log for which case this was, or pick one above.",
+    };
   }
 
   const raster = await loadMapRaster(map);
   if (!raster) {
-    return `Could not read pixels from "${map.name || "map"}" — see the console.`;
+    return {
+      ok: false,
+      message: `Could not read pixels from "${map.name || "map"}" — see the console.`,
+    };
   }
 
   const { pixels, plan, bounds, dpi } = raster;
@@ -162,7 +212,7 @@ export async function dryRun(): Promise<string> {
   // between two rooms by thinning the ink.
   devLog(
     "info",
-    `dry run: "${raster.name}" source ${plan.sourceWidth}x${plan.sourceHeight} ` +
+    `trace: "${raster.name}" source ${plan.sourceWidth}x${plan.sourceHeight} ` +
       `(${megapixels(plan.sourceWidth, plan.sourceHeight).toFixed(1)} MP) -> raster ` +
       `${plan.width}x${plan.height} (${megapixels(plan.width, plan.height).toFixed(1)} MP), ` +
       (plan.capped
@@ -184,7 +234,7 @@ export async function dryRun(): Promise<string> {
 
   devLog(
     "info",
-    `dry run: placement origin (${bounds.min.x.toFixed(1)}, ${bounds.min.y.toFixed(1)}) ` +
+    `trace: placement origin (${bounds.min.x.toFixed(1)}, ${bounds.min.y.toFixed(1)}) ` +
       `world ${worldWidth.toFixed(1)}x${worldHeight.toFixed(1)}; units/px ` +
       `x ${placement.unitsPerPixelX.toFixed(4)} y ${placement.unitsPerPixelY.toFixed(4)}; ` +
       `aspect mismatch ${(mismatch * 100).toFixed(3)}%, per-axis scaling absorbing ` +
@@ -194,7 +244,7 @@ export async function dryRun(): Promise<string> {
   if (mismatch > MAX_ASPECT_MISMATCH) {
     devLog(
       "warn",
-      `dry run: world bounds are ${(mismatch * 100).toFixed(0)}% off the image's aspect ratio, ` +
+      `trace: world bounds are ${(mismatch * 100).toFixed(0)}% off the image's aspect ratio, ` +
         `which usually means the map is rotated. Rotation is not handled — output would be ` +
         `misplaced.`,
     );
@@ -208,7 +258,7 @@ export async function dryRun(): Promise<string> {
   const pxPerSquare = squaresAcross > 0 ? plan.width / squaresAcross : 0;
   devLog(
     "info",
-    `dry run: raster (0,0) -> world (${bounds.min.x.toFixed(1)}, ${bounds.min.y.toFixed(1)}), ` +
+    `trace: raster (0,0) -> world (${bounds.min.x.toFixed(1)}, ${bounds.min.y.toFixed(1)}), ` +
       `raster (${plan.width},${plan.height}) -> world ` +
       `(${farCorner.x.toFixed(1)}, ${farCorner.y.toFixed(1)}); ` +
       `map spans ${squaresAcross.toFixed(1)} grid squares at dpi ${dpi}, ` +
@@ -224,7 +274,7 @@ export async function dryRun(): Promise<string> {
 
   devLog(
     "info",
-    `dry run: luminance mean ${meanLuminance(histogram).toFixed(3)}, ` +
+    `trace: luminance mean ${meanLuminance(histogram).toFixed(3)}, ` +
       `profile dark->light ${describeHistogram(histogram)} (% per 1/16 band)`,
   );
 
@@ -240,7 +290,7 @@ export async function dryRun(): Promise<string> {
           : "neither class is a clear minority, so this may not be line art";
     devLog(
       "info",
-      `dry run: global split at ${(split.threshold / 255).toFixed(3)} — ` +
+      `trace: global split at ${(split.threshold / 255).toFixed(3)} — ` +
         `${darkPercent.toFixed(1)}% dark (mean ${split.darkMean.toFixed(3)}) vs ` +
         `${(100 - darkPercent).toFixed(1)}% light (mean ${split.lightMean.toFixed(3)}); ` +
         `reads as ${reading}`,
@@ -248,7 +298,7 @@ export async function dryRun(): Promise<string> {
   } else {
     devLog(
       "warn",
-      "dry run: luminance has fewer than two distinct values — a blank or broken asset",
+      "trace: luminance has fewer than two distinct values — a blank or broken asset",
     );
   }
 
@@ -268,13 +318,13 @@ export async function dryRun(): Promise<string> {
 
   devLog(
     "info",
-    `dry run: binarized in ${binarizeMs}ms — Sauvola radius ${radius}px ` +
+    `trace: binarized in ${binarizeMs}ms — Sauvola radius ${radius}px ` +
       `(${SAUVOLA_RADIUS_SQUARES} square at ${pxPerSquare.toFixed(1)} px/square), k ${SAUVOLA_K}, ` +
       `blur sigma ${BLUR_SIGMA}`,
   );
   devLog(
     "info",
-    `dry run: polarity ${reading.polarity}${reading.confident ? "" : " (NOT CONFIDENT)"} — ` +
+    `trace: polarity ${reading.polarity}${reading.confident ? "" : " (NOT CONFIDENT)"} — ` +
       `dark reading ${(reading.darkCoverage * 100).toFixed(1)}% ink at thinness ` +
       `${reading.darkThinness.toFixed(3)}; light reading ` +
       `${(reading.lightCoverage * 100).toFixed(1)}% ink at thinness ` +
@@ -289,12 +339,12 @@ export async function dryRun(): Promise<string> {
   // is the one that means the same thing on the next map.
   const window = radius * 2 + 1;
   if (reading.inkWidth === null) {
-    devLog("warn", "dry run: no ink at all in the chosen reading — nothing to measure or trace");
+    devLog("warn", "trace: no ink at all in the chosen reading — nothing to measure or trace");
   } else {
     const squares = pxPerSquare > 0 ? reading.inkWidth / pxPerSquare : 0;
     devLog(
       "info",
-      `dry run: ink width ~${reading.inkWidth.toFixed(1)}px (${squares.toFixed(3)} of a grid ` +
+      `trace: ink width ~${reading.inkWidth.toFixed(1)}px (${squares.toFixed(3)} of a grid ` +
         `square); Sauvola window ${window}px is ${(window / reading.inkWidth).toFixed(1)}x that. ` +
         `Biased thin and saturates at 2px — see inkMetrics.ts`,
     );
@@ -305,7 +355,7 @@ export async function dryRun(): Promise<string> {
     if (window < reading.inkWidth * MIN_WINDOW_RATIO) {
       devLog(
         "warn",
-        `dry run: the Sauvola window (${window}px) is not comfortably wider than the ink ` +
+        `trace: the Sauvola window (${window}px) is not comfortably wider than the ink ` +
           `(~${reading.inkWidth.toFixed(1)}px). Heavy linework can fill its own window and be ` +
           `read as ground. Raise SAUVOLA_RADIUS_SQUARES.`,
       );
@@ -315,7 +365,7 @@ export async function dryRun(): Promise<string> {
     if (reading.inkWidth <= 2.05) {
       devLog(
         "warn",
-        "dry run: ink measures at the floor of what erosion can see (2px). The linework is " +
+        "trace: ink measures at the floor of what erosion can see (2px). The linework is " +
           "hairline-thin at this resolution, so anything denominated in ink width is unreliable " +
           "here — and a stroke this thin is one threshold wobble away from developing gaps.",
       );
@@ -325,7 +375,7 @@ export async function dryRun(): Promise<string> {
   if (!reading.confident) {
     devLog(
       "warn",
-      "dry run: the two polarity readings are too close to separate. Neither looks clearly more " +
+      "trace: the two polarity readings are too close to separate. Neither looks clearly more " +
         "like linework, which usually means this is not line art — a photograph, a heavily " +
         "textured render, or a blank asset. Treat everything downstream as suspect.",
     );
@@ -340,7 +390,7 @@ export async function dryRun(): Promise<string> {
     if (byMinority !== reading.polarity) {
       devLog(
         "warn",
-        `dry run: the histogram's minority class says ${byMinority} and the linework shape says ` +
+        `trace: the histogram's minority class says ${byMinority} and the linework shape says ` +
           `${reading.polarity}. Trusting shape. This is the case that rule was replaced for — ` +
           `worth looking at the map to see which is right.`,
       );
@@ -361,10 +411,10 @@ export async function dryRun(): Promise<string> {
 
   devLog(
     "info",
-    `dry run: labelled in ${labelMs}ms — minimum region ${minArea}px ` +
+    `trace: labelled in ${labelMs}ms — minimum region ${minArea}px ` +
       `(${MIN_REGION_SQUARES} of a grid square at ${pxPerSquare.toFixed(1)} px/square)`,
   );
-  devLog("info", `dry run: census — ${describeCensus(stats)}`);
+  devLog("info", `trace: census — ${describeCensus(stats)}`);
 
   // The merge signal, spelled out rather than left for a reader to reconstruct. With the exterior
   // kept, the largest region is normally the outside and its share being big is correct — so the
@@ -373,7 +423,7 @@ export async function dryRun(): Promise<string> {
     const second = stats.topShares[1]!;
     devLog(
       "info",
-      `dry run: largest region ${(stats.topShares[0]! * 100).toFixed(1)}% (expected to be the ` +
+      `trace: largest region ${(stats.topShares[0]! * 100).toFixed(1)}% (expected to be the ` +
         `outside, which is kept deliberately); second ${(second * 100).toFixed(1)}% — that is the ` +
         `one to watch, since rooms merging into each other show up there`,
     );
@@ -389,12 +439,12 @@ export async function dryRun(): Promise<string> {
   const traceMs = Math.round(performance.now() - traceStarted);
   const contours = contourStats(labelled, traced);
 
-  devLog("info", `dry run: traced in ${traceMs}ms — ${describeContours(contours)}`);
+  devLog("info", `trace: traced in ${traceMs}ms — ${describeContours(contours)}`);
 
   if (contours.areaMismatches > 0) {
     devLog(
       "error",
-      `dry run: ${contours.areaMismatches} regions traced to a boundary enclosing a different area ` +
+      `trace: ${contours.areaMismatches} regions traced to a boundary enclosing a different area ` +
         `than the region holds. The geometry does not describe the regions it claims to, and ` +
         `nothing downstream of this is worth reading.`,
     );
@@ -408,7 +458,7 @@ export async function dryRun(): Promise<string> {
   if (reading.inkWidth === null) {
     devLog(
       "warn",
-      `dry run: no ink width to denominate simplification in, so the tolerance falls back to ` +
+      `trace: no ink width to denominate simplification in, so the tolerance falls back to ` +
         `${inkWidth.toFixed(1)}px from the grid. The half-wall safety bound is not being checked ` +
         `against anything measured.`,
     );
@@ -426,11 +476,11 @@ export async function dryRun(): Promise<string> {
 
   devLog(
     "info",
-    `dry run: simplified in ${simplifyMs}ms — tolerance ${tolerance.toFixed(2)}px ` +
+    `trace: simplified in ${simplifyMs}ms — tolerance ${tolerance.toFixed(2)}px ` +
       `(${SIMPLIFY_INK_WIDTHS} of a ${inkWidth.toFixed(1)}px ink width; the bound that stops a ` +
       `boundary crossing a wall is ${safeTolerance.toFixed(2)}px)`,
   );
-  devLog("info", `dry run: ${describeSimplification(simplification)}`);
+  devLog("info", `trace: ${describeSimplification(simplification)}`);
 
   // The regions most likely to be a problem at emit time, listed rather than summarised. Which
   // region escalated matters more than how many did: one enormous outside is expected, and a room
@@ -439,7 +489,7 @@ export async function dryRun(): Promise<string> {
   if (heaviest.length > 0) {
     devLog(
       "info",
-      `dry run: heaviest items — ` +
+      `trace: heaviest items — ` +
         heaviest
           .map(
             (region) =>
@@ -454,7 +504,7 @@ export async function dryRun(): Promise<string> {
   if (pastBound.length > 0) {
     devLog(
       "warn",
-      `dry run: ${pastBound.length} regions had to be simplified past half the ink width to fit ` +
+      `trace: ${pastBound.length} regions had to be simplified past half the ink width to fit ` +
         `the command cap (${pastBound.map((region) => `#${region.id}`).join(", ")}). Their ` +
         `boundaries may cross the middle of a wall. This is expected for the outside, which wraps ` +
         `every room on the map; a room in that list is not expected.`,
@@ -464,7 +514,7 @@ export async function dryRun(): Promise<string> {
   if (simplification.overCap > 0) {
     devLog(
       "warn",
-      `dry run: ${simplification.overCap} regions still exceed the ${COMMAND_CAP}-command cap at ` +
+      `trace: ${simplification.overCap} regions still exceed the ${COMMAND_CAP}-command cap at ` +
         `the ceiling tolerance and could not be emitted as they stand. Splitting them is not the ` +
         `remedy — the join becomes a wall across a room — so this is either far noisier ink than ` +
         `expected or a region that has merged into something enormous.`,
@@ -480,7 +530,7 @@ export async function dryRun(): Promise<string> {
   const filled = placedBounds(placed);
 
   if (!filled) {
-    devLog("warn", "dry run: nothing to place — no region survived with any geometry");
+    devLog("warn", "trace: nothing to place — no region survived with any geometry");
   } else {
     // A scale error is the failure this *can* catch. The outside normally runs to all four edges of
     // the raster, so the placed geometry should fill the map's own box; a box a fraction of the
@@ -495,7 +545,7 @@ export async function dryRun(): Promise<string> {
     );
     devLog(
       "info",
-      `dry run: placed ${placed.length} regions filling world ` +
+      `trace: placed ${placed.length} regions filling world ` +
         `(${filled.min.x.toFixed(1)}, ${filled.min.y.toFixed(1)}) to ` +
         `(${filled.max.x.toFixed(1)}, ${filled.max.y.toFixed(1)}); the map's own box is short by ` +
         `${slackX.toFixed(1)} x ${slackY.toFixed(1)} world units, which is ` +
@@ -518,23 +568,40 @@ export async function dryRun(): Promise<string> {
     });
     devLog(
       "info",
-      `dry run: where the largest regions landed — ${namedRegions.join("; ")}. ` +
+      `trace: where the largest regions landed — ${namedRegions.join("; ")}. ` +
         `Check these against the map by eye: a mirrored or transposed placement fills the same box ` +
         `and disagrees only about which region is where.`,
     );
   }
 
   const elapsed = Math.round(performance.now() - started);
-  // The explicit statement that nothing was written. A dry run and a dry run that silently failed
-  // to reach this point look identical without it. Now that geometry reaches world coordinates the
-  // wording has to be exact: it was placed, and placing is not emitting.
+  // The explicit statement that nothing was written. A run that worked and a run that silently
+  // failed to reach this point look identical without it. Now that geometry reaches world
+  // coordinates the wording has to be exact: it was placed, and placing is not emitting.
   devLog(
     "info",
-    `dry run: complete in ${elapsed}ms — geometry placed in world coordinates, nothing written to ` +
+    `trace: complete in ${elapsed}ms — geometry placed in world coordinates, nothing written to ` +
       `the scene`,
   );
 
-  return (
+  // Zipped back together by id here rather than carried through every stage. Each stage answers one
+  // question about a region and should not be threading the others' answers along beside it.
+  const squaresById = new Map(
+    labelled.regions.map((region) => [
+      region.id,
+      pxPerSquare > 0 ? region.area / pxPerSquare ** 2 : 0,
+    ]),
+  );
+  const regions: TracedRegion[] = simplified.map((region, index) => ({
+    id: region.id,
+    placed: placed[index]!,
+    squares: squaresById.get(region.id) ?? 0,
+    commands: region.commands,
+    tolerance: region.tolerance,
+    overCap: region.overCap,
+  }));
+
+  const summary =
     `"${raster.name}" ${plan.width}x${plan.height}` +
     (plan.capped ? ` (reduced ${plan.factor}x)` : " (native)") +
     `, ${reading.polarity}${reading.confident ? "" : "?"}` +
@@ -543,6 +610,23 @@ export async function dryRun(): Promise<string> {
     `, ${stats.count} regions (${stats.roomSized} room-sized)` +
     `, ${simplification.vertices} vertices in ${simplification.commands} commands` +
     (simplification.overCap > 0 ? ` (${simplification.overCap} OVER CAP)` : "") +
-    `, ${elapsed}ms. Placed but not emitted — detail in dev.log.`
-  );
+    `, ${elapsed}ms`;
+
+  return {
+    ok: true,
+    run: { mapId: raster.mapId, mapName: raster.name, dpi, regions, summary },
+  };
+}
+
+/**
+ * Roadmap step 2 — trace and report, writing nothing.
+ *
+ * A thin wrapper, and deliberately thin: the value is that it runs *exactly* the code the emit path
+ * runs, so a disagreement between what the dry run reports and what lands in a scene cannot arise
+ * by construction.
+ */
+export async function dryRun(): Promise<string> {
+  const outcome = await runTrace();
+  if (!outcome.ok) return outcome.message;
+  return `${outcome.run.summary}. Placed but not emitted — detail in dev.log.`;
 }

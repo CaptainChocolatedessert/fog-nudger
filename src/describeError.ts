@@ -76,3 +76,35 @@ export function describeError(value: unknown, depth = 0): string {
       : String(value);
   return `no detail on ${shown}`;
 }
+
+/**
+ * The `name` Owlbear gave a rejection, unwrapped from its envelope, or `""` if there is none.
+ *
+ * Exists for the one distinction DESIGN.md §7 insists on making at every write site: a rate limit
+ * is temporary and giving up on it loses data, while a validation or size failure is permanent and
+ * retrying it forever is a hang. Those arrive through the same channel and look alike in a message.
+ */
+export function errorName(value: unknown, depth = 0): string {
+  if (value instanceof Error) return value.name;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (depth < 2 && "error" in record) return errorName(record.error, depth + 1);
+    if (typeof record.name === "string") return record.name;
+  }
+  return "";
+}
+
+/**
+ * Whether a rejection is Owlbear throttling us rather than refusing us.
+ *
+ * **Matches loosely, on purpose.** The name observed is `RateLimitHit` and the message "Too many
+ * requests", and either alone is taken as a throttle. The two mistakes here are not symmetric: a
+ * throttle read as a refusal abandons a write that would have succeeded on retry and silently loses
+ * regions, while a refusal read as a throttle costs a few pointless retries and then reports itself
+ * anyway. Erring toward "throttle" is the cheaper error.
+ */
+export function isRateLimited(value: unknown): boolean {
+  const name = errorName(value);
+  if (name.toLowerCase().includes("ratelimit")) return true;
+  return describeError(value).toLowerCase().includes("too many requests");
+}

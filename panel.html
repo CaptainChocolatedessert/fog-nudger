@@ -102,6 +102,12 @@
       .maps label:hover { background: var(--line); }
       .maps input { margin: 0; accent-color: var(--accent); }
       .maps .note { color: var(--dim); font-size: 0.8em; }
+      /*
+        Also used outside the picker, for the sentence explaining what staging does. Kept dim and
+        small: it is standing explanation, and it must not compete with #result, which is where the
+        answer to the last thing the GM clicked appears.
+      */
+      .note { color: var(--dim); font-size: 0.8em; }
       .maps[aria-disabled="true"] { opacity: 0.5; }
       .maps[aria-disabled="true"] label { cursor: default; }
       #result {
@@ -136,6 +142,25 @@
       </div>
       <button id="dry-run" disabled>Trace, emit nothing</button>
       <p id="result">Waiting for a scene.</p>
+    </section>
+
+    <!--
+      Roadmap step 8. Staging first is not caution bolted on: on the DRAWING layer a proposal
+      renders in its own colour, stays invisible to players, and derives no walls at all, so a run
+      cannot affect play whatever it gets wrong. Accepting is what makes it fog.
+
+      Ordered as the gesture is: stage, look, accept — with remove sitting apart because it is the
+      undo for all of it, and because staging refuses to run over an existing set.
+    -->
+    <section class="probe">
+      <h2>Emit</h2>
+      <button id="stage" disabled>Trace &amp; stage</button>
+      <button id="accept" disabled>Accept staged</button>
+      <button id="remove" disabled>Remove ours</button>
+      <p class="note">
+        Staged proposals are magenta, GM-only, and produce no walls. Accepting moves them to the
+        fog layer, where they become fog and Dynamic Fog starts deriving walls from them.
+      </p>
     </section>
 
     <!--

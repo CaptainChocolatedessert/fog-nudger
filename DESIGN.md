@@ -1012,18 +1012,69 @@ not need eyes on a map.
 asymmetric shape §9 asks for has to be *looked at*. So step 7's room check is really step 8's first
 run, the same way step 5 was unusable without step 6.
 
-**8. Emit — next, and it carries step 7's room check with it.** Build `Path` items on the `FOG`
-layer, tagged with our own metadata namespace for provenance. Meet the 8192 cap by simplifying,
-never by splitting (§10). Batch and debounce against the rate limiter, distinguishing throttle from
-validation failure at the call site.
+**8. Emit — built; the first run in a room is outstanding, and it carries step 7's check with it.**
+Three gestures on the panel: **stage**, **accept**, **remove**.
 
-Staged on `DRAWING` first, per §4: a proposal there renders in its own colour, is invisible to
-players while `visible` is false, is editable, and derives **zero** walls — so the first run in a
-room cannot affect play whatever it gets wrong. That inertness is what makes it safe to use as step
-7's verification, which is the whole reason the two steps land together.
+*Staging writes proposals to `DRAWING`, not fog*, per §4. Every property of that decision was
+measured in step 1, and together they make a first run inert: a staged item renders in its own
+colour so it is visibly a proposal, is invisible to players so a prep run does not leak the
+dungeon, stays selectable and editable so the GM can nudge it, and derives **zero** walls because
+Dynamic Fog filters on the `FOG` layer. Nothing about that safety is us being careful — it is a
+property of the layer, which is why it holds even when the trace is wrong.
 
-**9. Re-run and review.** Idempotency — replace our own shapes, never touch the GM's — and whatever
-OQ6 resolves to. A re-run destroys hand edits, so it must be deliberate and warned.
+*Accepting is a property update, not a re-emission*: layer to `FOG`, `fillOpacity` to 1, `visible`
+to false. Ids survive and hundreds of items are one call. The magenta is left in place, so demoting
+restores the marking with no bookkeeping.
+
+*The pipeline is one implementation with two modes, and that is load-bearing.* The dry run and the
+emit path call the same function; the dry run simply declines to write. The sibling's trace harness
+diagnosed a real bug only after it and a real room disagreed **in direction**, because the harness
+never ran the world-placement stage — and anything keeping a second copy of the chain re-opens
+exactly that gap. The log prefix changed from `dry run:` to `trace:` for the same reason: those
+lines are now emitted during a real write, and a label that lies is worse than no label.
+
+*Throttle and refusal are separated at the write, which is the only place the distinction can be
+acted on* (§7). A throttled batch waits and retries on a short backoff; anything else stops the run
+immediately, because retrying a refusal is a hang wearing the costume of resilience. The match for
+a throttle is deliberately **loose** — either the name or the message will do — since the two
+mistakes are not symmetric: a throttle read as a refusal silently loses regions, while a refusal
+read as a throttle costs three pointless retries and then reports itself anyway.
+
+*Writes are batched and paced.* Two limits, guarding different things: an item count that paces
+against the rate limiter, and a command count that bounds one call's payload, since two dozen
+regions near the 8192-entry cap is a quarter of a million numbers crossing a `postMessage`
+boundary and that failure is not a clean refusal. **Both numbers are first guesses**; the item cap
+was bisected in a room by the sibling, but nothing has ever measured where a write starts being
+refused for size. Expect them to move, and move one at a time.
+
+*A region still over the command cap is skipped and named, never truncated or split.* Owlbear
+refuses an oversized item and the refusal fails the whole batch it travelled in, so attempting one
+known-invalid shape would take a few dozen valid ones down with it. What lands is therefore correct
+as far as it goes, with the gaps stated.
+
+*A partial failure is left in the scene rather than rolled back.* Undoing it would mean more writes
+through the limiter that just refused one, and the GM can see what landed. The panel says how far
+it got and that removal is manual.
+
+*Staging over an existing set is refused, not merged.* Emitting twice would double every region, and
+choosing which copy survives is the re-run question — a product decision §10 assigns to step 9, and
+one a first emit path has no business answering quietly. The remedy is the explicit remove.
+
+**What the first room session has to settle**, in rough order of how much depends on it:
+
+- **Whether the regions are in the right places at all**, which is step 7's check and cannot be made
+  any other way. An asymmetric map, looked at.
+- **Whether the partition is one a GM wants** — OQ6, and the first time it has ever been askable.
+- **Whether an item's `rotation` pivots about its `position`**, which regions are anchored on the
+  assumption of.
+- **What the batch limits should actually be**, and whether the rate limiter is reached at all at
+  260 items.
+- **Whether 115 room-sized regions is right for this map**, carried forward unanswered since step 4.
+
+**9. Re-run and review — next.** Idempotency — replace our own shapes, never touch the GM's — and
+whatever OQ6 resolves to. A re-run destroys hand edits, so it must be deliberate and warned. Step 8
+holds the placeholder for it: staging over an existing set is simply **refused**, which is safe and
+is not an answer.
 
 ---
 
