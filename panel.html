@@ -301,48 +301,15 @@
         Both are reading-stage pipeline controls — either re-partitions the map wholesale — so the
         division is presentational and the cascade is unaffected.
       -->
-      <p class="field">1a · What counts as ink</p>
-      <div class="settings" id="read-ink"></div>
-      <p class="note">
-        Separating marks from paper. Local contrast is the only tool here so far.
-      </p>
-
-      <p class="field">1b · Which ink counts as walls</p>
-      <div class="settings" id="read-walls"></div>
-      <p class="note">
-        Filtering the marks down to linework. <em>Minimum stroke width</em> works on width rather
-        than contrast, so unlike the blur above it can take a floor grid printed as dark as the
-        walls. <em>Smallest ink island</em> then catches what survives that — decoration that is
-        thick but stubby — by using the fact that walls join into one network and decorations do
-        not. Neither is safe, only visible: both delete everything below their threshold, and the
-        first can sever a thin wall and merge two rooms. Turn on the overlay and look.
-      </p>
-
-      <!--
-        How the overlay is painted. These sit here rather than on tab 3 because a display control
-        belongs with the thing it displays, and the overlay is what the controls above produce —
-        flipping tabs to recolour what you are looking at would be absurd. They destroy nothing and
-        recompute nothing; `PARAMETER_KIND` is what keeps them out of the mask fingerprint.
-
-        Swatches as well as a colour input, deliberately. A native colour dialog inside a
-        third-party iframe is the same rendering path that made the map <select> render
-        white-on-white and look empty — not something we control or can style. The swatches cannot
-        fail that way, so the picker is the convenience and they are the floor.
-      -->
-      <p class="field">Ink overlay</p>
-      <div class="swatches" id="ink-swatches" role="group" aria-label="Overlay colour"></div>
-      <div class="settings" id="read-display"></div>
-
       <div class="actions">
-        <button id="overlay-open" disabled>Show ink overlay</button>
-        <button id="overlay-close" class="quiet" disabled>Hide</button>
+        <button id="open-workspace" disabled>Open the workspace</button>
       </div>
       <p class="note">
-        Paints the mask over the map: everything the trace calls ink, and nothing else. It blanks
-        while you pan or zoom and repaints once the view settles — an overlay that lagged would show
-        ink beside the linework it is meant to sit on, which reads as the trace being wrong. It
-        covers Owlbear's tools too, but clicks pass through, so the toolbar and this panel keep
-        working underneath.
+        Reading the map happens on its own surface: it draws the map, paints the ink over it, and
+        carries the controls that decide what counts as ink. It has to be its own surface because
+        the answer here is a per-pixel verdict, which only a picture can carry &mdash; and because
+        the controls belong beside the thing they change rather than in a panel the picture would
+        cover.
       </p>
 
       <div class="actions">

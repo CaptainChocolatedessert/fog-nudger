@@ -66,8 +66,8 @@ export default defineConfig({
         // Opened as full-screen modals by the panel, not by the manifest — so nothing declares
         // them anywhere else and forgetting these lines is the only way they can go missing.
         overlayProbe: "overlay-probe.html",
-        overlay: "overlay.html",
         workspaceProbe: "workspace-probe.html",
+        workspace: "workspace.html",
       },
     },
   },

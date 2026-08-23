@@ -138,4 +138,15 @@ export class MaskRequests {
   waiting(): boolean {
     return this.state.kind === "pending";
   }
+
+  /**
+   * The generation most recently asked for.
+   *
+   * So a worker or a fetch can be started for "whatever is current" without inventing a new stamp.
+   * Asking again inside the code that *services* a request would make every service call look like
+   * a fresh change and blank the sheet a second time for no reason.
+   */
+  latest(): Generation {
+    return this.requested;
+  }
 }

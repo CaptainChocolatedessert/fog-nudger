@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fog Nudger — reading the map</title>
+    <style>
+      /*
+        Opaque, and that is the whole point of this surface rather than an incidental style choice.
+
+        The click-through overlay this replaces was transparent so the map could show through
+        Owlbear's own rendering, and everything hard about it followed from not owning the view.
+        Here we draw the map ourselves, so map and mask agree by construction rather than by our
+        arithmetic agreeing with somebody else's.
+      */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0e1020;
+        color: #e8e9f5;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+        overflow: hidden;
+        user-select: none;
+      }
+
+      #surface {
+        position: fixed;
+        inset: 0;
+        outline: none;
+        /* Ours, not the browser's: without this a touch drag scrolls the page and a pinch zooms the
+           document, both fighting the navigation underneath. */
+        touch-action: none;
+        cursor: grab;
+      }
+      #surface.dragging {
+        cursor: grabbing;
+      }
+
+      #canvas {
+        position: fixed;
+        inset: 0;
+        display: block;
+      }
+
+      /* ----------------------------------------------------------------------------------------
+         The controls, docked rather than floating.
+
+         The click-through overlay kept its controls in the popover and spent real machinery on not
+         painting over them — a poll, a heartbeat and a reserved band down one side. Owning the
+         surface means the controls simply have a place on it, and the map is drawn in what is left.
+         ---------------------------------------------------------------------------------------- */
+      #panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 22rem;
+        max-width: 42vw;
+        box-sizing: border-box;
+        padding: 0.9rem 1rem 1.4rem;
+        overflow-y: auto;
+        background: rgba(16, 18, 36, 0.94);
+        border-right: 1px solid rgba(187, 153, 255, 0.25);
+        backdrop-filter: blur(6px);
+      }
+      #panel.hidden {
+        display: none;
+      }
+
+      h1 {
+        margin: 0 0 0.15rem;
+        font-size: 1rem;
+      }
+      h2 {
+        margin: 1.2rem 0 0.5rem;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: #bb99ff;
+      }
+      .sub {
+        margin: 0 0 0.4rem;
+        color: #9aa0c8;
+        font-size: 0.8rem;
+      }
+
+      .row {
+        margin: 0 0 0.9rem;
+      }
+      .row .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.5rem;
+      }
+      .row label {
+        font-weight: 600;
+      }
+      .row .value {
+        font-family: ui-monospace, Consolas, monospace;
+        color: #ffd479;
+      }
+      .row input[type="range"] {
+        width: 100%;
+        margin: 0.3rem 0 0.1rem;
+        accent-color: #bb99ff;
+      }
+      .row .hint {
+        margin: 0;
+        font-size: 0.76rem;
+        color: #9aa0c8;
+      }
+      .row .hint b {
+        color: #c9cdea;
+      }
+
+      .swatches {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        align-items: center;
+        margin-bottom: 0.6rem;
+      }
+      .swatches button {
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        padding: 0;
+        cursor: pointer;
+      }
+      .swatches input[type="color"] {
+        width: 2.4rem;
+        height: 1.6rem;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 0.25rem;
+        background: transparent;
+      }
+
+      /* ----------------------------------------------------------------------------------------
+         The bar. Deliberately outside the panel, so hiding the controls to see the whole map does
+         not also hide the way out.
+         ---------------------------------------------------------------------------------------- */
+      #bar {
+        position: fixed;
+        top: 0.6rem;
+        right: 0.6rem;
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+      }
+      button.chip {
+        padding: 0.4rem 0.65rem;
+        border-radius: 0.35rem;
+        border: 1px solid rgba(187, 153, 255, 0.45);
+        background: rgba(34, 26, 58, 0.92);
+        color: #e8e9f5;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.chip:hover {
+        background: #2c2250;
+      }
+      button.chip[aria-pressed="true"] {
+        background: #bb99ff;
+        color: #14162a;
+        font-weight: 600;
+      }
+
+      /*
+        The state of the mask, and the one thing on this page that must never be quietly absent.
+
+        A blank sheet means "no mask is current", and that is a deliberate state rather than a
+        failure — but a GM looking at bare map needs to know which of "computing", "failed" and
+        "the opacity is at zero" they are looking at.
+      */
+      #state {
+        position: fixed;
+        bottom: 0.6rem;
+        right: 0.6rem;
+        padding: 0.35rem 0.6rem;
+        border-radius: 0.35rem;
+        background: rgba(16, 18, 36, 0.9);
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 0.75rem;
+        color: #9aa0c8;
+      }
+      #state.bad {
+        color: #ff8080;
+      }
+      #state.working {
+        color: #ffd479;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Stage one: reading the map.
+
+      The GM's question here is "what did it call ink", and the answer is a per-pixel verdict that
+      only a picture can carry. So this surface draws the map, paints the ink mask over it, and puts
+      the controls that decide the mask on the same surface as the mask.
+
+      It replaces the click-through overlay entirely. That one was transparent and let drags reach
+      Owlbear, which meant it could never be painted on and had to infer where the map was on a
+      40ms poll — with a settle interval, a blank-and-restore, a reserved band so it would not cover
+      the popover, and a heartbeat from the popover so it knew when the band was needed. Every one
+      of those was machinery for not owning the transform. None of it is here.
+
+      Deliberately NOT here either: a dismissal timer. The probe had one because an opaque sheet
+      that might swallow every click is a trap, and that risk was real while input capture was
+      unmeasured. It has since been measured over fifteen runs — pointer, wheel and keyboard all
+      arrive, Escape included — so a working surface that evicts a GM mid-tuning would now be
+      trading a real cost against a risk that has been retired.
+    -->
+    <div id="surface" tabindex="-1">
+      <canvas id="canvas"></canvas>
+
+      <div id="panel">
+        <h1>Reading the map</h1>
+        <p class="sub" id="map-name">Loading…</p>
+
+        <h2>1a &middot; What counts as ink</h2>
+        <p class="sub">Separating marks from paper, shading and background.</p>
+        <div id="section-ink"></div>
+
+        <h2>1b &middot; Which ink counts as walls</h2>
+        <p class="sub">Filtering those marks down to linework.</p>
+        <div id="section-walls"></div>
+
+        <h2>Overlay</h2>
+        <div class="swatches" id="swatches"></div>
+        <div id="section-display"></div>
+      </div>
+
+      <div id="bar">
+        <button class="chip" id="tool-hand" aria-pressed="true" title="Pan the map (hold Ctrl to pan with any tool)">Hand</button>
+        <button class="chip" id="fit" title="Fit the whole map">Fit</button>
+        <button class="chip" id="toggle-panel" title="Hide the controls">Controls</button>
+        <button class="chip" id="close">Close (Esc)</button>
+      </div>
+
+      <p id="state">Starting…</p>
+    </div>
+
+    <script type="module" src="./src/workspace.ts"></script>
+  </body>
+</html>

@@ -18,10 +18,9 @@ import { themeVariables } from "./theme";
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 import { closeOverlayProbe, openOverlayProbe } from "./probe/overlayProbeControl";
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
-import { closeInkOverlay, openInkOverlay } from "./overlay/overlayControl";
-import { HEARTBEAT_MS, PANEL_PRESENCE_CHANNEL } from "./overlay/panelPresence";
 import { dryRun, lastInkWidth, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
 import { CONTROLS, type Measured } from "./controls";
+import { openWorkspace } from "./workspace/workspaceControl";
 import {
   DEFAULT_SETTINGS,
   isStageDefault,
@@ -275,24 +274,6 @@ function applyTheme(theme: unknown): void {
 }
 
 
-/**
- * Preset overlay colours.
- *
- * A spread of hues plus both extremes of neutral, because the only thing that makes a colour good
- * here is contrast against a particular map — red vanishes on red stonework and shouts on a grey
- * plan, and only the GM can see which they have. Six is enough to find something workable on any
- * map in one click, with the picker there for the rest.
- */
-const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[] = [
-  { value: "#ff2020", name: "Red" },
-  { value: "#ff20d0", name: "Magenta" },
-  { value: "#00c8ff", name: "Cyan" },
-  { value: "#ffd000", name: "Yellow" },
-  { value: "#00e070", name: "Green" },
-  { value: "#ffffff", name: "White" },
-  { value: "#000000", name: "Black" },
-];
-
 let settings: Settings = DEFAULT_SETTINGS;
 
 /** Build one row. Number inputs rather than sliders: these are values worth reading exactly. */
@@ -355,51 +336,6 @@ function settingRow(
   return row;
 }
 
-/**
- * Repaint the overlay colour swatches, marking the chosen one.
- *
- * Rebuilt from the settings rather than tracking selection in the DOM, for the same reason the
- * sliders repaint from what the store returned: the panel must show what is *stored*, not what was
- * last clicked. A colour the normaliser rejected would otherwise sit highlighted while the overlay
- * painted something else.
- */
-function renderSwatches(): void {
-  const container = document.getElementById("ink-swatches");
-  if (!container) return;
-  const chosen = settings.overlay.inkColour;
-  container.replaceChildren();
-
-  for (const swatch of INK_SWATCHES) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.style.background = swatch.value;
-    button.title = swatch.name;
-    button.setAttribute("aria-label", swatch.name);
-    button.setAttribute("aria-pressed", String(swatch.value === chosen));
-    button.disabled = !sceneReady;
-    button.addEventListener("click", () => {
-      void save({ ...settings, overlay: { ...settings.overlay, inkColour: swatch.value } }, "read");
-    });
-    container.append(button);
-  }
-
-  // Offered alongside rather than instead of the swatches. If Owlbear's iframe sandbox makes the
-  // native dialog unusable — the failure mode the map dropdown already hit — the swatches are
-  // still a complete control.
-  const picker = document.createElement("input");
-  picker.type = "color";
-  picker.value = chosen;
-  picker.title = "Any colour";
-  picker.setAttribute("aria-label", "Overlay colour, any");
-  picker.disabled = !sceneReady;
-  // `change` rather than `input`: a native picker streams every colour the cursor crosses while it
-  // is open, and each one would be a write to scene metadata.
-  picker.addEventListener("change", () => {
-    void save({ ...settings, overlay: { ...settings.overlay, inkColour: picker.value } }, "read");
-  });
-  container.append(picker);
-}
-
 /** Repaint every stage's controls from the current settings, and refresh the derived figures. */
 function renderSettings(): void {
   for (const stage of STAGES) {
@@ -448,7 +384,6 @@ function renderSettings(): void {
     }
   }
 
-  renderSwatches();
   setSettingsEnabled(sceneReady);
 }
 
@@ -536,22 +471,6 @@ OBR.onReady(async () => {
 
   devLog("info", "panel: connection ready");
 
-  // Tell the ink overlay we are here, so it can keep its paint off the controls. A heartbeat rather
-  // than an announcement, because a popover is dismissed by clicking anywhere outside it and there
-  // is no farewell worth betting the behaviour on — see `panelPresence.ts`. The width is measured
-  // rather than assumed, so the band follows the manifest instead of a copy of the number.
-  const beat = (): void => {
-    void OBR.broadcast
-      .sendMessage(PANEL_PRESENCE_CHANNEL, { width: window.innerWidth }, { destination: "LOCAL" })
-      .catch(() => {
-        // Deliberately silent. This fires several times a second, so a failing bus would fill the
-        // log with identical lines and bury whatever else was happening; and the overlay's
-        // fallback is simply to draw over the panel as it did before.
-      });
-  };
-  beat();
-  window.setInterval(beat, HEARTBEAT_MS);
-
   // Subscribe before reading, for the same reason the background page does: a theme changed in the
   // window between the two would otherwise never be observed. Both paths run `applyTheme`, which
   // is idempotent, so the overlap costs nothing.
@@ -565,8 +484,7 @@ OBR.onReady(async () => {
   const buttons = [
     wireButton("dry-run", dryRun),
     wireButton("probe", probeViewportCentre),
-    wireButton("overlay-open", openInkOverlay),
-    wireButton("overlay-close", closeInkOverlay),
+    wireButton("open-workspace", openWorkspace),
     wireButton("stage", stageRegions),
     wireButton("accept", acceptStaged),
     wireButton("unaccept", returnToStaging),
