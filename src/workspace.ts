@@ -487,24 +487,37 @@ async function persist(): Promise<void> {
 type Tool = "hand";
 let tool: Tool = "hand";
 
-if (surface instanceof HTMLElement) {
+/*
+  The navigation listens on the **canvas**, not on the surface that contains everything.
+
+  The first version listened on the surface, which covers the whole viewport with the controls drawn
+  on top of it — so a press on a button bubbled up, started a pan, and `setPointerCapture` then
+  redirected the rest of the gesture to the surface. The button never saw its click, and every
+  control on the page was dead: reported from a room as "Hand always interacts with the map".
+
+  Listening on the canvas fixes it structurally rather than by filtering event targets. The canvas
+  is *behind* the controls, so a press meant for a button never reaches it at all, and there is no
+  list of exceptions to keep in step with the markup. The wheel comes right for free too —
+  scrolling over the controls scrolls the controls, because the canvas is not under the pointer.
+*/
+if (canvas instanceof HTMLCanvasElement) {
   let panning = false;
   let last: { x: number; y: number } | null = null;
 
-  surface.addEventListener("pointerdown", (event) => {
+  canvas.addEventListener("pointerdown", (event) => {
     // Ctrl pans with any tool, which is what keeps a pan available once the plain drag is a brush.
     if (tool !== "hand" && !event.ctrlKey) return;
     panning = true;
     last = { x: event.clientX, y: event.clientY };
-    surface.classList.add("dragging");
+    canvas.classList.add("dragging");
     try {
-      surface.setPointerCapture(event.pointerId);
+      canvas.setPointerCapture(event.pointerId);
     } catch (error) {
       devLog("warn", "workspace: could not capture the pointer", describeError(error));
     }
   });
 
-  surface.addEventListener("pointermove", (event) => {
+  canvas.addEventListener("pointermove", (event) => {
     if (!panning || !last) return;
     setView(panBy(view, event.clientX - last.x, event.clientY - last.y));
     last = { x: event.clientX, y: event.clientY };
@@ -513,12 +526,12 @@ if (surface instanceof HTMLElement) {
   const endPan = (): void => {
     panning = false;
     last = null;
-    surface.classList.remove("dragging");
+    canvas.classList.remove("dragging");
   };
-  surface.addEventListener("pointerup", endPan);
-  surface.addEventListener("pointercancel", endPan);
+  canvas.addEventListener("pointerup", endPan);
+  canvas.addEventListener("pointercancel", endPan);
 
-  surface.addEventListener(
+  canvas.addEventListener(
     "wheel",
     (event) => {
       if (event.cancelable) event.preventDefault();

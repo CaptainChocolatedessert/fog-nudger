@@ -33,16 +33,31 @@
         /* Ours, not the browser's: without this a touch drag scrolls the page and a pinch zooms the
            document, both fighting the navigation underneath. */
         touch-action: none;
-        cursor: grab;
-      }
-      #surface.dragging {
-        cursor: grabbing;
       }
 
+      /*
+        The canvas is what pans, so the grab cursor lives here rather than on the surface — over a
+        button or a slider the pointer should look like a pointer.
+      */
       #canvas {
         position: fixed;
         inset: 0;
         display: block;
+        /*
+          Stated, not inferred from `inset: 0`.
+
+          A canvas is a *replaced* element, so it keeps its intrinsic 300x150 rather than stretching
+          to fill four zero insets the way a div would. It ends up full-size anyway once the first
+          frame runs and sets explicit dimensions — but until then it is a small rectangle in the
+          corner, and everything outside it hits the surface behind. Found by asking
+          `elementFromPoint` where a press over the map actually lands, which answered `#surface`.
+        */
+        width: 100%;
+        height: 100%;
+        cursor: grab;
+      }
+      #canvas.dragging {
+        cursor: grabbing;
       }
 
       /* ----------------------------------------------------------------------------------------
