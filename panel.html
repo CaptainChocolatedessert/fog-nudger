@@ -287,8 +287,34 @@
         <p class="note">Waiting for a scene&hellip;</p>
       </div>
 
-      <p class="field">What counts as ink</p>
-      <div class="settings" id="read-settings"></div>
+      <!--
+        Stage one is two things in series, and the panel says so because the GM's question changes
+        between them.
+
+        First: what is a mark at all, as against background, shading and paper. Local contrast is
+        the only tool for it today; selecting or ignoring by hue would join it here, since colour is
+        also a question about what the mark *is*.
+
+        Second: which of those marks are walls. A width filter is the only tool today; smoothing the
+        nubs an opening leaves where a thick wall crossed a thin gridline would join it here.
+
+        Both are reading-stage pipeline controls — either re-partitions the map wholesale — so the
+        division is presentational and the cascade is unaffected.
+      -->
+      <p class="field">1a · What counts as ink</p>
+      <div class="settings" id="read-ink"></div>
+      <p class="note">
+        Separating marks from paper. Local contrast is the only tool here so far.
+      </p>
+
+      <p class="field">1b · Which ink counts as walls</p>
+      <div class="settings" id="read-walls"></div>
+      <p class="note">
+        Filtering the marks down to linework. Removing thin strokes is by <em>width</em>, so unlike
+        the blur above it can take a floor grid printed as dark as the walls. It is not safe, only
+        visible — it deletes everything below the threshold and can sever a thin wall, which merges
+        two rooms. Turn on the overlay and look before trusting it.
+      </p>
 
       <!--
         How the overlay is painted. These sit here rather than on tab 3 because a display control

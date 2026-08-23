@@ -565,6 +565,34 @@ gesture would go unseen. The polling is the drawing's input rather than a cost o
 screen pixels filters five-pixel ink away. That is the same limit as everywhere else here — ink can
 only be judged at a zoom where ink is visible — and not a defect to engineer around.
 
+#### Keeping off the panel — user, 2026-08-23
+
+A full-screen modal covers the panel, and at any zoom where the linework is thick the ink paints
+over the sliders. The panel is exactly where a GM is working while the overlay is up, so this is the
+common case rather than a corner.
+
+**The overlay keeps a band on the left clear while the panel is open**, and only while it is open —
+a permanent stripe would hide a third of the map on a 1205px window. Nothing in the SDK reports
+whether a popover is open, so **the panel says so on a heartbeat**.
+
+- **A heartbeat rather than open/close messages.** A popover is dismissed by clicking anywhere
+  outside it, and whether a frame torn down that way gets to send a farewell is not worth betting
+  on. A missed close leaves a permanent blank stripe with nothing to explain it. With a heartbeat
+  there is no ending to miss, and the state repairs itself within one stale interval however the
+  panel went away.
+- **The stale window is comfortably over two beats**, because a band that flickers is worse than one
+  that lingers: lingering costs a moment of hidden map, flickering makes the layout jump under a
+  slider being dragged. The relationship is asserted in a test rather than left as two numbers.
+- **The panel reports its own measured width**, so the band follows the manifest instead of a second
+  copy of the number going stale the first time the popover is resized. The extra margin covering
+  the gap between the screen edge and the popover is a **guess**, logged on every change so it can
+  be corrected by looking once.
+- **It clips rather than shrinking the drawn rectangle.** Shrinking would rescale the image into the
+  remaining space and slide every pixel of ink off the linework — the same lie the blanking exists
+  to prevent, arrived at from the other side.
+- **It fails safe.** If the broadcast never reaches a sibling iframe, no band is ever reserved and
+  the overlay draws over the panel exactly as before: the previous behaviour, not a new fault.
+
 **Where the dividing line actually falls** is "what does the map say" against "what do I want" — and
 one operation moves across it on inspection. *Splitting a region because of something not on the
 map* reads like a stage-three edit and belongs in stage one, as **GM-drawn ink**: draw the wall, and
@@ -574,11 +602,62 @@ a join that Dynamic Fog turns into a wall across a room; and it uses tools the G
 is the same argument §4 makes for editing fog natively. Not built; the highest-value thing that is
 not.
 
+### Stage one is two things in series — settled 2026-08-23 (user)
+
+The GM's question changes partway through stage one, and the panel says so with two numbered
+sub-sections. Both halves are reading-stage pipeline controls — either re-partitions the map
+wholesale — so this is presentational and the cascade is untouched.
+
+- **1a · What counts as ink.** Separating marks from paper, shading and background. **Local contrast
+  is the only tool today**; selecting or ignoring by *hue* would join it here, since colour is
+  another question about what a mark is. Colour is currently discarded at binarisation, and §4
+  already names that as a real loss.
+- **1b · Which ink counts as walls.** Filtering marks down to linework. **A width filter is the only
+  tool today**; smoothing the nubs an opening leaves where a thick wall crossed a thin gridline
+  would join it here.
+
+Both lists are expected to grow, and the sections exist so that growth has somewhere to go that is
+not one long column of unrelated knobs.
+
+### The minimum stroke width — built 2026-08-23, previously rejected
+
+A morphological **opening**: erode by `k`, dilate by `k`, so marks narrower than about `2k` vanish
+and everything else keeps its original width. Denominated in measured ink widths, **default zero**.
+
+**Why it was rejected before, and what changed.** It can sever a thin wall anywhere, and a severed
+wall merges two rooms. That risk is unchanged and the control is still not safe. What changed is
+that it is no longer *invisible*: the stage-one overlay shows the mask registered on the map at any
+zoom, so a severed wall is a gap a GM can see, with the second-largest-region alarm behind it. The
+objection was about visibility, and visibility is what got built.
+
+**Why it earns its place beside the blur.** The blur is the other global lever and works on
+**contrast**, so a floor grid printed as dark as the walls costs linework to remove. An opening
+works on **width**, which is the axis a grid line actually differs on. The two are not redundant;
+they attack different properties, and the grid sits on the one the blur cannot reach.
+
+**It runs after the ink-width measurement, and that ordering is load-bearing.** The threshold is
+denominated in ink widths, and measuring a mask this has already filtered would raise the mean width
+— which moves the threshold, which changes what it removes. Measure the raw reading, then filter it.
+Polarity is decided on the raw reading for the same reason.
+
+**Implementation notes.** Separable square structuring element with running counts, so it is linear
+in the pixel count and *independent of the radius* — the naive neighbourhood is a billion tests at
+8.4 megapixels and a radius of five. Square rather than circular means a diagonal stroke must be
+slightly thicker to survive than an axis-aligned one, which on a printed grid points the right way.
+Borders **clamp** rather than counting off-image as ground: the opposite would erode a band off every
+edge and delete a wall drawn along the map's border, which the dilation could not restore.
+
+**The cost, stated rather than softened.** It deletes *everything* below the threshold — a thin
+doorway marking, a lightly drawn secret door, a wall hatched as fine parallel strokes. It is a
+scalpel for the grid only where the grid is thinner than everything worth keeping, and on some maps
+it will not be. GM-drawn "not ink" strokes remain the better, local tool; this does not replace them.
+
 ### The controls
 
-Three for stage one — ink threshold, texture blur, detail window. Two for stage two — smallest room,
-edge simplification. Two for stage three, both about how a proposal is drawn while it is being
-judged.
+Three for stage 1a — ink threshold, texture blur, detail window. One for stage 1b — minimum stroke
+width. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
+proposal is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
+reading tab but are **display** parameters (below).
 
 - **One declaration decides which stage owns which parameter**, and both the panel's tabs and the
   pipeline's cache invalidation read it. Two lists would be two places to disagree about what a knob

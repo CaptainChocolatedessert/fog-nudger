@@ -66,6 +66,8 @@ import type { LabelledSpace } from "./trace/label";
 import type { RasterPlacement, WorldBounds } from "./map/placement";
 import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity, type PolarityReading } from "./trace/polarity";
+import { countInk } from "./trace/binarize";
+import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { labelSpace } from "./trace/label";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
@@ -148,8 +150,17 @@ interface MaskStage {
   readonly pxPerSquare: number;
   /** Unblurred, for the point probe. */
   readonly rawField: ScalarField;
-  /** Carries the chosen mask, the polarity evidence and the measured ink width. */
+  /** Carries the RAW mask, the polarity evidence and the measured ink width. */
   readonly reading: PolarityReading;
+  /**
+   * The mask everything downstream actually uses: the reading's, after the minimum-stroke-width
+   * opening. Identical to `reading.mask` when that control is off, which is the default.
+   *
+   * Kept separate rather than replacing it, because the two answer different questions. The raw
+   * reading is what the ink width and the polarity were measured from and must stay that way, or
+   * the unit the threshold is denominated in moves with the threshold.
+   */
+  readonly mask: BinaryMask;
   readonly chosenCoverage: number;
 }
 
@@ -233,6 +244,21 @@ export function probeWorldPoint(x: number, y: number): string {
  */
 export function lastPixelsPerSquare(): number | null {
   return lastRun ? lastRun.pxPerSquare : null;
+}
+
+/**
+ * The ink width the last reading measured, in raster pixels.
+ *
+ * For the panel's derived readouts. Two controls are denominated in ink widths — the minimum stroke
+ * width and the simplification tolerance — and without this the panel can only show the GM a bare
+ * fraction, which means nothing on its own.
+ *
+ * Read from the **mask cache** rather than from `lastRun`, so it is available after a reading change
+ * even when no full trace has been run since. `null` before anything has been read, which the panel
+ * shows as no derived figure rather than as a wrong one.
+ */
+export function lastInkWidth(): number | null {
+  return cachedMask?.reading.inkWidth ?? null;
 }
 
 /** One region, carrying everything the emit path needs and nothing it does not. */
@@ -492,8 +518,52 @@ async function computeMask(
   //
   // Denominated in measured ink width, since a stroke is one ink width across its narrow side by
   // definition and a filled shape is several.
+  // ## Minimum stroke width
+  //
+  // An opening — erode then dilate — so marks narrower than the threshold vanish and everything
+  // else keeps its width. Deliberately placed **after** the ink-width measurement above and not
+  // before: the threshold is denominated in ink widths, and measuring a mask this has already
+  // thinned out would raise the mean width, which would move the threshold, which would change what
+  // it removes. Measure the raw reading, then filter it.
+  //
+  // Polarity is decided on the raw reading for the same reason: this only ever removes thin marks,
+  // so it can only make a reading look less like linework than it is.
+  const rawInk = countInk(reading.mask);
+  const openStarted = performance.now();
+  const strokeFloor = settings.trace.minStrokeInkWidths * (reading.inkWidth ?? 0);
+  const openRadius = radiusForWidth(strokeFloor);
+  const effectiveMask = openMask(reading.mask, openRadius);
+
+  if (openRadius > 0) {
+    const removed = removedInk(reading.mask, effectiveMask);
+    devLog(
+      "info",
+      `trace: minimum stroke width in ${Math.round(performance.now() - openStarted)}ms — ` +
+        `${settings.trace.minStrokeInkWidths} of a ${(reading.inkWidth ?? 0).toFixed(1)}px ink ` +
+        `width is ${strokeFloor.toFixed(1)}px, radius ${openRadius}px, so marks under about ` +
+        `${openRadius * 2}px are gone. Removed ${removed} of ${rawInk} ink px ` +
+        `(${rawInk > 0 ? ((removed / rawInk) * 100).toFixed(1) : "0.0"}%).`,
+    );
+    // Named as a risk rather than reported as a number, because the number cannot distinguish a
+    // floor grid from a wall. Only the overlay can, which is the entire reason this control exists
+    // at all rather than remaining rejected.
+    devLog(
+      "warn",
+      "trace: the minimum stroke width can sever a thin wall, which merges two rooms. Check the " +
+        "ink overlay for gaps in the linework, and watch the second-largest region below.",
+    );
+  } else if (settings.trace.minStrokeInkWidths > 0) {
+    // The setting is on but rounds to nothing. Silence here would look identical to it working.
+    devLog(
+      "info",
+      `trace: minimum stroke width ${settings.trace.minStrokeInkWidths} of a ` +
+        `${(reading.inkWidth ?? 0).toFixed(1)}px ink width rounds to a radius of 0, so nothing ` +
+        `was removed. Raise it past ${(1 / Math.max(0.01, reading.inkWidth ?? 1)).toFixed(2)} to bite.`,
+    );
+  }
+
   const blobStarted = performance.now();
-  const blobs = findInkBlobs(reading.mask, {
+  const blobs = findInkBlobs(effectiveMask, {
     pxPerSquare,
     minSquares: MIN_BLOB_SQUARES,
     minThickness: (reading.inkWidth ?? pxPerSquare * 0.1) * BLOB_INK_WIDTHS,
@@ -515,6 +585,7 @@ async function computeMask(
     pxPerSquare,
     rawField,
     reading,
+    mask: effectiveMask,
     chosenCoverage,
   };
 }
@@ -557,7 +628,7 @@ export async function maskForOverlay(): Promise<MaskForOverlay | null> {
 
   if (cachedMask && cachedMask.fingerprint === fingerprint) {
     return {
-      mask: cachedMask.reading.mask,
+      mask: cachedMask.mask,
       bounds: cachedMask.bounds,
       mapName: cachedMask.name,
       reused: true,
@@ -571,7 +642,7 @@ export async function maskForOverlay(): Promise<MaskForOverlay | null> {
   }
   cachedMask = computed;
   return {
-    mask: computed.reading.mask,
+    mask: computed.mask,
     bounds: computed.bounds,
     mapName: computed.name,
     reused: false,
@@ -657,6 +728,7 @@ export async function runTrace(): Promise<TraceOutcome> {
     pxPerSquare,
     rawField,
     reading,
+    mask: inkMask,
     chosenCoverage,
     name: mapName,
     mapId,
@@ -669,12 +741,12 @@ export async function runTrace(): Promise<TraceOutcome> {
   // interior or exterior; the outside is labelled and will be emitted like anything else.
   const labelStarted = performance.now();
   const minArea = Math.max(1, Math.round(settings.trace.minRoomSquares * pxPerSquare ** 2));
-  const labelled = labelSpace(reading.mask, { minArea });
+  const labelled = labelSpace(inkMask, { minArea });
 
   // Held for the point probe, which needs the labelling as well as the mask and therefore cannot be
   // served by the mask cache alone. Re-deriving it costs the better part of a second, which is fine
   // once and not fine for a control whose whole value is asking about one spot and then another.
-  lastRun = { rawField, mask: reading.mask, labelled, placement, pxPerSquare, name: mapName };
+  lastRun = { rawField, mask: inkMask, labelled, placement, pxPerSquare, name: mapName };
   const labelMs = Math.round(performance.now() - labelStarted);
 
   const stats = censusStats(labelled, { pxPerSquare });
@@ -705,7 +777,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   // faces and neither claims half a pixel of it. The area check is the one exact tie between this
   // stage and the last: every region's ring areas must sum to the pixel count that produced it.
   const traceStarted = performance.now();
-  const traced = traceRegions(labelled, reading.mask);
+  const traced = traceRegions(labelled, inkMask);
   const traceMs = Math.round(performance.now() - traceStarted);
   const contours = contourStats(labelled, traced);
 

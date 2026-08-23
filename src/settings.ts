@@ -58,6 +58,24 @@ export interface TraceSettings {
    */
   readonly sauvolaRadiusSquares: number;
   /**
+   * Minimum stroke width, as a fraction of the measured ink width. Zero is off.
+   *
+   * A morphological **opening** — erode then dilate — so marks narrower than this vanish and
+   * everything else keeps its original width. Not a plain erosion: that thins what survives, and
+   * since regions are bounded by ink, thinning ink grows every region.
+   *
+   * The lever for a printed floor grid that the blur cannot reach. Blur works on *contrast*, so a
+   * grid drawn as dark as the walls costs linework to remove; this works on *width*, which is the
+   * axis a grid line actually differs on.
+   *
+   * **It is not safe, only visible.** It deletes everything below the threshold — a thin doorway
+   * marking, a lightly drawn secret door, a wall hatched as fine parallel strokes — and it can
+   * sever a thin wall, which merges two rooms. It was rejected outright until the stage-one overlay
+   * made a severed wall something a GM can see. Default zero, so it changes nothing until it is
+   * reached for.
+   */
+  readonly minStrokeInkWidths: number;
+  /**
    * Smallest area kept as a room, in grid squares.
    *
    * Guards against hatching, speckle and the slivers a picked-up floor grid leaves. It can only
@@ -129,6 +147,7 @@ export const DEFAULT_SETTINGS: Settings = {
     blurSigma: 1,
     sauvolaK: 0.34,
     sauvolaRadiusSquares: 0.25,
+    minStrokeInkWidths: 0,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -160,6 +179,9 @@ export const SETTING_LIMITS = {
   blurSigma: { min: 0, max: 3, step: 0.25 },
   sauvolaK: { min: 0.02, max: 0.9, step: 0.02 },
   sauvolaRadiusSquares: { min: 0.05, max: 0.75, step: 0.05 },
+  // Tops out at one ink width. Past that it is removing strokes as thick as the linework it is
+  // meant to protect, which is not a setting with a use so much as a way to erase the map.
+  minStrokeInkWidths: { min: 0, max: 1, step: 0.05 },
   minRoomSquares: { min: 0.002, max: 6, step: 0.01 },
   // Capped below the half-ink-width bound that stops a boundary crossing a wall. A GM cannot be
   // given a control whose top end silently merges rooms.
@@ -206,6 +228,7 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   sauvolaK: "read",
   blurSigma: "read",
   sauvolaRadiusSquares: "read",
+  minStrokeInkWidths: "read",
   inkOpacity: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
@@ -236,6 +259,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   sauvolaK: "pipeline",
   blurSigma: "pipeline",
   sauvolaRadiusSquares: "pipeline",
+  minStrokeInkWidths: "pipeline",
   inkOpacity: "display",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
@@ -361,6 +385,11 @@ export function normaliseSettings(raw: unknown): Settings {
         "sauvolaRadiusSquares",
         t.sauvolaRadiusSquares,
       ),
+      minStrokeInkWidths: clamp(
+        trace.minStrokeInkWidths,
+        "minStrokeInkWidths",
+        t.minStrokeInkWidths,
+      ),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,
@@ -403,6 +432,7 @@ export function describeSettings(settings: Settings): string {
   const { trace, review } = settings;
   return (
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusSquares} sq, ` +
+    `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
     `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")

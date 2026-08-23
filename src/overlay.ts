@@ -53,6 +53,12 @@ import { DEFAULT_SETTINGS, type Settings } from "./settings";
 import { OVERLAY_ID, OVERLAY_LIFETIME_MS } from "./overlay/overlayControl";
 import { paintMask, parseColour, screenRect } from "./overlay/maskImage";
 import { shouldShow, viewMoved, type ScreenPair } from "./probe/viewportSettle";
+import {
+  PANEL_PRESENCE_CHANNEL,
+  readPanelPresence,
+  reservedWidth,
+  type PanelPresence,
+} from "./overlay/panelPresence";
 
 installDevLog("overlay");
 
@@ -89,6 +95,22 @@ interface Painted {
 
 let painted: Painted | null = null;
 let settings: Settings = DEFAULT_SETTINGS;
+
+/**
+ * The panel's last heartbeat, and when it arrived.
+ *
+ * The overlay covers the whole window, so at any zoom where the linework is thick the ink paints
+ * over the panel and makes the sliders hard to use — and the panel is exactly where the GM is
+ * working while this is up. Keeping a band clear needs to know whether the panel is actually open,
+ * which nothing in the SDK reports, so the panel says so on a timer.
+ */
+let panelPresence: PanelPresence | null = null;
+let panelHeardAt = Number.NEGATIVE_INFINITY;
+
+/** How wide a strip on the left to leave unpainted right now. Zero when the panel is not open. */
+function panelBand(): number {
+  return reservedWidth(panelPresence, performance.now() - panelHeardAt);
+}
 
 /**
  * Build (or recolour) the offscreen image of the mask.
@@ -210,6 +232,18 @@ function draw(where: ScreenPair | null): void {
   const rect = screenRect(where.a, where.b);
   if (rect.width <= 0 || rect.height <= 0) return;
 
+  // Clip rather than shrink the drawn rectangle. Shrinking it would rescale the image into the
+  // remaining space and slide every pixel of ink away from the linework it is meant to sit on —
+  // which is precisely the lie the blanking exists to prevent, arrived at from the other side.
+  const band = panelBand();
+  if (band > 0) {
+    if (band >= width) return;
+    context.save();
+    context.beginPath();
+    context.rect(band, 0, width - band, height);
+    context.clip();
+  }
+
   context.globalAlpha = settings.overlay.inkOpacity;
   // Nearest-neighbour. Zoomed in, a GM is judging individual strokes and smoothing invents edges
   // that are not in the mask; zoomed out this cannot save thin ink anyway, so there is nothing to
@@ -217,6 +251,7 @@ function draw(where: ScreenPair | null): void {
   context.imageSmoothingEnabled = false;
   context.drawImage(painted.canvas, rect.x, rect.y, rect.width, rect.height);
   context.globalAlpha = 1;
+  if (band > 0) context.restore();
 }
 
 async function run(): Promise<void> {
@@ -236,9 +271,34 @@ async function run(): Promise<void> {
   let showing = false;
   let stopped = false;
 
+  // The panel's heartbeat. Nothing in the SDK says whether a popover is open, so it tells us —
+  // and because it is a heartbeat rather than an announcement, there is no farewell to miss when
+  // the popover is dismissed by a click somewhere else.
+  let lastBand = 0;
+  OBR.broadcast.onMessage(PANEL_PRESENCE_CHANNEL, (event) => {
+    const presence = readPanelPresence(event.data);
+    if (!presence) return;
+    panelPresence = presence;
+    panelHeardAt = performance.now();
+  });
+
   const tick = async (): Promise<void> => {
     if (!painted) return;
     const next = await readCorners(painted.bounds);
+
+    // Checked every poll rather than only on a message, because the band also has to *lift* — and
+    // that happens by a heartbeat failing to arrive, which is not an event.
+    const band = panelBand();
+    const bandChanged = band !== lastBand;
+    if (bandChanged) {
+      devLog(
+        "info",
+        band > 0
+          ? `overlay: panel open, keeping ${band}px clear on the left`
+          : "overlay: panel closed, painting the full width again",
+      );
+      lastBand = band;
+    }
 
     if (viewMoved(previous, next)) {
       stillSince = performance.now();
@@ -246,6 +306,10 @@ async function run(): Promise<void> {
       draw(null);
     } else if (!showing && shouldShow(performance.now() - stillSince, SETTLE_MS)) {
       showing = true;
+      draw(next);
+    } else if (showing && bandChanged) {
+      // Already settled, so nothing else would trigger a repaint and the band would not take
+      // effect until the GM next moved the map.
       draw(next);
     }
     previous = next;

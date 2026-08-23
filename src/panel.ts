@@ -18,18 +18,17 @@ import { themeVariables } from "./theme";
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 import { closeOverlayProbe, openOverlayProbe } from "./probe/overlayProbeControl";
 import { closeInkOverlay, openInkOverlay } from "./overlay/overlayControl";
-import { dryRun, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
+import { HEARTBEAT_MS, PANEL_PRESENCE_CHANNEL } from "./overlay/panelPresence";
+import { dryRun, lastInkWidth, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
 import {
   DEFAULT_SETTINGS,
   isStageDefault,
-  PARAMETER_KIND,
   PARAMETER_STAGE,
   readParameter,
   resetStage,
   SETTING_LIMITS,
   STAGES,
   writeParameter,
-  type ParameterKind,
   type SettingName,
   type Settings,
   type Stage,
@@ -286,6 +285,15 @@ interface Control {
   readonly name: SettingName;
   readonly label: string;
   readonly hint: string;
+  /**
+   * Which container on the stage's tab this appears in — the id is `<stage>-<section>`.
+   *
+   * **Presentation only, and deliberately separate from `PARAMETER_KIND`.** The kind decides what a
+   * change *invalidates* and is read by the mask fingerprint; this decides only where the control
+   * is drawn. Stage one is two things in series — what is a mark, then which marks are walls — and
+   * both halves are reading-stage pipeline controls, so the division must not touch the cascade.
+   */
+  readonly section: string;
   readonly scale?: Scale;
   /** Renders the value in a unit the GM can feel, given the last run's pixels per grid square. */
   readonly derive?: (value: number, pxPerSquare: number) => string;
@@ -301,23 +309,47 @@ interface Control {
 const CONTROLS: readonly Control[] = [
   {
     name: "sauvolaK",
+    section: "ink",
     label: "Ink threshold",
     hint: "Higher finds <b>less</b> ink — only decisively dark pixels. Lower catches faint linework, and eventually the paper.",
   },
   {
     name: "blurSigma",
+    section: "ink",
     label: "Texture blur",
     hint: "Fades the finest marks below the threshold. The blunt lever against speckle and a printed floor grid — blunt because it works on contrast, so it takes faint walls too.",
     derive: (value) => `${value.toFixed(2)} px`,
   },
   {
     name: "sauvolaRadiusSquares",
+    section: "ink",
     label: "Detail window",
     hint: "How local the threshold is. Wants to stay comfortably wider than the linework is thick, or a bold stroke becomes its own background and stops counting as ink.",
     derive: (value, px) => `${Math.round(value * px) * 2 + 1} px across`,
   },
   {
+    name: "minStrokeInkWidths",
+    section: "walls",
+    label: "Minimum stroke width",
+    hint: "Removes marks narrower than this, keeping thicker ones at full width. As a share of the measured ink width; <b>zero is off</b>. Works on width, not contrast, so it reaches a floor grid the blur cannot.",
+    // Reads the measured ink width rather than assuming one. An earlier version multiplied by
+    // 0.111 — this project's test map's ink width in grid squares — which is a measurement of one
+    // map hardcoded into a control meant for any map, and DESIGN.md §5 exists to prevent exactly
+    // that. Before a first read there is no width, so no figure is shown at all.
+    derive: (value) => {
+      if (value <= 0) return "off";
+      const ink = lastInkWidth();
+      if (ink === null) return "trace once for a figure";
+      const width = value * ink;
+      const radius = Math.max(0, Math.round(width / 2));
+      return radius <= 0
+        ? `rounds to nothing against ${ink.toFixed(1)}px ink`
+        : `under ~${radius * 2}px goes (ink is ${ink.toFixed(1)}px)`;
+    },
+  },
+  {
     name: "minRoomSquares",
+    section: "settings",
     // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a
     // linear track the default sits 1.6% along and the rest of the slider chooses between absurd
     // values.
@@ -328,21 +360,29 @@ const CONTROLS: readonly Control[] = [
   },
   {
     name: "simplifyInkWidths",
+    section: "settings",
     label: "Edge simplification",
     hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",
+    derive: (value) => {
+      const ink = lastInkWidth();
+      return ink === null ? "trace once for a figure" : `${(value * ink).toFixed(1)}px of a ${ink.toFixed(1)}px ink width`;
+    },
   },
   {
     name: "fillOpacity",
+    section: "settings",
     label: "Proposal fill",
     hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
   },
   {
     name: "strokeSquares",
+    section: "settings",
     label: "Proposal outline",
     hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
   },
   {
     name: "inkOpacity",
+    section: "display",
     label: "Overlay opacity",
     hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
   },
@@ -477,15 +517,22 @@ function renderSettings(): void {
     // Pipeline controls and display controls are painted into separate containers, because a
     // display control belongs beside the thing it displays rather than beside the knobs that share
     // its stage. A stage with no display container simply has all its controls in the one place.
-    const containers: Record<ParameterKind, HTMLElement | null> = {
-      pipeline: document.getElementById(`${stage}-settings`),
-      display: document.getElementById(`${stage}-display`) ?? document.getElementById(`${stage}-settings`),
-    };
-    for (const container of new Set(Object.values(containers))) container?.replaceChildren();
+    // Cleared up front, because a section's container must end up empty rather than stale when no
+    // control lands in it — a leftover row from a previous paint would be a control that still
+    // writes settings while claiming to belong somewhere it does not.
+    const sections = new Set(
+      CONTROLS.filter((control) => PARAMETER_STAGE[control.name] === stage).map(
+        (control) => control.section,
+      ),
+    );
+    const containerFor = (section: string): HTMLElement | null =>
+      document.getElementById(`${stage}-${section}`) ??
+      document.getElementById(`${stage}-settings`);
+    for (const section of sections) containerFor(section)?.replaceChildren();
 
     for (const control of CONTROLS) {
       if (PARAMETER_STAGE[control.name] !== stage) continue;
-      const container = containers[PARAMETER_KIND[control.name]];
+      const container = containerFor(control.section);
       if (container) {
         container.append(
           settingRow(
@@ -599,6 +646,22 @@ OBR.onReady(async () => {
   }
 
   devLog("info", "panel: connection ready");
+
+  // Tell the ink overlay we are here, so it can keep its paint off the controls. A heartbeat rather
+  // than an announcement, because a popover is dismissed by clicking anywhere outside it and there
+  // is no farewell worth betting the behaviour on — see `panelPresence.ts`. The width is measured
+  // rather than assumed, so the band follows the manifest instead of a copy of the number.
+  const beat = (): void => {
+    void OBR.broadcast
+      .sendMessage(PANEL_PRESENCE_CHANNEL, { width: window.innerWidth }, { destination: "LOCAL" })
+      .catch(() => {
+        // Deliberately silent. This fires several times a second, so a failing bus would fill the
+        // log with identical lines and bury whatever else was happening; and the overlay's
+        // fallback is simply to draw over the panel as it did before.
+      });
+  };
+  beat();
+  window.setInterval(beat, HEARTBEAT_MS);
 
   // Subscribe before reading, for the same reason the background page does: a theme changed in the
   // window between the two would otherwise never be observed. Both paths run `applyTheme`, which
