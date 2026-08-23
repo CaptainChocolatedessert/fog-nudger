@@ -113,11 +113,33 @@ export function describeKeyboardFocus(evidence: {
   readonly hadFocusAtOpen: boolean;
   readonly keysBeforeAnyPointer: number;
   readonly keysAfterAPointer: number;
+  /** Whether the page has asked for the keyboard yet. */
+  readonly focusWasAsked: boolean;
+  /** Keys that arrived *before* it asked, which is the only proof focus was given rather than taken. */
+  readonly keysBeforeFocusAttempt: number;
 }): string {
-  const { hadFocusAtOpen, keysBeforeAnyPointer, keysAfterAPointer } = evidence;
+  const {
+    hadFocusAtOpen,
+    keysBeforeAnyPointer,
+    keysAfterAPointer,
+    focusWasAsked,
+    keysBeforeFocusAttempt,
+  } = evidence;
 
   if (keysBeforeAnyPointer > 0) {
-    return "keys arrive without clicking first — focus is ours on open";
+    /*
+      Three ways a key can arrive with no click, and they are three different products: focus we
+      were given, focus we took by asking, and — once the page asks automatically — the two being
+      indistinguishable unless the order is recorded. A key that landed before the request is the
+      only evidence that no request was needed.
+    */
+    if (keysBeforeFocusAttempt > 0) {
+      return "keys arrive with no click and before we asked — focus is ours on open";
+    }
+    if (focusWasAsked) {
+      return "keys arrive with no click, but only after we asked — asking for the keyboard works";
+    }
+    return "keys arrive without clicking first";
   }
   if (keysAfterAPointer > 0) {
     return "keys arrive, but only after a click — the modal has to be focused first";

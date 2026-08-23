@@ -34,6 +34,12 @@
       #sheet {
         position: fixed;
         inset: 0;
+        /*
+          No focus ring. The sheet is given focus programmatically to claim the keyboard, not
+          because anyone tabbed to it, and a browser default outline drawn round the entire screen
+          would read as a rendering fault rather than as a focus indicator.
+        */
+        outline: none;
         display: flex;
         flex-direction: column;
         gap: 0.6rem;
@@ -203,7 +209,13 @@
       could throw. The button and Escape are also the tests for pointer and keyboard capture, which
       is deliberate — the way out is the experiment.
     -->
-    <div id="sheet">
+    <!--
+      `tabindex="-1"` makes the sheet focusable programmatically without putting it in the tab
+      order. Thirteen runs established that this modal receives no keyboard input at all until it is
+      clicked — every keystroke goes to Owlbear's page underneath — so the script now asks for focus
+      deliberately, and needs something it is allowed to give focus to.
+    -->
+    <div id="sheet" tabindex="-1">
       <div id="frame"></div>
 
       <h1>Fog Nudger — workspace probe <span id="variant">…</span></h1>

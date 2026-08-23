@@ -93,44 +93,65 @@ describe("channelVerdict", () => {
 });
 
 describe("describeKeyboardFocus", () => {
+  /** Nothing has happened yet, as a base to vary one piece of evidence at a time. */
+  const nothing = {
+    hadFocusAtOpen: false,
+    keysBeforeAnyPointer: 0,
+    keysAfterAPointer: 0,
+    focusWasAsked: false,
+    keysBeforeFocusAttempt: 0,
+  };
+
   it("distinguishes focus on open from focus after a click", () => {
     const beforeClick = describeKeyboardFocus({
+      ...nothing,
       hadFocusAtOpen: true,
       keysBeforeAnyPointer: 3,
-      keysAfterAPointer: 0,
+      keysBeforeFocusAttempt: 3,
     });
-    const afterClick = describeKeyboardFocus({
-      hadFocusAtOpen: false,
-      keysBeforeAnyPointer: 0,
-      keysAfterAPointer: 3,
-    });
+    const afterClick = describeKeyboardFocus({ ...nothing, keysAfterAPointer: 3 });
     expect(beforeClick).not.toBe(afterClick);
-    expect(beforeClick).toMatch(/without clicking/);
+    expect(beforeClick).toMatch(/no click/);
     expect(afterClick).toMatch(/only after a click/);
   });
 
+  it("separates focus we were given from focus we asked for", () => {
+    // The distinction the probe now exists to make. Both have keys arriving with no click; only the
+    // first proves the modal is focused on open, and once the page asks automatically the two are
+    // indistinguishable unless the order of the key and the request is kept.
+    const given = describeKeyboardFocus({
+      ...nothing,
+      keysBeforeAnyPointer: 2,
+      keysBeforeFocusAttempt: 2,
+      focusWasAsked: true,
+    });
+    const taken = describeKeyboardFocus({
+      ...nothing,
+      keysBeforeAnyPointer: 2,
+      keysBeforeFocusAttempt: 0,
+      focusWasAsked: true,
+    });
+    expect(given).not.toBe(taken);
+    expect(given).toMatch(/before we asked/);
+    expect(taken).toMatch(/asking for the keyboard works/);
+  });
+
   it("prefers the stronger evidence when both kinds of key arrived", () => {
-    // A key before any pointer proves focus on open outright, so later keys cannot downgrade it.
+    // A key before any pointer proves focus without a click outright, so later keys cannot
+    // downgrade it.
     expect(
       describeKeyboardFocus({
-        hadFocusAtOpen: false,
+        ...nothing,
         keysBeforeAnyPointer: 1,
+        keysBeforeFocusAttempt: 1,
         keysAfterAPointer: 9,
       }),
-    ).toMatch(/without clicking/);
+    ).toMatch(/no click/);
   });
 
   it("says nothing has been typed yet, and whether that is expected", () => {
-    const focused = describeKeyboardFocus({
-      hadFocusAtOpen: true,
-      keysBeforeAnyPointer: 0,
-      keysAfterAPointer: 0,
-    });
-    const unfocused = describeKeyboardFocus({
-      hadFocusAtOpen: false,
-      keysBeforeAnyPointer: 0,
-      keysAfterAPointer: 0,
-    });
+    const focused = describeKeyboardFocus({ ...nothing, hadFocusAtOpen: true });
+    const unfocused = describeKeyboardFocus(nothing);
     expect(focused).toMatch(/no keys yet/);
     expect(unfocused).toMatch(/no keys yet/);
     // The two must not read alike: one is "try typing", the other is "you will have to click

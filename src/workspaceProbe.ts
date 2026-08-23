@@ -106,6 +106,28 @@ const SELF_TEST_NUDGE = 60;
 /** How long to hold each end of the nudge, comfortably more than one poll interval. */
 const SELF_TEST_SETTLE_MS = 500;
 
+/**
+ * When the page asks for keyboard focus, having first measured what it gets without asking.
+ *
+ * After the passive sample above, deliberately, so the two never blur into one another. Thirteen
+ * runs settled the unasked case — no keystroke of any kind reaches this modal until it is clicked,
+ * so every key goes to Owlbear underneath — and that measurement is not worth repeating. What is
+ * still open is whether the keyboard can be *claimed*, which is the difference between a workspace
+ * with shortcuts and a pointer-only one.
+ */
+const FOCUS_ATTEMPT_MS = 800;
+
+/** How long after asking before the result is read, letting the focus change settle. */
+const FOCUS_SETTLE_MS = 150;
+
+/**
+ * How many movements to narrate per channel before falling silent and merely counting.
+ *
+ * A genuine leak during a drag would log one of these every poll and bury the rest of the run.
+ * Three is enough to establish that it is happening and roughly when.
+ */
+const MOVEMENTS_LOGGED_PER_CHANNEL = 3;
+
 const sheet = document.getElementById("sheet");
 const pad = document.getElementById("pad");
 const typing = document.getElementById("typing");
@@ -134,6 +156,14 @@ const tally = {
   /** Keys seen before any pointer event at all — the proof that focus did not need a click. */
   keysBeforeAnyPointer: 0,
   keysAfterAPointer: 0,
+  /**
+   * Keys that arrived before the page asked for focus.
+   *
+   * The only evidence that separates focus we were *given* from focus we *took*. Once the page asks
+   * automatically, a key with no click beforehand is explained equally well by either, and the
+   * order is the only thing that tells them apart.
+   */
+  keysBeforeFocusAttempt: 0,
   /** Viewport movements observed, split by which channel of ours was most recent. */
   blamed: { drag: 0, wheel: 0, key: 0, other: 0 } as Record<InputChannel, number>,
   polls: 0,
@@ -168,6 +198,20 @@ const selfTest = {
   ran: false,
   movementsSeen: 0,
   note: "not run yet",
+};
+
+/**
+ * What happened when the page asked for the keyboard.
+ *
+ * Kept apart from `hadFocusAtOpen` because they answer different questions and conflating them
+ * would lose the only interesting one: whether asking *changes* anything.
+ */
+const focusAttempt = {
+  made: false,
+  /** `document.hasFocus()` immediately before asking, and again after it settled. */
+  before: false,
+  after: false,
+  note: "not attempted yet",
 };
 
 let hadFocusAtOpen = false;
@@ -358,6 +402,8 @@ function render(): void {
     hadFocusAtOpen,
     keysBeforeAnyPointer: tally.keysBeforeAnyPointer,
     keysAfterAPointer: tally.keysAfterAPointer,
+    focusWasAsked: focusAttempt.made,
+    keysBeforeFocusAttempt: tally.keysBeforeFocusAttempt,
   });
 
   const leaked = dragVerdict === "leaking" || wheelVerdict === "leaking";
@@ -365,7 +411,7 @@ function render(): void {
     verdicts,
     `<b>input capture</b>\n` +
       `${leaked ? `<span class="bad">${capture}</span>` : capture}\n` +
-      `<b>keyboard</b>\n${focus}`,
+      `<b>keyboard</b>\n${focus}\n${focusAttempt.note}`,
   );
 
   const remaining = Math.max(0, LIFETIME_MS - (performance.now() - opened));
@@ -473,6 +519,26 @@ async function run(): Promise<void> {
         // box.
         const channel = attributeMovement(started, lastEventAt);
         tally.blamed[channel] += 1;
+
+        /*
+          Written the moment it happens, not only in the closing summary.
+
+          Owlbear tears this modal down on Escape without our dismissal ever running, and two runs
+          in the last session ended that way — reporting nothing at all about leaks, because the
+          only line that carries the tally is the one that never got written. A movement is the
+          single most important thing this page can observe, so it should not depend on being able
+          to say goodbye.
+
+          Capped, because a real leak during a drag would produce one of these per poll and bury
+          everything else in the log. Past the cap they are still counted, just not narrated.
+        */
+        if (tally.blamed[channel] <= MOVEMENTS_LOGGED_PER_CHANNEL) {
+          devLog(
+            "warn",
+            `workspace probe (${variant}): Owlbear's view MOVED — blamed on ${channel} ` +
+              `(#${tally.blamed[channel]} for that channel). Input is reaching Owlbear underneath.`,
+          );
+        }
       }
     }
     previous = { a, b };
@@ -494,18 +560,53 @@ async function run(): Promise<void> {
   loop();
 
   window.setTimeout(() => {
-    hadFocusAtOpen = document.hasFocus();
-    devLog(
-      "info",
-      `workspace probe (${variant}): ${FOCUS_SAMPLE_MS}ms after load, document.hasFocus() is ` +
-        `${hadFocusAtOpen} — whether the modal is focused without being clicked`,
-    );
-    render();
-  }, FOCUS_SAMPLE_MS);
-
-  window.setTimeout(() => {
     void runSelfTest();
   }, SELF_TEST_AT_MS);
+}
+
+/**
+ * Ask for the keyboard, and report honestly whether asking worked.
+ *
+ * Both calls are made because they can succeed independently: `window.focus()` asks the embedder to
+ * hand this frame the keyboard at all, and focusing an element decides where a key goes once it
+ * arrives. Either alone could leave the other half unsatisfied, and the failure would look the
+ * same — nothing happening.
+ *
+ * The result is deliberately not trusted from `document.hasFocus()` alone. A frame can report focus
+ * and still not be where keys land, so the honest confirmation is a keystroke actually arriving,
+ * which the first-key line records with the attempt's state attached.
+ */
+function claimTheKeyboard(): void {
+  if (stopped) return;
+
+  focusAttempt.before = document.hasFocus();
+  try {
+    window.focus();
+    if (sheet instanceof HTMLElement) sheet.focus({ preventScroll: true });
+  } catch (error) {
+    devLog("warn", "workspace probe: asking for focus threw", describeError(error));
+  }
+  focusAttempt.made = true;
+
+  window.setTimeout(() => {
+    focusAttempt.after = document.hasFocus();
+    const active = document.activeElement;
+    // Both halves, never one verdict. Focusing an element and the frame holding the keyboard are
+    // separate things that fail separately, and the first measurement of this showed exactly that
+    // split: activeElement became the sheet while document.hasFocus() stayed false.
+    focusAttempt.note =
+      `asked at ${FOCUS_ATTEMPT_MS}ms — hasFocus ${focusAttempt.before} → ` +
+      `${focusAttempt.after}, activeElement ${active instanceof HTMLElement && active.id ? `#${active.id}` : active ? active.tagName.toLowerCase() : "none"}`;
+    devLog(
+      "info",
+      `workspace probe (${variant}): asked for the keyboard — document.hasFocus() went ` +
+        `${focusAttempt.before} → ${focusAttempt.after}, activeElement is ` +
+        `${active ? active.tagName.toLowerCase() : "none"}` +
+        `${active instanceof HTMLElement && active.id ? `#${active.id}` : ""}. ` +
+        "Only a key actually arriving proves it worked.",
+    );
+    render();
+  }, FOCUS_SETTLE_MS);
 }
 
 /**
@@ -569,6 +670,27 @@ async function runSelfTest(): Promise<void> {
   ready, or `run()` throws on its first await, the page must still be able to demonstrate whether it
   receives input at all — that is the question, and it does not depend on Owlbear answering.
 */
+
+/*
+  Both focus timers are started here, at module load, and not inside `run()`.
+
+  Focus is a browser fact with nothing to do with Owlbear being ready, and putting these in `run()`
+  made them wait on two SDK round trips first — so a constant named for 300ms after load would have
+  measured 300ms after Owlbear answered, which on a cold open was two and a half seconds later. A
+  measurement labelled with a time it did not happen at is worse than no measurement, because it
+  gets quoted.
+*/
+window.setTimeout(() => {
+  hadFocusAtOpen = document.hasFocus();
+  devLog(
+    "info",
+    `workspace probe (${variant}): ${FOCUS_SAMPLE_MS}ms after load, document.hasFocus() is ` +
+      `${hadFocusAtOpen} — whether the modal is focused without being clicked or asking`,
+  );
+  render();
+}, FOCUS_SAMPLE_MS);
+
+window.setTimeout(claimTheKeyboard, FOCUS_ATTEMPT_MS);
 
 // The pad is the primary pointer test, so it is wired here with everything else rather than inside
 // `run()`. It sat there in the first draft and the consequence was immediate: outside a room
@@ -638,6 +760,7 @@ window.addEventListener("keydown", (event) => {
   // moment, and this is a fact about the whole session.
   if (!anyPointerYet) tally.keysBeforeAnyPointer += 1;
   else tally.keysAfterAPointer += 1;
+  if (!focusAttempt.made) tally.keysBeforeFocusAttempt += 1;
 
   /*
     The first key is logged the instant it arrives, rather than only in the closing summary.
@@ -652,7 +775,16 @@ window.addEventListener("keydown", (event) => {
     devLog(
       "info",
       `workspace probe (${variant}): FIRST KEY "${event.key}" reached the modal ` +
-        `${anyPointerYet ? "after a click" : "with no click first — focus was ours on open"}`,
+        `${anyPointerYet ? "after a click" : "with NO click"}, ` +
+        // Deliberately the same sentence the readout shows, from the same function, so the log and
+        // the screen cannot disagree about what was concluded from one keystroke.
+        describeKeyboardFocus({
+          hadFocusAtOpen,
+          keysBeforeAnyPointer: tally.keysBeforeAnyPointer,
+          keysAfterAPointer: tally.keysAfterAPointer,
+          focusWasAsked: focusAttempt.made,
+          keysBeforeFocusAttempt: tally.keysBeforeFocusAttempt,
+        }),
     );
   }
 
