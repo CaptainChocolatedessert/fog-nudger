@@ -78,13 +78,21 @@ const LIFETIME_MS = 60_000;
 const POLL_MS = 150;
 
 /**
- * When focus is sampled, and why not immediately.
+ * How often to ask again while the keyboard is still not ours.
  *
- * A newly-opened iframe may be handed focus a beat after its script runs, so reading
- * `document.hasFocus()` at load would report "not focused" about the timing rather than about the
- * modal. The readout names the delay so the sample is not mistaken for an instant one.
+ * The claim is made at load, but an iframe that is not yet ready to take focus will refuse it
+ * silently, so one attempt is a coin toss. Asking repeatedly until it sticks is the whole mechanism
+ * for closing the window in which keys go to Owlbear.
  */
-const FOCUS_SAMPLE_MS = 300;
+const FOCUS_RETRY_MS = 100;
+
+/**
+ * How long to keep asking before giving up and saying so.
+ *
+ * Three seconds. Past that the failure is real rather than a slow start, and continuing to grab at
+ * focus every tenth of a second would be a page fighting its user for the rest of the session.
+ */
+const FOCUS_RETRY_LIMIT_MS = 3_000;
 
 /**
  * When the leak detector's control experiment runs.
@@ -105,17 +113,6 @@ const SELF_TEST_NUDGE = 60;
 
 /** How long to hold each end of the nudge, comfortably more than one poll interval. */
 const SELF_TEST_SETTLE_MS = 500;
-
-/**
- * When the page asks for keyboard focus, having first measured what it gets without asking.
- *
- * After the passive sample above, deliberately, so the two never blur into one another. Thirteen
- * runs settled the unasked case — no keystroke of any kind reaches this modal until it is clicked,
- * so every key goes to Owlbear underneath — and that measurement is not worth repeating. What is
- * still open is whether the keyboard can be *claimed*, which is the difference between a workspace
- * with shortcuts and a pointer-only one.
- */
-const FOCUS_ATTEMPT_MS = 800;
 
 /** How long after asking before the result is read, letting the focus change settle. */
 const FOCUS_SETTLE_MS = 150;
@@ -208,10 +205,18 @@ const selfTest = {
  */
 const focusAttempt = {
   made: false,
-  /** `document.hasFocus()` immediately before asking, and again after it settled. */
+  /** True while the keyboard is ours; cleared if it goes back to Owlbear. */
+  held: false,
+  tries: 0,
+  /** How long after load the keyboard actually became ours — the width of the dead window. */
+  claimedAtMs: 0,
+  losses: 0,
+  /** Set once the retry budget is spent, so the failure is reported once rather than per click. */
+  gaveUp: false,
+  /** `document.hasFocus()` immediately before the first ask, and again after the latest settled. */
   before: false,
   after: false,
-  note: "not attempted yet",
+  note: "asking for the keyboard…",
 };
 
 let hadFocusAtOpen = false;
@@ -475,7 +480,6 @@ async function run(): Promise<void> {
   }
 
   devLog("info", `workspace probe (${variant}): modal is alive and running its own script`);
-  say(variantLabel, `· ${variant}`);
 
   [viewWidth, viewHeight] = await Promise.all([
     OBR.viewport.getWidth(),
@@ -577,10 +581,21 @@ async function run(): Promise<void> {
  * which the first-key line records with the attempt's state attached.
  */
 function claimTheKeyboard(): void {
-  if (stopped) return;
+  if (stopped || focusAttempt.held) return;
 
-  focusAttempt.before = document.hasFocus();
+  // The last honest reading of the unasked state, taken once, immediately before we interfere with
+  // it. After the first attempt this would only be measuring our own effect.
+  if (!focusAttempt.made) {
+    focusAttempt.before = document.hasFocus();
+    hadFocusAtOpen = focusAttempt.before;
+  }
+
+  focusAttempt.tries += 1;
   try {
+    // Both calls, because they can succeed independently: `window.focus()` asks the embedder to
+    // give this frame the keyboard at all, and focusing an element decides where a key goes once it
+    // arrives. Measured in a room, they do come apart — activeElement became the sheet on every
+    // attempt, while hasFocus only turned true inside Owlbear.
     window.focus();
     if (sheet instanceof HTMLElement) sheet.focus({ preventScroll: true });
   } catch (error) {
@@ -589,25 +604,100 @@ function claimTheKeyboard(): void {
   focusAttempt.made = true;
 
   window.setTimeout(() => {
+    if (stopped) return;
     focusAttempt.after = document.hasFocus();
     const active = document.activeElement;
-    // Both halves, never one verdict. Focusing an element and the frame holding the keyboard are
-    // separate things that fail separately, and the first measurement of this showed exactly that
-    // split: activeElement became the sheet while document.hasFocus() stayed false.
+    const activeName =
+      active instanceof HTMLElement && active.id
+        ? `#${active.id}`
+        : active
+          ? active.tagName.toLowerCase()
+          : "none";
+
+    if (focusAttempt.after) {
+      focusAttempt.held = true;
+      focusAttempt.claimedAtMs = performance.now() - opened;
+      // Both halves reported, never one verdict — focusing an element and the frame holding the
+      // keyboard fail separately.
+      focusAttempt.note =
+        `claimed after ${focusAttempt.tries} ` +
+        `${focusAttempt.tries === 1 ? "try" : "tries"} at ` +
+        `${focusAttempt.claimedAtMs.toFixed(0)}ms, activeElement ${activeName}`;
+      devLog(
+        "info",
+        `workspace probe (${variant}): keyboard CLAIMED ${focusAttempt.claimedAtMs.toFixed(0)}ms ` +
+          `after load, on try ${focusAttempt.tries}, activeElement ${activeName}. ` +
+          "Anything typed before this went to Owlbear.",
+      );
+      render();
+      return;
+    }
+
+    const elapsed = performance.now() - opened;
+    if (elapsed < FOCUS_RETRY_LIMIT_MS) {
+      // Silent between attempts on purpose: thirty log lines saying "still not ours" would bury the
+      // one line that matters, which is the moment it becomes ours.
+      focusAttempt.note = `asking… ${focusAttempt.tries} tries, activeElement ${activeName}`;
+      window.setTimeout(claimTheKeyboard, FOCUS_RETRY_MS);
+      return;
+    }
+
     focusAttempt.note =
-      `asked at ${FOCUS_ATTEMPT_MS}ms — hasFocus ${focusAttempt.before} → ` +
-      `${focusAttempt.after}, activeElement ${active instanceof HTMLElement && active.id ? `#${active.id}` : active ? active.tagName.toLowerCase() : "none"}`;
+      `NEVER claimed — ${focusAttempt.tries} tries over ` +
+      `${FOCUS_RETRY_LIMIT_MS}ms, activeElement ${activeName}`;
+    // Once per run. Every click after the give-up makes a fresh attempt and lands back here, so
+    // logging each would fill the log with one repeated sentence in precisely the session where
+    // something else is worth reading.
+    const alreadySaid = focusAttempt.gaveUp;
+    focusAttempt.gaveUp = true;
+    if (alreadySaid) {
+      render();
+      return;
+    }
     devLog(
-      "info",
-      `workspace probe (${variant}): asked for the keyboard — document.hasFocus() went ` +
-        `${focusAttempt.before} → ${focusAttempt.after}, activeElement is ` +
-        `${active ? active.tagName.toLowerCase() : "none"}` +
-        `${active instanceof HTMLElement && active.id ? `#${active.id}` : ""}. ` +
-        "Only a key actually arriving proves it worked.",
+      "error",
+      `workspace probe (${variant}): keyboard NEVER claimed after ${focusAttempt.tries} tries ` +
+        `over ${FOCUS_RETRY_LIMIT_MS}ms — activeElement ${activeName}. Every key is going to ` +
+        "Owlbear.",
     );
     render();
   }, FOCUS_SETTLE_MS);
 }
+
+/**
+ * Notice the keyboard going back to Owlbear.
+ *
+ * Losing focus is silent and looks exactly like a workspace whose shortcuts have stopped working
+ * for no reason. It is the same failure as the gap before the claim, arriving later.
+ *
+ * **It does not fight back.** Re-focusing on every blur would mean a page that will not let the GM
+ * alt-tab away from it, which is worse than a lost shortcut. A run that loses focus and never gets
+ * it back is a result worth having rather than a bug to paper over.
+ */
+window.addEventListener("blur", () => {
+  if (stopped || !focusAttempt.held) return;
+  focusAttempt.held = false;
+  focusAttempt.losses += 1;
+  focusAttempt.note = `LOST the keyboard (${focusAttempt.losses}x) — keys are Owlbear's again`;
+  devLog(
+    "warn",
+    `workspace probe (${variant}): LOST keyboard focus after holding it — ` +
+      `${focusAttempt.losses} time(s) this run. Keys go to Owlbear until it is clicked again.`,
+  );
+  render();
+});
+
+/**
+ * Take it back when the GM clicks into the sheet.
+ *
+ * Not a fight — this only fires on a deliberate pointer press on our own surface, which is as clear
+ * a statement of "I am working here" as the page can get.
+ */
+window.addEventListener("pointerdown", () => {
+  if (stopped || focusAttempt.held) return;
+  claimTheKeyboard();
+});
+
 
 /**
  * Move the viewport deliberately, and find out whether the detector notices.
@@ -672,25 +762,24 @@ async function runSelfTest(): Promise<void> {
 */
 
 /*
-  Both focus timers are started here, at module load, and not inside `run()`.
+  The keyboard is claimed here, at module load — as early as this page can run at all, and not
+  inside `run()`.
 
-  Focus is a browser fact with nothing to do with Owlbear being ready, and putting these in `run()`
-  made them wait on two SDK round trips first — so a constant named for 300ms after load would have
-  measured 300ms after Owlbear answered, which on a cold open was two and a half seconds later. A
-  measurement labelled with a time it did not happen at is worse than no measurement, because it
-  gets quoted.
+  Focus is a browser fact with nothing to do with Owlbear being ready. Waiting on the SDK made an
+  earlier version of this measure "300ms after load" three seconds after load, and the delay that
+  replaced it cost a real keystroke: a GM typed 1 through 9 and the log holds eight digits, because
+  the "1" landed before the claim and went to Owlbear instead. Every millisecond between the sheet
+  appearing and the keyboard being ours is a millisecond in which a key does something invisible in
+  somebody else's application.
+
+  What remains is the iframe's own load — 2.4 seconds on a cold open — which is Owlbear's to own.
+  This page cannot start earlier than it starts.
 */
-window.setTimeout(() => {
-  hadFocusAtOpen = document.hasFocus();
-  devLog(
-    "info",
-    `workspace probe (${variant}): ${FOCUS_SAMPLE_MS}ms after load, document.hasFocus() is ` +
-      `${hadFocusAtOpen} — whether the modal is focused without being clicked or asking`,
-  );
-  render();
-}, FOCUS_SAMPLE_MS);
+claimTheKeyboard();
 
-window.setTimeout(claimTheKeyboard, FOCUS_ATTEMPT_MS);
+// Read straight off the URL, so the heading names the variant whether or not the SDK ever answers.
+// It sat inside `run()` and showed a bare placeholder on any page that never reached a room.
+say(variantLabel, `· ${variant}`);
 
 // The pad is the primary pointer test, so it is wired here with everything else rather than inside
 // `run()`. It sat there in the first draft and the consequence was immediate: outside a room
