@@ -669,6 +669,56 @@ a join that Dynamic Fog turns into a wall across a room; and it uses tools the G
 is the same argument §4 makes for editing fog natively. Not built; the highest-value thing that is
 not.
 
+#### The workspace probe, input half — measured in a room, 2026-08-23
+
+The unproven combination was a `fullScreen` modal **without** `disablePointerEvents`. It is proven
+now, and the answer the surface rests on came back the right way. Fifteen runs.
+
+**Input capture is total, and Owlbear gets none of it.** Drags arrive as drags — around 66 moves per
+gesture, dense enough for a brush. Every wheel event arrives `cancelable`, 86 of 86, so a zoom can
+be stopped rather than merely watched. Right-clicks reach us. Across every run, with hundreds of
+polls, **Owlbear's viewport never moved once**.
+
+**That zero is a measurement rather than an absence, and only because the detector was made to
+fail.** The sheet is opaque, so the map it might be leaking to is exactly what it covers: the
+question cannot be answered by looking, which is why the page polls two fixed world points and
+blames any movement on whichever input channel fired most recently. Attribution by timing, and
+labelled as a guess. It reported "moved 0 times" for four runs before anything checked whether it
+*could* report anything else — §8's rule about a clean diagnostic, walked into again. So the probe
+now moves the viewport itself, holds, and puts it back: **saw 2 of an expected 2**, every run since.
+
+**The keyboard is a different animal, and it is the one real finding.** It is not given — it is
+**taken**. Nothing reaches this modal unasked, ever: fourteen runs, waits from under two seconds to
+thirteen, including one where the GM typed nine digits and not one arrived. Calling `window.focus()`
+plus focusing an element claims it on the **first try, about 16ms** after the page's own script
+starts, after which keys arrive with no click.
+
+- **So the keyboard is the one channel that leaks, and it leaks completely** until claimed. Those
+  keystrokes are not merely lost — they reach Owlbear's page and do whatever they do there, under an
+  opaque sheet. The viewport detector cannot see that, because a key that triggers something other
+  than a camera move moves nothing.
+- **Escape belongs to whoever holds focus.** Before the claim, Owlbear closed the modal itself and
+  our handler never ran — which is why a modal dismissed by Escape used to leave no closing line at
+  all. After the claim, Escape is ours.
+- **The dead window is the iframe's load, not the claim.** Measured at 2,396ms cold against 166ms
+  for the claim, and the GM lost four keystrokes to it. **It is a development artifact, on the
+  evidence**: two consecutive opens went from click to first line of code in **76ms**, thirty times
+  faster, because the module graph was already fetched. Vite serves this page unbundled in
+  development, SDK included. Worth re-measuring against a production build before treating it as
+  real; if it survives, the panel is same-origin and already open, so prefetching the workspace's
+  graph would make every open warm.
+
+**`hidePaper` and `hideBackdrop` make no observable difference under `fullScreen`.** Both variants
+report the same rectangle and look identical. There is no frame to evaluate, which retires that
+question rather than answering it.
+
+**`iframe == viewport` holds without `disablePointerEvents` too** — 1246x1242 both, every run. The
+click-through overlay's finding was not a property of that flag.
+
+**Not tested, deliberately:** pan and zoom, and the frame cost of drawing a map-sized image per
+frame. Navigation was held back for a separate decision (below), and frame cost only means something
+once there is something being drawn every frame.
+
 ### Stage one is two things in series — settled 2026-08-23 (user)
 
 The GM's question changes partway through stage one, and the panel says so with two numbered
@@ -1847,21 +1897,23 @@ the moment the map changes.
 
 Not built; recorded so the order and the reasoning survive a session change.
 
-#### 0. The workspace probe — this is the immediate next thing
+#### 0. The workspace probe — input half done, navigation still open
 
 **Stage one moves to its own opaque, interactive surface.** The reasoning is in §4 under "Superseding
 all of the above"; the short version is that the click-through overlay is mostly machinery for coping
 with not owning the transform, and that everything queued below wants interaction it structurally
 cannot provide.
 
-**The probe tests one thing: does pan and zoom feel right?** A full-screen opaque modal that draws
-the map and navigates it. No mask, no controls, no marks. If the navigation is wrong beside
-Owlbear's own, the cost was a probe and the working overlay is untouched.
+**Done, 2026-08-23: does the surface own its input?** Yes, completely — full results in §4 under
+"The workspace probe, input half". Pointer, wheel and right-click are ours with no leak to Owlbear,
+against a detector that was made to fail before its zero was believed. The keyboard has to be
+*claimed* rather than being given, and until it is, every keystroke goes to Owlbear's page instead;
+claiming it succeeds on the first try. `hidePaper` turns out to change nothing.
 
-Worth measuring while it is up, since they are the other unknowns: **frame cost** with a
-map-sized image being drawn per frame, and how a `fullScreen` modal behaves **without**
-`disablePointerEvents` — keyboard focus, scroll ownership, and whether a visible frame gets in the
-way.
+**Still open, and it was always the harder half: does pan and zoom feel right?** That is the
+question nothing but a human's hands can answer, and it is why item 0 was a probe rather than a
+build. Also unmeasured: **frame cost** with a map-sized image drawn per frame, which only means
+something once navigation exists to drive it.
 
 Everything from 1 to 4 below is then built **on that surface**, not on the click-through overlay.
 
