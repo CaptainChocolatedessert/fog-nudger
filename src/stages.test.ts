@@ -19,8 +19,10 @@ import {
   maskFingerprint,
   normaliseColour,
   normaliseSettings,
+  isPostReading,
   PARAMETER_KIND,
   PARAMETER_STAGE,
+  readingFingerprint,
   readParameter,
   resetStage,
   SETTING_LIMITS,
@@ -95,23 +97,11 @@ describe("maskFingerprint", () => {
     }
   });
 
-  it("does NOT change for a GAPS parameter", () => {
-    // The gap marks are derived from the mask and change nothing about it, so widening the search
-    // must not re-binarise. This is the same trap the display test guards, one value along: a gap
-    // parameter filed as pipeline would cost 690ms to arrive at a mask identical to the one in
-    // hand, on every release of the slider.
-    const base = maskFingerprint(DEFAULT_SETTINGS);
-    for (const name of ALL_NAMES) {
-      if (PARAMETER_KIND[name] !== "gaps") continue;
-      const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
-      expect(maskFingerprint(changed)).toBe(base);
-    }
-  });
-
-  it("has at least one parameter of each kind, so none of the three tests above is vacuous", () => {
+  it("has at least one parameter of each kind, so neither test above is vacuous", () => {
     // Every test in this block is a loop with a filter, and a filter that matches nothing passes.
-    // A rename that emptied one of them would leave a green suite asserting nothing.
-    for (const kind of ["pipeline", "gaps", "display"] as const) {
+    // A rename that emptied one of them would leave a green suite asserting nothing — which is how
+    // the short-lived `gaps` kind would have gone unnoticed after its last member became pipeline.
+    for (const kind of ["pipeline", "display"] as const) {
       expect(ALL_NAMES.filter((name) => PARAMETER_KIND[name] === kind).length).toBeGreaterThan(0);
     }
   });
@@ -144,6 +134,57 @@ describe("maskFingerprint", () => {
     const a = writeParameter(DEFAULT_SETTINGS, "sauvolaK", 0.2);
     const b = writeParameter(DEFAULT_SETTINGS, "sauvolaK", 0.4);
     expect(maskFingerprint(a)).not.toBe(maskFingerprint(b));
+  });
+});
+
+/**
+ * The second cache boundary, and the one that can be wrong rather than merely useless.
+ *
+ * The reading is reused whenever this fingerprint is unchanged, so a parameter that feeds
+ * binarisation and is *not* covered here would be a stale mask reported as current — the failure
+ * this project has already paid for once. The declaration is written by exclusion so that the
+ * default for anything new is to invalidate; these tests pin that polarity.
+ */
+describe("readingFingerprint", () => {
+  it("changes for every reading parameter that is not declared post-reading", () => {
+    const base = readingFingerprint(DEFAULT_SETTINGS);
+    for (const name of stageParameters("read")) {
+      if (PARAMETER_KIND[name] !== "pipeline" || isPostReading(name)) continue;
+      const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
+      expect(readingFingerprint(changed)).not.toBe(base);
+    }
+  });
+
+  it("does NOT change for a parameter composed on top of the reading", () => {
+    // The whole point: sweeping a 1b filter or a gap slider must not re-binarise a map that has not
+    // changed. This is what turns a 1.4s notch into a 0.7s one.
+    const base = readingFingerprint(DEFAULT_SETTINGS);
+    for (const name of ALL_NAMES) {
+      if (!isPostReading(name)) continue;
+      const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
+      expect(readingFingerprint(changed)).toBe(base);
+    }
+  });
+
+  it("covers strictly less than the mask fingerprint, and every post-reading parameter is in it", () => {
+    // A post-reading parameter that the *mask* fingerprint also ignored would be a setting the GM
+    // could change with no effect at all, silently.
+    for (const name of ALL_NAMES) {
+      if (!isPostReading(name)) continue;
+      expect(PARAMETER_KIND[name]).toBe("pipeline");
+      expect(PARAMETER_STAGE[name]).toBe("read");
+      const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
+      expect(maskFingerprint(changed)).not.toBe(maskFingerprint(DEFAULT_SETTINGS));
+    }
+  });
+
+  it("declares at least one parameter on each side of the boundary", () => {
+    const post = ALL_NAMES.filter(isPostReading);
+    const reading = stageParameters("read").filter(
+      (name) => PARAMETER_KIND[name] === "pipeline" && !isPostReading(name),
+    );
+    expect(post.length).toBeGreaterThan(0);
+    expect(reading.length).toBeGreaterThan(0);
   });
 });
 

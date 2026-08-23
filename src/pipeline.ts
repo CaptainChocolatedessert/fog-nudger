@@ -36,7 +36,7 @@
  */
 
 import { devLog } from "./devlog";
-import { describeSettings, maskFingerprint, type Settings } from "./settings";
+import { describeSettings, maskFingerprint, readingFingerprint, type Settings } from "./settings";
 import { readSettings } from "./settingsStore";
 import { loadMapRaster, readGridDpi, resolveTraceMap } from "./map/mapImage";
 import type { Image as ImageItem } from "@owlbear-rodeo/sdk";
@@ -69,6 +69,7 @@ import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
 import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
+import { applyGapFill, findGaps, type GapFinding } from "./trace/gaps";
 import { labelSpace } from "./trace/label";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
@@ -139,8 +140,8 @@ const MAX_SIMPLIFY_INK_WIDTHS = 8;
  * still reports every stage in the same order. The only thing that changes is whether the mask was
  * computed just now or a moment ago, and that is stated in the log on every run.
  */
-interface MaskStage {
-  /** Identity of the map and the reading settings that produced this. See `maskIdentity`. */
+interface ReadingStage {
+  /** Identity of the map and the *reading* settings that produced this. See `readingIdentity`. */
   readonly fingerprint: string;
   readonly mapId: string;
   readonly name: string;
@@ -153,18 +154,50 @@ interface MaskStage {
   readonly rawField: ScalarField;
   /** Carries the RAW mask, the polarity evidence and the measured ink width. */
   readonly reading: PolarityReading;
-  /**
-   * The mask everything downstream actually uses: the reading's, after the minimum-stroke-width
-   * opening. Identical to `reading.mask` when that control is off, which is the default.
-   *
-   * Kept separate rather than replacing it, because the two answer different questions. The raw
-   * reading is what the ink width and the polarity were measured from and must stay that way, or
-   * the unit the threshold is denominated in moves with the threshold.
-   */
-  readonly mask: BinaryMask;
   readonly chosenCoverage: number;
 }
 
+interface MaskStage extends ReadingStage {
+  /** Identity of the map and *all* the reading-stage settings. See `maskIdentity`. */
+  readonly maskFingerprint: string;
+  /**
+   * The ink as **read**: the reading's mask after the two 1b filters, before anything is invented.
+   *
+   * This is what the workspace draws as ink, and it is deliberately not the same thing as `mask`.
+   * Drawing the filled version would put invented pixels on screen indistinguishable from read ones,
+   * which `DESIGN.md` §8 forbids — they get their own colour on their own layer instead.
+   */
+  readonly base: BinaryMask;
+  /**
+   * The ink everything downstream derives regions from: `base` plus the breaks the fill repaired.
+   *
+   * ## The composition, and where it is going
+   *
+   * The final ink is a stack of layers rather than a single filtered mask (user, 2026-08-23):
+   *
+   * ```
+   * basic ink  −  GM-suppressed areas  +  gap fills  +  GM-drawn ink
+   * ```
+   *
+   * Two of those four exist today — the basic ink and the gap fills — and the other two are
+   * `DESIGN.md` §11 items 4 and 5. The order is not arbitrary: suppression comes before the gap
+   * search so that repairs are derived from the ink the GM has already corrected, and GM-drawn ink
+   * comes last so nothing automatic second-guesses a line drawn deliberately.
+   */
+  readonly mask: BinaryMask;
+  readonly gaps: GapFinding;
+}
+
+/**
+ * Two caches, one per half, and the split is what makes a slider sweep bearable.
+ *
+ * The reading — binarise, decide polarity, measure the ink width — is about 690ms of a 1.4s run and
+ * depends on none of the filters or repairs composed on top of it. Cached on its own, a sweep of the
+ * 1b filters or either gap slider re-runs only the cheap half. `settings.ts` declares which
+ * parameters are composed on top, by exclusion, so that a forgotten declaration makes this cache
+ * useless rather than wrong.
+ */
+let cachedReading: ReadingStage | null = null;
 let cachedMask: MaskStage | null = null;
 
 /**
@@ -181,7 +214,7 @@ let cachedMask: MaskStage | null = null;
  * own `lastModified` would very likely cover the geometry on its own, but it is undocumented
  * bookkeeping and the explicit fields cost nothing but a string concatenation.
  */
-function maskIdentity(map: ImageItem, dpi: number, settings: Settings): string {
+function mapIdentity(map: ImageItem, dpi: number): string {
   return [
     map.id,
     map.lastModified,
@@ -192,8 +225,22 @@ function maskIdentity(map: ImageItem, dpi: number, settings: Settings): string {
     `rot:${map.rotation}`,
     `grid:${map.grid.dpi},${map.grid.offset.x},${map.grid.offset.y}`,
     `dpi:${dpi}`,
-    maskFingerprint(settings),
   ].join("|");
+}
+
+function maskIdentity(map: ImageItem, dpi: number, settings: Settings): string {
+  return `${mapIdentity(map, dpi)}|${maskFingerprint(settings)}`;
+}
+
+/**
+ * What a cached *reading* is valid for: the same map, read the same way.
+ *
+ * A strict prefix of the above. Everything the two share is the map's own identity and geometry;
+ * the difference is that the filters and repairs composed on top of the reading do not appear here,
+ * because none of them can change what binarisation produced.
+ */
+function readingIdentity(map: ImageItem, dpi: number, settings: Settings): string {
+  return `${mapIdentity(map, dpi)}|${readingFingerprint(settings)}`;
 }
 
 /**
@@ -303,12 +350,19 @@ export type TraceOutcome =
  *
  * Returns `null` on the two failures a GM can act on, having already logged which one it was.
  */
-async function computeMask(
+/**
+ * The expensive half: turn the map into a binary mask, and measure what it is made of.
+ *
+ * Ends deliberately at the last thing that reads the *image*. Everything after this point works on
+ * the mask alone — filters, repairs, and eventually the GM's own suppression and ink — which is what
+ * makes this the right place to cache.
+ */
+async function computeReading(
   map: ImageItem,
   dpi: number,
   settings: Settings,
   fingerprint: string,
-): Promise<MaskStage | null> {
+): Promise<ReadingStage | null> {
   const raster = await loadMapRaster(map);
   if (!raster) return null;
 
@@ -510,6 +564,31 @@ async function computeMask(
     }
   }
 
+  return {
+    fingerprint,
+    mapId: raster.mapId,
+    name: raster.name,
+    plan,
+    bounds,
+    dpi,
+    placement,
+    pxPerSquare,
+    rawField,
+    reading,
+    chosenCoverage,
+  };
+}
+
+/**
+ * The cheap half: compose the ink the regions come from, out of the reading and everything the GM
+ * has said about it.
+ *
+ * Synchronous, because everything here works on arrays already in hand. That is the same property
+ * that lets it be re-run without re-reading the map.
+ */
+function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: string): MaskStage {
+  const { plan, pxPerSquare, reading } = source;
+
   // ## Ink that is not linework
   //
   // Runs before labelling because it explains a class of result labelling cannot: a filled area
@@ -602,8 +681,57 @@ async function computeMask(
     }
   }
 
+  // ## Breaks in the linework, and the repair of the ones the GM asked for
+  //
+  // Runs last of the ink stages, and after the minimum stroke width specifically: part of its job
+  // is repairing what that control severed, so it has to see the damage.
+  //
+  // The fill adds the pixels of **marked** breaks and nothing else — never a blanket closing. A
+  // blanket closing would also seal channels that failed the travel test, the clearest example being
+  // a narrow doorway beside a corner, and it would do so with nothing to see. See `gaps.ts`.
+  const gapStarted = performance.now();
+  const gaps = findGaps(filteredMask, {
+    widthPx: settings.trace.gapWidthPx,
+    travelPx: settings.trace.gapTravelPx,
+    fillPx: settings.trace.gapFillPx,
+  });
+  const inkedMask = applyGapFill(filteredMask, gaps.labels);
+
+  if (gaps.searchRadius > 0) {
+    devLog(
+      "info",
+      `trace: breaks in ${Math.round(performance.now() - gapStarted)}ms — search radius ` +
+        `${gaps.searchRadius}px found ${gaps.channels} narrow channels, ${gaps.through} passing ` +
+        `through; ${gaps.marks.length} had banks more than ${settings.trace.gapTravelPx}px apart ` +
+        `along the ink and are marked. ` +
+        (gaps.fillRadius > 0
+          ? `Fill at ${settings.trace.gapFillPx}px (radius ${gaps.fillRadius}px) closed ` +
+            `${gaps.filled} of them, inventing ${gaps.filledArea} px of ink.`
+          : `Fill is off, so all ${gaps.marks.length} are left open.`),
+    );
+    // The number that says whether the marks are worth reading. A map reporting hundreds is either
+    // drawn with hollow walls or has a reading that is falling apart, and either way the count is
+    // the signal rather than any individual ring.
+    if (gaps.marks.length > 200) {
+      devLog(
+        "warn",
+        `trace: ${gaps.marks.length} breaks is a great many for one map. Two usual causes: walls ` +
+          `drawn as two parallel strokes, whose hollow interiors are all narrow channels, or a ` +
+          `reading that is breaking the linework up. Narrow the largest break to mark, or look at ` +
+          `the ink before trusting the rings.`,
+      );
+    }
+    if (gaps.budgetHits > 0) {
+      devLog(
+        "warn",
+        `trace: ${gaps.budgetHits} breaks were marked because the search ran out of budget rather ` +
+          `than because the ink was broken. They are never filled. Lower the same-wall distance.`,
+      );
+    }
+  }
+
   const blobStarted = performance.now();
-  const blobs = findInkBlobs(filteredMask, {
+  const blobs = findInkBlobs(inkedMask, {
     pxPerSquare,
     minSquares: MIN_BLOB_SQUARES,
     minThickness: (reading.inkWidth ?? pxPerSquare * 0.1) * BLOB_INK_WIDTHS,
@@ -614,29 +742,62 @@ async function computeMask(
       `${describeInkBlobs(blobs, plan.width, plan.height)}`,
   );
 
-  return {
-    fingerprint,
-    mapId: raster.mapId,
-    name: raster.name,
-    plan,
-    bounds,
-    dpi,
-    placement,
-    pxPerSquare,
-    rawField,
-    reading,
-    mask: filteredMask,
-    chosenCoverage,
-  };
+  return { ...source, maskFingerprint, base: filteredMask, mask: inkedMask, gaps };
+}
+
+/**
+ * Get a mask for these settings, reusing whichever halves are still valid.
+ *
+ * The only place either cache is read or written, so there is one answer to "may this be reused"
+ * rather than one per caller. Which halves ran is reported by the caller, every time: a run that
+ * reused a reading and a run that took one are not the same run, and only the second can be wrong
+ * about the map.
+ */
+async function resolveMask(
+  map: ImageItem,
+  dpi: number,
+  settings: Settings,
+): Promise<{ stage: MaskStage; readingReused: boolean; maskReused: boolean } | null> {
+  const maskPrint = maskIdentity(map, dpi, settings);
+  if (cachedMask && cachedMask.maskFingerprint === maskPrint) {
+    return { stage: cachedMask, readingReused: true, maskReused: true };
+  }
+
+  const readingPrint = readingIdentity(map, dpi, settings);
+  const readingReused = cachedReading !== null && cachedReading.fingerprint === readingPrint;
+  const source = readingReused
+    ? cachedReading!
+    : await computeReading(map, dpi, settings, readingPrint);
+
+  if (!source) {
+    cachedReading = null;
+    cachedMask = null;
+    return null;
+  }
+
+  cachedReading = source;
+  cachedMask = composeInk(source, settings, maskPrint);
+  return { stage: cachedMask, readingReused, maskReused: false };
 }
 
 /** What the overlay needs: the mask, and where the raster sits in the world. */
 export interface MaskForOverlay {
+  /**
+   * The ink as **read**, before anything was invented — what the surface draws as ink.
+   *
+   * Deliberately not the filled mask. The filled pixels are handed over separately in `gaps`, so
+   * they can be drawn in their own colour: `DESIGN.md` §8 requires that invented ink never look
+   * like read ink, and a surface handed only the composite could not tell them apart.
+   */
   readonly mask: BinaryMask;
+  /** The breaks found, each carrying whether the fill closed it. */
+  readonly gaps: GapFinding;
   readonly bounds: WorldBounds;
   readonly mapName: string;
   /** Whether this run recomputed the mask or reused the cached one, for the log. */
   readonly reused: boolean;
+  /** Whether the expensive half was reused even though the mask was not. */
+  readonly readingReused: boolean;
 }
 
 /**
@@ -676,28 +837,16 @@ export async function maskForOverlay(
   if (!map) return null;
 
   const dpi = await readGridDpi();
-  const fingerprint = maskIdentity(map, dpi, settings);
+  const resolved = await resolveMask(map, dpi, settings);
+  if (!resolved) return null;
 
-  if (cachedMask && cachedMask.fingerprint === fingerprint) {
-    return {
-      mask: cachedMask.mask,
-      bounds: cachedMask.bounds,
-      mapName: cachedMask.name,
-      reused: true,
-    };
-  }
-
-  const computed = await computeMask(map, dpi, settings, fingerprint);
-  if (!computed) {
-    cachedMask = null;
-    return null;
-  }
-  cachedMask = computed;
   return {
-    mask: computed.mask,
-    bounds: computed.bounds,
-    mapName: computed.name,
-    reused: false,
+    mask: resolved.stage.base,
+    gaps: resolved.stage.gaps,
+    bounds: resolved.stage.bounds,
+    mapName: resolved.stage.name,
+    reused: resolved.maskReused,
+    readingReused: resolved.readingReused,
   };
 }
 
@@ -740,37 +889,31 @@ export async function runTrace(): Promise<TraceOutcome> {
   // therefore the Sauvola radius — a regridded scene needs a fresh mask even though the map image
   // has not changed.
   const dpi = await readGridDpi();
-  const fingerprint = maskIdentity(map, dpi, settings);
 
-  let mask: MaskStage;
-  if (cachedMask && cachedMask.fingerprint === fingerprint) {
-    mask = cachedMask;
-    // The mask-level diagnostics above — resolution, placement, luminance, polarity, ink width,
-    // ink shapes — belong to the run that computed it and are not repeated. So restate the few
-    // figures the rest of this run is built on, or a reader of the log has numbers below with
-    // nothing above them.
+  const resolved = await resolveMask(map, dpi, settings);
+  if (!resolved) {
+    return {
+      ok: false,
+      message: `Could not read pixels from "${map.name || "map"}" — see the console.`,
+    };
+  }
+  const mask = resolved.stage;
+
+  if (resolved.readingReused) {
+    // The reading's own diagnostics — resolution, placement, luminance, polarity, ink width —
+    // belong to the run that took it and are not repeated. So restate the few figures the rest of
+    // this run is built on, or a reader of the log has numbers below with nothing above them.
     devLog(
       "info",
-      `trace: reused the cached mask for "${mask.name}" — reading settings and map unchanged, ` +
-        `so stage one was skipped. ${mask.plan.width}x${mask.plan.height}, ${mask.reading.polarity}` +
+      `trace: reused the cached reading for "${mask.name}" — the map and the reading settings are ` +
+        `unchanged, so the expensive half was skipped` +
+        (resolved.maskReused ? " and so was composing the ink" : ", and the ink was recomposed") +
+        `. ${mask.plan.width}x${mask.plan.height}, ${mask.reading.polarity}` +
         `${mask.reading.confident ? "" : " (NOT CONFIDENT)"}, ` +
         `${(mask.chosenCoverage * 100).toFixed(1)}% ink` +
         (mask.reading.inkWidth === null ? "" : ` ~${mask.reading.inkWidth.toFixed(1)}px wide`) +
         `, ${mask.pxPerSquare.toFixed(1)} px/square. Full detail is against the run that read it.`,
     );
-  } else {
-    const computed = await computeMask(map, dpi, settings, fingerprint);
-    if (!computed) {
-      // A failed read must not leave the previous map's mask sitting where the next run can find
-      // it. Cheaper to throw it away than to reason about whether it is still the right one.
-      cachedMask = null;
-      return {
-        ok: false,
-        message: `Could not read pixels from "${map.name || "map"}" — see the console.`,
-      };
-    }
-    mask = computed;
-    cachedMask = mask;
   }
 
   const {

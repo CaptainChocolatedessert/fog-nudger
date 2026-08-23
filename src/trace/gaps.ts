@@ -1,10 +1,10 @@
 /**
- * Finding breaks in the linework — the failure that matters most, made visible.
+ * Finding breaks in the linework, and repairing the ones the GM says to repair.
  *
- * A wall with a section missing merges two rooms into one region, and a merged region is this
- * project's worst outcome: the fog opens on a room nobody has entered. A GM cannot be asked to
- * scan a whole map for a four-pixel crack, and `DESIGN.md` §8 forbids answering that with a warning
- * in a log nobody reads. So the breaks are found and drawn.
+ * A wall with a section missing merges two rooms, and a merged region is this project's worst
+ * outcome: the fog opens on a room nobody has entered. A GM cannot be asked to scan a whole map for
+ * a four-pixel crack, and `DESIGN.md` §8 forbids answering that with a warning in a log nobody
+ * reads. So the breaks are found, drawn, and — separately, on the GM's judgement — filled.
  *
  * ## What counts as a gap, and the two definitions this replaced
  *
@@ -28,7 +28,7 @@
  *
  * ## How it is computed, in three steps
  *
- * 1. **A closing** at the gap radius. What it converts from ground to ink is exactly the set of
+ * 1. **A closing** at the search radius. What it converts from ground to ink is exactly the set of
  *    narrow channels: cracks, notches, enclosed pockets, and the hollow interiors of double-line
  *    walls. That is the candidate set and nothing more.
  * 2. **The bank groups.** The ink touching one channel, grouped into the pieces it arrives in. A
@@ -44,11 +44,37 @@
  * Travel is measured through the ink rather than inside a cropped window on purpose: a wall that
  * bulges out of a window and back is still one wall, and travel says so where a crop would not.
  *
+ * ## Highlighting and filling are two separate widths, and that is the workflow
+ *
+ * `widthPx` decides what is **shown**; `fillPx` decides which of those is **repaired**. The point of
+ * separating them (user, 2026-08-23) is that a GM can settle the first to get a stable set of places
+ * worth attention, then sweep the second and watch how many of that fixed set turn from open to
+ * filled — judging the trade with the reference set held still underneath it.
+ *
+ * **The search runs at the larger of the two radii**, so pushing the fill past the highlight widens
+ * what is looked at rather than filling anything unseen. That gives the invariant the whole design
+ * rests on:
+ *
+ * > **Every pixel the fill invents belongs to a break that has a mark on it.**
+ *
+ * ## Why the fill is not simply a closing
+ *
+ * Morphologically a repair *is* a closing, and the obvious implementation is to close the mask at
+ * the fill radius and keep the result. That would be wrong, and dangerously so. A blanket closing
+ * also seals channels that **failed the travel test** — and the clearest example of one is a narrow
+ * doorway right beside a corner, where the two banks meet round the corner within a short travel.
+ * It would be sealed with nothing at all to see, where an opening's failures at least leave a
+ * visible absence. Dynamic Fog would then derive a wall across an open door and block line of sight
+ * through it, silently.
+ *
+ * So the fill adds the pixels of **marked breaks** and nothing else. A dead end is never filled,
+ * which costs nothing: a dead end connects nothing to anything, so sealing it could not have helped.
+ *
  * ## Both thresholds are in raster pixels
  *
  * Stage one stays close to the raster (`DESIGN.md` §5, as amended). Denominating these in measured
  * ink widths was the first plan and was dropped: the ink width is itself a measurement that can
- * come out oddly on an unusual map, and a threshold that moves with it would make the marks change
+ * come out oddly on an unusual map, and a threshold that moved with it would make the marks change
  * for reasons the GM has no way to see.
  *
  * ## What it will get wrong, stated rather than discovered
@@ -56,7 +82,7 @@
  * **A double-line wall.** Where a map draws walls as two parallel strokes with white between, that
  * white is a narrow channel and the two strokes are far apart along the ink — they meet only at the
  * ends of a run. Every hollow wall would be marked. It comes out as one mark per wall run rather
- * than a shower of them, and the width control tunes it away; on such a map bridging is arguably
+ * than a shower of them, and the width control tunes it away; on such a map filling them is arguably
  * the right answer rather than the mark being wrong.
  *
  * **A speck of ink lying close to a wall.** Two locally different pieces, so a gap. Guardable by
@@ -73,8 +99,28 @@
  * Pure: no DOM, no SDK.
  */
 
-import { emptyMask, type BinaryMask } from "./binarize";
+import type { BinaryMask } from "./binarize";
 import { closeMask, radiusForWidth } from "./morphology";
+
+/** Nothing here. */
+export const GAP_NONE = 0;
+/** A break that was found and left open. */
+export const GAP_OPEN = 1;
+/** A break that was found and filled — ink this stage invented. */
+export const GAP_FILLED = 2;
+
+/**
+ * One value per pixel: `GAP_NONE`, `GAP_OPEN` or `GAP_FILLED`.
+ *
+ * Three states rather than two masks, because the two sets are disjoint by construction and the
+ * surface draws them in one pass. It is also what the pipeline reads to decide which pixels to add
+ * to the ink — exactly the `GAP_FILLED` ones.
+ */
+export interface GapLabels {
+  readonly width: number;
+  readonly height: number;
+  readonly data: Uint8Array;
+}
 
 /** One break, as the surface needs to draw it. */
 export interface GapMark {
@@ -85,30 +131,39 @@ export interface GapMark {
   readonly span: number;
   /** How many ground pixels the channel holds. */
   readonly area: number;
+  /** Whether the fill closed this one. Decides the ring's colour. */
+  readonly filled: boolean;
 }
 
 export interface GapOptions {
-  /** The widest break to look for, in raster pixels. Zero is off. */
+  /** The widest break to highlight, in raster pixels. */
   readonly widthPx: number;
   /**
    * How far two banks may be apart along the ink and still count as one piece, in raster pixels.
    *
-   * Zero is meaningful rather than off: it marks every channel that passes through, which is the
+   * Zero is meaningful rather than off: it marks every break that passes through, which is the
    * loudest the detector goes.
    */
   readonly travelPx: number;
+  /** The widest highlighted break to fill, in raster pixels. Zero fills nothing. */
+  readonly fillPx: number;
 }
 
 export interface GapFinding {
-  /** The pixels of the channels judged to be breaks, for painting. Empty when the control is off. */
-  readonly mask: BinaryMask;
+  readonly labels: GapLabels;
   readonly marks: readonly GapMark[];
-  /** The closing radius used, in raster pixels. Zero means the control rounded to nothing. */
-  readonly radius: number;
+  /** The radius the search ran at — the larger of the two settings. */
+  readonly searchRadius: number;
+  /** The radius a break had to fall inside to be filled. Zero means the fill is off. */
+  readonly fillRadius: number;
   /** Narrow channels the closing found, before any sifting. */
   readonly channels: number;
   /** Of those, how many pass through rather than being a dead end. */
   readonly through: number;
+  /** How many marks were filled. */
+  readonly filled: number;
+  /** How many pixels of ink the fill invented. */
+  readonly filledArea: number;
   /** Channels marked because the flood budget ran out rather than because the ink was broken. */
   readonly budgetHits: number;
 }
@@ -121,24 +176,39 @@ export interface GapFinding {
  * is large — a combination that is reachable, since the control deliberately runs well past useful.
  * Channels left unexamined are marked rather than dropped: a warning that goes quiet under load is
  * the one failure a warning cannot survive, and the count is reported so the cause is visible.
+ *
+ * A channel marked this way is **not** filled, whatever the fill radius is. Marking on a guess is a
+ * warning; inventing ink on a guess is not.
  */
 const FLOOD_BUDGET = 40_000_000;
 
 export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
   const { width, height } = mask;
-  const radius = radiusForWidth(options.widthPx);
+  const markRadius = radiusForWidth(options.widthPx);
+  const fillRadius = radiusForWidth(options.fillPx);
+  const searchRadius = Math.max(markRadius, fillRadius);
+
   const empty: GapFinding = {
-    mask: emptyMask(width, height),
+    labels: { width, height, data: new Uint8Array(width * height) },
     marks: [],
-    radius,
+    searchRadius,
+    fillRadius,
     channels: 0,
     through: 0,
+    filled: 0,
+    filledArea: 0,
     budgetHits: 0,
   };
-  if (radius <= 0 || width === 0 || height === 0) return empty;
+  if (searchRadius <= 0 || width === 0 || height === 0) return empty;
 
-  const closed = closeMask(mask, radius);
-  const out = emptyMask(width, height);
+  const closed = closeMask(mask, searchRadius);
+  // One closing when the fill is off or is itself the wider of the two, which is the common case:
+  // a GM sweeping the fill up towards the highlight pays for a second closing, and stops paying for
+  // it the moment they push past.
+  const closedFill =
+    fillRadius <= 0 ? null : fillRadius === searchRadius ? closed : closeMask(mask, fillRadius);
+
+  const labels = new Uint8Array(width * height);
 
   // Which channel pixels have been claimed already. Ground that the closing left alone is never a
   // candidate, so this doubles as the candidate test.
@@ -149,6 +219,8 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
   const marks: GapMark[] = [];
   let channels = 0;
   let through = 0;
+  let filledCount = 0;
+  let filledArea = 0;
   let budgetHits = 0;
   let budget = FLOOD_BUDGET;
 
@@ -165,16 +237,75 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
     if (groups.count < 2) continue; // A dead end: a notch, or a pocket the ink encloses.
     through += 1;
 
-    const spent = floodFromFirstGroup(mask, banks, groups, reached, width, height, options.travelPx, budget);
+    const spent = floodFromFirstGroup(
+      mask,
+      banks,
+      groups,
+      reached,
+      width,
+      height,
+      options.travelPx,
+      budget,
+    );
     budget -= spent.visited;
     if (spent.exhausted) budgetHits += 1;
     if (spent.allReached) continue;
 
-    for (const index of pixels) out.data[index] = 1;
-    marks.push(describe(pixels, width));
+    // Filled only when the whole channel falls inside the fill radius. A break sealed along part of
+    // its length is still a break at the rest of it, so a partial fill is no fill at all — and the
+    // ring must stay open to say so. A guessed channel is never filled, whatever its width.
+    const fills = closedFill !== null && !spent.exhausted && allFilled(pixels, closedFill);
+    const state = fills ? GAP_FILLED : GAP_OPEN;
+    for (const index of pixels) labels[index] = state;
+    if (fills) {
+      filledCount += 1;
+      filledArea += pixels.length;
+    }
+
+    marks.push(describe(pixels, width, fills));
   }
 
-  return { mask: out, marks, radius, channels, through, budgetHits };
+  return {
+    labels: { width, height, data: labels },
+    marks,
+    searchRadius,
+    fillRadius,
+    channels,
+    through,
+    filled: filledCount,
+    filledArea,
+    budgetHits,
+  };
+}
+
+/**
+ * Add the filled breaks to the ink.
+ *
+ * The whole of what the repair writes. Returns the input untouched when nothing was filled, which
+ * is the default and has to stay exactly true — a map whose GM never reaches for the fill must get
+ * the same mask it got before this existed.
+ */
+export function applyGapFill(mask: BinaryMask, labels: GapLabels): BinaryMask {
+  let filled = 0;
+  for (let i = 0; i < labels.data.length; i++) if (labels.data[i] === GAP_FILLED) filled += 1;
+  if (filled === 0) return mask;
+
+  const out: BinaryMask = {
+    width: mask.width,
+    height: mask.height,
+    data: Uint8Array.from(mask.data),
+  };
+  for (let i = 0; i < labels.data.length; i++) {
+    if (labels.data[i] === GAP_FILLED) out.data[i] = 1;
+  }
+  return out;
+}
+
+function allFilled(pixels: readonly number[], closedFill: BinaryMask): boolean {
+  for (const index of pixels) {
+    if (closedFill.data[index] !== 1) return false;
+  }
+  return true;
 }
 
 /**
@@ -217,7 +348,7 @@ function collectChannel(
         const neighbour = ny * width + nx;
 
         if (mask.data[neighbour] === 1) {
-          // Ink: a bank. Recorded once, which the flood's own bookkeeping enforces below.
+          // Ink: a bank. Duplicates are harmless — the grouping below works from a set.
           banks.push(neighbour);
           continue;
         }
@@ -247,11 +378,7 @@ interface BankGroups {
  * seeded from all of it at once, so a bank running the length of a long channel cannot be judged
  * "far from itself".
  */
-function groupBanks(
-  banks: readonly number[],
-  width: number,
-  height: number,
-): BankGroups {
+function groupBanks(banks: readonly number[], width: number, height: number): BankGroups {
   const members = new Set(banks);
   const seen = new Set<number>();
   let count = 0;
@@ -285,8 +412,6 @@ function groupBanks(
     }
 
     if (count === 1) first = group;
-    // Two groups is already the answer to "does it pass through"; counting the rest is only for
-    // reporting, and the flood below needs the first group alone.
   }
 
   return { count, first };
@@ -371,8 +496,8 @@ function floodFromFirstGroup(
   return { allReached, visited: touched.length, exhausted };
 }
 
-/** Where to draw the mark, and how big the thing it is marking is. */
-function describe(pixels: readonly number[], width: number): GapMark {
+/** Where to draw the mark, how big the thing it is marking is, and whether it was repaired. */
+function describe(pixels: readonly number[], width: number, filled: boolean): GapMark {
   let sumX = 0;
   let sumY = 0;
   let minX = Infinity;
@@ -397,5 +522,6 @@ function describe(pixels: readonly number[], width: number): GapMark {
     y: sumY / area,
     span: Math.max(maxX - minX + 1, maxY - minY + 1),
     area,
+    filled,
   };
 }

@@ -107,6 +107,43 @@ export interface TraceSettings {
    */
   readonly minIslandPx: number;
   /**
+   * The widest break in the linework to **highlight**, in raster pixels. Zero turns the marks off.
+   *
+   * In pixels rather than measured ink widths, and that was a decision rather than a default (user,
+   * 2026-08-23): stage one stays close to the raster, and a threshold that moved with a measurement
+   * would change the marks for reasons a GM has no way to see.
+   *
+   * This is the **stable reference set** in the two-slider workflow: settle it first, then sweep the
+   * fill against it and watch how many rings turn from unfilled to filled.
+   */
+  readonly gapWidthPx: number;
+  /**
+   * How far apart two banks of a break may be **along the ink** and still count as one piece of
+   * wall, in raster pixels.
+   *
+   * The whole discriminator between a crack and a ragged edge. Zero is meaningful rather than off:
+   * it marks every break that passes through, which is the loudest the detector goes.
+   */
+  readonly gapTravelPx: number;
+  /**
+   * The widest highlighted break to **fill**, in raster pixels. Zero is off.
+   *
+   * Repairs walls thinned or severed upstream, so that two rooms do not merge across a break the
+   * map does not actually have. Morphologically a closing — the exact inverse of the minimum stroke
+   * width — but applied only to breaks the detector has marked, never as a blanket operation.
+   *
+   * **That restriction is the safety property, not an optimisation.** A blanket closing also seals
+   * through-channels that failed the travel test, and the clearest example of one is a narrow
+   * doorway beside a corner, where the two banks meet round the corner within a short travel. That
+   * would be sealed with nothing to see — and Dynamic Fog would then derive a wall across an open
+   * door and block line of sight through it, silently. Filling only marked breaks gives the
+   * invariant instead: **every pixel the fill invents belongs to a break with a ring on it.**
+   *
+   * Not clamped to `gapWidthPx`. Pushed past it, the search widens to cover it, so a fill can never
+   * outrun the highlighting and act unseen.
+   */
+  readonly gapFillPx: number;
+  /**
    * Smallest area kept as a room, in grid squares.
    *
    * Guards against hatching, speckle and the slivers a picked-up floor grid leaves. It can only
@@ -143,16 +180,14 @@ export interface ReviewSettings {
 }
 
 /**
- * What the stage-one surface draws on top of the mask.
+ * How the stage-one surface paints the mask.
  *
- * **Nothing here reaches the mask**, which is why none of it is a pipeline parameter despite all of
- * it living on the reading surface — see `PARAMETER_KIND`. Two of the four are not merely paint,
- * though: the gap settings drive a derivation that costs real work, and the kind axis distinguishes
- * them from a colour for exactly that reason.
+ * Purely how it looks. Nothing here reaches the pipeline, which is why these are display parameters
+ * rather than reading ones despite living on the reading surface — see `PARAMETER_KIND`.
  *
- * Kept in this group rather than renested beside the reading parameters they sit next to, per the
- * standing rule that the stored shape does not follow the stages — moving a key means a migration
- * or a normaliser that resets a GM's tuning, and the mapping carries the semantics instead.
+ * The gap settings were briefly here, on the reasoning that they changed nothing about the mask.
+ * They moved to `trace` the moment the fill became real: a gap parameter now decides which pixels
+ * of invented ink reach the regions, which is as far from paint as a parameter gets.
  */
 export interface OverlaySettings {
   /**
@@ -171,22 +206,6 @@ export interface OverlaySettings {
    * "does this line up with the linework underneath".
    */
   readonly inkOpacity: number;
-  /**
-   * The widest break in the linework to mark, in raster pixels. Zero turns the marks off.
-   *
-   * In pixels rather than in measured ink widths, and that was a decision rather than a default
-   * (user, 2026-08-23): stage one stays close to the raster, and a threshold that moved with a
-   * measurement would make the marks change for reasons a GM has no way to see.
-   */
-  readonly gapWidthPx: number;
-  /**
-   * How far apart two banks of a break may be **along the ink** and still count as one piece, in
-   * raster pixels.
-   *
-   * The whole discriminator between a crack and a ragged edge. Zero is meaningful rather than off:
-   * it marks every break that passes through, which is the loudest the detector goes.
-   */
-  readonly gapTravelPx: number;
 }
 
 export interface Settings {
@@ -202,6 +221,14 @@ export const DEFAULT_SETTINGS: Settings = {
     sauvolaRadiusPx: 13,
     minStrokeInkWidths: 0,
     minIslandPx: 0,
+    // Highlighting is on by default. A break in a wall merges two rooms, which is this project's
+    // worst outcome, and the GM who never reaches for this control is the one who needs telling.
+    gapWidthPx: 12,
+    gapTravelPx: 40,
+    // Filling is **off** by default, and the asymmetry is deliberate. Looking costs nothing but
+    // time; inventing ink changes what gets emitted, and no control that writes into the map's
+    // linework should do so before a GM has looked at what it would write.
+    gapFillPx: 0,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -212,11 +239,6 @@ export const DEFAULT_SETTINGS: Settings = {
   overlay: {
     inkColour: "#ff2020",
     inkOpacity: 1,
-    // On by default. A break in a wall merges two rooms, which is this project's worst outcome, and
-    // a GM who never reaches for this control is exactly the one who needs telling. The price is
-    // about half a second added to a reading, which the state line and the log both report.
-    gapWidthPx: 12,
-    gapTravelPx: 40,
   },
 };
 
@@ -263,6 +285,9 @@ export const SETTING_LIMITS = {
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
   // the marks; the bottom end marks every break that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },
+  // The same range as the highlight, so the sweep can reach every ring the highlight found. Going
+  // past it is allowed and safe — the search widens to match, so nothing is ever filled unringed.
+  gapFillPx: { min: 0, max: 80, step: 1 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -305,6 +330,7 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   inkOpacity: "read",
   gapWidthPx: "read",
   gapTravelPx: "read",
+  gapFillPx: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
@@ -328,19 +354,20 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
  * The cascade in `Stage` therefore governs pipeline parameters. Display parameters are orthogonal
  * to it: they live with the thing they display and they destroy nothing, wherever they sit.
  *
- * ## Why there is a third value rather than two
+ * ## There was briefly a third value, and it is worth knowing why it went
  *
- * The gap marks are derived *from* the mask and change nothing *about* it, so filing them as
- * pipeline parameters would re-binarise on every nudge — the trap above, exactly. But they are not
- * display parameters either: unlike a colour or an opacity they cost real work, so a surface that
- * treated them as free would recompute half a second of morphology on every frame of a drag.
+ * When the gap marks only *highlighted* breaks, they were neither kind: derived from the mask so
+ * not pipeline, but costly enough that treating them as free would have run half a second of
+ * morphology on every frame of a drag. A `gaps` value carried that for one commit.
  *
- * So `gaps` is its own answer to the one question this axis asks — **what does changing this
- * recompute?** — and the cascade runs the way the names do: a `pipeline` change invalidates the
- * mask and therefore the marks too, a `gaps` change invalidates only the marks, and a `display`
- * change invalidates nothing but the next repaint.
+ * It stopped being right the moment the fill became real. A gap parameter now decides which pixels
+ * of invented ink reach the regions — and because the fill repairs only breaks the detector has
+ * *marked*, the highlighting parameters feed the mask too. All three are pipeline, the third value
+ * had no members left, and a kind with no members is a filter that silently matches nothing. The
+ * cost it was avoiding is answered instead by caching the reading separately from what is composed
+ * on top of it, which is a better answer anyway: it makes the 1b filters cheaper as well.
  */
-export type ParameterKind = "pipeline" | "gaps" | "display";
+export type ParameterKind = "pipeline" | "display";
 
 export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   sauvolaK: "pipeline",
@@ -349,8 +376,9 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   minStrokeInkWidths: "pipeline",
   minIslandPx: "pipeline",
   inkOpacity: "display",
-  gapWidthPx: "gaps",
-  gapTravelPx: "gaps",
+  gapWidthPx: "pipeline",
+  gapTravelPx: "pipeline",
+  gapFillPx: "pipeline",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
@@ -403,10 +431,58 @@ export function writeParameter(
  * pipeline combines this with the map's own identity before trusting a cached mask.
  */
 export function maskFingerprint(settings: Settings): string {
-  return stageParameters("read")
-    .filter((name) => PARAMETER_KIND[name] === "pipeline")
+  return readingParameters()
     .map((name) => `${name}=${readParameter(settings, name)}`)
     .join(",");
+}
+
+/**
+ * Parameters that act on the mask **after** binarisation, and therefore cannot change the reading.
+ *
+ * ## Declared by exclusion, and the polarity of that is the point
+ *
+ * The reading — binarise, decide polarity, measure the ink width — is the expensive half of a run,
+ * about 690ms of a 1.4s trace, and none of the filters or repairs composed on top of it can change
+ * what it produced. Caching it separately is what keeps a sweep of the 1b filters or the gap
+ * sliders from re-reading a map that has not changed.
+ *
+ * A cached reading is only safe if this list is complete, so the list is written the safe way
+ * round: everything counts as a reading input **unless it is named here**. Add a new binarisation
+ * parameter and forget to touch this file, and the reading cache becomes useless — which costs
+ * 690ms and is obvious in the log. Write it as an opt-in list instead, forget the same edit, and
+ * the reading gets reused when it should not have been, which is a mask that is quietly wrong. This
+ * project has already paid once for a diagnostic that lied; the useless direction is the one to
+ * fail in.
+ */
+const POST_READING: readonly SettingName[] = [
+  "minStrokeInkWidths",
+  "minIslandPx",
+  "gapWidthPx",
+  "gapTravelPx",
+  "gapFillPx",
+];
+
+/** Every reading-stage pipeline parameter, in declaration order. */
+function readingParameters(): readonly SettingName[] {
+  return stageParameters("read").filter((name) => PARAMETER_KIND[name] === "pipeline");
+}
+
+/**
+ * The identity of the *reading* a set of settings would produce.
+ *
+ * A strict prefix of what `maskFingerprint` covers: same map, same reading, whatever the filters
+ * and repairs above it are set to.
+ */
+export function readingFingerprint(settings: Settings): string {
+  return readingParameters()
+    .filter((name) => !POST_READING.includes(name))
+    .map((name) => `${name}=${readParameter(settings, name)}`)
+    .join(",");
+}
+
+/** Whether a parameter is composed on top of the reading rather than feeding it. Exported for the tests. */
+export function isPostReading(name: SettingName): boolean {
+  return POST_READING.includes(name);
 }
 
 /**
@@ -477,6 +553,9 @@ export function normaliseSettings(raw: unknown): Settings {
         t.minStrokeInkWidths,
       ),
       minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
+      gapWidthPx: clamp(trace.gapWidthPx, "gapWidthPx", t.gapWidthPx),
+      gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
+      gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,
@@ -491,8 +570,6 @@ export function normaliseSettings(raw: unknown): Settings {
     overlay: {
       inkColour: normaliseColour(overlay.inkColour, o.inkColour),
       inkOpacity: clamp(overlay.inkOpacity, "inkOpacity", o.inkOpacity),
-      gapWidthPx: clamp(overlay.gapWidthPx, "gapWidthPx", o.gapWidthPx),
-      gapTravelPx: clamp(overlay.gapTravelPx, "gapTravelPx", o.gapTravelPx),
     },
   };
 }
@@ -518,14 +595,15 @@ export function isDefault(settings: Settings): boolean {
 
 /** One line for the log, so a run's numbers can be read beside the settings that produced them. */
 export function describeSettings(settings: Settings): string {
-  const { trace, review, overlay } = settings;
+  const { trace, review } = settings;
   return (
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusPx}px, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
     `min island ${trace.minIslandPx}px, ` +
     `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
-    `gaps ${overlay.gapWidthPx === 0 ? "off" : `${overlay.gapWidthPx}px wide, ${overlay.gapTravelPx}px travel`}` +
+    `gaps ${trace.gapWidthPx === 0 ? "marking off" : `mark ${trace.gapWidthPx}px, travel ${trace.gapTravelPx}px`}` +
+    `, ${trace.gapFillPx === 0 ? "fill off" : `fill ${trace.gapFillPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
   );
 }

@@ -965,8 +965,8 @@ trade on a control whose effect could not be seen.
 ### The controls
 
 Three for stage 1a — ink threshold, texture blur, detail window. Two for stage 1b — minimum stroke
-width, smallest ink island. Two for the gap marks — largest break to mark, same-wall distance. Two
-for stage two — smallest room, edge simplification. Two for stage three, both about how a
+width, smallest ink island. Three for the breaks — largest break to mark, same-wall distance,
+largest break to fill. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
 proposal is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
 reading tab but are **display** parameters (below).
 
@@ -976,12 +976,15 @@ reading tab but are **display** parameters (below).
   tweak reusing a mask it should have thrown away. A test asserts the mapping is total and that the
   three stages partition the parameters exactly.
 - **A second declaration decides what a change *recomputes*, and it is not the same axis.**
-  `pipeline` invalidates the mask, `gaps` only the marks derived from it, `display` nothing but the
-  next repaint. The stage says which surface a control appears on; this says what turning it costs.
-  Conflating them is a real bug in both directions — a display parameter filed as pipeline
-  re-binarises on every opacity nudge, and a gap parameter filed as display would run half a second
-  of morphology on every frame of a drag. The workspace's rows are built from this, so a control
-  moved between headings cannot silently change what it recomputes.
+  `pipeline` invalidates the mask, `display` nothing but the next repaint. The stage says which
+  surface a control appears on; this says what turning it costs, and the workspace's rows are built
+  from it — so a control moved between headings cannot silently change what it recomputes. Filing a
+  display parameter as pipeline would re-binarise on every opacity nudge, which is the whole reason
+  the axis exists.
+- **A third declaration splits the pipeline parameters again**, into those that feed the reading and
+  those composed on top of it, so binarisation can be cached separately. Written **by exclusion**:
+  anything new invalidates the reading unless it is named, because a forgotten entry then makes that
+  cache useless rather than wrong.
 - **The stored shape was deliberately not renested to match.** Storage keeps its two groups and the
   stage mapping carries the semantics. Renesting would mean either a migration or a normaliser
   falling back to defaults for every field of a GM's existing tuning — and silently rewriting a
@@ -1110,6 +1113,7 @@ Where each parameter landed:
 | Smallest ink island | **px** (was squares) | a size on the image, and ink width is not trusted here |
 | Largest break to mark | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes the marks invisibly |
 | Same-wall distance | px | a distance travelled across the image; nothing about it is a stroke or a square |
+| Largest break to fill | px | the same quantity as the highlight width, so the same unit |
 | Smallest room | squares | it really is an area on the map's grid, and a GM thinks in squares |
 | Edge simplification | ink widths | its safety bound *is* half an ink width |
 
@@ -2057,7 +2061,7 @@ the moment the map changes.
 
 ### Next, in order — user, 2026-08-23
 
-Items 0 to 2 are done. The rest is recorded so the order and the reasoning survive a session change.
+Items 0 to 3 are done. The rest is recorded so the order and the reasoning survive a session change.
 
 #### 0. The workspace probe — CLOSED, 2026-08-23
 
@@ -2234,35 +2238,108 @@ So a gap search costs roughly one closing plus a linear scan plus some bounded l
 it the same order as a stage-1b filter, against 690ms for a reading. That is the whole reason the
 search runs off the mask rather than off the map.
 
-#### 3. Bridging small gaps
+#### 3. Bridging small gaps — BUILT 2026-08-23
 
-**A control to close small gaps, preserving the integrity of walls thinned or severed upstream.**
-Morphologically this is a **closing** — dilate then erode — the exact inverse of the minimum stroke
-width, and it runs after it, since its job is partly repairing that control's damage.
+**Two sliders, and the separation is the design** (user, 2026-08-23). One sets which breaks are
+**highlighted**; the other sets which of those are **filled**. The workflow that buys:
 
-**It is dangerous in the mirror image of the opening, and the danger is invisible in a worse way.**
-A doorway is a deliberate gap. A closing whose radius exceeds a doorway's width seals it, and a
-sealed doorway *looks like perfectly good wall* — there is nothing to see unless you knew the
-doorway was there. The opening's failures at least leave a visible absence.
+> Settle the first to get a stable set of places worth paying attention to. Then sweep the second,
+> and watch how many of that fixed set turn from open to filled — judging the trade with the
+> reference set held still underneath it.
 
-**So bridged pixels must be drawn in their own colour on the overlay.** Invented ink and read ink
-must never be indistinguishable. That is the §8 rule applied directly, and it is a precondition
-rather than a refinement — the control should not ship without it.
+**Purple rings are breaks left open; green rings are breaks the fill closed.** The pixels are painted
+the same two colours. Green is the only ink on the surface that the map does not contain.
 
-**That precondition is now met in advance.** Item 2 built the separate full-alpha layer and the
-screen-space ring, and both already draw ground the reading found nothing in — so what this control
-adds is a second reason for a pixel to be on that layer, not a new surface. It also inherits the
-closing itself, and the measurement that a closing costs about the same as a stage-1b filter.
+**The user notes this could be a model for other tweaks** — show one thing at a time while holding
+the rest still. Not generalised; this is the only place it exists.
 
-**Two questions it still has to answer**, and neither is inherited. Whether the bridging radius is
-the same number as the gap-marking width or a second control — the marks deliberately warn about
-breaks a bridge would not close, so they are not the same question, and forcing one number would
-make widening the search also widen the sealing. And whether a bridged pixel is drawn differently
-from a *marked but unbridged* one, since once both exist the layer is carrying two meanings.
+##### The fill is not a closing, and that is a safety property
 
-The consequence for play is worth stating: a sealed doorway does not merge rooms, it *separates*
-them, which fog handles fine. But Dynamic Fog derives a wall across the opening, so line of sight is
-blocked through a door that is standing open. That is play-affecting and silent.
+Morphologically a repair *is* a closing, and the obvious implementation is to close the mask at the
+fill radius and keep the result. **That would be wrong, and invisibly so.** A blanket closing also
+seals channels that **failed the travel test**, and the clearest example of one is a narrow doorway
+right beside a corner, where the two banks meet round the corner within a short travel. It would be
+sealed with nothing at all to see — where an opening's failures at least leave a visible absence —
+and Dynamic Fog would then derive a wall across an open door and block line of sight through it.
+
+So the fill adds the pixels of **marked breaks** and nothing else. That gives the invariant the
+whole design rests on:
+
+> **Every pixel the fill invents belongs to a break that has a ring on it.**
+
+Consequences worth stating:
+
+- **A dead end is never filled.** It connects nothing to anything, so sealing it could not have
+  helped, and it carries no mark.
+- **A break the search only guessed at** — one where the flood ran out of budget — is marked but
+  never filled. Marking on a guess is a warning; inventing ink on a guess is not.
+- **A break only partly inside the fill width stays open.** A break sealed along part of its length
+  is still a break at the rest of it, so a partial fill is no fill at all.
+- **The fill is not clamped to the highlight.** Pushed past it, the *search* widens to match, so a
+  fill can never outrun what is being shown.
+- **Filling defaults to off while highlighting defaults to on.** Looking costs nothing but time;
+  inventing ink changes what gets emitted, and no control that writes into a map's linework should
+  do so before a GM has looked at what it would write.
+
+##### The ink is composed from layers now — the user's framing, 2026-08-23
+
+The mask the regions come from is no longer "the reading, filtered". It is a composition, and it was
+built to take all four terms even though two of them do not exist yet:
+
+```
+basic ink  −  GM-suppressed areas  +  gap fills  +  GM-drawn ink
+```
+
+The order is not arbitrary. Suppression comes **before** the gap search, so repairs are derived from
+ink the GM has already corrected. GM-drawn ink comes **last**, so nothing automatic second-guesses a
+line drawn deliberately — which is the standing requirement for §11 item 5.
+
+Two consequences already visible:
+
+- **The surface draws the base ink, not the composite.** Handing it only the composite would make
+  invented pixels indistinguishable from read ones, which §8 forbids. The fills arrive separately
+  and are drawn in their own colours.
+- **The gap search moved out of the workspace and into the pipeline.** While the marks only
+  highlighted, computing them on the surface was right. The moment the fill became real they had to
+  be the same computation that produces the mask — a second copy on a surface is the sibling's
+  harness-versus-room failure waiting to happen.
+
+##### The mask cache is now two caches
+
+**Splitting is right** (user), and the composition above is the reason it is more than an
+optimisation: the layers will keep multiplying, and every one of them acts on the mask rather than on
+the image.
+
+- **The reading** — binarise, decide polarity, measure the ink width — is cached on the map's
+  identity plus the 1a parameters alone. About 690ms of a 1.4s run.
+- **The composed ink** is cached on everything, and built from a reading that may have been reused.
+
+So a sweep of a 1b filter or either gap slider re-runs only the cheap half. Without the split, every
+notch of a slider whose whole purpose is comparative would have paid a full re-read.
+
+**The boundary is declared by exclusion, and the polarity of that is the point.** Everything counts
+as a reading input *unless it is named* as post-reading. Add a new binarisation parameter and forget
+this file, and the reading cache goes **useless** — 690ms, obvious in the log. Write it as an opt-in
+list, forget the same edit, and a reading gets **reused when it should not have been**, which is a
+mask that is quietly wrong. This project has already paid once for a diagnostic that lied.
+
+Four tests pin it: every non-excluded reading parameter moves the reading fingerprint; every excluded
+one does not; every excluded one still moves the *mask* fingerprint, so none of them is a setting a
+GM can change with no effect at all; and both sides of the boundary are non-empty, since every one of
+those tests is a filtered loop and a filter matching nothing passes.
+
+##### The third parameter kind lasted one commit
+
+`PARAMETER_KIND` went `pipeline | display` → `pipeline | gaps | display` → back again. The `gaps`
+value was right while the marks only highlighted: derived from the mask so not pipeline, but costly
+enough that treating them as free would have run half a second of morphology on every frame of a
+drag. The fill made all three gap parameters feed the mask — the highlighting ones included, since
+the fill repairs only what is *marked* — and a kind with no members is a filter that silently
+matches nothing. The cost it was avoiding is answered by the reading cache instead, which is a
+better answer because it makes the 1b filters cheaper too.
+
+The one test that would have caught a silently-empty kind is the one asserting every kind has a
+member, and it is kept.
 
 #### 4. Painting to suppress ink
 

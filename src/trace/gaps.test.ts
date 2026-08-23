@@ -25,12 +25,12 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
-import { findGaps } from "./gaps";
+import { findGaps, GAP_FILLED, GAP_NONE, GAP_OPEN } from "./gaps";
 
 /** Seals breaks up to two pixels; treats ink more than six pixels apart along itself as separate. */
-const NEAR = { widthPx: 2, travelPx: 6 };
+const NEAR = { widthPx: 2, travelPx: 6, fillPx: 0 };
 /** The same width, with enough travel allowed to walk right round a small room. */
-const FAR = { widthPx: 2, travelPx: 60 };
+const FAR = { widthPx: 2, travelPx: 60, fillPx: 0 };
 
 /** A wall across a bordered box, with a two-pixel break in it. */
 const BROKEN_WALL = [
@@ -66,17 +66,17 @@ const WIDE_BREAK = [
 
 describe("findGaps", () => {
   it("finds nothing when the width is zero, which is off", () => {
-    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 0, travelPx: 6 });
+    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 0, travelPx: 6, fillPx: 0 });
     expect(found.marks).toEqual([]);
-    expect(found.radius).toBe(0);
+    expect(found.searchRadius).toBe(0);
     expect(found.channels).toBe(0);
   });
 
   it("finds nothing when the width rounds to nothing", () => {
     // A setting under one pixel cannot describe a break, and must leave the mask alone rather than
     // nearly so — the same exactness the opening's zero depends on.
-    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 0.4, travelPx: 6 });
-    expect(found.radius).toBe(0);
+    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 0.4, travelPx: 6, fillPx: 0 });
+    expect(found.searchRadius).toBe(0);
     expect(found.channels).toBe(0);
   });
 
@@ -99,7 +99,7 @@ describe("findGaps", () => {
     const mask = maskFromRows(WIDE_BREAK);
     expect(findGaps(mask, NEAR).channels).toBe(0);
 
-    const found = findGaps(mask, { widthPx: 4, travelPx: 6 });
+    const found = findGaps(mask, { widthPx: 4, travelPx: 6, fillPx: 0 });
     expect(found.marks).toHaveLength(1);
     expect(found.marks[0]!.area).toBe(4);
     expect(found.marks[0]!.span).toBe(4);
@@ -215,7 +215,7 @@ describe("findGaps", () => {
   });
 
   it("marks every break that passes through when the travel distance is zero", () => {
-    const found = findGaps(maskFromRows(CRACKED_RING), { widthPx: 2, travelPx: 0 });
+    const found = findGaps(maskFromRows(CRACKED_RING), { widthPx: 2, travelPx: 0, fillPx: 0 });
     expect(found.marks).toHaveLength(1);
   });
 
@@ -239,14 +239,17 @@ describe("findGaps", () => {
     expect(found.marks.map((mark) => mark.x)).toEqual([3.5, 10.5]);
   });
 
-  it("returns the marked channels as a mask, and puts nothing else in it", () => {
+  it("labels the marked channels and nothing else", () => {
     const found = findGaps(maskFromRows(BROKEN_WALL), NEAR);
     const lit: number[] = [];
-    for (let i = 0; i < found.mask.data.length; i++) if (found.mask.data[i] === 1) lit.push(i);
+    for (let i = 0; i < found.labels.data.length; i++) {
+      if (found.labels.data[i] !== GAP_NONE) lit.push(i);
+    }
     // Row 4, columns 5 and 6 — the break itself. Ink is never included: what gets painted in the
     // gap colour has to be ground the trace found nothing in, or the mark would sit on top of the
     // linework it is complaining about.
     expect(lit).toEqual([4 * 12 + 5, 4 * 12 + 6]);
+    expect(lit.map((i) => found.labels.data[i])).toEqual([GAP_OPEN, GAP_OPEN]);
   });
 
   it("does not turn the map's border into a break", () => {
@@ -287,6 +290,159 @@ describe("findGaps", () => {
   it("survives an empty raster", () => {
     const found = findGaps(maskFromRows([]), NEAR);
     expect(found.marks).toEqual([]);
-    expect(found.mask.width).toBe(0);
+    expect(found.labels.width).toBe(0);
+  });
+});
+
+/**
+ * The fill, which is the half that writes.
+ *
+ * The property doing the real work here is the last one: **nothing is ever filled that is not also
+ * marked**. Everything else is the two sliders behaving independently, which is the point of having
+ * two of them.
+ */
+describe("findGaps, filling", () => {
+  it("fills nothing when the fill width is zero, which is off", () => {
+    const found = findGaps(maskFromRows(BROKEN_WALL), NEAR);
+    expect(found.marks).toHaveLength(1);
+    expect(found.marks[0]!.filled).toBe(false);
+    expect(found.filled).toBe(0);
+    expect(found.filledArea).toBe(0);
+    expect(found.fillRadius).toBe(0);
+  });
+
+  it("fills a break the fill width reaches, and says so on the mark", () => {
+    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 2, travelPx: 6, fillPx: 2 });
+    expect(found.marks).toHaveLength(1);
+    expect(found.marks[0]!.filled).toBe(true);
+    expect(found.filled).toBe(1);
+    // The two pixels of the break, and they are exactly what the pipeline adds to the ink.
+    expect(found.filledArea).toBe(2);
+    expect(found.labels.data[4 * 12 + 5]).toBe(GAP_FILLED);
+    expect(found.labels.data[4 * 12 + 6]).toBe(GAP_FILLED);
+  });
+
+  it("holds the marked set still while the fill sweeps across it", () => {
+    // The workflow the two sliders exist for: settle what you are looking at, then move the other
+    // one and watch the same set change state. Two breaks, one narrow and one wide.
+    const mask = maskFromRows([
+      "##################",
+      "#................#",
+      "#................#",
+      "#................#",
+      "#................#",
+      "#................#",
+      "#................#",
+      "#####.#######....#",
+      "#................#",
+      "#................#",
+      "#................#",
+      "#................#",
+      "#................#",
+      "#................#",
+      "##################",
+    ]);
+    const marked = { widthPx: 4, travelPx: 6 };
+
+    const none = findGaps(mask, { ...marked, fillPx: 0 });
+    const narrow = findGaps(mask, { ...marked, fillPx: 2 });
+    const both = findGaps(mask, { ...marked, fillPx: 4 });
+
+    // The reference set does not move. That is the property the GM is relying on while sweeping.
+    expect(none.marks).toHaveLength(2);
+    expect(narrow.marks).toHaveLength(2);
+    expect(both.marks).toHaveLength(2);
+    expect(narrow.marks.map((m) => m.x)).toEqual(none.marks.map((m) => m.x));
+    expect(both.marks.map((m) => m.x)).toEqual(none.marks.map((m) => m.x));
+
+    // Only the state changes, and it changes in one direction as the fill widens.
+    expect(none.marks.map((m) => m.filled)).toEqual([false, false]);
+    expect(narrow.marks.map((m) => m.filled)).toEqual([true, false]);
+    expect(both.marks.map((m) => m.filled)).toEqual([true, true]);
+  });
+
+  it("leaves a break only partly within the fill width open", () => {
+    /*
+      A break sealed along part of its length is still a break at the rest of it, so a partial fill
+      is no fill at all and the mark has to keep saying so.
+
+      A two-row wall broken three pixels wide through the upper row and one pixel wide through the
+      lower one. The fill reaches the narrow half and not the wide half.
+
+      The first draft of this fixture staggered the break diagonally instead, and the detector was
+      right to report nothing: **space is 4-connected here**, so a diagonal step does not pass, and
+      that wall is intact. Worth keeping as a note — a break drawn as a diagonal jog is not a break.
+    */
+    const mask = maskFromRows([
+      "################",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "#####...########",
+      "######.#########",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "#..............#",
+      "################",
+    ]);
+    const found = findGaps(mask, { widthPx: 4, travelPx: 6, fillPx: 2 });
+    expect(found.marks).toHaveLength(1);
+    expect(found.marks[0]!.filled).toBe(false);
+  });
+
+  it("never fills anything it has not marked", () => {
+    // The invariant the whole design rests on, asserted directly rather than inferred: every filled
+    // pixel belongs to a channel that also produced a mark. A fill wider than the highlight widens
+    // the search rather than acting unseen.
+    const mask = maskFromRows(BROKEN_WALL);
+    for (const fillPx of [0, 1, 2, 4, 8, 40]) {
+      const found = findGaps(mask, { widthPx: 2, travelPx: 6, fillPx });
+      let filledPixels = 0;
+      for (const value of found.labels.data) if (value === GAP_FILLED) filledPixels += 1;
+      expect(filledPixels).toBe(found.filledArea);
+      // Anything filled is part of a mark, so a filled pixel count above zero demands a filled mark.
+      expect(found.filled > 0).toBe(filledPixels > 0);
+      expect(found.marks.filter((m) => m.filled)).toHaveLength(found.filled);
+    }
+  });
+
+  it("widens the search when the fill is pushed past the highlight", () => {
+    // Highlighting set narrower than the break; the fill reaches it, so the search has to as well
+    // or the fill would be acting on something with no mark on it.
+    const mask = maskFromRows(WIDE_BREAK);
+    const found = findGaps(mask, { widthPx: 2, travelPx: 6, fillPx: 4 });
+    expect(found.searchRadius).toBe(2);
+    expect(found.marks).toHaveLength(1);
+    expect(found.marks[0]!.filled).toBe(true);
+  });
+
+  it("does not fill a dead end the fill could easily reach", () => {
+    // A notch connects nothing to anything, so sealing it could not help — and it carries no mark,
+    // so filling it would break the invariant above. The fill here is wide enough to cover it twice
+    // over and still leaves it alone.
+    const found = findGaps(
+      maskFromRows([
+        "############",
+        "#..........#",
+        "#..........#",
+        "#..........#",
+        "#####.######",
+        "############",
+        "#..........#",
+        "#..........#",
+        "#..........#",
+        "############",
+      ]),
+      { widthPx: 2, travelPx: 6, fillPx: 2 },
+    );
+    expect(found.channels).toBe(1);
+    expect(found.filledArea).toBe(0);
+    expect(found.marks).toEqual([]);
   });
 });

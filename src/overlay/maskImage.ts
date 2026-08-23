@@ -91,6 +91,44 @@ export function paintMask(
 }
 
 /**
+ * Paint the gap labels: one colour for a break left open, another for one the fill closed.
+ *
+ * Two states in one pass rather than two layers, because they are disjoint by construction and a
+ * second full-resolution buffer is 34MB on this project's test map. The distinction itself is not
+ * cosmetic — `DESIGN.md` §8 requires that invented ink never be indistinguishable from read ink, and
+ * these are exactly the pixels the fill invented.
+ */
+export function paintGaps(
+  labels: { width: number; height: number; data: Uint8Array },
+  open: Rgb,
+  filled: Rgb,
+  into?: Uint8ClampedArray<ArrayBuffer>,
+): Uint8ClampedArray<ArrayBuffer> {
+  const needed = labels.width * labels.height * 4;
+  const out = into && into.length === needed ? into : new Uint8ClampedArray(needed);
+
+  for (let i = 0, p = 0; i < labels.data.length; i++, p += 4) {
+    const value = labels.data[i];
+    if (value === 1 || value === 2) {
+      const colour = value === 2 ? filled : open;
+      out[p] = colour.r;
+      out[p + 1] = colour.g;
+      out[p + 2] = colour.b;
+      out[p + 3] = 255;
+    } else {
+      // Cleared explicitly, for the reason `paintMask` gives: a reused buffer holding last run's
+      // marks would draw breaks that are no longer there, which is worse than drawing none.
+      out[p] = 0;
+      out[p + 1] = 0;
+      out[p + 2] = 0;
+      out[p + 3] = 0;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Where the raster's rectangle sits on screen, from the two probed corners.
  *
  * The corners come back as whatever Owlbear reports for the map's world bounding box, which is not

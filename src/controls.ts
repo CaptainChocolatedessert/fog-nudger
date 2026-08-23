@@ -138,6 +138,17 @@ export const CONTROLS: readonly Control[] = [
     derive: (value) => (value <= 0 ? "mark every break" : `${Math.round(value)}px along the ink`),
   },
   {
+    name: "gapFillPx",
+    section: "gaps",
+    label: "Largest break to fill",
+    hint: "Repairs the marked breaks up to this width, so two rooms do not merge across a break the map has not got. Filled ones turn <b class='gap-key filled'>green</b>; the rest stay <b class='gap-key'>purple</b>. In pixels; <b>zero fills nothing</b>. Settle the width above first, then sweep this one.",
+    derive: (value, { pxPerSquare }) => {
+      if (value <= 0) return "nothing filled";
+      if (pxPerSquare === null) return `${Math.round(value)}px`;
+      return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
+    },
+  },
+  {
     name: "minRoomSquares",
     section: "settings",
     // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a

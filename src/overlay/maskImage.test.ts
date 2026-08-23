@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "../trace/fixtures";
-import { paintMask, parseColour, rgbaByteLength, screenRect } from "./maskImage";
+import { paintGaps, paintMask, parseColour, rgbaByteLength, screenRect } from "./maskImage";
 
 const RED = { r: 255, g: 32, b: 32 };
 
@@ -159,5 +159,36 @@ describe("screenRect", () => {
     const rect = screenRect({ x: 50, y: 50 }, { x: -50, y: -50 });
     expect(rect.width).toBeGreaterThanOrEqual(0);
     expect(rect.height).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("paintGaps", () => {
+  const OPEN = { r: 150, g: 80, b: 255 };
+  const FILLED = { r: 40, g: 210, b: 120 };
+  const labels = (data: number[]) => ({ width: data.length, height: 1, data: Uint8Array.from(data) });
+
+  it("paints the two states in their own colours and leaves the rest transparent", () => {
+    const out = paintGaps(labels([0, 1, 2]), OPEN, FILLED);
+    expect([...out.slice(0, 4)]).toEqual([0, 0, 0, 0]);
+    expect([...out.slice(4, 8)]).toEqual([150, 80, 255, 255]);
+    expect([...out.slice(8, 12)]).toEqual([40, 210, 120, 255]);
+  });
+
+  it("clears a reused buffer rather than leaving last run's marks behind", () => {
+    // A break that has been filled, or has gone away entirely, must stop being drawn. Stale alpha
+    // here would show breaks the current settings do not have, which is worse than showing none.
+    const first = paintGaps(labels([1, 1, 1]), OPEN, FILLED);
+    const second = paintGaps(labels([0, 2, 0]), OPEN, FILLED, first);
+    expect(second).toBe(first);
+    expect([...second.slice(0, 4)]).toEqual([0, 0, 0, 0]);
+    expect([...second.slice(4, 8)]).toEqual([40, 210, 120, 255]);
+    expect([...second.slice(8, 12)]).toEqual([0, 0, 0, 0]);
+  });
+
+  it("allocates when the buffer offered is the wrong size", () => {
+    const wrong = new Uint8ClampedArray(4);
+    const out = paintGaps(labels([1, 2]), OPEN, FILLED, wrong);
+    expect(out).not.toBe(wrong);
+    expect(out.length).toBe(8);
   });
 });

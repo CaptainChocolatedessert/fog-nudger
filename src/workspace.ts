@@ -56,7 +56,7 @@ import { CONTROLS, type Control, type Measured } from "./controls";
 import { lastInkWidth, lastPixelsPerSquare, maskForOverlay } from "./pipeline";
 import { resolveTraceMap } from "./map/mapImage";
 import { readSettings, writeSettings } from "./settingsStore";
-import { findGaps, type GapMark } from "./trace/gaps";
+import type { GapFinding, GapMark } from "./trace/gaps";
 import {
   DEFAULT_SETTINGS,
   PARAMETER_KIND,
@@ -68,7 +68,7 @@ import {
   type Settings,
 } from "./settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "./sliderScale";
-import { paintMask, parseColour } from "./overlay/maskImage";
+import { paintGaps, paintMask, parseColour } from "./overlay/maskImage";
 import { WORKSPACE_ID } from "./workspace/workspaceControl";
 import { MaskRequests, shouldPaint } from "./workspace/maskRequest";
 import {
@@ -114,17 +114,28 @@ const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[]
 ];
 
 /**
- * The colour breaks are drawn in, and the ring that makes them findable.
+ * The two colours a break can be drawn in, and the difference between them is the whole point.
+ *
+ * **Purple is a break left open; green is one the fill closed.** A GM settles the highlight width to
+ * get a stable set of places worth attention, then sweeps the fill and watches how much of that
+ * fixed set turns green — judging the trade with the reference set held still underneath it (user,
+ * 2026-08-23).
+ *
+ * Green pixels are also the only ink on this surface that the map does not contain. `DESIGN.md` §8
+ * requires that invented ink never be indistinguishable from read ink, and this is that rule met:
+ * they are a different colour from the ink, a different colour from an unrepaired break, and they
+ * are ringed.
  *
  * **Fixed rather than a swatch row**, unlike the ink colour, and the reason the ink colour is
  * adjustable applies here too: no colour is readable on every map. The ring is what carries the
- * identification when the colour collides — it is drawn dark-then-bright over the same path, so it
- * reads against anything underneath, and it is a shape nothing on a map looks like. If a room
- * reports the marks vanishing into the paper anyway, a picker is the answer.
+ * identification when a colour collides — drawn dark-then-bright over the same path, so it reads
+ * against anything underneath, and it is a shape nothing on a map looks like. If a room reports the
+ * marks vanishing into the paper anyway, a picker is the answer.
  *
- * Kept in step with the `.gap-key` colour in the page's own stylesheet by hand.
+ * Kept in step with the `.gap-key` colours in the page's own stylesheet by hand.
  */
-const GAP_COLOUR = "#ff8a1e";
+const GAP_OPEN_COLOUR = "#a855f7";
+const GAP_FILLED_COLOUR = "#22c55e";
 
 /**
  * The ring is drawn in **screen** pixels, which is the whole point of it.
@@ -170,8 +181,6 @@ let painted: Layer | null = null;
  */
 let paintedGaps: Layer | null = null;
 let gapMarks: readonly GapMark[] = [];
-/** Whether the marks in hand are the marks for the settings that have been applied. */
-let gapsFresh = false;
 
 const requests = new MaskRequests();
 let inFlight = false;
@@ -228,10 +237,10 @@ function draw(): void {
     context.globalAlpha = 1;
   }
 
-  // The breaks, over the ink and at full alpha. Gated on their own freshness as well as the mask's:
-  // marks computed for a setting the GM has moved past are the same lie the blanking rule exists to
-  // prevent, one derivation further down.
-  if (paintedGaps && gapsFresh && showing) {
+  // The breaks, over the ink and at full alpha — so a GM who has tinted the ink down to look at the
+  // linework underneath has not also turned the warning down. They come from the same reading as the
+  // ink, so the mask's own freshness gate covers them.
+  if (paintedGaps && showing) {
     context.drawImage(paintedGaps.canvas, view.x, view.y, drawWidth, drawHeight);
     drawGapRings(context, width, height);
   }
@@ -259,10 +268,10 @@ function drawGapRings(context: CanvasRenderingContext2D, viewWidth: number, view
     context.beginPath();
     context.arc(cx, cy, radius, 0, Math.PI * 2);
     context.lineWidth = 4;
-    context.strokeStyle = "rgba(8, 6, 2, 0.7)";
+    context.strokeStyle = "rgba(6, 4, 12, 0.7)";
     context.stroke();
     context.lineWidth = 2;
-    context.strokeStyle = GAP_COLOUR;
+    context.strokeStyle = mark.filled ? GAP_FILLED_COLOUR : GAP_OPEN_COLOUR;
     context.stroke();
   }
 }
@@ -377,16 +386,23 @@ async function refreshMask(): Promise<void> {
 
     lastInkShare = shareOfInk(result.mask);
     lastReused = result.reused;
+    paintBreaks(result.gaps);
+    gapTotal = result.gaps.marks.length;
+    gapFilled = result.gaps.filled;
     sayReading();
     devLog(
       "info",
       `workspace: mask ${generation} painted for "${result.mapName}" — ` +
         `${result.mask.width}x${result.mask.height}, ink ${(lastInkShare * 100).toFixed(1)}%, ` +
-        `${result.reused ? "reused from cache" : "recomputed"}`,
+        `${gapTotal} breaks of which ${gapFilled} filled, ` +
+        `${
+          result.reused
+            ? "reused whole"
+            : result.readingReused
+              ? "reading reused, ink recomposed"
+              : "read from the map"
+        }`,
     );
-    // A new mask means new breaks. Left to run on its own rather than awaited, so the ink is on
-    // screen while the search happens instead of both landing together half a second later.
-    void refreshGaps();
   } catch (error) {
     if (requests.fail(generation)) {
       const detail = describeError(error);
@@ -412,13 +428,14 @@ function shareOfInk(mask: { data: Uint8Array; width: number; height: number }): 
 /** The last reading's headline figures, so the two paths that report them cannot word it differently. */
 let lastInkShare: number | null = null;
 let lastReused = false;
-/** How many breaks the last search found, or `null` when the control is off. */
-let gapTotal: number | null = null;
+/** How many breaks the last reading found, and how many of them the fill closed. */
+let gapTotal = 0;
+let gapFilled = 0;
 
 function sayReading(): void {
   if (lastInkShare === null) return;
   const ink = `ink ${(lastInkShare * 100).toFixed(1)}%${lastReused ? " (cached)" : ""}`;
-  if (gapTotal === null) {
+  if (gapTotal === 0) {
     sayIfSettled(ink);
     return;
   }
@@ -428,9 +445,10 @@ function sayReading(): void {
     A found break is a finding rather than a fault — most maps will have a few, and a status line
     that is permanently red is a status line nobody reads, which is the failure §8 is about. The
     rings are the channel that has to be noticed; this is the count that tells a GM whether the
-    ones they can see are all of them.
+    ones they can see are all of them, and how far the fill has got through them.
   */
-  sayIfSettled(`${ink} · ${gapTotal === 1 ? "1 break" : `${gapTotal} breaks`}`);
+  const breaks = gapTotal === 1 ? "1 break" : `${gapTotal} breaks`;
+  sayIfSettled(`${ink} · ${breaks}, ${gapFilled} filled`);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -438,82 +456,42 @@ function sayReading(): void {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Search the mask in hand for breaks, and paint them.
+ * Paint the breaks that arrived with the mask.
  *
- * Runs on the mask rather than the map, so it never re-reads: a gap parameter changes what is
- * *derived* from the reading and nothing about the reading itself, which is why those two settings
- * are their own kind rather than pipeline parameters. Changing one costs a closing and some local
- * flooding — around half a second on this project's test map — instead of the 690ms binarisation.
+ * **The search itself is not here any more.** It moved into the pipeline the moment the fill became
+ * real: the fill invents ink that the regions are derived from, so the search and the repair have to
+ * be the same computation that produces the mask, not a second copy of it living on a surface. This
+ * side now only draws what it was handed, which is the shape the rest of stage one already has.
  *
- * Coalesced the same way the mask is, and for the same reason: the work is synchronous, so a second
- * request cannot interrupt the first, and what arrives late must be dropped rather than drawn.
+ * The layer is allocated lazily. A map with no breaks — or a GM who has turned the marks off — does
+ * not pay for a second full-resolution RGBA buffer, which is about 34MB on this project's test map.
  */
-let gapGeneration = 0;
-
-async function refreshGaps(): Promise<void> {
-  const mask = lastMask;
-  const generation = ++gapGeneration;
-
-  // Blank first. Marks for a setting the GM has moved past are worse than no marks: they say "this
-  // is where the breaks are" about a question that has changed.
-  gapsFresh = false;
-  gapMarks = [];
-  dirty = true;
-
-  const { gapWidthPx, gapTravelPx } = settings.overlay;
-  if (!mask || gapWidthPx <= 0) {
-    gapTotal = null;
-    gapsFresh = true;
-    sayReading();
+function paintBreaks(gaps: GapFinding): void {
+  gapMarks = gaps.marks;
+  if (gaps.marks.length === 0) {
+    // Cleared rather than left stale. A repaint that kept the previous reading's layer would draw
+    // breaks the current settings do not have, which is the blanking rule one derivation down.
+    paintedGaps = null;
     return;
   }
 
-  say("looking for breaks…", "working");
-  // One turn of the event loop so that message actually paints. The search itself holds the thread
-  // from here, which is the same limitation the reading has and has the same two ways out — a
-  // worker, or cropping to the visible region — neither of them measured yet.
-  await new Promise((resolve) => window.setTimeout(resolve, 0));
-  if (closing || generation !== gapGeneration) return;
+  const open = parseColour(GAP_OPEN_COLOUR);
+  const filled = parseColour(GAP_FILLED_COLOUR);
+  if (!open || !filled) return;
 
-  const started = performance.now();
-  try {
-    const found = findGaps(mask, { widthPx: gapWidthPx, travelPx: gapTravelPx });
-    if (closing || generation !== gapGeneration) return;
-
-    if (found.marks.length > 0) {
-      const layer = rasterise(found.mask, GAP_COLOUR, paintedGaps);
-      if (!layer) {
-        say("could not allocate the break overlay", "bad");
-        devLog("error", "workspace: could not allocate the break overlay");
-        return;
-      }
-      paintedGaps = layer;
-    }
-
-    gapMarks = found.marks;
-    gapTotal = found.marks.length;
-    gapsFresh = true;
-    dirty = true;
-    sayReading();
-
-    devLog(
-      "info",
-      `workspace: breaks in ${Math.round(performance.now() - started)}ms — ` +
-        `${gapWidthPx}px wide at radius ${found.radius}px found ${found.channels} narrow channels, ` +
-        `${found.through} of them passing through; ${found.marks.length} had banks more than ` +
-        `${gapTravelPx}px apart along the ink and are marked` +
-        (found.budgetHits > 0
-          ? `. ${found.budgetHits} were marked because the flood budget ran out rather than because ` +
-            `the ink was broken — lower the same-wall distance`
-          : ""),
-    );
-  } catch (error) {
-    if (generation !== gapGeneration) return;
-    const detail = describeError(error);
-    say(`looking for breaks failed: ${detail}`, "bad");
-    devLog("error", "workspace: the break search failed", detail);
-    console.error("Fog Nudger — workspace could not search for breaks", error);
+  const buffer = paintGaps(gaps.labels, open, filled, paintedGaps?.buffer);
+  const target = paintedGaps?.canvas ?? document.createElement("canvas");
+  target.width = gaps.labels.width;
+  target.height = gaps.labels.height;
+  const context = target.getContext("2d");
+  if (!context) {
+    paintedGaps = null;
+    devLog("error", "workspace: could not allocate the break overlay");
+    return;
   }
+
+  context.putImageData(new ImageData(buffer, gaps.labels.width, gaps.labels.height), 0, 0);
+  paintedGaps = { canvas: target, buffer };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -614,10 +592,7 @@ function settingRow(control: Control): HTMLElement {
       What it must not do is look current, so the state line says the slider is ahead of the map.
     */
     pendingEdit = true;
-    say(
-      kind === "gaps" ? "slider moved — release to look again" : "slider moved — release to re-read",
-      "working",
-    );
+    say("slider moved — release to re-read", "working");
   });
 
   input.addEventListener("change", () => {
@@ -631,8 +606,6 @@ function settingRow(control: Control): HTMLElement {
       requests.request();
       dirty = true;
       void refreshMask();
-    } else if (kind === "gaps") {
-      void refreshGaps();
     }
     void persist();
   });
@@ -947,13 +920,16 @@ async function run(): Promise<void> {
     painted = layer;
     lastInkShare = shareOfInk(result.mask);
     lastReused = result.reused;
+    paintBreaks(result.gaps);
+    gapTotal = result.gaps.marks.length;
+    gapFilled = result.gaps.filled;
     sayReading();
     devLog(
       "info",
       `workspace: opened on "${result.mapName}" — mask ${result.mask.width}x${result.mask.height}, ` +
-        `ink ${(lastInkShare * 100).toFixed(1)}%, ${result.reused ? "reused from cache" : "recomputed"}`,
+        `ink ${(lastInkShare * 100).toFixed(1)}%, ${gapTotal} breaks of which ${gapFilled} filled, ` +
+        `${result.reused ? "reused from cache" : "recomputed"}`,
     );
-    void refreshGaps();
   }
   dirty = true;
 }
