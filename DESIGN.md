@@ -715,9 +715,83 @@ question rather than answering it.
 **`iframe == viewport` holds without `disablePointerEvents` too** — 1246x1242 both, every run. The
 click-through overlay's finding was not a property of that flag.
 
-**Not tested, deliberately:** pan and zoom, and the frame cost of drawing a map-sized image per
-frame. Navigation was held back for a separate decision (below), and frame cost only means something
-once there is something being drawn every frame.
+#### The workspace probe, navigation half — measured in a room, 2026-08-23
+
+**Item 0 is closed.** The surface works, the navigation is right, and the two constants it exists to
+find are settled.
+
+**Written rather than imported, after considering the alternative.** The requirement was never
+"zooming works" — it was *"it feels like Owlbear's"*, and a library supplies someone else's feel to
+be tuned through its abstractions instead of by changing a constant. The case here is one image, no
+rotation, no tiling, one transform, on a surface that already owns every pointer event; what remains
+is about sixty lines. The reasoning about a painting library, which is the same question one level
+up, is in §11.
+
+*The cost, stated:* device quirks are ours. That bill arrived immediately, below.
+
+**The feel constants, found by sweeping them during a run rather than guessed:**
+
+| | |
+| --- | --- |
+| Mouse wheel | **12% per notch** — right on the first try, unchanged after a sweep |
+| Trackpad pinch | **1.00% of zoom per pixel** of finger movement |
+
+Both are adjustable from the keyboard *while the probe is up*, which is what made one run enough.
+"Too fast" is a complaint; a number is something to build with.
+
+**It opens on exactly the view Owlbear was showing**, by asking where the map's own world corners
+currently sit on screen. Confirmed by eye: nothing moves as the sheet goes up. That also makes a
+comparison of *feel* honest, since both navigations start from the same framing rather than from two
+different ones.
+
+**A mouse notch and a trackpad gesture are three intents down one event**, and treating them as one
+was the whole of the first round's trouble — a two-finger scroll zoomed the map, and a pinch was
+unusably fast. Classified now: `ctrlKey` is a pinch, which is a browser convention rather than a
+guess; a `deltaMode` other than pixels is a mouse; a coarse, integer, purely vertical pixel delta is
+a mouse in a browser that reports pixels; anything else is a two-finger scroll and means pan.
+
+- **A pinch scales with its delta and a notch does not**, and that is the speed fix rather than a
+  smaller constant. A notch is one discrete event whose magnitude is a number the browser chose
+  arbitrarily. A pinch is continuous, delivered as a stream of small events, and applying a whole
+  notch to each was dozens of steps for one gesture. Exponential, so a pinch out exactly undoes a
+  pinch in.
+- **The classification is reported live**, because the last two rules are a guess about a device
+  from the shape of its numbers. A misread gesture is visible while the hand is still on the device
+  rather than being a mystery afterwards.
+
+**Frame cost is a non-issue, with margin.** 1,202 frames, both map-sized layers drawn every frame:
+**0.1ms mean and 1.0ms worst inside the draw call, against a 16.7ms frame**. The surface is bound by
+the display, not by us, and §4's expectation that a GPU-composited `drawImage` would be fine is
+confirmed rather than assumed. Measured during motion only — a still view redraws nothing and would
+have reported a flattering zero.
+
+**Owlbear's viewport never moved**, under real navigation, with the detector proving itself 2/2 on
+every run.
+
+##### Two platform limits, and neither is ours — 2026-08-23
+
+Both were reported as defects, both were measured, and both turned out to be Firefox. **Owlbear
+behaves identically** (confirmed by the user), which is what settles them: the bar was matching it.
+
+- **A two-finger scroll is axis-locked when the gesture starts along an axis.** 624 of 1,200 events
+  carried both deltas — so diagonals do arrive and are used, and a drag begun diagonally stays free
+  — against 163 x-only and 413 y-only from gestures begun straight. The lock is applied upstream at
+  gesture start and JavaScript receives only what is sent.
+- **A pinch cannot carry a pan.** Of 291 pinch events, **none** carried any horizontal delta and
+  **none** interleaved with a scroll event inside 200ms. Firefox delivers a pinch as pure vertical
+  `ctrl`+wheel; the pan half of a combined gesture never reaches the page.
+
+*A real bug was fixed on the way to that answer and was not its cause:* a pinch's `deltaX` was being
+discarded outright, since the zoom path read only `deltaY`. Correct to fix — a component that
+arrives and is thrown away is wrong regardless — but on this platform there is nothing for it to
+act on.
+
+**The design consequence, and it is the useful part:** the axis-lock applies only to the wheel.
+**Click-and-drag panning has no lock at all.** But in the workspace a left-drag becomes the brush,
+which would push a trackpad user back onto the locked gesture for panning. So the workspace needs an
+unrestricted drag-pan on another binding — **a modifier held while dragging, and/or a dedicated hand
+tool** (user, 2026-08-23). Probably both: a modifier for a moment's nudge, a tool for a while spent
+navigating.
 
 ### Stage one is two things in series — settled 2026-08-23 (user)
 
@@ -1897,25 +1971,34 @@ the moment the map changes.
 
 Not built; recorded so the order and the reasoning survive a session change.
 
-#### 0. The workspace probe — input half done, navigation still open
+#### 0. The workspace probe — CLOSED, 2026-08-23
 
 **Stage one moves to its own opaque, interactive surface.** The reasoning is in §4 under "Superseding
 all of the above"; the short version is that the click-through overlay is mostly machinery for coping
 with not owning the transform, and that everything queued below wants interaction it structurally
 cannot provide.
 
-**Done, 2026-08-23: does the surface own its input?** Yes, completely — full results in §4 under
-"The workspace probe, input half". Pointer, wheel and right-click are ours with no leak to Owlbear,
-against a detector that was made to fail before its zero was believed. The keyboard has to be
-*claimed* rather than being given, and until it is, every keystroke goes to Owlbear's page instead;
-claiming it succeeds on the first try. `hidePaper` turns out to change nothing.
+Both halves are answered and the full results are in §4 under "The workspace probe". In brief:
 
-**Still open, and it was always the harder half: does pan and zoom feel right?** That is the
-question nothing but a human's hands can answer, and it is why item 0 was a probe rather than a
-build. Also unmeasured: **frame cost** with a map-sized image drawn per frame, which only means
-something once navigation exists to drive it.
+- **The surface owns its input.** Pointer, wheel and right-click are ours with no leak to Owlbear,
+  against a detector made to fail before its zero was believed. The keyboard is *taken rather than
+  given* — until claimed, every keystroke reaches Owlbear's page — and claiming it succeeds on the
+  first try, about 150ms in. `hidePaper` changes nothing.
+- **The navigation feels right**, at **12% per mouse notch** and **1.00% per trackpad pixel**, and it
+  opens on the view Owlbear was already showing so nothing jumps.
+- **Frame cost is negligible** — 0.1ms of a 16.7ms frame with both map-sized layers.
+- **Two trackpad limits are Firefox's, not ours**, and Owlbear has them too, so we match: a
+  two-finger scroll is axis-locked when begun along an axis, and a pinch cannot carry a pan.
 
-Everything from 1 to 4 below is then built **on that surface**, not on the click-through overlay.
+**Carried forward into item 3 and 4:** because a left-drag will become the brush, the workspace owes
+a trackpad user an unrestricted drag-pan on another binding — **a modifier held while dragging,
+and/or a dedicated hand tool**. The wheel's axis-lock makes the two-finger gesture an inadequate
+substitute on its own.
+
+**The next thing is the workspace itself**, not another probe: the real mask instead of the
+stand-in, stage one's controls inside the surface, and the click-through overlay deleted along with
+its poll, settle, blank-and-restore, clip band and panel heartbeat. Items 1 to 4 are then built
+**on that surface**.
 
 #### 1. Gap marks
 
