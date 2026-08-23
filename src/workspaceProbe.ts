@@ -192,7 +192,37 @@ const wheelShape = {
   largestAbsDelta: 0,
   fractional: 0,
   withCtrl: 0,
+
+  /*
+    Whether a two-finger drag can be diagonal at all, and whether a pinch can carry a pan.
+
+    Reported from a room: the pan goes in pure X or pure Y and never a diagonal, and a pinch cannot
+    be combined with a drag. Neither is necessarily ours to fix — a browser is free to lock a
+    trackpad gesture to its dominant axis, and to decide that a gesture is a pinch *or* a scroll and
+    not both, in which case no code here can recover an axis that never arrived.
+
+    So this counts what actually shows up, and the difference is decisive: events carrying both
+    deltas mean the diagonal reached us and we dropped it, while none ever carrying both means the
+    browser locked the axis before we saw it. Same for a pinch — `pinchWithX` is whether the zoom
+    events carry any sideways movement, and `interleaved` is whether pinch and scroll events
+    alternate inside one gesture, which is the other way a platform can deliver "both at once".
+  */
+  bothAxes: 0,
+  xOnly: 0,
+  yOnly: 0,
+  pinchWithX: 0,
+  interleaved: 0,
+  lastWasCtrl: null as boolean | null,
+  lastAt: 0,
 };
+
+/**
+ * How close two wheel events must be to count as part of one gesture.
+ *
+ * Only used for `interleaved`. Generous, because the question is whether the browser mixes pinch
+ * and scroll events inside a single continuous gesture at all — not where its exact boundaries are.
+ */
+const GESTURE_GAP_MS = 200;
 
 /** When each channel last fired, feeding the attribution of an observed movement. */
 const lastEventAt: Record<InputChannel, number | null> = {
@@ -297,6 +327,9 @@ function dismiss(why: string): void {
       `mask layer ${showMaskLayer ? "on" : "off"}. ` +
       `INTENTS: ${wheelShape.intents["zoom-notch"]} notch, ${wheelShape.intents["zoom-pinch"]} ` +
       `pinch, ${wheelShape.intents.pan} pan. ` +
+      `AXES: ${wheelShape.bothAxes} diagonal, ${wheelShape.xOnly} x-only, ${wheelShape.yOnly} ` +
+      `y-only, ${wheelShape.pinchWithX} pinches carried x, ${wheelShape.interleaved} pinch/scroll ` +
+      `transitions within ${GESTURE_GAP_MS}ms. ` +
       `FRAMES: ${frames.drawn} drawn, draw ${average(frames.drawMs).toFixed(1)}ms mean / ` +
       `${worst(frames.drawMs).toFixed(1)}ms worst, frame ${frameMean.toFixed(1)}ms mean / ` +
       `${worst(frames.frameMs).toFixed(1)}ms worst` +
@@ -425,6 +458,11 @@ function render(): void {
     `wheel     last <b>${wheelShape.lastIntent}</b> · ` +
     `${wheelShape.intents["zoom-notch"]} notch / ${wheelShape.intents["zoom-pinch"]} pinch / ` +
     `${wheelShape.intents.pan} pan\n` +
+    // Decides whether a missing diagonal is ours or the browser's: events carrying both deltas mean
+    // it reached us, none ever doing so means the axis was locked before we saw it.
+    `axes      <b>${wheelShape.bothAxes}</b> diagonal · ${wheelShape.xOnly} x-only · ` +
+    `${wheelShape.yOnly} y-only · pinch+x ${wheelShape.pinchWithX} · ` +
+    `mixed ${wheelShape.interleaved}\n` +
     `frames    ${frames.drawn} drawn · draw ${average(frames.drawMs).toFixed(1)}ms mean, ` +
     `${worst(frames.drawMs).toFixed(1)}ms worst · ` +
     `${frameMean > 0 ? `${(1000 / frameMean).toFixed(0)}fps` : "—"} while moving\n` +
@@ -517,6 +555,23 @@ if (sheet instanceof HTMLElement) {
       }
       if (event.ctrlKey) wheelShape.withCtrl += 1;
 
+      // Which axes arrived, and whether the two gestures ever mix. See `wheelShape`.
+      if (event.deltaX !== 0 && event.deltaY !== 0) wheelShape.bothAxes += 1;
+      else if (event.deltaX !== 0) wheelShape.xOnly += 1;
+      else if (event.deltaY !== 0) wheelShape.yOnly += 1;
+      if (event.ctrlKey && event.deltaX !== 0) wheelShape.pinchWithX += 1;
+
+      const now = performance.now();
+      if (
+        wheelShape.lastWasCtrl !== null &&
+        wheelShape.lastWasCtrl !== event.ctrlKey &&
+        now - wheelShape.lastAt < GESTURE_GAP_MS
+      ) {
+        wheelShape.interleaved += 1;
+      }
+      wheelShape.lastWasCtrl = event.ctrlKey;
+      wheelShape.lastAt = now;
+
       /*
         Three intents down one event, from two devices.
 
@@ -528,17 +583,39 @@ if (sheet instanceof HTMLElement) {
       wheelShape.intents[intent] += 1;
       wheelShape.lastIntent = intent;
 
+      // The browser's own sign convention, so whatever the OS is set to — natural scrolling or not
+      // — this follows it rather than second-guessing it.
+      const direction = panInverted ? -1 : 1;
+
       if (intent === "pan") {
-        // The browser's own sign convention, so whatever the OS is set to — natural scrolling or
-        // not — this follows it rather than second-guessing it.
-        const direction = panInverted ? -1 : 1;
         setView(panBy(view, -event.deltaX * direction, -event.deltaY * direction));
+      } else if (intent === "zoom-pinch") {
+        /*
+          A pinch zooms by its vertical delta and pans by its horizontal one, in the same event.
+
+          Reported from a room: a pinch cannot be combined with a drag, the way it can in most
+          applications. Dropping `deltaX` here was one way that could happen and it is ours to fix,
+          so it is fixed whether or not it turns out to be the cause — a sideways component that
+          arrives and is discarded is a bug regardless of what else is wrong.
+
+          The other possible cause is not ours: a browser may decide a gesture is a pinch or a
+          scroll and never both, in which case the pan half never reaches this page at all. The
+          `interleaved` and `pinchWithX` counts are what tell those apart.
+        */
+        const zoomed = zoomAbout(
+          view,
+          { x: event.clientX, y: event.clientY },
+          pinchFactor(wheelInverted ? -event.deltaY : event.deltaY, pinchSensitivity),
+        );
+        setView(event.deltaX !== 0 ? panBy(zoomed, -event.deltaX * direction, 0) : zoomed);
       } else {
-        const factor =
-          intent === "zoom-pinch"
-            ? pinchFactor(wheelInverted ? -event.deltaY : event.deltaY, pinchSensitivity)
-            : wheelFactor(event.deltaY, zoomStepPercent, wheelInverted);
-        setView(zoomAbout(view, { x: event.clientX, y: event.clientY }, factor));
+        setView(
+          zoomAbout(
+            view,
+            { x: event.clientX, y: event.clientY },
+            wheelFactor(event.deltaY, zoomStepPercent, wheelInverted),
+          ),
+        );
       }
       render();
     },
