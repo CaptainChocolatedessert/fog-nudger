@@ -321,11 +321,11 @@ const CONTROLS: readonly Control[] = [
     derive: (value) => `${value.toFixed(2)} px`,
   },
   {
-    name: "sauvolaRadiusSquares",
+    name: "sauvolaRadiusPx",
     section: "ink",
     label: "Detail window",
-    hint: "How local the threshold is. Wants to stay comfortably wider than the linework is thick, or a bold stroke becomes its own background and stops counting as ink.",
-    derive: (value, px) => `${Math.round(value * px) * 2 + 1} px across`,
+    hint: "How local the threshold is, as a radius in pixels. Wants to stay comfortably wider than the linework is thick, or a bold stroke becomes its own background and stops counting as ink.",
+    derive: (value) => `${Math.round(value) * 2 + 1} px across`,
   },
   {
     name: "minStrokeInkWidths",
@@ -348,12 +348,11 @@ const CONTROLS: readonly Control[] = [
     },
   },
   {
-    name: "minIslandSquares",
+    name: "minIslandPx",
     section: "walls",
     label: "Smallest ink island",
-    hint: "Removes isolated marks shorter than this on <b>both</b> sides — decoration that survived the filter above. Walls join into one network, so they are not islands. In grid squares; <b>zero is off</b>.",
-    derive: (value, px) =>
-      value <= 0 ? "off" : `under ~${Math.round(value * px)}px across goes`,
+    hint: "Removes isolated marks shorter than this on <b>both</b> sides — decoration that survived the filter above. Walls join into one network, so they are not islands. In pixels; <b>zero is off</b>.",
+    derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
   },
   {
     name: "minRoomSquares",

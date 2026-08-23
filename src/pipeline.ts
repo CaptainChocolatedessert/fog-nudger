@@ -417,7 +417,7 @@ async function computeMask(
   // is, not on which class is smaller — see `polarity.ts` for the map style that breaks the obvious
   // rule.
   const binarizeStarted = performance.now();
-  const radius = Math.min(64, Math.max(4, Math.round(settings.trace.sauvolaRadiusSquares * pxPerSquare)));
+  const radius = Math.max(1, Math.round(settings.trace.sauvolaRadiusPx));
   // Kept unblurred as well, purely so the point probe can report the tone the *map* has rather than
   // the tone the binariser read. When the question is "is this actually white", a value softened by
   // a one-pixel Gaussian is the wrong number to answer it with.
@@ -432,8 +432,8 @@ async function computeMask(
   devLog(
     "info",
     `trace: binarized in ${binarizeMs}ms — Sauvola radius ${radius}px ` +
-      `(${settings.trace.sauvolaRadiusSquares} square at ${pxPerSquare.toFixed(1)} px/square), k ${settings.trace.sauvolaK}, ` +
-      `blur sigma ${settings.trace.blurSigma}`,
+      `(window ${radius * 2 + 1}px), k ${settings.trace.sauvolaK}, ` +
+      `blur sigma ${settings.trace.blurSigma}px`,
   );
   devLog(
     "info",
@@ -470,7 +470,7 @@ async function computeMask(
         "warn",
         `trace: the Sauvola window (${window}px) is not comfortably wider than the ink ` +
           `(~${reading.inkWidth.toFixed(1)}px). Heavy linework can fill its own window and be ` +
-          `read as ground. Raise settings.trace.sauvolaRadiusSquares.`,
+          `read as ground. Raise the detail window.`,
       );
     }
     // Saturation is a real limit rather than a small one: at or below two pixels the measure cannot
@@ -573,7 +573,7 @@ async function computeMask(
   // Eight-connected, per the pairing rule, and that is the conservative direction here: a decoration
   // touching a wall even diagonally counts as part of the network and is never removed.
   const islandStarted = performance.now();
-  const minIslandPx = settings.trace.minIslandSquares * pxPerSquare;
+  const minIslandPx = settings.trace.minIslandPx;
   const islands = removeSmallInkIslands(effectiveMask, minIslandPx);
   const filteredMask = islands.mask;
 
@@ -582,8 +582,8 @@ async function computeMask(
     devLog(
       "info",
       `trace: smallest ink island in ${Math.round(performance.now() - islandStarted)}ms — ` +
-        `${settings.trace.minIslandSquares} of a square is ${minIslandPx.toFixed(1)}px, so any ` +
-        `isolated mark shorter than that on both sides is gone. Removed ${islands.removed} ` +
+        `any isolated mark shorter than ${minIslandPx}px on both sides is gone. ` +
+        `Removed ${islands.removed} ` +
         `islands holding ${islands.removedArea} px ` +
         `(${beforeIslands > 0 ? ((islands.removedArea / beforeIslands) * 100).toFixed(1) : "0.0"}% ` +
         `of the ink); largest surviving island spans ${islands.largestKeptSpan}px ` +

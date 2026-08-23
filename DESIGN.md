@@ -800,10 +800,52 @@ during the draw, not by a box filter of ours. A box average would be better, but
 the full-resolution pixels in memory, which is precisely what the budget exists to avoid.
 
 **The lesson worth carrying.** The sibling's real trap was denominating its parameters in raster
-pixels, which made the raster load-bearing forever. Ours should be denominated in **measured ink
-width** — already this project's natural unit, since the half-wall coverage target in §4 is stated
-as a fraction of the wall's own thickness. Keep it that way and the raster never becomes something
-we cannot change.
+pixels, which made the raster load-bearing forever. Ink width is this project's natural unit where
+it can be used, since the half-wall coverage target in §4 is stated as a fraction of the wall's own
+thickness.
+
+#### Amended 2026-08-23 (user): pixels are allowed, and there is no unit that is always right
+
+The original rule was **"denominate in measured ink width or grid squares, never raster pixels"**.
+Both halves have since failed, and the rule stated that way was hiding the fact that a choice has to
+be made per parameter rather than once.
+
+- **Grid squares fail when the grid is not the map's.** A GM who does not need a grid leaves it at a
+  default, or sets it wrong, and nothing about that is visible or reported. The pipeline still runs;
+  the control simply stops meaning anything. This is the failure that prompted the amendment.
+- **Ink width is not trusted across map styles** (user). It saturates at 2px, is biased thin, and is
+  measured by erosion on a mask that a heavily hatched or stippled map makes unrepresentative. It is
+  a good unit when it is good and there is no way to know from inside which case you are in.
+- **Raster pixels stop meaning the same thing only when the megapixel budget bites**, which is
+  reported and rare — and they are always *exactly* what they say for the run in front of you.
+
+So the amended rule is: **prefer ink width where the parameter is genuinely about the linework's own
+scale; otherwise prefer pixels; use grid squares only where the quantity really is an area or a
+distance on the map's own grid.** Nothing may depend on the grid *silently*.
+
+Where each parameter landed:
+
+| parameter | unit | why |
+| --- | --- | --- |
+| Texture blur | px | always was; it is a filter kernel size |
+| Detail window | **px** (was squares) | a filter kernel size, and it is tuned beside the blur |
+| Minimum stroke width | ink widths | genuinely a statement about stroke thickness |
+| Smallest ink island | **px** (was squares) | a size on the image, and ink width is not trusted here |
+| Smallest room | squares | it really is an area on the map's grid, and a GM thinks in squares |
+| Edge simplification | ink widths | its safety bound *is* half an ink width |
+
+**Stage one now depends on nothing but the image.** Stage two's smallest-room control still depends
+on the grid, and squared — a grid off by four puts it off by sixteen. That is a known exposure.
+
+*Rejected: choosing the raster to hit a target pixels-per-grid-square density.* The sibling tried
+it, reasoning that pixel-denominated constants are only meaningful against the ink scale they were
+tuned on. It broke on a map spanning 5.4 grid squares, where the rule picked a raster 174 pixels
+wide and thinned every line out of existence. Grid-derived *sizing of the raster* remains a trap.
+
+*Note on migration:* both controls were **renamed** rather than reinterpreted. Keeping the key while
+changing the unit would have read a stored `0.25` squares as `0.25` pixels, which is catastrophic
+and silent. A rename means the old key is ignored and the new default applies, which is the loud
+version of the same event.
 
 *Rejected: choosing the raster to hit a target pixels-per-grid-square density.* The sibling tried
 it, reasoning that pixel-denominated constants are only meaningful against the ink scale they were
@@ -952,6 +994,36 @@ The sibling's culture is the reason it works, and it costs almost nothing to ado
   after changing two things at once.
 - **Diagnostics that fire unconditionally are worth their noise.** One that only fires when
   something is known to be wrong cannot distinguish "fine" from "never ran".
+
+### A warning is not a safeguard — settled 2026-08-23 (user)
+
+**Nobody reads the log, and probably nobody reads the little messages on the panel either.** So a
+control is not made safe by warning about what it might have done. Either it is **right**, or its
+failure is **evident in something the GM is actively looking at**.
+
+This corrects a habit that had been accumulating. Several controls here were justified partly on the
+grounds that the run "says so" when they go wrong — the minimum stroke width warns that it can sever
+a wall, the island filter warns when the largest surviving island is too small, the trace warns when
+the Sauvola window is too narrow for the ink. Every one of those is a real signal and none of them
+is a safety mechanism, because the person who needs it is looking at a map.
+
+**What this does not mean.** The log is not being cut back. It remains the instrument that lets a
+fault a GM *reports* be diagnosed without either party looking at pixels, which is the census's whole
+justification, and it is how this project debugs itself. The change is in what a warning is allowed
+to *license*: it may not be offered as the reason a risky control is acceptable.
+
+**What it means in practice**, and this is the design consequence rather than a slogan:
+
+- The stage-one overlay is the model. It made a global width filter defensible where a log line
+  could not, because the damage appears under the GM's cursor as they drag.
+- **A new control that can be wrong needs a visual channel before it ships**, not a warning. The
+  gap-bridging control below is the immediate case: a closing that seals a doorway looks exactly
+  like correct wall, so bridged pixels have to be drawn in their own colour or the control should
+  not exist.
+- *Rejected on these grounds, 2026-08-23: a grid-plausibility check.* Comparing pixels-per-square
+  against measured ink width would have detected a grid that is not the map's and reported it. It
+  was the natural answer to §5's amendment and it was declined, because it is a warning — the fix
+  was to remove the dependency instead.
 
 ### The region census — a troubleshooting instrument, not a quality signal
 
@@ -1703,6 +1775,72 @@ skeleton is noisy — thick filled walls, hatching — it will propose nonsense,
 only because it is GM-invoked rather than automatic. Recompute the skeleton from the map image on
 demand rather than persisting it; pixel access is verified to work, and a stored skeleton goes stale
 the moment the map changes.
+
+### Next, in order — user, 2026-08-23
+
+Four things, and the first two are one piece of work. Not built; recorded so the order and the
+reasoning survive a session change.
+
+#### 1. Gap marks on the overlay
+
+**Highlight small gaps in the ink.** A wall with a thin section eroded away — by the minimum stroke
+width, or simply drawn faintly — leaves a break, and a break merges two rooms into one region, which
+is this project's worst failure. There is an example on the current test map.
+
+This is the visual channel §8 now requires before the bridging control below can be justified: a gap
+must be *seen*, not reported. The mark wants to be conspicuous rather than subtle, since it is
+flagging the failure that matters most and the GM is scanning a whole map.
+
+**Open: what counts as a gap.** The candidate definition is a place where a morphological *closing*
+at some radius would join two ink components that are currently separate — which makes the marks a
+preview of the bridging control rather than an independent detector, and lets the two explain each
+other. The alternative is an independent notion of "gap" that warns even with bridging off. These
+differ in whether a gap the bridge would not close still gets marked; probably it should.
+
+#### 2. Bridging small gaps
+
+**A control to close small gaps, preserving the integrity of walls thinned or severed upstream.**
+Morphologically this is a **closing** — dilate then erode — the exact inverse of the minimum stroke
+width, and it runs after it, since its job is partly repairing that control's damage.
+
+**It is dangerous in the mirror image of the opening, and the danger is invisible in a worse way.**
+A doorway is a deliberate gap. A closing whose radius exceeds a doorway's width seals it, and a
+sealed doorway *looks like perfectly good wall* — there is nothing to see unless you knew the
+doorway was there. The opening's failures at least leave a visible absence.
+
+**So bridged pixels must be drawn in their own colour on the overlay.** Invented ink and read ink
+must never be indistinguishable. That is the §8 rule applied directly, and it is a precondition
+rather than a refinement — the control should not ship without it.
+
+The consequence for play is worth stating: a sealed doorway does not merge rooms, it *separates*
+them, which fog handles fine. But Dynamic Fog derives a wall across the opening, so line of sight is
+blocked through a door that is standing open. That is play-affecting and silent.
+
+#### 3. Painting to suppress ink
+
+**Let the GM paint areas where ink is ignored** — meaningless crosshatching being the motivating
+case. Local where the global controls are blunt, and the counterpart to the global width and island
+filters: those cannot distinguish hatching from linework by measurement, and the GM can by looking.
+
+#### 4. Painting ink
+
+**Let the GM draw ink that is applied after everything in stage one.** Already the record's
+"GM-drawn ink", and long identified as the highest-value unbuilt thing. Applied last, so it is
+immune to the opening and the island filter — the GM drew it deliberately and no automatic filter
+should second-guess it.
+
+Both 3 and 4 exist for the same reason: **they are how a GM fixes details once the general settings
+are as good as they are going to get.** Every global control has a point past which it costs more
+than it gains, and that point arrives with the map still imperfect. They also survive re-runs by
+being *inputs* rather than outputs, which is what a stage-two hand edit is not.
+
+**Open, and it needs answering before either is built: how does the GM paint?** The overlay has
+pointer events **disabled** — that is precisely what makes it click-through, and click-through is
+what lets the map be panned while it is up. So the overlay as it stands cannot be painted on. The
+options are a mode toggle (painting captures the pointer, so no panning while painting), or drawing
+with Owlbear's own tools on a designated layer and reading the items back — which uses tools the GM
+already has, the same argument §4 makes for editing fog natively, but puts our working data in the
+scene where players and other extensions can see it.
 
 ### The overlay's panel band does not lift, and probably should not need to — logged 2026-08-23 (user)
 

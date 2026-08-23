@@ -50,13 +50,18 @@ export interface TraceSettings {
    */
   readonly sauvolaK: number;
   /**
-   * Sauvola's window radius, as a fraction of a grid square.
+   * Sauvola's window radius, in raster pixels.
    *
    * How local "local" is. It wants to be comfortably wider than the linework is thick — a stroke
    * that fills its own window becomes the local ground and stops being called ink, which loses the
    * *boldest* lines on the map and is the opposite of what anyone predicts.
+   *
+   * **In pixels rather than grid squares** (user, 2026-08-23). A GM who does not need a grid leaves
+   * it at a default that has nothing to do with the map, and a control denominated in squares then
+   * means nothing. It also sits directly beside the blur, which has always been in pixels and is
+   * tuned with it — one of the pair in each unit was an inconsistency inside a single section.
    */
-  readonly sauvolaRadiusSquares: number;
+  readonly sauvolaRadiusPx: number;
   /**
    * Minimum stroke width, as a fraction of the measured ink width. Zero is off.
    *
@@ -76,8 +81,8 @@ export interface TraceSettings {
    */
   readonly minStrokeInkWidths: number;
   /**
-   * Smallest isolated ink island kept, measured as the longest side of its bounding box in grid
-   * squares. Zero is off.
+   * Smallest isolated ink island kept, measured as the longest side of its bounding box in raster
+   * pixels. Zero is off.
    *
    * The second tool in stage 1b, and it exists because the first leaves a residue. Once a printed
    * floor grid is gone, what remains beside the linework is decoration — high-contrast, thick
@@ -88,14 +93,19 @@ export interface TraceSettings {
    * while a decoration is an island floating inside a room. So the threshold only has to be big
    * enough to catch islands, and it is separating things that differ by orders of magnitude.
    *
-   * The longest side rather than the area, because a GM can look at a map and say "that compass
-   * rose is two squares across" and nobody can estimate an area by eye. It is also the measure that
-   * says *stubby*, which is the property distinguishing what survives an opening from what should.
+   * The longest side rather than the area, because nobody can estimate an area by eye. It is also
+   * the measure that says *stubby*, which is the property distinguishing what survives an opening
+   * from what should.
+   *
+   * **In pixels rather than grid squares or ink widths** (user, 2026-08-23). The grid may be a
+   * default that has nothing to do with the map; the ink-width measure is not trusted to be
+   * reliable across map styles, saturating at 2px and biased thin. Pixels are the only unit here
+   * that is always exactly what it says.
    *
    * **The cost:** a genuinely isolated short wall — a free-standing pillar, a lone threshold mark —
    * looks exactly like a decoration and goes with them.
    */
-  readonly minIslandSquares: number;
+  readonly minIslandPx: number;
   /**
    * Smallest area kept as a room, in grid squares.
    *
@@ -167,9 +177,9 @@ export const DEFAULT_SETTINGS: Settings = {
   trace: {
     blurSigma: 1,
     sauvolaK: 0.34,
-    sauvolaRadiusSquares: 0.25,
+    sauvolaRadiusPx: 13,
     minStrokeInkWidths: 0,
-    minIslandSquares: 0,
+    minIslandPx: 0,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -200,13 +210,15 @@ export const SETTING_LIMITS = {
   // times any stroke — both were reachable only by crushing the useful end of the track.
   blurSigma: { min: 0, max: 3, step: 0.25 },
   sauvolaK: { min: 0.02, max: 0.9, step: 0.02 },
-  sauvolaRadiusSquares: { min: 0.05, max: 0.75, step: 0.05 },
+  // In raster pixels. The floor is a window that can still see past a stroke; the ceiling is far
+  // past any linework, so the top end is reachable and visibly wrong rather than merely large.
+  sauvolaRadiusPx: { min: 2, max: 48, step: 1 },
   // Tops out well past useful, deliberately (user, 2026-08-23). A control whose top end still
   // looks reasonable gives no sense of where the edge is; being able to push it until the ink
   // disappears entirely is what makes the middle feel like a choice rather than a guess.
   minStrokeInkWidths: { min: 0, max: 3, step: 0.05 },
   // Same reasoning: the top end should be able to erase a map's decoration and then its walls.
-  minIslandSquares: { min: 0, max: 6, step: 0.05 },
+  minIslandPx: { min: 0, max: 300, step: 1 },
   minRoomSquares: { min: 0.002, max: 6, step: 0.01 },
   // Capped below the half-ink-width bound that stops a boundary crossing a wall. A GM cannot be
   // given a control whose top end silently merges rooms.
@@ -252,9 +264,9 @@ export const STAGES = ["read", "derive", "adjust"] as const;
 export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   sauvolaK: "read",
   blurSigma: "read",
-  sauvolaRadiusSquares: "read",
+  sauvolaRadiusPx: "read",
   minStrokeInkWidths: "read",
-  minIslandSquares: "read",
+  minIslandPx: "read",
   inkOpacity: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
@@ -284,9 +296,9 @@ export type ParameterKind = "pipeline" | "display";
 export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   sauvolaK: "pipeline",
   blurSigma: "pipeline",
-  sauvolaRadiusSquares: "pipeline",
+  sauvolaRadiusPx: "pipeline",
   minStrokeInkWidths: "pipeline",
-  minIslandSquares: "pipeline",
+  minIslandPx: "pipeline",
   inkOpacity: "display",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
@@ -407,21 +419,13 @@ export function normaliseSettings(raw: unknown): Settings {
     trace: {
       blurSigma: clamp(trace.blurSigma, "blurSigma", t.blurSigma),
       sauvolaK: clamp(trace.sauvolaK, "sauvolaK", t.sauvolaK),
-      sauvolaRadiusSquares: clamp(
-        trace.sauvolaRadiusSquares,
-        "sauvolaRadiusSquares",
-        t.sauvolaRadiusSquares,
-      ),
+      sauvolaRadiusPx: clamp(trace.sauvolaRadiusPx, "sauvolaRadiusPx", t.sauvolaRadiusPx),
       minStrokeInkWidths: clamp(
         trace.minStrokeInkWidths,
         "minStrokeInkWidths",
         t.minStrokeInkWidths,
       ),
-      minIslandSquares: clamp(
-        trace.minIslandSquares,
-        "minIslandSquares",
-        t.minIslandSquares,
-      ),
+      minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,
@@ -463,9 +467,9 @@ export function isDefault(settings: Settings): boolean {
 export function describeSettings(settings: Settings): string {
   const { trace, review } = settings;
   return (
-    `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusSquares} sq, ` +
+    `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusPx}px, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
-    `min island ${trace.minIslandSquares} sq, ` +
+    `min island ${trace.minIslandPx}px, ` +
     `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
