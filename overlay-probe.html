@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fog Nudger — overlay probe</title>
+    <style>
+      /*
+        Everything here is transparent by default, deliberately and in both directions.
+
+        The whole question this page exists to answer is whether Owlbear composites a modal over
+        the map at all. A background colour anywhere — on `html`, on `body`, on the canvas element
+        — would make the page opaque and the probe would report "not transparent" about its own
+        stylesheet rather than about Owlbear. The panel learned the inverse lesson (an unset
+        background left the iframe see-through when it wanted to be solid); this is the same fact
+        used on purpose.
+      */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+      /*
+        Fixed rather than absolute so it tracks the viewport regardless of any scrolling Owlbear's
+        container might do to us.
+      */
+      #sheet {
+        position: fixed;
+        inset: 0;
+        display: block;
+      }
+      /*
+        The readout has to be legible over an unknown background — the map could be anything — so
+        it carries its own plate. This is the one opaque thing on the page.
+      */
+      #readout {
+        position: fixed;
+        top: 0.5rem;
+        left: 0.5rem;
+        max-width: 32rem;
+        padding: 0.5rem 0.7rem;
+        border-radius: 0.4rem;
+        background: rgba(20, 22, 34, 0.88);
+        color: #ffffff;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 0.72rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      #readout b { color: #bb99ff; }
+    </style>
+  </head>
+  <body>
+    <!--
+      A throwaway measurement page, not product UI. It answers four things the SDK's types cannot,
+      and it answers them by being looked at:
+
+        1. Does a modal with hidePaper + hideBackdrop actually composite transparently over the map?
+        2. Does disablePointerEvents really let a drag reach the map underneath?
+        3. Is this iframe's coordinate space the viewport's? The crosshairs are drawn at the screen
+           positions Owlbear reports for the map's own four world corners, so if they sit on the
+           corners of the map the spaces agree, and if they are uniformly displaced they do not.
+        4. What does a full-screen modal cover? The dashed border is this iframe's exact extent.
+
+      And it measures a fifth that is only guessable from the types: how long a viewport poll takes,
+      which is the number the whole blank-and-restore design rests on.
+
+      It closes itself on a timer. A full-screen click-through overlay that hides the toolbar may
+      also hide the way to dismiss it, so the escape hatch cannot be a button on this page or on
+      the panel — it has to be something that fires without anyone being able to reach anything.
+    -->
+    <canvas id="sheet"></canvas>
+    <pre id="readout">Overlay probe starting…</pre>
+    <script type="module" src="./src/overlayProbe.ts"></script>
+  </body>
+</html>

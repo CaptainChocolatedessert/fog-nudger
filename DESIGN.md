@@ -498,6 +498,73 @@ lies.
 **Which half ran is logged on every run**, and a reused mask restates the few figures the rest of
 the run is built on. A run that reused and a run that recomputed must not produce the same log.
 
+### The stage-one overlay — measured in a room, 2026-08-23
+
+Stage two's representation is the coloured proposals staged on the drawing layer. Stage one needs a
+different one, because its data is a different *kind* of thing: a per-pixel classification at native
+resolution — ink, kept floor, discarded floor — which is dense, unsummarisable, and today only
+answerable one pixel at a time by the point probe. **The overlay is the point probe made total.**
+
+**Rasters cannot go into the scene**, and that is settled rather than assumed: the sibling measured
+`data:` URLs rendering as a broken-image placeholder at 0.3KB, refused outright at 21.6KB, and
+wedging the message bus at 1.37MB, with asset upload the only mechanism that delivers pixels and no
+opacity, tint or blend on an image item anyway. So the overlay cannot be scene content.
+
+**The route that works is a full-screen modal** — `fullScreen`, `hideBackdrop`, `hidePaper`,
+`disablePointerEvents` — drawing on its own canvas. The pixels never enter Owlbear's scene graph, so
+none of the above applies. Neither Dynamic Fog nor the sibling opens a modal anywhere, so this was
+unprecedented and `overlayProbe.ts` was written to settle it. **Every answer came back usable:**
+
+- **It composites.** The map is visible through a translucent wash.
+- **`disablePointerEvents` passes drags through.** Owlbear beneath stays clickable and pannable.
+  This was the fatal one — a GM who cannot pan while the overlay is up has no overlay.
+- **No calibration is needed.** `iframe 1205x925 · viewport 1205x925 — same rectangle`, in every
+  run, and the crosshairs sit on the map's corners and follow pan and zoom. **Owlbear's map canvas
+  is the full window and its toolbars float on top of it**, so there is no inset to discover. The
+  "modal origin may not be the viewport origin" risk does not exist.
+- **The modal covers everything** — map, Owlbear's tools, and our own panel. Click-through means
+  nothing breaks, but the tint sits on the UI. The probe overstates this by construction, painting
+  a flat full-screen wash so transparency would be unmistakable; the real overlay paints only where
+  the mask says something, which is 6.5% of the raster on this map. If it irritates, the fix is
+  lower alpha — where Owlbear's furniture sits is not discoverable.
+
+**There is no viewport change event.** Verified against the types: the player record carries
+`syncView` but not the transform, and no API exposes an `onChange`. Polling is the only mechanism.
+
+**The poll costs 2–4ms**, over five runs of ~200 polls each, worst case 12/33/12/97/38ms. An order
+of magnitude cheaper than the sibling's contended-bus note led this record to expect.
+
+#### Blank and restore, and why the cheap poll does not retire it — user, 2026-08-23
+
+**An overlay that lags does not merely trail, it lies.** It shows ink displaced from the linework it
+exists to be compared against, and comparing those two is the whole of stage one — a GM would read
+the offset as the tool having found the wall in the wrong place. So the rule is: **blank on any
+movement, repaint only once the view is still.** The sheet is either absent or correct, never
+present and wrong. That is the same posture as the mask fingerprint, where recomputing needlessly is
+cheap and being confidently wrong is not.
+
+**3ms does not mean tracking continuously would do instead.** At any poll rate the sheet during a
+drag is offset by roughly velocity times the interval; a brisk pan at 2000 px/s with 16ms polling
+still puts ink 30-odd pixels from linework about five pixels wide. What the cheap poll buys is the
+fix to the one residual flaw — detection is itself a poll, so there is a window where the view has
+moved and the sheet is still up. At 120ms that window is 120ms; at 3ms a poll we can afford 30–40ms,
+about two frames.
+
+**View changes need no recompute, only re-projection.** Render the tri-state classification once
+into an offscreen canvas at raster resolution — 3300×2550 is about 34MB, and the pipeline already
+draws a canvas that size to read the map's pixels — and every subsequent view change is one
+`drawImage` with a different transform. So the blank is a flicker rather than a pause, and the
+cropped-binarisation idea is needed only for live *slider* feedback, which is a separate question.
+
+**Two calls do double duty.** Ask for the screen positions of two fixed world points: if either
+moved, blank; when they hold still, those two points *are* the transform to draw with. Two points
+rather than one because a zoom centred on a single probe point leaves it fixed, and the whole
+gesture would go unseen. The polling is the drawing's input rather than a cost on top of it.
+
+**Zoomed out the overlay is indicative, not diagnostic.** Squeezing 8.4 megapixels into a thousand
+screen pixels filters five-pixel ink away. That is the same limit as everywhere else here — ink can
+only be judged at a zoom where ink is visible — and not a defect to engineer around.
+
 **Where the dividing line actually falls** is "what does the map say" against "what do I want" — and
 one operation moves across it on inspection. *Splitting a region because of something not on the
 map* reads like a stage-three edit and belongs in stage one, as **GM-drawn ink**: draw the wall, and

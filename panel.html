@@ -313,7 +313,16 @@
       <div class="actions">
         <button id="census" disabled>Census</button>
         <button id="inspect" disabled>Inspect fog</button>
+        <button id="overlay-probe" disabled>Overlay probe</button>
+        <button id="overlay-probe-close" class="quiet" disabled>Close overlay</button>
       </div>
+      <p class="note">
+        <em>Overlay probe</em> puts a full-screen transparent sheet over the map for 25 seconds to
+        find out whether the stage-one overlay is possible at all: whether a modal composites over
+        the map, whether panning still reaches it, whether its pixels are the viewport's, and what
+        it covers. It closes itself on a timer — <em>Close overlay</em> is only a convenience, since
+        this panel disappears the moment you click the map.
+      </p>
     </section>
 
     <p id="result">Waiting for a scene.</p>

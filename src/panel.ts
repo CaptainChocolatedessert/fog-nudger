@@ -16,6 +16,7 @@ import { themeVariables } from "./theme";
 // so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
+import { closeOverlayProbe, openOverlayProbe } from "./probe/overlayProbeControl";
 import { dryRun, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
 import {
   DEFAULT_SETTINGS,
@@ -538,6 +539,8 @@ OBR.onReady(async () => {
     wireButton("remove", removeOurs),
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
+    wireButton("overlay-probe", openOverlayProbe),
+    wireButton("overlay-probe-close", closeOverlayProbe),
     wireButton("restyle", restyleStaged),
     ...STAGES.map((stage) => wireButton(`reset-${stage}`, () => resetStageSettings(stage))),
   ];
