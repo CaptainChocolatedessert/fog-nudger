@@ -37,12 +37,12 @@ import { devLog } from "../devlog";
 import { describeError, isRateLimited } from "../describeError";
 import { PathOp, type PathCommandLike } from "../geometry/ring";
 import { runTrace } from "../pipeline";
+import { readSettings } from "../settingsStore";
 import {
   ACCEPTED_FILL_OPACITY,
   planBatches,
   REGION_KEY,
   stageShapes,
-  STAGED_FILL_OPACITY,
   totalCommands,
   type FogShapeSpec,
 } from "./fogShapes";
@@ -78,17 +78,6 @@ const BATCH_PAUSE_MS = 120;
 const RETRY_BACKOFF_MS = [250, 750, 2_000] as const;
 
 /**
- * Stroke width for a staged proposal, as a fraction of a grid square.
- *
- * Free, including zero — a zero-stroke shape produced exactly as many walls as a stroked one, and
- * that was measured per shape rather than inferred from a total (DESIGN.md §4). So this is purely
- * about a GM being able to see a proposal's boundary, and after a room reported the output reading
- * as one flat tint it is the *boundaries* doing most of the work. Doubled from a twenty-fourth of a
- * grid square to a twelfth for that reason.
- */
-const STROKE_SQUARES = 1 / 12;
-
-/**
  * Trace the scene's map and stage the result as proposals on the `DRAWING` layer.
  *
  * Nothing here can affect play. A staged item is invisible to players, renders in its own colour
@@ -110,12 +99,14 @@ export async function stageRegions(): Promise<string> {
   if (!outcome.ok) return outcome.message;
   const { run } = outcome;
 
-  const stroke = Math.max(1, run.dpi * STROKE_SQUARES);
+  const review = (await readSettings()).review;
+  const stroke = Math.max(0, run.dpi * review.strokeSquares);
   const runId = new Date().toISOString();
   const { shapes, skipped } = stageShapes(run.regions, {
     run: runId,
     mapId: run.mapId,
     strokeWidth: stroke,
+    fillOpacity: review.fillOpacity,
   });
 
   if (skipped.length > 0) {
@@ -235,6 +226,9 @@ export async function acceptStaged(): Promise<string> {
 export async function returnToStaging(): Promise<string> {
   if (!(await OBR.scene.isReady())) return "No scene open.";
 
+  // The GM's current staged opacity, not the one the shapes were emitted with. Demoting is how a
+  // proposal comes back for another look, so it should come back looking the way proposals look now.
+  const stagedOpacity = (await readSettings()).review.fillOpacity;
   const accepted = await OBR.scene.items.getItems<Path>(
     (item) => REGION_KEY in item.metadata && item.layer === "FOG" && isPath(item),
   );
@@ -246,7 +240,7 @@ export async function returnToStaging(): Promise<string> {
         OBR.scene.items.updateItems<Path>(accepted, (drafts) => {
           for (const draft of drafts) {
             draft.layer = "DRAWING";
-            draft.style.fillOpacity = STAGED_FILL_OPACITY;
+            draft.style.fillOpacity = stagedOpacity;
           }
         }),
       "return to staging",
@@ -262,6 +256,49 @@ export async function returnToStaging(): Promise<string> {
     `Returned ${accepted.length} to staging. They are proposals again — no walls, no fog — and ` +
     `every hand edit is still on them.`
   );
+}
+
+/**
+ * Re-apply the current appearance settings to the shapes already staged.
+ *
+ * Without this, changing how proposals look would mean removing and re-tracing — which recomputes
+ * every region and is the one thing the two-stage split exists to keep separate. Appearance is a
+ * stage-two question, so it must be answerable without touching stage one.
+ *
+ * Only staged items, never accepted ones: an accepted shape is fog, and fog below full opacity
+ * leaves a tint over ground the party has revealed.
+ */
+export async function restyleStaged(): Promise<string> {
+  if (!(await OBR.scene.isReady())) return "No scene open.";
+
+  const review = (await readSettings()).review;
+  const dpi = await OBR.scene.grid.getDpi();
+  const stroke = Math.max(0, dpi * review.strokeSquares);
+
+  const staged = await OBR.scene.items.getItems<Path>(
+    (item) => REGION_KEY in item.metadata && item.layer === "DRAWING" && isPath(item),
+  );
+  if (staged.length === 0) return "Nothing of ours staged to restyle.";
+
+  try {
+    await writeWithBackoff(
+      () =>
+        OBR.scene.items.updateItems<Path>(staged, (drafts) => {
+          for (const draft of drafts) {
+            draft.style.fillOpacity = review.fillOpacity;
+            draft.style.strokeWidth = stroke;
+          }
+        }),
+      "restyle",
+    );
+  } catch (error) {
+    const detail = describeError(error);
+    console.error(`Fog Nudger — restyling staged shapes failed: ${detail}`);
+    return `Could not restyle: ${detail}`;
+  }
+
+  devLog("info", `emit: restyled ${staged.length} staged shapes`);
+  return `Restyled ${staged.length} proposals.`;
 }
 
 /** Delete every item this pipeline created, and nothing else. */

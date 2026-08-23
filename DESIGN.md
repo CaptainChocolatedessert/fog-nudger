@@ -410,6 +410,67 @@ need to find exactly our items and never the GM's, so every emitted item carries
 `io.github.captainchocolatedessert.fog-nudger`. That is already how the probe's removal avoids
 touching hand-drawn fog, and it is the same mechanism §10's re-run pitfall depends on.
 
+### Two stages, and why the split is architectural — settled 2026-08-22 (user)
+
+**The binary mask determines the partition completely.** Connected-component labelling has exactly
+one choice in it — the connectivity pairing — and that is forced by the diagonal-leak paradox, so it
+is a correctness requirement rather than a knob. Nothing downstream of the mask can split or join a
+region: the minimum-area filter only *deletes*, simplification is bounded below half an ink width
+precisely so it cannot change topology, and tracing and placement are exact.
+
+Counted rather than asserted: of the eight parameters in the pipeline, five decide what is ink and
+three act after it — a size filter, a smoothing tolerance, and a ceiling on that tolerance. **None of
+the three can change which rooms exist.**
+
+Supporting evidence from the same week: the hole rule used to carry a threshold, and replacing it
+with containment **removed the parameter entirely** and made the result strictly better. Downstream
+parameters kept turning out to be the wrong lever because downstream is not where the decisions are.
+
+**So the GM's work divides in two, and the division is forced rather than stylistic:**
+
+1. **Reading the map** — what is a wall. Every control here acts on the mask, so changing any of
+   them recomputes the partition wholesale and **discards anything edited in stage two, by
+   construction**.
+2. **Editing the regions** — what the GM wants, which no amount of mask work can express: merge
+   these two because they are one room to me; do not fog that at all; show me the proposals
+   differently while I judge them.
+
+**This answers a question the roadmap has been carrying.** Step 9 has always said "a re-run destroys
+hand edits, so it must be deliberate and warned" without saying what to *do* about it. The answer is
+not to engineer around it: the stages are inherently ordered, and the honest tool makes that
+ordering visible instead of pretending edits are durable. Hence two tabs, numbered.
+
+**Where the dividing line actually falls** is "what does the map say" against "what do I want" — and
+one operation moves across it on inspection. *Splitting a region because of something not on the
+map* reads like a stage-two edit and belongs in stage one, as **GM-drawn ink**: draw the wall, and
+the next trace splits the region. That survives re-runs because it is an *input* rather than an
+output; it re-derives both halves with correct boundaries, where splitting a polygon by hand leaves
+a join that Dynamic Fog turns into a wall across a room; and it uses tools the GM already has, which
+is the same argument §4 makes for editing fog natively. Not built; the highest-value thing that is
+not.
+
+### The controls
+
+Five for stage one — ink threshold, texture blur, detail window, smallest room, edge simplification
+— and two for stage two, both about how a proposal is drawn while it is being judged.
+
+- **They live in scene metadata**, like the map nomination and for the same reason: the panel is a
+  fresh iframe every time it opens and `localStorage` is partitioned in a third-party iframe. Tuning
+  arrived at by looking at *this* map should also travel with it.
+- **Everything read is normalised**, and the normaliser is total: it takes anything at all and
+  returns a usable set, clamping rather than rejecting and falling back **per field** so one bad
+  key cannot discard a GM's other four. A parameter panel that can put the pipeline into a state it
+  cannot recover from is worse than no panel.
+- **Edge simplification is capped below half an ink width** in the control itself, because that is
+  the bound past which a boundary can cross the middle of a wall into the next room. A control whose
+  top end silently merges rooms is not a control.
+- **Every hint says which way to turn the knob.** Raising Sauvola's `k` finds *less* ink, which is
+  the opposite of what "threshold" suggests to most people, and a control whose direction has to be
+  discovered by experiment is one that gets turned once and abandoned.
+- **Settings are logged with every run**, so a set of numbers can be read beside the parameters that
+  produced it — which is the entire claim §8 makes for comparison between runs.
+
+
 ---
 
 ## 5. The pipeline

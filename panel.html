@@ -90,7 +90,7 @@
         them is a *comparison* — name, size, whether one is hidden. A dropdown hides exactly the
         information the GM needs to choose with.
       */
-      .maps { margin-bottom: 0.5rem; }
+      .maps { margin-bottom: 0.6rem; }
       .maps label {
         display: flex;
         align-items: baseline;
@@ -102,16 +102,84 @@
       .maps label:hover { background: var(--line); }
       .maps input { margin: 0; accent-color: var(--accent); }
       .maps .note { color: var(--dim); font-size: 0.8em; }
-      /*
-        Also used outside the picker, for the sentence explaining what staging does. Kept dim and
-        small: it is standing explanation, and it must not compete with #result, which is where the
-        answer to the last thing the GM clicked appears.
-      */
-      .note { color: var(--dim); font-size: 0.8em; }
       .maps[aria-disabled="true"] { opacity: 0.5; }
       .maps[aria-disabled="true"] label { cursor: default; }
+      /*
+        Also used outside the picker, for standing explanation. Kept dim and small: it must not
+        compete with #result, which is where the answer to the last thing the GM clicked appears.
+      */
+      .note { color: var(--dim); font-size: 0.8em; }
+      .note em { font-style: normal; color: var(--text); }
+
+      /*
+        Tabs. Two stages, and the numbering is load-bearing rather than decorative — the order is
+        forced, because reading the map recomputes every region and so discards anything edited in
+        the second stage.
+      */
+      .tabs {
+        display: flex;
+        gap: 0.25rem;
+        margin: 0.6rem 0 0.8rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .tabs button {
+        flex: 1;
+        margin: 0;
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 0.35rem 0.35rem 0 0;
+        background: transparent;
+        color: var(--dim);
+        padding: 0.4rem 0.3rem;
+        font-size: 0.8rem;
+      }
+      .tabs button:hover:not([aria-selected="true"]) { color: var(--text); background: var(--line); }
+      .tabs button[aria-selected="true"] {
+        color: var(--text);
+        border-bottom-color: var(--accent);
+        background: transparent;
+      }
+
+      /* One row per setting: label, control, and the value in a unit the GM can feel. */
+      .settings { margin-bottom: 0.6rem; }
+      .setting {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 0.2rem 0.5rem;
+        padding: 0.3rem 0;
+      }
+      .setting + .setting { border-top: 1px solid var(--line); }
+      .setting label { font-size: 0.8rem; }
+      .setting input[type="number"] {
+        width: 5rem;
+        font: inherit;
+        font-size: 0.8rem;
+        color: var(--text);
+        background: var(--line);
+        border: 1px solid transparent;
+        border-radius: 0.3rem;
+        padding: 0.2rem 0.3rem;
+        text-align: right;
+      }
+      .setting input:focus { outline: none; border-color: var(--accent); }
+      .setting input:disabled { opacity: 0.5; }
+      .setting .hint {
+        grid-column: 1 / -1;
+        font-size: 0.72rem;
+        color: var(--dim);
+        line-height: 1.35;
+      }
+      .setting .hint b { font-weight: 600; color: var(--text); }
+
+      .actions { margin: 0.5rem 0 0.2rem; }
+      button.quiet { background: transparent; color: var(--dim); }
+      button.quiet:hover:not(:disabled) { color: var(--text); }
+
       #result {
-        margin-top: 0.5rem;
+        margin-top: 0.7rem;
+        padding-top: 0.6rem;
+        border-top: 1px solid var(--line);
         font-size: 0.8rem;
         color: var(--dim);
         overflow-wrap: anywhere;
@@ -129,60 +197,90 @@
     <p id="status" data-state="pending">Connecting&hellip;</p>
 
     <!--
-      Roadmap step 2. The picker exists because a scene can hold more than one MAP-layer image and
-      one of them may be a GM overlay — and because a scene map is normally locked, so it cannot be
-      nominated by clicking it. "Auto" leaves the resolver to decide, which it will refuse to do
-      when the scene is genuinely ambiguous.
+      Two tabs, and the split is architectural rather than cosmetic.
+
+      The binary mask determines the partition completely: labelling has one choice in it and that
+      choice is forced, and nothing downstream can split or join a region. So every control that
+      decides *what the rooms are* acts on the mask, and everything after it is a filter or a
+      finish. Reading the map recomputes everything and therefore discards hand edits by
+      construction; editing the regions is what cannot be derived from the image at all.
+
+      The ordering is forced rather than advisory, which is why it is two tabs and not one long
+      column: stage one destroys stage two's work every time it runs.
     -->
-    <section class="probe">
-      <h2>Dry run</h2>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-read" aria-selected="true" aria-controls="panel-read">
+        1 · Read the map
+      </button>
+      <button role="tab" id="tab-edit" aria-selected="false" aria-controls="panel-edit">
+        2 · Edit the regions
+      </button>
+    </nav>
+
+    <section id="panel-read" role="tabpanel" aria-labelledby="tab-read">
+      <!--
+        The picker exists because a scene can hold more than one MAP-layer image and one of them may
+        be a GM overlay — and because a scene map is normally locked, so it cannot be nominated by
+        clicking it. "Auto" leaves the resolver to decide, which it refuses to do when the scene is
+        genuinely ambiguous.
+      -->
       <p class="field">Map</p>
       <div class="maps" id="maps" aria-disabled="true">
         <p class="note">Waiting for a scene&hellip;</p>
       </div>
-      <button id="dry-run" disabled>Trace, emit nothing</button>
-      <button id="probe" disabled>What is here?</button>
+
+      <p class="field">What counts as a wall</p>
+      <div class="settings" id="trace-settings"></div>
+
+      <div class="actions">
+        <button id="dry-run" disabled>Trace, emit nothing</button>
+        <button id="stage" disabled>Trace &amp; stage</button>
+        <button id="probe" disabled>What is here?</button>
+        <button id="reset-trace" class="quiet" disabled>Defaults</button>
+      </div>
       <p class="note">
+        Changing anything here re-derives every region, so it discards edits made in tab 2.
         <em>What is here?</em> reports what the last trace computed at the centre of your view —
-        region, ink, or discarded floor, with the luminance it read. Centre the view on anything
-        that looks wrong and ask.
+        region, ink, or discarded floor, with the luminance it read.
       </p>
-      <p id="result">Waiting for a scene.</p>
     </section>
 
-    <!--
-      Roadmap step 8. Staging first is not caution bolted on: on the DRAWING layer a proposal
-      renders in its own colour, stays invisible to players, and derives no walls at all, so a run
-      cannot affect play whatever it gets wrong. Accepting is what makes it fog.
-
-      Ordered as the gesture is: stage, look, accept — with remove sitting apart because it is the
-      undo for all of it, and because staging refuses to run over an existing set.
-    -->
-    <section class="probe">
-      <h2>Emit</h2>
-      <button id="stage" disabled>Trace &amp; stage</button>
-      <button id="accept" disabled>Accept staged</button>
-      <button id="unaccept" disabled>Back to staging</button>
-      <button id="remove" disabled>Remove ours</button>
+    <section id="panel-edit" role="tabpanel" aria-labelledby="tab-edit" hidden>
+      <div class="actions">
+        <button id="accept" disabled>Accept staged</button>
+        <button id="unaccept" disabled>Back to staging</button>
+        <button id="remove" disabled>Remove ours</button>
+      </div>
       <p class="note">
-        Staged proposals are GM-only and produce no walls. Neighbouring regions are drawn in
-        different colours, so the partition is what you see rather than a flat tint. Accepting moves
-        them to the fog layer, where they become fog and Dynamic Fog starts deriving walls from
-        them. Going back to staging is the exact inverse and keeps every hand edit; re-running does
-        not.
+        Staged proposals are GM-only and produce no walls, so nothing here can affect play until you
+        accept. Accepting moves them to the fog layer, where Dynamic Fog starts deriving walls.
+        Going back to staging is the exact inverse and keeps every hand edit; re-tracing does not.
       </p>
+
+      <p class="field">How proposals look while you judge them</p>
+      <div class="settings" id="review-settings"></div>
+      <div class="actions">
+        <button id="restyle" disabled>Apply to staged</button>
+        <button id="reset-review" class="quiet" disabled>Defaults</button>
+      </div>
+      <p class="note">
+        Neighbouring regions are drawn in different colours so the partition is what you see rather
+        than a flat tint. Appearance affects staged proposals only — an accepted shape is forced to
+        full opacity, because fog below that leaves a tint over ground the party has revealed.
+      </p>
+
+      <!--
+        Not product UI. Step 1's shape-placing buttons are gone now that it is closed; these two
+        earned a longer stay because they answer "what is actually in this scene".
+      -->
+      <p class="field">Diagnostics</p>
+      <div class="actions">
+        <button id="census" disabled>Census</button>
+        <button id="inspect" disabled>Inspect fog</button>
+      </div>
     </section>
 
-    <!--
-      Not product UI. Step 1's shape-placing buttons are gone now that it is closed; these two
-      earned a longer stay because they answer "what is actually in this scene" for every stage
-      that follows.
-    -->
-    <section class="probe">
-      <h2>Diagnostics</h2>
-      <button id="census" disabled>Census</button>
-      <button id="inspect" disabled>Inspect fog</button>
-    </section>
+    <p id="result">Waiting for a scene.</p>
 
     <script type="module" src="./src/panel.ts"></script>
   </body>

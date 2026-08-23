@@ -16,8 +16,22 @@ import { themeVariables } from "./theme";
 // so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
-import { dryRun, probeWorldPoint } from "./pipeline";
-import { acceptStaged, removeOurs, returnToStaging, stageRegions } from "./emit/emitRegions";
+import { dryRun, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
+import {
+  DEFAULT_SETTINGS,
+  isDefault,
+  SETTING_LIMITS,
+  type SettingName,
+  type Settings,
+} from "./settings";
+import { readSettings, writeSettings } from "./settingsStore";
+import {
+  acceptStaged,
+  removeOurs,
+  restyleStaged,
+  returnToStaging,
+  stageRegions,
+} from "./emit/emitRegions";
 import {
   listMapImages,
   mapSignature,
@@ -42,6 +56,7 @@ async function probeViewportCentre(): Promise<string> {
   return probeWorldPoint(centre.x, centre.y);
 }
 
+let sceneReady = false;
 const status = document.getElementById("status");
 const result = document.getElementById("result");
 
@@ -241,6 +256,228 @@ function applyTheme(theme: unknown): void {
   }
 }
 
+
+/**
+ * The controls, in the order a GM meets them, with a hint saying which way to turn each one.
+ *
+ * The hints exist because every one of these is a number whose direction is not guessable —
+ * raising Sauvola's `k` makes *less* ink, which is the opposite of what "sensitivity" suggests to
+ * most people. A control whose direction you have to discover by experiment is a control that gets
+ * turned once and left alone.
+ */
+const TRACE_CONTROLS: readonly {
+  readonly name: TraceName;
+  readonly label: string;
+  readonly hint: string;
+  /** Renders the value in a unit the GM can feel, given the last run's pixels per grid square. */
+  readonly derive?: (value: number, pxPerSquare: number) => string;
+}[] = [
+  {
+    name: "sauvolaK",
+    label: "Ink threshold",
+    hint: "Higher finds <b>less</b> ink — only decisively dark pixels. Lower catches faint linework, and eventually the paper.",
+  },
+  {
+    name: "blurSigma",
+    label: "Texture blur",
+    hint: "Fades the finest marks below the threshold. The blunt lever against speckle and a printed floor grid — blunt because it works on contrast, so it takes faint walls too.",
+    derive: (value) => `${value.toFixed(2)} px`,
+  },
+  {
+    name: "sauvolaRadiusSquares",
+    label: "Detail window",
+    hint: "How local the threshold is. Wants to stay comfortably wider than the linework is thick, or a bold stroke becomes its own background and stops counting as ink.",
+    derive: (value, px) => `${Math.round(value * px) * 2 + 1} px across`,
+  },
+  {
+    name: "minRoomSquares",
+    label: "Smallest room",
+    hint: "Anything smaller is discarded, and shows as bare map unless something swallows it. Low is safer: a spurious region costs one click, a bare patch is a visible defect.",
+    derive: (value, px) => `${Math.round(value * px * px)} px, ${(Math.sqrt(value) * px).toFixed(0)} px across`,
+  },
+  {
+    name: "simplifyInkWidths",
+    label: "Edge simplification",
+    hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",
+  },
+];
+
+const REVIEW_CONTROLS: readonly {
+  readonly name: ReviewName;
+  readonly label: string;
+  readonly hint: string;
+  readonly derive?: (value: number, pxPerSquare: number) => string;
+}[] = [
+  {
+    name: "fillOpacity",
+    label: "Proposal fill",
+    hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
+  },
+  {
+    name: "strokeSquares",
+    label: "Proposal outline",
+    hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
+  },
+];
+
+type TraceName = keyof Settings["trace"];
+type ReviewName = keyof Settings["review"];
+
+let settings: Settings = DEFAULT_SETTINGS;
+
+/** Build one row. Number inputs rather than sliders: these are values worth reading exactly. */
+function settingRow(
+  name: SettingName,
+  label: string,
+  hint: string,
+  value: number,
+  onChange: (value: number) => void,
+): HTMLElement {
+  const limits = SETTING_LIMITS[name];
+  const row = document.createElement("div");
+  row.className = "setting";
+
+  const text = document.createElement("label");
+  text.textContent = label;
+  text.htmlFor = `set-${name}`;
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.id = `set-${name}`;
+  input.min = String(limits.min);
+  input.max = String(limits.max);
+  input.step = String(limits.step);
+  input.value = String(value);
+
+  const note = document.createElement("p");
+  note.className = "hint";
+  note.innerHTML = hint;
+  note.dataset.name = name;
+
+  // On `change` rather than `input`: committing on every keystroke would write to scene metadata
+  // once per digit, and a half-typed number is a value nobody meant.
+  input.addEventListener("change", () => {
+    const parsed = Number(input.value);
+    onChange(Number.isFinite(parsed) ? parsed : value);
+  });
+
+  row.append(text, input, note);
+  return row;
+}
+
+/** Repaint both control groups from the current settings, and refresh the derived figures. */
+function renderSettings(): void {
+  const px = lastPixelsPerSquare();
+
+  const paint = (
+    container: HTMLElement | null,
+    controls: readonly { name: string; label: string; hint: string; derive?: (v: number, p: number) => string }[],
+    read: (name: string) => number,
+    write: (name: string, value: number) => void,
+  ): void => {
+    if (!container) return;
+    container.replaceChildren();
+    for (const control of controls) {
+      const value = read(control.name);
+      const derived = px !== null && control.derive ? ` <b>${control.derive(value, px)}</b>` : "";
+      container.append(
+        settingRow(
+          control.name as SettingName,
+          control.label,
+          control.hint + derived,
+          value,
+          (next) => write(control.name, next),
+        ),
+      );
+    }
+  };
+
+  paint(
+    document.getElementById("trace-settings"),
+    TRACE_CONTROLS,
+    (name) => settings.trace[name as TraceName],
+    (name, value) => {
+      void save({ ...settings, trace: { ...settings.trace, [name]: value } });
+    },
+  );
+  paint(
+    document.getElementById("review-settings"),
+    REVIEW_CONTROLS,
+    (name) => settings.review[name as ReviewName],
+    (name, value) => {
+      void save({ ...settings, review: { ...settings.review, [name]: value } });
+    },
+  );
+
+  setSettingsEnabled(sceneReady);
+  const traceReset = document.getElementById("reset-trace");
+  const reviewReset = document.getElementById("reset-review");
+  if (traceReset instanceof HTMLButtonElement) {
+    traceReset.disabled = !sceneReady || isDefault(settings);
+  }
+  if (reviewReset instanceof HTMLButtonElement) {
+    reviewReset.disabled = !sceneReady || isDefault(settings);
+  }
+}
+
+/**
+ * Persist and repaint.
+ *
+ * Repaints from what came *back* rather than from what was sent, so a value the store clamped shows
+ * the clamped figure immediately. A control that silently keeps displaying a number the pipeline is
+ * not using is worse than one that snaps.
+ */
+async function save(next: Settings): Promise<void> {
+  try {
+    settings = await writeSettings(next);
+  } catch (error) {
+    const detail = describeError(error);
+    reportResult(`Could not save the setting: ${detail}`, "bad");
+    console.error(`Fog Nudger — saving settings failed: ${detail}`);
+    return;
+  }
+  renderSettings();
+  reportResult("Saved. Trace again to see it.", "ok");
+}
+
+function setSettingsEnabled(enabled: boolean): void {
+  for (const input of document.querySelectorAll<HTMLInputElement>(".setting input")) {
+    input.disabled = !enabled;
+  }
+}
+
+/** Put one group back to its defaults, leaving the other alone. */
+async function resetGroup(which: "trace" | "review"): Promise<string> {
+  await save({ ...settings, [which]: DEFAULT_SETTINGS[which] });
+  return which === "trace"
+    ? "Reading settings back to defaults. Trace again to see it."
+    : "Appearance back to defaults.";
+}
+
+/** Show one tab. Kept plain: two buttons, two panels, one selected. */
+function selectTab(which: "read" | "edit"): void {
+  for (const name of ["read", "edit"] as const) {
+    const tab = document.getElementById(`tab-${name}`);
+    const panel = document.getElementById(`panel-${name}`);
+    tab?.setAttribute("aria-selected", String(name === which));
+    if (panel) panel.hidden = name !== which;
+  }
+}
+
+// Painted once at load, before Owlbear is known to be there at all. The values are the defaults
+// and every control is disabled until a scene opens, but the panel shows what it is rather than an
+// empty column — which is the same rule the status line follows, and the reason the map picker was
+// reported as broken when it was merely empty.
+renderSettings();
+
+// Wired at load rather than inside `onReady`: switching tabs is pure UI and has no business waiting
+// on the SDK. It *was* inside, and outside a room the tabs were simply dead — which is also how it
+// was caught, since the SDK is inert there by design.
+for (const which of ["read", "edit"] as const) {
+  document.getElementById(`tab-${which}`)?.addEventListener("click", () => selectTab(which));
+}
+selectTab("read");
+
 OBR.onReady(async () => {
   // Same first move as the background page, and for the same reason. This page is a separate
   // iframe from it, so it has its own copy of the shim with its own unset label — which is how
@@ -274,6 +511,9 @@ OBR.onReady(async () => {
     wireButton("remove", removeOurs),
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
+    wireButton("restyle", restyleStaged),
+    wireButton("reset-trace", () => resetGroup("trace")),
+    wireButton("reset-review", () => resetGroup("review")),
   ];
 
   const mapSelect = wireMapPicker();
@@ -289,14 +529,28 @@ OBR.onReady(async () => {
 
     // Subscribe as well as check, for the usual reason: a scene opened while the popover is already
     // up would otherwise leave the buttons dead with no explanation.
-    const setEnabled = (sceneReady: boolean): void => {
-      for (const button of buttons) if (button) button.disabled = !sceneReady;
-      setPickerEnabled(mapSelect, sceneReady);
-      reportResult(sceneReady ? "Ready." : "Waiting for a scene.", "ok");
+    const setEnabled = (open: boolean): void => {
+      sceneReady = open;
+      for (const button of buttons) if (button) button.disabled = !open;
+      setPickerEnabled(mapSelect, open);
+      reportResult(open ? "Ready." : "Waiting for a scene.", "ok");
+      // Settings live in scene metadata, so there is nothing real to show until a scene is open.
+      if (open) {
+        void readSettings()
+          .then((loaded) => {
+            settings = loaded;
+            renderSettings();
+          })
+          .catch((error: unknown) => {
+            console.error("Fog Nudger — reading settings failed: " + describeError(error));
+          });
+      } else {
+        renderSettings();
+      }
       // Repopulated on every transition rather than once: the list belongs to the scene, so a
       // scene change makes the previous one's maps stale, and a stale nomination silently pointing
       // at an id from another scene is exactly the confusion the picker exists to remove.
-      if (sceneReady) void refreshMaps(mapSelect);
+      if (open) void refreshMaps(mapSelect);
     };
     OBR.scene.onReadyChange(setEnabled);
     setEnabled(ready);

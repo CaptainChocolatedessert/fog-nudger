@@ -42,7 +42,12 @@ function region(overrides: Partial<StageableRegion> = {}): StageableRegion {
   };
 }
 
-const options = { run: "2026-08-22T12:00:00.000Z", mapId: "map-1", strokeWidth: 3 };
+const options = {
+  run: "2026-08-22T12:00:00.000Z",
+  mapId: "map-1",
+  strokeWidth: 3,
+  fillOpacity: 0.22,
+};
 
 describe("stageShapes", () => {
   it("carries the region's position through untouched", () => {

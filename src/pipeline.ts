@@ -36,6 +36,8 @@
  */
 
 import { devLog } from "./devlog";
+import { describeSettings } from "./settings";
+import { readSettings } from "./settingsStore";
 import { loadMapRaster, resolveTraceMap } from "./map/mapImage";
 import { megapixels } from "./map/rasterPlan";
 import {
@@ -82,29 +84,6 @@ import {
 const MAX_ASPECT_MISMATCH = 0.01;
 
 /**
- * Gaussian blur before binarisation, in raster pixels. The texture-suppression control, and
- * deliberately its own stage rather than a side effect of raster size (DESIGN.md §5).
- */
-const BLUR_SIGMA = 1;
-
-/**
- * Sauvola's window radius, **as a fraction of a grid square**.
- *
- * Denominated this way on purpose. Tying it to raster pixels is exactly what left the sibling
- * unable to change its resolution afterwards, and a grid square is the one length that means the
- * same thing on every map — walls are drawn at a fairly consistent fraction of one. The window wants
- * to be comfortably wider than the linework is thick, and a quarter square is several times a
- * typical wall.
- *
- * Ink width would be the better unit still, and nothing measures it yet. When something does, this
- * should move to it.
- */
-const SAUVOLA_RADIUS_SQUARES = 0.25;
-
-/** Sauvola's sensitivity. The value his paper settles on; no reason yet to differ. */
-const SAUVOLA_K = 0.34;
-
-/**
  * How many times the ink's width the Sauvola *window* should be, at minimum.
  *
  * Below this a heavy stroke occupies enough of its own window to become the local ground, and
@@ -113,17 +92,6 @@ const SAUVOLA_K = 0.34;
  * this project's test map at about four and a half.
  */
 const MIN_WINDOW_RATIO = 3;
-
-/**
- * Smallest region to keep, as a fraction of a **grid square's area**.
- *
- * Denominated against the grid for the usual reason, and set low on purpose. §5's bias is toward
- * splitting rather than merging: a spurious extra region costs the GM one click, a room the filter
- * ate costs them a room, and they will not know it is missing. Raising this is how cross-hatching
- * gets killed, and it is also how a genuine closet eventually gets killed — there is no setting that
- * does one without risking the other, which is why the census reports what was dropped.
- */
-const MIN_REGION_SQUARES = 0.1;
 
 /**
  * Smallest solid ink shape worth naming in the log, in grid squares.
@@ -142,19 +110,6 @@ const MIN_BLOB_SQUARES = 0.05;
  * per map (DESIGN.md §5).
  */
 const BLOB_INK_WIDTHS = 3;
-
-/**
- * Simplification tolerance, **as a fraction of the measured ink width**.
- *
- * The unit DESIGN.md §5 asks for, and here it is not merely portable — it is the safety argument.
- * Douglas–Peucker moves the boundary by at most the tolerance, so a tolerance below *half* the ink
- * width cannot carry a room's edge past the centre of the wall beside it and into the next room.
- * A quarter sits comfortably inside that, leaving room for the ink-width figure itself to be off.
- *
- * Set low on purpose for the other reason too: outward error is desirable up to half a wall and
- * harmful past it, and nobody looks at a fog region's vertex count (DESIGN.md §5).
- */
-const SIMPLIFY_INK_WIDTHS = 0.25;
 
 /**
  * Ceiling on the tolerance a region may be escalated to in order to fit the 8192-command cap, again
@@ -208,6 +163,17 @@ export function probeWorldPoint(x: number, y: number): string {
   return line;
 }
 
+/**
+ * Raster pixels per grid square from the last run, or null before one.
+ *
+ * So the panel can show a setting in a unit the GM can feel — "0.25 squares" means nothing until it
+ * also says "27 px across". Null before the first trace, because until then there is no map and the
+ * conversion would be invented.
+ */
+export function lastPixelsPerSquare(): number | null {
+  return lastRun ? lastRun.pxPerSquare : null;
+}
+
 /** One region, carrying everything the emit path needs and nothing it does not. */
 export interface TracedRegion {
   readonly id: number;
@@ -248,6 +214,12 @@ export type TraceOutcome =
  */
 export async function runTrace(): Promise<TraceOutcome> {
   const started = performance.now();
+
+  // Read before anything else, and log them beside the run they produced. A set of numbers with no
+  // record of the settings that made them cannot be compared against the next set, which is the
+  // whole claim this project makes for its diagnostics (DESIGN.md §8).
+  const settings = await readSettings();
+  devLog("info", `trace: settings — ${describeSettings(settings)}`);
 
   const map = await resolveTraceMap();
   if (!map) {
@@ -372,13 +344,13 @@ export async function runTrace(): Promise<TraceOutcome> {
   // is, not on which class is smaller — see `polarity.ts` for the map style that breaks the obvious
   // rule.
   const binarizeStarted = performance.now();
-  const radius = Math.min(64, Math.max(4, Math.round(SAUVOLA_RADIUS_SQUARES * pxPerSquare)));
+  const radius = Math.min(64, Math.max(4, Math.round(settings.trace.sauvolaRadiusSquares * pxPerSquare)));
   // Kept unblurred as well, purely so the point probe can report the tone the *map* has rather than
   // the tone the binariser read. When the question is "is this actually white", a value softened by
   // a one-pixel Gaussian is the wrong number to answer it with.
   const rawField = luminanceField(pixels);
-  const field = blur(rawField, BLUR_SIGMA);
-  const reading = detectPolarity(field, { radius, k: SAUVOLA_K });
+  const field = blur(rawField, settings.trace.blurSigma);
+  const reading = detectPolarity(field, { radius, k: settings.trace.sauvolaK });
   const binarizeMs = Math.round(performance.now() - binarizeStarted);
 
   const chosenCoverage =
@@ -387,8 +359,8 @@ export async function runTrace(): Promise<TraceOutcome> {
   devLog(
     "info",
     `trace: binarized in ${binarizeMs}ms — Sauvola radius ${radius}px ` +
-      `(${SAUVOLA_RADIUS_SQUARES} square at ${pxPerSquare.toFixed(1)} px/square), k ${SAUVOLA_K}, ` +
-      `blur sigma ${BLUR_SIGMA}`,
+      `(${settings.trace.sauvolaRadiusSquares} square at ${pxPerSquare.toFixed(1)} px/square), k ${settings.trace.sauvolaK}, ` +
+      `blur sigma ${settings.trace.blurSigma}`,
   );
   devLog(
     "info",
@@ -425,7 +397,7 @@ export async function runTrace(): Promise<TraceOutcome> {
         "warn",
         `trace: the Sauvola window (${window}px) is not comfortably wider than the ink ` +
           `(~${reading.inkWidth.toFixed(1)}px). Heavy linework can fill its own window and be ` +
-          `read as ground. Raise SAUVOLA_RADIUS_SQUARES.`,
+          `read as ground. Raise settings.trace.sauvolaRadiusSquares.`,
       );
     }
     // Saturation is a real limit rather than a small one: at or below two pixels the measure cannot
@@ -492,7 +464,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   // rooms leaking into each other through a one-pixel diagonal. Nothing here classifies a region as
   // interior or exterior; the outside is labelled and will be emitted like anything else.
   const labelStarted = performance.now();
-  const minArea = Math.max(1, Math.round(MIN_REGION_SQUARES * pxPerSquare ** 2));
+  const minArea = Math.max(1, Math.round(settings.trace.minRoomSquares * pxPerSquare ** 2));
   const labelled = labelSpace(reading.mask, { minArea });
 
   // Held for the point probe. Everything above is thrown away when this function returns, and
@@ -506,7 +478,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   devLog(
     "info",
     `trace: labelled in ${labelMs}ms — minimum region ${minArea}px ` +
-      `(${MIN_REGION_SQUARES} of a grid square at ${pxPerSquare.toFixed(1)} px/square)`,
+      `(${settings.trace.minRoomSquares} of a grid square at ${pxPerSquare.toFixed(1)} px/square)`,
   );
   devLog("info", `trace: census — ${describeCensus(stats)}`);
 
@@ -577,7 +549,7 @@ export async function runTrace(): Promise<TraceOutcome> {
     devLog(
       "warn",
       `trace: ${bareSquares.toFixed(2)} grid squares of floor are covered by nothing. These are ` +
-        `regions below the ${MIN_REGION_SQUARES}-square minimum that no filled hole reached — a ` +
+        `regions below the ${settings.trace.minRoomSquares}-square minimum that no filled hole reached — a ` +
         `feature whose ink joins a wall is not enclosed by anything, so the containment fill never ` +
         `sees it. Lowering the minimum is the direct lever, and §5's bias favours it: a spurious ` +
         `region costs a click, a bare patch is a visible defect.`,
@@ -628,7 +600,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   }
 
   const simplifyStarted = performance.now();
-  const tolerance = SIMPLIFY_INK_WIDTHS * inkWidth;
+  const tolerance = settings.trace.simplifyInkWidths * inkWidth;
   const safeTolerance = inkWidth / 2;
   const simplified = simplifyRegions(traced, {
     tolerance,
@@ -640,7 +612,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   devLog(
     "info",
     `trace: simplified in ${simplifyMs}ms — tolerance ${tolerance.toFixed(2)}px ` +
-      `(${SIMPLIFY_INK_WIDTHS} of a ${inkWidth.toFixed(1)}px ink width; the bound that stops a ` +
+      `(${settings.trace.simplifyInkWidths} of a ${inkWidth.toFixed(1)}px ink width; the bound that stops a ` +
       `boundary crossing a wall is ${safeTolerance.toFixed(2)}px)`,
   );
   devLog("info", `trace: ${describeSimplification(simplification)}`);

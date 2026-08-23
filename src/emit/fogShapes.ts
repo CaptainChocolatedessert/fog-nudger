@@ -110,6 +110,8 @@ export interface FogShapeSpec {
 export interface StageOptions {
   readonly run: string;
   readonly mapId: string;
+  /** From the review settings the GM has set; the default lives in settings.ts. */
+  readonly fillOpacity: number;
   /** In world units. Free, including zero — measured, DESIGN.md §4 — so this is purely legibility. */
   readonly strokeWidth: number;
 }
@@ -159,7 +161,7 @@ export function stageShapes(
         region: region.id,
         squares: Number(region.squares.toFixed(2)),
       },
-      fillOpacity: STAGED_FILL_OPACITY,
+      fillOpacity: options.fillOpacity,
       strokeWidth: options.strokeWidth,
       colour: PROPOSAL_COLOURS[shapes.length % PROPOSAL_COLOURS.length]!,
     });
