@@ -114,9 +114,12 @@ export const DEFAULT_SETTINGS: Settings = {
 
 /** Bounds for every field, and the step a control should offer. */
 export const SETTING_LIMITS = {
-  blurSigma: { min: 0, max: 5, step: 0.25 },
+  // Maxima chosen so the default sits somewhere a GM can push in both directions. A blur of 5px
+  // against 5.7px ink would erase the linework outright, and a window radius of 1.5 squares is 13
+  // times any stroke — both were reachable only by crushing the useful end of the track.
+  blurSigma: { min: 0, max: 3, step: 0.25 },
   sauvolaK: { min: 0.02, max: 0.9, step: 0.02 },
-  sauvolaRadiusSquares: { min: 0.05, max: 1.5, step: 0.05 },
+  sauvolaRadiusSquares: { min: 0.05, max: 0.75, step: 0.05 },
   minRoomSquares: { min: 0.002, max: 6, step: 0.01 },
   // Capped below the half-ink-width bound that stops a boundary crossing a wall. A GM cannot be
   // given a control whose top end silently merges rooms.

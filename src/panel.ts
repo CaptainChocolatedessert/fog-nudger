@@ -26,6 +26,13 @@ import {
 } from "./settings";
 import { readSettings, writeSettings } from "./settingsStore";
 import {
+  formatValue,
+  fromSlider,
+  SLIDER_STEPS,
+  toSlider,
+  type Scale,
+} from "./sliderScale";
+import {
   acceptStaged,
   removeOurs,
   restyleStaged,
@@ -269,6 +276,7 @@ const TRACE_CONTROLS: readonly {
   readonly name: TraceName;
   readonly label: string;
   readonly hint: string;
+  readonly scale?: Scale;
   /** Renders the value in a unit the GM can feel, given the last run's pixels per grid square. */
   readonly derive?: (value: number, pxPerSquare: number) => string;
 }[] = [
@@ -291,6 +299,10 @@ const TRACE_CONTROLS: readonly {
   },
   {
     name: "minRoomSquares",
+    // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a
+    // linear track the default sits 1.6% along and the rest of the slider chooses between absurd
+    // values.
+    scale: "log",
     label: "Smallest room",
     hint: "Anything smaller is discarded, and shows as bare map unless something swallows it. Low is safer: a spurious region costs one click, a bare patch is a visible defect.",
     derive: (value, px) => `${Math.round(value * px * px)} px, ${(Math.sqrt(value) * px).toFixed(0)} px across`,
@@ -306,6 +318,7 @@ const REVIEW_CONTROLS: readonly {
   readonly name: ReviewName;
   readonly label: string;
   readonly hint: string;
+  readonly scale?: Scale;
   readonly derive?: (value: number, pxPerSquare: number) => string;
 }[] = [
   {
@@ -330,6 +343,8 @@ function settingRow(
   name: SettingName,
   label: string,
   hint: string,
+  scale: Scale,
+  derive: ((value: number, pxPerSquare: number) => string) | undefined,
   value: number,
   onChange: (value: number) => void,
 ): HTMLElement {
@@ -341,51 +356,71 @@ function settingRow(
   text.textContent = label;
   text.htmlFor = `set-${name}`;
 
+  const readout = document.createElement("output");
+  readout.className = "value";
+  readout.htmlFor = `set-${name}`;
+  readout.textContent = formatValue(value, limits, scale);
+
   const input = document.createElement("input");
-  input.type = "number";
+  input.type = "range";
   input.id = `set-${name}`;
-  input.min = String(limits.min);
-  input.max = String(limits.max);
-  input.step = String(limits.step);
-  input.value = String(value);
+  input.min = "0";
+  input.max = String(SLIDER_STEPS);
+  input.step = "1";
+  input.value = String(toSlider(value, limits, scale));
 
   const note = document.createElement("p");
   note.className = "hint";
-  note.innerHTML = hint;
-  note.dataset.name = name;
 
-  // On `change` rather than `input`: committing on every keystroke would write to scene metadata
-  // once per digit, and a half-typed number is a value nobody meant.
+  const px = lastPixelsPerSquare();
+  const paintHint = (current: number): void => {
+    const derived = px !== null && derive ? ` <b>${derive(current, px)}</b>` : "";
+    note.innerHTML = hint + derived;
+  };
+  paintHint(value);
+
+  // Two events, and the split is the point of using a slider at all. `input` fires continuously
+  // while dragging, so it drives the readout and the derived figure — that live feedback is the
+  // whole reason a slider beats a number box here. `change` fires once on release, and only that
+  // writes: committing mid-drag would put a hundred values through scene metadata to reach one.
+  input.addEventListener("input", () => {
+    const current = fromSlider(Number(input.value), limits, scale);
+    readout.textContent = formatValue(current, limits, scale);
+    paintHint(current);
+  });
   input.addEventListener("change", () => {
-    const parsed = Number(input.value);
-    onChange(Number.isFinite(parsed) ? parsed : value);
+    onChange(fromSlider(Number(input.value), limits, scale));
   });
 
-  row.append(text, input, note);
+  row.append(text, readout, input, note);
   return row;
 }
 
 /** Repaint both control groups from the current settings, and refresh the derived figures. */
 function renderSettings(): void {
-  const px = lastPixelsPerSquare();
-
   const paint = (
     container: HTMLElement | null,
-    controls: readonly { name: string; label: string; hint: string; derive?: (v: number, p: number) => string }[],
+    controls: readonly {
+      name: string;
+      label: string;
+      hint: string;
+      scale?: Scale;
+      derive?: (v: number, p: number) => string;
+    }[],
     read: (name: string) => number,
     write: (name: string, value: number) => void,
   ): void => {
     if (!container) return;
     container.replaceChildren();
     for (const control of controls) {
-      const value = read(control.name);
-      const derived = px !== null && control.derive ? ` <b>${control.derive(value, px)}</b>` : "";
       container.append(
         settingRow(
           control.name as SettingName,
           control.label,
-          control.hint + derived,
-          value,
+          control.hint,
+          control.scale ?? "linear",
+          control.derive,
+          read(control.name),
           (next) => write(control.name, next),
         ),
       );

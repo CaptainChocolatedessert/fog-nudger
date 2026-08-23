@@ -464,6 +464,21 @@ Five for stage one — ink threshold, texture blur, detail window, smallest room
 - **Edge simplification is capped below half an ink width** in the control itself, because that is
   the bound past which a boundary can cross the middle of a wall into the next room. A control whose
   top end silently merges rooms is not a control.
+- **Sliders, not number boxes.** These are values arrived at by feel — drag until the map looks
+  right — so the control should support a sweep rather than a typed guess. The readout and the
+  derived figure update *during* the drag, on `input`; only releasing writes, on `change`, so one
+  sweep is one write to scene metadata rather than a hundred.
+- **The smallest-room control is logarithmic**, and that is not polish. It spans 0.002 to 6 grid
+  squares — three orders of magnitude — with every value a GM would ever pick near the bottom. On a
+  linear track its default sits **1.6% along**, three pixels from the stop, and the rest of the
+  slider chooses between absurd and more absurd. On a log track the same default sits at 49%.
+- **Two maxima were tightened once the widget made range legibility matter**: blur to 3px, window
+  radius to 0.75 squares. Nothing usable was lost — a 5px blur against 5.7px ink erases the linework
+  outright — and both defaults moved off the left stop.
+- **Round-tripping is tested, and it is the property that matters.** A value from scene metadata
+  positions the slider and the slider must reproduce it; if those disagree, merely *opening the
+  panel* rewrites a GM's setting, which is the worst failure a control can have because nothing
+  announces it.
 - **Every hint says which way to turn the knob.** Raising Sauvola's `k` finds *less* ink, which is
   the opposite of what "threshold" suggests to most people, and a control whose direction has to be
   discovered by experiment is one that gets turned once and abandoned.
