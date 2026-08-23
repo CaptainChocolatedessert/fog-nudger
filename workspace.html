@@ -131,6 +131,13 @@
       .row .hint b {
         color: #c9cdea;
       }
+      /*
+        Named in the colour it is drawn in, so the word and the mark on the map identify each other.
+        Kept in step with GAP_COLOUR by hand — the panel is static markup and the canvas is not.
+      */
+      .gap-key {
+        color: #ff8a1e;
+      }
 
       .swatches {
         display: flex;
@@ -246,6 +253,13 @@
         <h2>1b &middot; Which ink counts as walls</h2>
         <p class="sub">Filtering those marks down to linework.</p>
         <div id="section-walls"></div>
+
+        <h2>Breaks in the linework</h2>
+        <p class="sub">
+          A wall with a section missing merges two rooms, which is the worst this can get wrong.
+          Marked in <b class="gap-key">orange</b>, with a ring round each one.
+        </p>
+        <div id="section-gaps"></div>
 
         <h2>Overlay</h2>
         <div class="swatches" id="swatches"></div>

@@ -67,6 +67,12 @@ export function radiusForWidth(width: number): number {
  * the four passes from drifting apart — the horizontal and vertical versions of the same operation
  * differing by an off-by-one is exactly the bug that would show as ink shifted by a pixel, which
  * against five-pixel linework is invisible until it is not.
+ *
+ * A line's addressing is a **base and a stride** rather than a function call per pixel. That is not
+ * tidiness: the closure it replaces ran twice for every pixel of every pass, and at 8.4 megapixels
+ * an opening was measuring 440ms in a room — most of it spent deciding, sixty-seven million times,
+ * which of two multiplications to do. The gap marks add a second morphological operation to the
+ * same surface, which is what made the cost worth paying attention to.
  */
 function pass(
   source: Uint8Array,
@@ -82,18 +88,22 @@ function pass(
   // Running counts over a line, as a prefix sum: the ink in `[lo, hi]` is one subtraction.
   const prefix = new Int32Array(along + 1);
 
+  // A row is contiguous; a column steps by a row's width. Both are then `base + i * stride`.
+  const stride = horizontal ? 1 : width;
+
   for (let line = 0; line < across; line++) {
-    const index = (position: number): number =>
-      horizontal ? line * width + position : position * width + line;
+    const base = horizontal ? line * width : line;
 
-    for (let i = 0; i < along; i++) prefix[i + 1] = prefix[i]! + source[index(i)]!;
+    for (let i = 0, at = base; i < along; i++, at += stride) {
+      prefix[i + 1] = prefix[i]! + source[at]!;
+    }
 
-    for (let i = 0; i < along; i++) {
-      const lo = Math.max(0, i - radius);
-      const hi = Math.min(along - 1, i + radius);
+    for (let i = 0, at = base; i < along; i++, at += stride) {
+      const lo = i - radius > 0 ? i - radius : 0;
+      const hi = i + radius < along - 1 ? i + radius : along - 1;
       const count = prefix[hi + 1]! - prefix[lo]!;
       const span = hi - lo + 1;
-      target[index(i)] = erode ? (count === span ? 1 : 0) : count > 0 ? 1 : 0;
+      target[at] = erode ? (count === span ? 1 : 0) : count > 0 ? 1 : 0;
     }
   }
 }
@@ -130,6 +140,24 @@ export function dilateMask(mask: BinaryMask, radius: number): BinaryMask {
 export function openMask(mask: BinaryMask, radius: number): BinaryMask {
   if (radius <= 0) return mask;
   return dilateMask(erodeMask(mask, radius), radius);
+}
+
+/**
+ * Fill breaks narrower than about `2 * radius`, leaving everything else where it was.
+ *
+ * The exact inverse of the opening, and it is currently used for one thing only: **finding** the
+ * narrow breaks, not sealing them. What the closing adds over the original mask is precisely the
+ * set of channels too narrow to survive — cracks, seams, notches and enclosed pockets — which is
+ * the candidate set the gap detector then sifts.
+ *
+ * Nothing writes this back into the pipeline. When a bridging control eventually does, the danger
+ * is the mirror image of the opening's and worse: an opening that severs a wall leaves a visible
+ * absence, while a closing that seals a doorway looks like perfectly good wall. That is why the
+ * marks are being built first.
+ */
+export function closeMask(mask: BinaryMask, radius: number): BinaryMask {
+  if (radius <= 0) return mask;
+  return erodeMask(dilateMask(mask, radius), radius);
 }
 
 /** How many ink pixels an opening removed, for the log. */

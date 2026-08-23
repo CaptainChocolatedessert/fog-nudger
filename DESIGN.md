@@ -965,7 +965,8 @@ trade on a control whose effect could not be seen.
 ### The controls
 
 Three for stage 1a — ink threshold, texture blur, detail window. Two for stage 1b — minimum stroke
-width, smallest ink island. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
+width, smallest ink island. Two for the gap marks — largest break to mark, same-wall distance. Two
+for stage two — smallest room, edge simplification. Two for stage three, both about how a
 proposal is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
 reading tab but are **display** parameters (below).
 
@@ -974,6 +975,13 @@ reading tab but are **display** parameters (below).
   invalidates, and the disagreement would be silent in the direction that matters — a stage-two
   tweak reusing a mask it should have thrown away. A test asserts the mapping is total and that the
   three stages partition the parameters exactly.
+- **A second declaration decides what a change *recomputes*, and it is not the same axis.**
+  `pipeline` invalidates the mask, `gaps` only the marks derived from it, `display` nothing but the
+  next repaint. The stage says which surface a control appears on; this says what turning it costs.
+  Conflating them is a real bug in both directions — a display parameter filed as pipeline
+  re-binarises on every opacity nudge, and a gap parameter filed as display would run half a second
+  of morphology on every frame of a drag. The workspace's rows are built from this, so a control
+  moved between headings cannot silently change what it recomputes.
 - **The stored shape was deliberately not renested to match.** Storage keeps its two groups and the
   stage mapping carries the semantics. Renesting would mean either a migration or a normaliser
   falling back to defaults for every field of a GM's existing tuning — and silently rewriting a
@@ -1100,6 +1108,8 @@ Where each parameter landed:
 | Detail window | **px** (was squares) | a filter kernel size, and it is tuned beside the blur |
 | Minimum stroke width | ink widths | genuinely a statement about stroke thickness |
 | Smallest ink island | **px** (was squares) | a size on the image, and ink width is not trusted here |
+| Largest break to mark | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes the marks invisibly |
+| Same-wall distance | px | a distance travelled across the image; nothing about it is a stroke or a square |
 | Smallest room | squares | it really is an area on the map's grid, and a GM thinks in squares |
 | Edge simplification | ink widths | its safety bound *is* half an ink width |
 
@@ -2047,7 +2057,7 @@ the moment the map changes.
 
 ### Next, in order — user, 2026-08-23
 
-Not built; recorded so the order and the reasoning survive a session change.
+Items 0 to 2 are done. The rest is recorded so the order and the reasoning survive a session change.
 
 #### 0. The workspace probe — CLOSED, 2026-08-23
 
@@ -2091,21 +2101,138 @@ the surface owes a trackpad user an unrestricted pan on a binding other than a p
 (**Ctrl held while dragging, and a dedicated hand tool** — both, user 2026-08-23) once that drag
 becomes the brush. The hand tool exists as a button today with nothing to switch to.
 
-#### 2. Gap marks
+#### 2. Gap marks — BUILT 2026-08-23
 
-**Highlight small gaps in the ink.** A wall with a thin section eroded away — by the minimum stroke
-width, or simply drawn faintly — leaves a break, and a break merges two rooms into one region, which
-is this project's worst failure. There is an example on the current test map.
+**Highlight small breaks in the ink.** A wall with a thin section eroded away — by the minimum
+stroke width, or simply drawn faintly — leaves a break, and a break merges two rooms into one
+region, which is this project's worst failure. There is an example on the current test map.
 
-This is the visual channel §8 now requires before the bridging control below can be justified: a gap
-must be *seen*, not reported. The mark wants to be conspicuous rather than subtle, since it is
-flagging the failure that matters most and the GM is scanning a whole map.
+This is the visual channel §8 requires before the bridging control below can be justified: a break
+must be *seen*, not reported. The mark is conspicuous rather than subtle, since it flags the failure
+that matters most and the GM is scanning a whole map.
 
-**Open: what counts as a gap.** The candidate definition is a place where a morphological *closing*
-at some radius would join two ink components that are currently separate — which makes the marks a
-preview of the bridging control rather than an independent detector, and lets the two explain each
-other. The alternative is an independent notion of "gap" that warns even with bridging off. These
-differ in whether a gap the bridge would not close still gets marked; probably it should.
+##### What counts as a gap — settled after two wrong answers
+
+> **A gap is a narrow channel of ground whose banks of ink are far apart when measured *along the
+> ink*.**
+
+Two definitions were proposed and both were wrong, and they are recorded because each failed on a
+case that reads as obviously correct once stated.
+
+- **"A break that separates the space when sealed."** Exact-sounding, and it tests the wrong thing:
+  the *space*, when the question is the integrity of the *ink*. **A freestanding wall standing in
+  the middle of a room separates nothing**, so a crack in it would never be reported — yet it is
+  just as broken, and a map may hold a great many meaningful walls inside one area of space (user,
+  2026-08-23). It also costs a full space labelling, about 400ms.
+- **"A break between two different ink blobs."** Fails on **a crack in a ring**, where both banks
+  belong to one blob by way of the long trip round the other side.
+
+The user's own formulation is what fixed it: *cracks between blobs of ink that appear to be
+different blobs when cut off at a local area.* "Locally different pieces" and "far apart along the
+ink" are the same statement. Two ink pixels three pixels apart across a crack, where getting from
+one to the other through the ink means travelling most of the way round a room, are different pieces
+of wall whatever the global labelling says. Two ink pixels three pixels apart across a ragged notch
+in one wall's edge, where the trip through the ink is eight pixels, are the same stroke.
+
+**Travel through the ink, not connectivity inside a cropped window.** A wall that bulges out of a
+window and back is still one wall, and travel says so where a crop would not — and travel needs no
+window shape, so it is rotation-invariant for free.
+
+##### How it computes, and why only the first step is expensive
+
+1. **A closing** at the gap radius. What it converts from ground to ink is exactly the set of narrow
+   channels — cracks, notches, enclosed pockets, and the hollow interiors of double-line walls. The
+   candidate set, and nothing more.
+2. **The bank groups.** The ink touching one channel, grouped into the pieces it arrives in. **One
+   group means a dead end**, because the banks wrap round it continuously; a channel that passes
+   *through* has ground at both ends, so its banks arrive as two or more separate faces. This step
+   alone throws out the ragged-edge noise a raw closing produces in quantity, and it costs nothing.
+   Without it the marks are confetti.
+3. **The travel test.** Flood through the ink from one **whole** bank group — whole, so a bank
+   running the length of a long channel cannot be judged far from itself — stopping at the travel
+   distance. Every other bank reached means the ink is locally one piece. Any bank unreached means a
+   break.
+
+**Both thresholds are GM controls, and both are in raster pixels** (user, 2026-08-23). Stage one
+stays close to the raster, and the ink width is itself a measurement that can come out oddly on an
+unusual map — a threshold that moved with it would change the marks for reasons the GM cannot see.
+The travel distance is exposed rather than fixed in code deliberately, on the argument that if it
+turns out never to be touched it can be dropped; it is the number in this design with the least
+evidence behind it.
+
+##### What it is expected to get wrong, predicted rather than discovered
+
+- **A double-line wall.** Where a map draws walls as two parallel strokes with white between, that
+  white is a narrow channel and the strokes meet only at the ends of a run — so every hollow wall
+  gets marked. This is reasoning, not measurement. It comes out as one mark per wall run rather than
+  a shower of them, the width control tunes it away, and on such a map bridging is arguably the
+  right answer rather than the mark being wrong.
+- **A speck of ink lying close to a wall.** Two locally different pieces, so a gap. Guardable by
+  demanding both sides amount to a real stroke; not done, because a speck that close to a wall is
+  worth a glance and the island filter is the tool for removing it.
+- **A crack beside a corner or a T-junction** can be missed, since the two banks meet round the
+  corner within a short travel. Lowering the travel distance is the answer, and it is the reason
+  that control exists.
+
+##### What it draws
+
+**Breaks are painted in their own colour, on their own layer, at full alpha** — so tinting the ink
+down to look at the map underneath does not also turn the warning down. That layer is also §8's
+rule about the bridging control satisfied **before** the control that needs it exists: invented
+pixels and read pixels must never be indistinguishable.
+
+**A ring in screen space at each break**, dark stroke then bright over one path so it reads against
+pale paper and dark stonework alike. Screen space is the point: a break is a handful of raster
+pixels and would be sub-pixel with a whole map on screen, which is exactly the situation the mark
+exists for. It grows to enclose the break once the view is zoomed past it.
+
+**The count goes on the state line in the neutral tone, not the error tone.** Most maps will have a
+few, and a status line that is permanently red is a status line nobody reads — which is the §8
+failure wearing different clothes. The rings are the channel that must be noticed; the count only
+tells a GM whether the ones they can see are all of them.
+
+**The gap colour is fixed rather than a swatch row.** The argument that makes the ink colour
+adjustable — no colour is readable on every map — applies here too, and this is the honest cost: the
+ring is what carries the identification when the colour collides. A picker is the fix if a room
+reports the marks disappearing into the paper.
+
+##### The kind axis gained a third value
+
+`PARAMETER_KIND` was `pipeline | display`; it is now `pipeline | gaps | display`. The gap settings
+are derived *from* the mask and change nothing *about* it, so filing them as pipeline parameters
+would re-binarise 690ms on every nudge — the exact trap that axis exists to prevent. But they are
+not display parameters either: unlike a colour they cost real work, so a surface treating them as
+free would run half a second of morphology on every frame of a drag.
+
+So the axis keeps its single question — **what does changing this recompute?** — and the cascade
+runs the way the names do: `pipeline` invalidates the mask and therefore the marks, `gaps`
+invalidates only the marks, `display` invalidates nothing but the next repaint. The mask fingerprint
+still reads `pipeline` alone, and a test pins that a `gaps` change cannot move it — plus one that no
+kind is empty, since every test in that block is a filter and a filter matching nothing passes.
+
+The workspace's row builder now switches on the kind rather than on which heading a control is drawn
+under, which is a conflation it had before: a control moved between headings for tidiness would have
+silently changed what it recomputed.
+
+##### Measured — the morphology inner loop, 2026-08-23
+
+The separable pass addressed each pixel through a closure that chose between two multiplications,
+twice per pixel. At 8.4 megapixels that is sixty-seven million decisions per opening, and a room had
+measured an opening at 440ms. Replaced with a base and a stride. Measured in Node on the development
+machine, at 3300x2550 with linework-shaped ink:
+
+> radius 3 — old opening 310ms, new opening 236ms, new closing 208ms
+> radius 6 — old opening 503ms, new opening 235ms, new closing 219ms
+
+**The new one is flat in the radius and the old one was not**, which it should have been in both
+cases — the algorithm is O(1) in the radius by construction, so the old version's climb was the
+interpreter rather than the arithmetic. **This is not the room's number**: Node on a desktop is not
+Firefox in a third-party iframe, and the 440ms figure needs re-measuring there. What the A/B
+establishes is the ratio, not the absolute.
+
+So a gap search costs roughly one closing plus a linear scan plus some bounded local floods — call
+it the same order as a stage-1b filter, against 690ms for a reading. That is the whole reason the
+search runs off the mask rather than off the map.
 
 #### 3. Bridging small gaps
 
@@ -2121,6 +2248,17 @@ doorway was there. The opening's failures at least leave a visible absence.
 **So bridged pixels must be drawn in their own colour on the overlay.** Invented ink and read ink
 must never be indistinguishable. That is the §8 rule applied directly, and it is a precondition
 rather than a refinement — the control should not ship without it.
+
+**That precondition is now met in advance.** Item 2 built the separate full-alpha layer and the
+screen-space ring, and both already draw ground the reading found nothing in — so what this control
+adds is a second reason for a pixel to be on that layer, not a new surface. It also inherits the
+closing itself, and the measurement that a closing costs about the same as a stage-1b filter.
+
+**Two questions it still has to answer**, and neither is inherited. Whether the bridging radius is
+the same number as the gap-marking width or a second control — the marks deliberately warn about
+breaks a bridge would not close, so they are not the same question, and forcing one number would
+make widening the search also widen the sealing. And whether a bridged pixel is drawn differently
+from a *marked but unbridged* one, since once both exist the layer is carrying two meanings.
 
 The consequence for play is worth stating: a sealed doorway does not merge rooms, it *separates*
 them, which fog handles fine. But Dynamic Fog derives a wall across the opening, so line of sight is

@@ -120,6 +120,24 @@ export const CONTROLS: readonly Control[] = [
     derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
   },
   {
+    name: "gapWidthPx",
+    section: "gaps",
+    label: "Largest break to mark",
+    hint: "Marks narrow breaks in the linework, which are what merge two rooms into one. In pixels; <b>zero is off</b>. Past a doorway's width it starts marking doorways, and no measurement can tell those apart.",
+    derive: (value, { pxPerSquare }) => {
+      if (value <= 0) return "off";
+      if (pxPerSquare === null) return `${Math.round(value)}px`;
+      return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
+    },
+  },
+  {
+    name: "gapTravelPx",
+    section: "gaps",
+    label: "Same-wall distance",
+    hint: "How far apart two edges of a break can be <b>along the ink</b> and still count as one piece of wall. Low marks more: a crack beside a corner starts counting. High treats distant linework as connected and goes quiet.",
+    derive: (value) => (value <= 0 ? "mark every break" : `${Math.round(value)}px along the ink`),
+  },
+  {
     name: "minRoomSquares",
     section: "settings",
     // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a

@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
 import {
+  closeMask,
   dilateMask,
   erodeMask,
   openMask,
@@ -203,6 +204,99 @@ describe("openMask", () => {
 
   it("handles an empty mask", () => {
     expect(rows(openMask(maskFromRows([]), 2))).toEqual([]);
+  });
+});
+
+/**
+ * The closing — used only to *find* narrow breaks, never yet to seal one.
+ *
+ * The properties tested here are the opening's read backwards, and the one that matters is the
+ * last: a closing must not move a wall. Everything the gap detector reports is the difference
+ * between this and its input, so ink that drifted by a pixel would be reported as a break.
+ */
+describe("closeMask", () => {
+  it("leaves the mask exactly as it was at radius zero", () => {
+    const mask = maskFromRows(["#.#.#", ".###.", "#.#.#"]);
+    expect(rows(closeMask(mask, 0))).toEqual(rows(mask));
+  });
+
+  it("fills a break narrower than twice the radius", () => {
+    const mask = maskFromRows([
+      ".......",
+      ".......",
+      "###.###",
+      ".......",
+      ".......",
+    ]);
+    expect(rows(closeMask(mask, 1))).toEqual([
+      ".......",
+      ".......",
+      "#######",
+      ".......",
+      ".......",
+    ]);
+  });
+
+  it("leaves a break wider than twice the radius open", () => {
+    // The doorway case. A closing whose radius exceeds a doorway seals it, and a sealed doorway
+    // looks like perfectly good wall — which is why the marks come before any control that does it.
+    const mask = maskFromRows([
+      ".........",
+      ".........",
+      "##.....##",
+      ".........",
+      ".........",
+    ]);
+    expect(rows(closeMask(mask, 1))).toEqual(rows(mask));
+  });
+
+  it("never removes ink that was there", () => {
+    // A closing is bounded below by its input, exactly as an opening is bounded above by it.
+    const mask = maskFromRows(["#.#.#", ".###.", "#.#.#", ".###.", "#.#.#"]);
+    const closed = closeMask(mask, 1);
+    for (let i = 0; i < mask.data.length; i++) {
+      if (mask.data[i] === 1) expect(closed.data[i]).toBe(1);
+    }
+  });
+
+  it("does not thicken a wall standing clear of anything", () => {
+    // The property the gap marks rest on. Ink that grew would come back as ground-turned-ink and
+    // be reported as a break, which is a detector inventing its own findings.
+    const mask = maskFromRows([
+      ".........",
+      ".........",
+      "..#####..",
+      ".........",
+      ".........",
+    ]);
+    expect(rows(closeMask(mask, 1))).toEqual(rows(mask));
+  });
+
+  it("does not erode a wall drawn along the border", () => {
+    // Borders clamp rather than counting off-image as ground. Counting it as ground would let the
+    // erosion half eat a band off every edge that the dilation had already put back.
+    // The room inside has to be wider than the closing, or it fills legitimately and the fixture
+    // is testing the wrong thing — which is what the first draft of this one did.
+    const mask = maskFromRows(["#######", "#.....#", "#.....#", "#.....#", "#######"]);
+    expect(rows(closeMask(mask, 1))).toEqual(rows(mask));
+  });
+
+  it("is idempotent, as a closing must be", () => {
+    const mask = maskFromRows([
+      "..###..",
+      "..###..",
+      "#######",
+      "..#.#..",
+      "..###..",
+      ".......",
+      "#.#.#.#",
+    ]);
+    const once = closeMask(mask, 1);
+    expect(rows(closeMask(once, 1))).toEqual(rows(once));
+  });
+
+  it("handles an empty mask", () => {
+    expect(rows(closeMask(maskFromRows([]), 2))).toEqual([]);
   });
 });
 

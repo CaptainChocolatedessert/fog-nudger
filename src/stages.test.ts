@@ -95,6 +95,27 @@ describe("maskFingerprint", () => {
     }
   });
 
+  it("does NOT change for a GAPS parameter", () => {
+    // The gap marks are derived from the mask and change nothing about it, so widening the search
+    // must not re-binarise. This is the same trap the display test guards, one value along: a gap
+    // parameter filed as pipeline would cost 690ms to arrive at a mask identical to the one in
+    // hand, on every release of the slider.
+    const base = maskFingerprint(DEFAULT_SETTINGS);
+    for (const name of ALL_NAMES) {
+      if (PARAMETER_KIND[name] !== "gaps") continue;
+      const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
+      expect(maskFingerprint(changed)).toBe(base);
+    }
+  });
+
+  it("has at least one parameter of each kind, so none of the three tests above is vacuous", () => {
+    // Every test in this block is a loop with a filter, and a filter that matches nothing passes.
+    // A rename that emptied one of them would leave a green suite asserting nothing.
+    for (const kind of ["pipeline", "gaps", "display"] as const) {
+      expect(ALL_NAMES.filter((name) => PARAMETER_KIND[name] === kind).length).toBeGreaterThan(0);
+    }
+  });
+
   it("does NOT change when the overlay colour changes", () => {
     // The colour is not a number, so it lives outside the numeric machinery entirely and could not
     // reach the fingerprint even by accident today. Pinned anyway, because "could not reach it"

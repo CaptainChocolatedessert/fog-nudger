@@ -143,10 +143,16 @@ export interface ReviewSettings {
 }
 
 /**
- * How the stage-one overlay paints the mask.
+ * What the stage-one surface draws on top of the mask.
  *
- * Purely how it looks. Nothing here reaches the pipeline, which is why these are display parameters
- * rather than reading ones despite living on the reading tab — see `PARAMETER_KIND`.
+ * **Nothing here reaches the mask**, which is why none of it is a pipeline parameter despite all of
+ * it living on the reading surface — see `PARAMETER_KIND`. Two of the four are not merely paint,
+ * though: the gap settings drive a derivation that costs real work, and the kind axis distinguishes
+ * them from a colour for exactly that reason.
+ *
+ * Kept in this group rather than renested beside the reading parameters they sit next to, per the
+ * standing rule that the stored shape does not follow the stages — moving a key means a migration
+ * or a normaliser that resets a GM's tuning, and the mapping carries the semantics instead.
  */
 export interface OverlaySettings {
   /**
@@ -165,6 +171,22 @@ export interface OverlaySettings {
    * "does this line up with the linework underneath".
    */
   readonly inkOpacity: number;
+  /**
+   * The widest break in the linework to mark, in raster pixels. Zero turns the marks off.
+   *
+   * In pixels rather than in measured ink widths, and that was a decision rather than a default
+   * (user, 2026-08-23): stage one stays close to the raster, and a threshold that moved with a
+   * measurement would make the marks change for reasons a GM has no way to see.
+   */
+  readonly gapWidthPx: number;
+  /**
+   * How far apart two banks of a break may be **along the ink** and still count as one piece, in
+   * raster pixels.
+   *
+   * The whole discriminator between a crack and a ragged edge. Zero is meaningful rather than off:
+   * it marks every break that passes through, which is the loudest the detector goes.
+   */
+  readonly gapTravelPx: number;
 }
 
 export interface Settings {
@@ -190,6 +212,11 @@ export const DEFAULT_SETTINGS: Settings = {
   overlay: {
     inkColour: "#ff2020",
     inkOpacity: 1,
+    // On by default. A break in a wall merges two rooms, which is this project's worst outcome, and
+    // a GM who never reaches for this control is exactly the one who needs telling. The price is
+    // about half a second added to a reading, which the state line and the log both report.
+    gapWidthPx: 12,
+    gapTravelPx: 40,
   },
 };
 
@@ -228,6 +255,14 @@ export const SETTING_LIMITS = {
   // Not floored above zero. Dragging it to nothing is a legitimate way to check what is underneath
   // without taking the overlay down and losing its position.
   inkOpacity: { min: 0, max: 1, step: 0.02 },
+  // Runs past a doorway on purpose, like the two filters above it: at the top end whole doorways
+  // are marked, which is what makes the middle of the track feel like a choice. No measurement can
+  // separate a doorway from a severed wall — both are a break of some width — so where that line
+  // falls is the GM's to decide, and the control has to reach far enough for them to decide it.
+  gapWidthPx: { min: 0, max: 80, step: 1 },
+  // The top end calls almost any two pieces of one map's linework the same piece, which silences
+  // the marks; the bottom end marks every break that passes through, doorways included.
+  gapTravelPx: { min: 0, max: 300, step: 5 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -268,6 +303,8 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   minStrokeInkWidths: "read",
   minIslandPx: "read",
   inkOpacity: "read",
+  gapWidthPx: "read",
+  gapTravelPx: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
@@ -290,8 +327,20 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
  *
  * The cascade in `Stage` therefore governs pipeline parameters. Display parameters are orthogonal
  * to it: they live with the thing they display and they destroy nothing, wherever they sit.
+ *
+ * ## Why there is a third value rather than two
+ *
+ * The gap marks are derived *from* the mask and change nothing *about* it, so filing them as
+ * pipeline parameters would re-binarise on every nudge — the trap above, exactly. But they are not
+ * display parameters either: unlike a colour or an opacity they cost real work, so a surface that
+ * treated them as free would recompute half a second of morphology on every frame of a drag.
+ *
+ * So `gaps` is its own answer to the one question this axis asks — **what does changing this
+ * recompute?** — and the cascade runs the way the names do: a `pipeline` change invalidates the
+ * mask and therefore the marks too, a `gaps` change invalidates only the marks, and a `display`
+ * change invalidates nothing but the next repaint.
  */
-export type ParameterKind = "pipeline" | "display";
+export type ParameterKind = "pipeline" | "gaps" | "display";
 
 export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   sauvolaK: "pipeline",
@@ -300,6 +349,8 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   minStrokeInkWidths: "pipeline",
   minIslandPx: "pipeline",
   inkOpacity: "display",
+  gapWidthPx: "gaps",
+  gapTravelPx: "gaps",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
@@ -440,6 +491,8 @@ export function normaliseSettings(raw: unknown): Settings {
     overlay: {
       inkColour: normaliseColour(overlay.inkColour, o.inkColour),
       inkOpacity: clamp(overlay.inkOpacity, "inkOpacity", o.inkOpacity),
+      gapWidthPx: clamp(overlay.gapWidthPx, "gapWidthPx", o.gapWidthPx),
+      gapTravelPx: clamp(overlay.gapTravelPx, "gapTravelPx", o.gapTravelPx),
     },
   };
 }
@@ -465,13 +518,14 @@ export function isDefault(settings: Settings): boolean {
 
 /** One line for the log, so a run's numbers can be read beside the settings that produced them. */
 export function describeSettings(settings: Settings): string {
-  const { trace, review } = settings;
+  const { trace, review, overlay } = settings;
   return (
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusPx}px, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
     `min island ${trace.minIslandPx}px, ` +
     `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
-    `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq` +
+    `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
+    `gaps ${overlay.gapWidthPx === 0 ? "off" : `${overlay.gapWidthPx}px wide, ${overlay.gapTravelPx}px travel`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
   );
 }
