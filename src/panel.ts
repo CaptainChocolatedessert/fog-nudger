@@ -21,6 +21,7 @@ import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeC
 import { closeInkOverlay, openInkOverlay } from "./overlay/overlayControl";
 import { HEARTBEAT_MS, PANEL_PRESENCE_CHANNEL } from "./overlay/panelPresence";
 import { dryRun, lastInkWidth, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
+import { CONTROLS, type Measured } from "./controls";
 import {
   DEFAULT_SETTINGS,
   isStageDefault,
@@ -275,128 +276,6 @@ function applyTheme(theme: unknown): void {
 
 
 /**
- * The controls, in the order a GM meets them, with a hint saying which way to turn each one.
- *
- * The hints exist because every one of these is a number whose direction is not guessable —
- * raising Sauvola's `k` makes *less* ink, which is the opposite of what "sensitivity" suggests to
- * most people. A control whose direction you have to discover by experiment is a control that gets
- * turned once and left alone.
- */
-interface Control {
-  readonly name: SettingName;
-  readonly label: string;
-  readonly hint: string;
-  /**
-   * Which container on the stage's tab this appears in — the id is `<stage>-<section>`.
-   *
-   * **Presentation only, and deliberately separate from `PARAMETER_KIND`.** The kind decides what a
-   * change *invalidates* and is read by the mask fingerprint; this decides only where the control
-   * is drawn. Stage one is two things in series — what is a mark, then which marks are walls — and
-   * both halves are reading-stage pipeline controls, so the division must not touch the cascade.
-   */
-  readonly section: string;
-  readonly scale?: Scale;
-  /** Renders the value in a unit the GM can feel, given the last run's pixels per grid square. */
-  readonly derive?: (value: number, pxPerSquare: number) => string;
-}
-
-/**
- * Every control, in stage order.
- *
- * One list rather than one per tab: which tab a control appears on is read from the stage
- * declaration in `settings.ts`, which is the same declaration the pipeline's cache invalidation
- * uses. Two lists would be two places to disagree about what a knob invalidates.
- */
-const CONTROLS: readonly Control[] = [
-  {
-    name: "sauvolaK",
-    section: "ink",
-    label: "Ink threshold",
-    hint: "Higher finds <b>less</b> ink — only decisively dark pixels. Lower catches faint linework, and eventually the paper.",
-  },
-  {
-    name: "blurSigma",
-    section: "ink",
-    label: "Texture blur",
-    hint: "Fades the finest marks below the threshold. The blunt lever against speckle and a printed floor grid — blunt because it works on contrast, so it takes faint walls too.",
-    derive: (value) => `${value.toFixed(2)} px`,
-  },
-  {
-    name: "sauvolaRadiusPx",
-    section: "ink",
-    label: "Detail window",
-    hint: "How local the threshold is, as a radius in pixels. Wants to stay comfortably wider than the linework is thick, or a bold stroke becomes its own background and stops counting as ink.",
-    derive: (value) => `${Math.round(value) * 2 + 1} px across`,
-  },
-  {
-    name: "minStrokeInkWidths",
-    section: "walls",
-    label: "Minimum stroke width",
-    hint: "Removes marks narrower than this, keeping thicker ones at full width. As a share of the measured ink width; <b>zero is off</b>. Works on width, not contrast, so it reaches a floor grid the blur cannot.",
-    // Reads the measured ink width rather than assuming one. An earlier version multiplied by
-    // 0.111 — this project's test map's ink width in grid squares — which is a measurement of one
-    // map hardcoded into a control meant for any map, and DESIGN.md §5 exists to prevent exactly
-    // that. Before a first read there is no width, so no figure is shown at all.
-    derive: (value) => {
-      if (value <= 0) return "off";
-      const ink = lastInkWidth();
-      if (ink === null) return "trace once for a figure";
-      const width = value * ink;
-      const radius = Math.max(0, Math.round(width / 2));
-      return radius <= 0
-        ? `rounds to nothing against ${ink.toFixed(1)}px ink`
-        : `under ~${radius * 2}px goes (ink is ${ink.toFixed(1)}px)`;
-    },
-  },
-  {
-    name: "minIslandPx",
-    section: "walls",
-    label: "Smallest ink island",
-    hint: "Removes isolated marks shorter than this on <b>both</b> sides — decoration that survived the filter above. Walls join into one network, so they are not islands. In pixels; <b>zero is off</b>.",
-    derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
-  },
-  {
-    name: "minRoomSquares",
-    section: "settings",
-    // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a
-    // linear track the default sits 1.6% along and the rest of the slider chooses between absurd
-    // values.
-    scale: "log",
-    label: "Smallest room",
-    hint: "Anything smaller is discarded, and shows as bare map unless something swallows it. Low is safer: a spurious region costs one click, a bare patch is a visible defect.",
-    derive: (value, px) => `${Math.round(value * px * px)} px, ${(Math.sqrt(value) * px).toFixed(0)} px across`,
-  },
-  {
-    name: "simplifyInkWidths",
-    section: "settings",
-    label: "Edge simplification",
-    hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",
-    derive: (value) => {
-      const ink = lastInkWidth();
-      return ink === null ? "trace once for a figure" : `${(value * ink).toFixed(1)}px of a ${ink.toFixed(1)}px ink width`;
-    },
-  },
-  {
-    name: "fillOpacity",
-    section: "settings",
-    label: "Proposal fill",
-    hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
-  },
-  {
-    name: "strokeSquares",
-    section: "settings",
-    label: "Proposal outline",
-    hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
-  },
-  {
-    name: "inkOpacity",
-    section: "display",
-    label: "Overlay opacity",
-    hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
-  },
-];
-
-/**
  * Preset overlay colours.
  *
  * A spread of hues plus both extremes of neutral, because the only thing that makes a colour good
@@ -422,7 +301,7 @@ function settingRow(
   label: string,
   hint: string,
   scale: Scale,
-  derive: ((value: number, pxPerSquare: number) => string) | undefined,
+  derive: ((value: number, measured: Measured) => string) | undefined,
   value: number,
   onChange: (value: number) => void,
 ): HTMLElement {
@@ -450,10 +329,12 @@ function settingRow(
   const note = document.createElement("p");
   note.className = "hint";
 
-  const px = lastPixelsPerSquare();
+  // Read once per paint rather than per drag frame: both are figures from the last completed run,
+  // and neither can change while a slider is being moved.
+  const measured: Measured = { pxPerSquare: lastPixelsPerSquare(), inkWidth: lastInkWidth() };
   const paintHint = (current: number): void => {
-    const derived = px !== null && derive ? ` <b>${derive(current, px)}</b>` : "";
-    note.innerHTML = hint + derived;
+    const derived = derive ? derive(current, measured) : "";
+    note.innerHTML = derived ? `${hint} <b>${derived}</b>` : hint;
   };
   paintHint(value);
 

@@ -658,8 +658,20 @@ export interface MaskForOverlay {
  * overlay repainting because a colour changed should not fill the log with resolution and polarity
  * reports every time.
  */
-export async function maskForOverlay(): Promise<MaskForOverlay | null> {
-  const settings = await readSettings();
+export async function maskForOverlay(
+  /*
+    The settings to read with, or scene metadata's if omitted.
+
+    The workspace needs to preview a value the GM is still dragging, and metadata is the wrong place
+    to keep one: writing on every drag frame is exactly what the `input`/`change` split exists to
+    prevent, and a pending value written there would also be a value a *reload* would inherit
+    without the GM ever having accepted it. So the caller may supply the settings it wants a mask
+    for. The cache and its fingerprint work unchanged either way, since the fingerprint is computed
+    from whatever settings arrive rather than from where they came from.
+  */
+  override?: Settings,
+): Promise<MaskForOverlay | null> {
+  const settings = override ?? (await readSettings());
   const map = await resolveTraceMap();
   if (!map) return null;
 
