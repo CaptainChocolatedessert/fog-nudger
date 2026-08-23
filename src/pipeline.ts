@@ -68,6 +68,7 @@ import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
 import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
+import { removeSmallInkIslands } from "./trace/inkIslands";
 import { labelSpace } from "./trace/label";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
@@ -562,8 +563,47 @@ async function computeMask(
     );
   }
 
+  // ## Smallest ink island
+  //
+  // The second stage-1b filter, and it catches what the first leaves: decoration that is
+  // high-contrast, thick enough to survive an opening, and stubby. It separates those from walls by
+  // *connectivity* first — walls join into one enormous network, a decoration is an island — so the
+  // size threshold only has to be large enough to catch islands.
+  //
+  // Eight-connected, per the pairing rule, and that is the conservative direction here: a decoration
+  // touching a wall even diagonally counts as part of the network and is never removed.
+  const islandStarted = performance.now();
+  const minIslandPx = settings.trace.minIslandSquares * pxPerSquare;
+  const islands = removeSmallInkIslands(effectiveMask, minIslandPx);
+  const filteredMask = islands.mask;
+
+  if (minIslandPx > 0) {
+    const beforeIslands = countInk(effectiveMask);
+    devLog(
+      "info",
+      `trace: smallest ink island in ${Math.round(performance.now() - islandStarted)}ms — ` +
+        `${settings.trace.minIslandSquares} of a square is ${minIslandPx.toFixed(1)}px, so any ` +
+        `isolated mark shorter than that on both sides is gone. Removed ${islands.removed} ` +
+        `islands holding ${islands.removedArea} px ` +
+        `(${beforeIslands > 0 ? ((islands.removedArea / beforeIslands) * 100).toFixed(1) : "0.0"}% ` +
+        `of the ink); largest surviving island spans ${islands.largestKeptSpan}px ` +
+        `(${pxPerSquare > 0 ? (islands.largestKeptSpan / pxPerSquare).toFixed(1) : "?"} squares).`,
+    );
+    // The number that says whether this went too far. The wall network should be one island running
+    // most of the map; if the largest survivor is room-sized instead, the linework has been cut up.
+    if (pxPerSquare > 0 && islands.largestKeptSpan < plan.width * 0.25) {
+      devLog(
+        "warn",
+        `trace: the largest surviving ink island spans only ${islands.largestKeptSpan}px of a ` +
+          `${plan.width}px raster. The linework of a map is normally one connected network running ` +
+          `most of its width, so this suggests the walls have been broken into pieces — by this ` +
+          `filter, or by the minimum stroke width before it.`,
+      );
+    }
+  }
+
   const blobStarted = performance.now();
-  const blobs = findInkBlobs(effectiveMask, {
+  const blobs = findInkBlobs(filteredMask, {
     pxPerSquare,
     minSquares: MIN_BLOB_SQUARES,
     minThickness: (reading.inkWidth ?? pxPerSquare * 0.1) * BLOB_INK_WIDTHS,
@@ -585,7 +625,7 @@ async function computeMask(
     pxPerSquare,
     rawField,
     reading,
-    mask: effectiveMask,
+    mask: filteredMask,
     chosenCoverage,
   };
 }

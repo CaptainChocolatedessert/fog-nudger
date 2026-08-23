@@ -76,6 +76,27 @@ export interface TraceSettings {
    */
   readonly minStrokeInkWidths: number;
   /**
+   * Smallest isolated ink island kept, measured as the longest side of its bounding box in grid
+   * squares. Zero is off.
+   *
+   * The second tool in stage 1b, and it exists because the first leaves a residue. Once a printed
+   * floor grid is gone, what remains beside the linework is decoration — high-contrast, thick
+   * enough to survive an opening, and **stubby**: a compass rose, rubble, a furniture glyph.
+   *
+   * It separates those from walls by *connectivity* first and size second. A wall segment can be
+   * tiny, but walls **join up** — the linework of a dungeon is one enormous connected network,
+   * while a decoration is an island floating inside a room. So the threshold only has to be big
+   * enough to catch islands, and it is separating things that differ by orders of magnitude.
+   *
+   * The longest side rather than the area, because a GM can look at a map and say "that compass
+   * rose is two squares across" and nobody can estimate an area by eye. It is also the measure that
+   * says *stubby*, which is the property distinguishing what survives an opening from what should.
+   *
+   * **The cost:** a genuinely isolated short wall — a free-standing pillar, a lone threshold mark —
+   * looks exactly like a decoration and goes with them.
+   */
+  readonly minIslandSquares: number;
+  /**
    * Smallest area kept as a room, in grid squares.
    *
    * Guards against hatching, speckle and the slivers a picked-up floor grid leaves. It can only
@@ -148,6 +169,7 @@ export const DEFAULT_SETTINGS: Settings = {
     sauvolaK: 0.34,
     sauvolaRadiusSquares: 0.25,
     minStrokeInkWidths: 0,
+    minIslandSquares: 0,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -179,9 +201,12 @@ export const SETTING_LIMITS = {
   blurSigma: { min: 0, max: 3, step: 0.25 },
   sauvolaK: { min: 0.02, max: 0.9, step: 0.02 },
   sauvolaRadiusSquares: { min: 0.05, max: 0.75, step: 0.05 },
-  // Tops out at one ink width. Past that it is removing strokes as thick as the linework it is
-  // meant to protect, which is not a setting with a use so much as a way to erase the map.
-  minStrokeInkWidths: { min: 0, max: 1, step: 0.05 },
+  // Tops out well past useful, deliberately (user, 2026-08-23). A control whose top end still
+  // looks reasonable gives no sense of where the edge is; being able to push it until the ink
+  // disappears entirely is what makes the middle feel like a choice rather than a guess.
+  minStrokeInkWidths: { min: 0, max: 3, step: 0.05 },
+  // Same reasoning: the top end should be able to erase a map's decoration and then its walls.
+  minIslandSquares: { min: 0, max: 6, step: 0.05 },
   minRoomSquares: { min: 0.002, max: 6, step: 0.01 },
   // Capped below the half-ink-width bound that stops a boundary crossing a wall. A GM cannot be
   // given a control whose top end silently merges rooms.
@@ -229,6 +254,7 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   blurSigma: "read",
   sauvolaRadiusSquares: "read",
   minStrokeInkWidths: "read",
+  minIslandSquares: "read",
   inkOpacity: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
@@ -260,6 +286,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   blurSigma: "pipeline",
   sauvolaRadiusSquares: "pipeline",
   minStrokeInkWidths: "pipeline",
+  minIslandSquares: "pipeline",
   inkOpacity: "display",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
@@ -390,6 +417,11 @@ export function normaliseSettings(raw: unknown): Settings {
         "minStrokeInkWidths",
         t.minStrokeInkWidths,
       ),
+      minIslandSquares: clamp(
+        trace.minIslandSquares,
+        "minIslandSquares",
+        t.minIslandSquares,
+      ),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,
@@ -433,6 +465,7 @@ export function describeSettings(settings: Settings): string {
   return (
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusSquares} sq, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
+    `min island ${trace.minIslandSquares} sq, ` +
     `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")

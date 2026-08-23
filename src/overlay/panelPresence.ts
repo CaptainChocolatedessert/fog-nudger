@@ -51,10 +51,10 @@ export const PRESENCE_STALE_MS = 1200;
  * geometry across origins. Owlbear places the popover near its toolbar rather than flush to the
  * screen edge, so this covers the gap between the two.
  *
- * A guess, and flagged as one. The reserved band is logged on every change so it can be corrected
- * by looking at it once rather than reasoned about.
+ * Was 64 and measured too wide in a room (user, 2026-08-23); halved. Still a guess rather than a
+ * measurement — the band is logged on every change, so it stays correctable by looking.
  */
-export const PANEL_EDGE_MARGIN = 64;
+export const PANEL_EDGE_MARGIN = 32;
 
 /** What the panel sends. Carries its width so the band follows the manifest rather than a copy of it. */
 export interface PanelPresence {

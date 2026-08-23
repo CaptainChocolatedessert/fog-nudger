@@ -348,6 +348,14 @@ const CONTROLS: readonly Control[] = [
     },
   },
   {
+    name: "minIslandSquares",
+    section: "walls",
+    label: "Smallest ink island",
+    hint: "Removes isolated marks shorter than this on <b>both</b> sides — decoration that survived the filter above. Walls join into one network, so they are not islands. In grid squares; <b>zero is off</b>.",
+    derive: (value, px) =>
+      value <= 0 ? "off" : `under ~${Math.round(value * px)}px across goes`,
+  },
+  {
     name: "minRoomSquares",
     section: "settings",
     // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a

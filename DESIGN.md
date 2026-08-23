@@ -652,10 +652,51 @@ doorway marking, a lightly drawn secret door, a wall hatched as fine parallel st
 scalpel for the grid only where the grid is thinner than everything worth keeping, and on some maps
 it will not be. GM-drawn "not ink" strokes remain the better, local tool; this does not replace them.
 
+### The smallest ink island — built 2026-08-23 (user)
+
+The second tool in stage 1b, and it exists because the first leaves a residue. Once the minimum
+stroke width has taken out a printed floor grid, what remains beside the linework is **decoration**:
+high-contrast, thick enough to survive an opening, and **stubby** — a compass rose, rubble, a
+furniture glyph. Reported from a room on the run that first cleared a grid.
+
+**It separates those from walls by connectivity first, size second.** Not because a wall is large —
+a wall segment between two doorways can be tiny — but because **walls join up**. The linework of a
+dungeon is one enormous connected network; a decoration is an island floating inside a room. So the
+threshold only has to be large enough to catch islands, and it is separating things that differ by
+orders of magnitude rather than by a margin.
+
+**The measure is the bounding box's longest side, in grid squares.** A GM can look at a map and say
+"that compass rose is two squares across"; nobody estimates an area by eye, and an irregular glyph
+makes that worse. It is also the measure that says *stubby*, which is the property distinguishing
+what survives an opening from what should.
+
+**Eight-connected, and here that is the conservative direction rather than merely the consistent
+one.** A decoration touching a wall *even diagonally* counts as part of the network and is never
+removed. Under 4-connectivity it would look separate, and deleting it would quietly edit ink that
+the space labelling one stage later treats as load-bearing. Note that `findInkBlobs` labels ink
+4-connected by inverting the mask — harmless there, since it only reports.
+
+**The alarm:** the largest surviving island should span most of the raster, because that is what a
+wall network is. If it drops below a quarter of the map's width the linework has been cut into
+pieces, by this filter or by the stroke width before it, and the run says so.
+
+**The cost:** a genuinely isolated short wall — a free-standing pillar, a lone threshold mark —
+looks exactly like a decoration and goes with them.
+
+### Both 1b controls go further than useful, deliberately — user, 2026-08-23
+
+Their maxima are past the point of sense: far enough to erase a map's decoration and then its walls.
+A control whose top end still looks reasonable gives no sense of where the edge is, and the GM is
+left guessing whether they have gone far enough. Being able to push it until the ink disappears is
+what makes the middle feel like a choice — too low, too high, then settle.
+
+That is only safe because the overlay makes both extremes visible immediately. It would be a poor
+trade on a control whose effect could not be seen.
+
 ### The controls
 
-Three for stage 1a — ink threshold, texture blur, detail window. One for stage 1b — minimum stroke
-width. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
+Three for stage 1a — ink threshold, texture blur, detail window. Two for stage 1b — minimum stroke
+width, smallest ink island. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
 proposal is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
 reading tab but are **display** parameters (below).
 
@@ -1662,6 +1703,25 @@ skeleton is noisy — thick filled walls, hatching — it will propose nonsense,
 only because it is GM-invoked rather than automatic. Recompute the skeleton from the map image on
 demand rather than persisting it; pixel access is verified to work, and a stored skeleton goes stale
 the moment the map changes.
+
+### The overlay's panel band does not lift, and probably should not need to — logged 2026-08-23 (user)
+
+Measured in a room: the band is reserved correctly while the panel is open, but **closing the panel
+does not bring the ink back**. The heartbeat stops, so the band should expire within one stale
+interval and the next poll should repaint — it does not, and why is not yet established. My first
+suspicion is that the repaint on a band change only fires from inside the poll's settled branch, so
+a view that has not moved since may never take it; that is reasoning from the code, not a diagnosis.
+
+**The user's fix is better than repairing this** (2026-08-23): when the panel is put away, the
+overlay should **disappear entirely** rather than expanding to fill the space. It is a working
+surface for stage-one tuning, and stage-one tuning happens in the panel — an overlay left painting
+over a map nobody is currently tuning is clutter that hides the map at exactly the moment the GM has
+signalled they are done with it. That also dissolves the bug rather than fixing it: there is no band
+to lift if there is no overlay.
+
+It would want the presence signal to distinguish "panel closed" from "panel never heard from",
+since a stale heartbeat and a broadcast that never arrives currently look identical, and one of
+those must not take the overlay down. Not urgent; the overlay is usable as it stands.
 
 ### The overlay colour controls want a second look — logged 2026-08-23 (user)
 

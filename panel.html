@@ -310,10 +310,12 @@
       <p class="field">1b · Which ink counts as walls</p>
       <div class="settings" id="read-walls"></div>
       <p class="note">
-        Filtering the marks down to linework. Removing thin strokes is by <em>width</em>, so unlike
-        the blur above it can take a floor grid printed as dark as the walls. It is not safe, only
-        visible — it deletes everything below the threshold and can sever a thin wall, which merges
-        two rooms. Turn on the overlay and look before trusting it.
+        Filtering the marks down to linework. <em>Minimum stroke width</em> works on width rather
+        than contrast, so unlike the blur above it can take a floor grid printed as dark as the
+        walls. <em>Smallest ink island</em> then catches what survives that — decoration that is
+        thick but stubby — by using the fact that walls join into one network and decorations do
+        not. Neither is safe, only visible: both delete everything below their threshold, and the
+        first can sever a thin wall and merge two rooms. Turn on the overlay and look.
       </p>
 
       <!--
