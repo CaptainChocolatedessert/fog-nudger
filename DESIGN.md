@@ -593,6 +593,73 @@ whether a popover is open, so **the panel says so on a heartbeat**.
 - **It fails safe.** If the broadcast never reaches a sibling iframe, no band is ever reserved and
   the overlay draws over the panel exactly as before: the previous behaviour, not a new fault.
 
+### Superseding all of the above: stage one becomes its own workspace — user, 2026-08-23
+
+**Decided in principle, probe first.** The click-through overlay is not being kept and extended; it
+is the thing being replaced. Everything in the two subsections above — the poll, the settle, the
+blanking, the clip band, the heartbeat — is expected to be deleted rather than built on.
+
+**The case.** Look at what the overlay actually contains: a 40ms poll of two `transformPoint` calls,
+a settle interval, a movement threshold, blank-and-restore, a clip band, and a heartbeat from the
+panel so the band knows when to exist. Almost none of that is about *showing the mask*. It is all
+machinery for coping with the fact that **Owlbear owns the transform and publishes no event for it**,
+so we are perpetually inferring where someone else has put things.
+
+An opaque, interactive surface that draws the map itself owns the transform, and that deletes:
+
+- **The polling**, entirely. Pan and zoom become our own state, updated synchronously in an event
+  handler.
+- **Blank-and-restore.** There is no window in which we could be wrong about where the map is, so
+  there is nothing to be honest about by going blank. That was the one genuine wart in the design and
+  it was a symptom of not owning the transform, not a design choice.
+- **The registration risk.** Map and mask drawn into one canvas under one transform agree *by
+  construction* rather than by our arithmetic agreeing with Owlbear's. A whole failure class goes.
+- **The panel band, the heartbeat, and the note above about the band not lifting** — all moot, since
+  stage one's controls would live inside the workspace rather than in a popover the overlay covers.
+
+**The trigger is that painting cannot be added to what exists.** Pointer events are disabled, and
+that is not incidental — it is what makes the sheet click-through, which is what lets the map be
+panned while it is up. A mode toggle would mean "you cannot move the map while painting", which for
+a painting tool is a bad trade. Three of the four things §11 lists next want interaction the current
+surface structurally cannot provide.
+
+**And the surface split follows a data split already settled.** §4 established that stage one's
+artefact — a per-pixel classification — **can never be scene content**, because rasters cannot enter
+an Owlbear scene. Stage two's artefact **is** scene content by definition: items, edited with
+Owlbear's own tools, promoted to fog. So stage one gains nothing from Owlbear's renderer and stage
+two depends on it entirely. Different surfaces is the same line drawn one level up, not a workaround.
+Tabs 2 and 3 stay in the popover beside the scene; tab 1 becomes "open the workspace".
+
+**The risks, and the first is the one the decision rests on:**
+
+- **Pan and zoom feel.** Owlbear's viewer is good; ours would be minimal. Two navigation models in
+  one product jar if wheel direction, zoom rate or drag behaviour disagree. This is the question
+  nothing but a human's hands can answer, and it is why this is a probe rather than a build.
+- **A small map viewer to maintain forever**, including whatever turns up on a trackpad, a
+  touchscreen and a 4K display.
+- **Performance is unproven.** An 8.4-megapixel map plus an 8.4-megapixel mask per frame during a
+  drag *should* be fine — GPU-composited `drawImage` — but there is no measurement, and a pan that
+  stutters is worse than one that blanks.
+- **One unmeasured SDK question.** A full-screen modal *with* `disablePointerEvents` is proven. One
+  *without* it is not: keyboard focus, scroll ownership and whether `hidePaper: false` gives a usable
+  frame are all unknown.
+- **Everything Owlbear renders is lost** — tokens, existing fog, the grid. None of it matters for
+  deciding what is ink, which is the point; if judging scale against the grid turns out to matter, we
+  draw one ourselves.
+
+**The probe comes first and tests one thing.** A surface that opens opaque, draws the map, and pans
+and zooms. Nothing else — no mask, no controls. The question it answers is whether the navigation
+feels right beside Owlbear's own, and if it does not, the cost was a probe and the working overlay is
+still there. Same posture as the modal probe, which paid for itself.
+
+**Rejected for now, and worth recording because it is the cheaper schedule:** *let Owlbear do the
+painting.* Keep the click-through overlay and have the GM draw with Owlbear's own pen on a designated
+layer, read back as suppression or ink. Clicks already pass through, so it needs no viewer at all.
+Costs: our working data becomes scene items, networked and GM-only only if we manage it; the GM must
+select the right tool, colour and layer to mean "suppress" rather than "add", every time; and there
+could never be a purpose-built brush or a live preview of what a stroke would do. The worse product
+and the better schedule — declined because all four queued features want interaction.
+
 **Where the dividing line actually falls** is "what does the map say" against "what do I want" — and
 one operation moves across it on inspection. *Splitting a region because of something not on the
 map* reads like a stage-three edit and belongs in stage one, as **GM-drawn ink**: draw the wall, and
@@ -1778,10 +1845,27 @@ the moment the map changes.
 
 ### Next, in order — user, 2026-08-23
 
-Four things, and the first two are one piece of work. Not built; recorded so the order and the
-reasoning survive a session change.
+Not built; recorded so the order and the reasoning survive a session change.
 
-#### 1. Gap marks on the overlay
+#### 0. The workspace probe — this is the immediate next thing
+
+**Stage one moves to its own opaque, interactive surface.** The reasoning is in §4 under "Superseding
+all of the above"; the short version is that the click-through overlay is mostly machinery for coping
+with not owning the transform, and that everything queued below wants interaction it structurally
+cannot provide.
+
+**The probe tests one thing: does pan and zoom feel right?** A full-screen opaque modal that draws
+the map and navigates it. No mask, no controls, no marks. If the navigation is wrong beside
+Owlbear's own, the cost was a probe and the working overlay is untouched.
+
+Worth measuring while it is up, since they are the other unknowns: **frame cost** with a
+map-sized image being drawn per frame, and how a `fullScreen` modal behaves **without**
+`disablePointerEvents` — keyboard focus, scroll ownership, and whether a visible frame gets in the
+way.
+
+Everything from 1 to 4 below is then built **on that surface**, not on the click-through overlay.
+
+#### 1. Gap marks
 
 **Highlight small gaps in the ink.** A wall with a thin section eroded away — by the minimum stroke
 width, or simply drawn faintly — leaves a break, and a break merges two rooms into one region, which
@@ -1834,13 +1918,13 @@ are as good as they are going to get.** Every global control has a point past wh
 than it gains, and that point arrives with the map still imperfect. They also survive re-runs by
 being *inputs* rather than outputs, which is what a stage-two hand edit is not.
 
-**Open, and it needs answering before either is built: how does the GM paint?** The overlay has
-pointer events **disabled** — that is precisely what makes it click-through, and click-through is
-what lets the map be panned while it is up. So the overlay as it stands cannot be painted on. The
-options are a mode toggle (painting captures the pointer, so no panning while painting), or drawing
-with Owlbear's own tools on a designated layer and reading the items back — which uses tools the GM
-already has, the same argument §4 makes for editing fog natively, but puts our working data in the
-scene where players and other extensions can see it.
+**How the GM paints was the open question, and the workspace is the answer** (user, 2026-08-23).
+The click-through overlay cannot be painted on: its pointer events are disabled, and that is exactly
+what lets the map be panned while it is up. A mode toggle would mean no panning while painting,
+which for a painting tool is a bad trade. An opaque interactive surface owns all input, so both of
+these become ordinary — and a purpose-built brush with a live preview of what a stroke would do
+becomes possible, which neither alternative allowed. This is the single biggest reason item 0 comes
+first.
 
 ### The overlay's panel band does not lift, and probably should not need to — logged 2026-08-23 (user)
 
