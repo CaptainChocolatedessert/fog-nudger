@@ -498,7 +498,17 @@ lies.
 **Which half ran is logged on every run**, and a reused mask restates the few figures the rest of
 the run is built on. A run that reused and a run that recomputed must not produce the same log.
 
-### The stage-one overlay — measured in a room, 2026-08-23
+### Superseded: the click-through ink overlay — built, measured, and deleted 2026-08-23
+
+**The code is gone.** It was replaced by the workspace below, and `overlay.html`, `src/overlay.ts`,
+`overlayControl.ts` and `panelPresence.ts` were removed with it.
+
+**The reasoning is kept, and this subsection and the two under it should be read as history.** Two
+things in them are still live: the argument for *why stage one needs a picture at all*, which the
+workspace inherits unchanged, and the correction about the mask being binary. Everything else — the
+poll, the settle interval, blank-and-restore, the reserved band, the heartbeat — describes machinery
+that existed only because that sheet did not own the transform, and is worth reading only to
+understand why owning it mattered.
 
 Stage two's representation is the coloured proposals staged on the drawing layer. Stage one needs a
 different one, because its data is a different *kind* of thing: a per-pixel verdict at native
@@ -545,7 +555,7 @@ unprecedented and `overlayProbe.ts` was written to settle it. **Every answer cam
 **The poll costs 2–4ms**, over five runs of ~200 polls each, worst case 12/33/12/97/38ms. An order
 of magnitude cheaper than the sibling's contended-bus note led this record to expect.
 
-#### Blank and restore, and why the cheap poll does not retire it — user, 2026-08-23
+#### Superseded with it: blank and restore, and why the cheap poll did not retire it
 
 **An overlay that lags does not merely trail, it lies.** It shows ink displaced from the linework it
 exists to be compared against, and comparing those two is the whole of stage one — a GM would read
@@ -576,7 +586,7 @@ gesture would go unseen. The polling is the drawing's input rather than a cost o
 screen pixels filters five-pixel ink away. That is the same limit as everywhere else here — ink can
 only be judged at a zoom where ink is visible — and not a defect to engineer around.
 
-#### Keeping off the panel — user, 2026-08-23
+#### Superseded with it: keeping off the panel
 
 A full-screen modal covers the panel, and at any zoom where the linework is thick the ink paints
 over the sliders. The panel is exactly where a GM is working while the overlay is up, so this is the
@@ -803,6 +813,63 @@ which would push a trackpad user back onto the locked gesture for panning. So th
 unrestricted drag-pan on another binding — **a modifier held while dragging, and/or a dedicated hand
 tool** (user, 2026-08-23). Probably both: a modifier for a moment's nudge, a tool for a while spent
 navigating.
+
+### The workspace — built 2026-08-23
+
+`workspace.html`. An opaque full-screen modal that draws the map, paints the binary ink mask over
+it, and carries 1a and 1b's controls on the same surface as the mask they decide. **Panel tab 1 is
+now a single button that opens it.** Run in a room the same day; two defects found and fixed there,
+both recorded below.
+
+**Map and mask go into one canvas under one transform.** That is the whole architectural payoff: they
+register **by construction** rather than by our arithmetic agreeing with Owlbear's, and the failure
+class the click-through overlay spent a poll, a settle interval and a blank-and-restore guarding
+against no longer exists. All of that machinery was deleted rather than ported.
+
+**It opens on the view Owlbear was showing**, so nothing jumps when the sheet goes up — the probe
+confirmed the behaviour and it matters more here, since a GM opening the workspace is continuing to
+look at the same map and a jump costs them their place.
+
+**Getting out is Escape or a button that survives hiding the controls, and there is no dismissal
+timer.** The probe had one because an opaque sheet that might swallow every click is a trap; that
+was true while input capture was unmeasured and is not now. Evicting a GM mid-tuning would trade a
+certain cost against a retired risk.
+
+#### The re-read happens on release — tried live, reverted the same day
+
+Recomputing per drag frame was the intent and it was reported unusable from a room. **The coalescing
+was not the problem and is untouched**: it blanks on change, keeps only the latest value, and drops
+any answer a newer one supersedes.
+
+**What defeats a live drag is that the re-read is synchronous.** Its ~690ms is 690ms the slider
+itself cannot move, so the cancel-and-retry can never fire — the work it would cancel is holding the
+thread that would do the cancelling. Live needs the work **off the main thread**, or **cropped to
+the visible region**; the number that decides between those is what a stage-one re-read actually
+costs on this surface, which the workspace logs on every mask. Measure, then choose.
+
+**While a slider moves the mask stays up**, and that is not a breach of the blank-rather-than-stale
+rule. That rule guards against ink drawn for settings the GM has *applied* and moved past; this is
+ink for the last reading they applied — the thing they are dragging away from, and so the thing
+worth seeing while they choose. Blanking there means adjusting blind, which was the complaint. The
+state line says the slider is ahead of the map, and that message deliberately outranks a completed
+reading's own: a mask started at load can land mid-drag, and announcing a figure for a value the GM
+is leaving is the smaller truth.
+
+#### Two defects found in the room, and what they have in common
+
+- **The pan handler ate every click.** It listened on the surface, which covers the viewport with
+  the controls drawn on top, so a press on a button bubbled up, started a pan, and
+  `setPointerCapture` redirected the rest of the gesture away from the button. Nothing on the page
+  could be clicked. It listens on the **canvas** now, which is *behind* the controls — structural
+  rather than a filter on event targets, so there is no list of exceptions to keep in step with the
+  markup, and scrolling over the controls scrolls the controls for free.
+- **The canvas was not filling the viewport.** A `<canvas>` is a *replaced* element, so `inset: 0`
+  does not stretch it the way it would a div: it keeps its intrinsic 300×150 until the first frame
+  sets explicit dimensions. In a room that self-corrects on frame one, which is exactly the shape of
+  a bug nobody can reproduce. Stated in CSS now.
+
+Both were found by asking `elementFromPoint` where a press actually lands, rather than reasoning
+about z-order — which had already been got wrong once.
 
 ### Stage one is two things in series — settled 2026-08-23 (user)
 
@@ -2011,7 +2078,20 @@ stand-in, stage one's controls inside the surface, and the click-through overlay
 its poll, settle, blank-and-restore, clip band and panel heartbeat. Items 1 to 4 are then built
 **on that surface**.
 
-#### 1. Gap marks
+#### 1. The workspace itself — BUILT 2026-08-23
+
+Stage one now lives on the proven surface: the real binary ink mask, 1a and 1b's controls on the
+same surface, and the click-through overlay deleted with all of its coping machinery. Panel tab 1 is
+one button that opens it. Full write-up in §4 under "The workspace"; two defects were found in a
+room and fixed the same day.
+
+**Carried forward, and both are the reason the next items are next:** the re-read is on release
+rather than live until the work moves off the main thread or is cropped to the visible region, and
+the surface owes a trackpad user an unrestricted pan on a binding other than a plain left-drag
+(**Ctrl held while dragging, and a dedicated hand tool** — both, user 2026-08-23) once that drag
+becomes the brush. The hand tool exists as a button today with nothing to switch to.
+
+#### 2. Gap marks
 
 **Highlight small gaps in the ink.** A wall with a thin section eroded away — by the minimum stroke
 width, or simply drawn faintly — leaves a break, and a break merges two rooms into one region, which
@@ -2027,7 +2107,7 @@ preview of the bridging control rather than an independent detector, and lets th
 other. The alternative is an independent notion of "gap" that warns even with bridging off. These
 differ in whether a gap the bridge would not close still gets marked; probably it should.
 
-#### 2. Bridging small gaps
+#### 3. Bridging small gaps
 
 **A control to close small gaps, preserving the integrity of walls thinned or severed upstream.**
 Morphologically this is a **closing** — dilate then erode — the exact inverse of the minimum stroke
@@ -2046,13 +2126,13 @@ The consequence for play is worth stating: a sealed doorway does not merge rooms
 them, which fog handles fine. But Dynamic Fog derives a wall across the opening, so line of sight is
 blocked through a door that is standing open. That is play-affecting and silent.
 
-#### 3. Painting to suppress ink
+#### 4. Painting to suppress ink
 
 **Let the GM paint areas where ink is ignored** — meaningless crosshatching being the motivating
 case. Local where the global controls are blunt, and the counterpart to the global width and island
 filters: those cannot distinguish hatching from linework by measurement, and the GM can by looking.
 
-#### 4. Painting ink
+#### 5. Painting ink
 
 **Let the GM draw ink that is applied after everything in stage one.** Already the record's
 "GM-drawn ink", and long identified as the highest-value unbuilt thing. Applied last, so it is
@@ -2072,7 +2152,12 @@ these become ordinary — and a purpose-built brush with a live preview of what 
 becomes possible, which neither alternative allowed. This is the single biggest reason item 0 comes
 first.
 
-### The overlay's panel band does not lift, and probably should not need to — logged 2026-08-23 (user)
+### Retired: the overlay's panel band did not lift — logged and dissolved 2026-08-23
+
+**Dissolved rather than fixed.** The band, the heartbeat and the overlay that needed them were all
+deleted when stage one moved to the workspace: controls that live *on* the surface need no space
+reserved for a popover somewhere else. Kept because it is a clean example of the pattern this
+project keeps meeting — a bug whose right fix turned out to be removing the thing that had it.
 
 Measured in a room: the band is reserved correctly while the panel is open, but **closing the panel
 does not bring the ink back**. The heartbeat stops, so the band should expire within one stale
@@ -2106,6 +2191,12 @@ seven is the right number, alongside whatever other display controls the overlay
 
 Not urgent. Nothing here is wrong, it is merely unconsidered, and it will be easier to judge once
 there is more than one thing being drawn on the overlay.
+
+*Still open, and the controls moved 2026-08-23:* they live on the workspace now rather than in the
+popover, beside the mask they colour instead of a tab away from it. That is the arrangement question
+made easier rather than answered — and the "more than one thing being drawn" it waits on is now
+concretely the next two items, since gap marks and bridged pixels each need a colour of their own
+that cannot be confused with read ink.
 
 ### Erosion and a minimum line width are different tools — clarified 2026-08-23 (user)
 
