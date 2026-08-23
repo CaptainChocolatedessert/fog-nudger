@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_SCALE,
   MIN_SCALE,
+  classifyWheel,
   clampScale,
   fitToViewport,
+  pinchFactor,
   panBy,
   screenToWorld,
   viewFromScreenRect,
@@ -186,5 +188,69 @@ describe("clampScale", () => {
     expect(clampScale(1000)).toBe(MAX_SCALE);
     expect(clampScale(0.0001)).toBe(MIN_SCALE);
     expect(clampScale(1.5)).toBe(1.5);
+  });
+});
+
+describe("classifyWheel", () => {
+  /** A trackpad two-finger scroll, as this machine actually reports one. */
+  const twoFinger = { ctrlKey: false, deltaMode: 0, deltaX: -2.4, deltaY: 7.8 };
+
+  it("reads ctrlKey as a pinch, whatever else the event looks like", () => {
+    // The one convention rather than heuristic here: browsers synthesise ctrlKey for a trackpad
+    // pinch. It must win even over an event that otherwise looks exactly like a mouse notch.
+    expect(classifyWheel({ ...twoFinger, ctrlKey: true })).toBe("zoom-pinch");
+    expect(
+      classifyWheel({ ctrlKey: true, deltaMode: 1, deltaX: 0, deltaY: 3 }),
+    ).toBe("zoom-pinch");
+  });
+
+  it("reads a line-or-page deltaMode as a mouse notch", () => {
+    // Firefox on this machine reports the mouse this way, measured in the run that found the bug.
+    expect(classifyWheel({ ctrlKey: false, deltaMode: 1, deltaX: 0, deltaY: 3 })).toBe("zoom-notch");
+    expect(classifyWheel({ ctrlKey: false, deltaMode: 2, deltaX: 0, deltaY: 1 })).toBe("zoom-notch");
+  });
+
+  it("reads a coarse, integer, purely vertical pixel delta as a mouse notch", () => {
+    // The Chrome-style mouse, which reports pixels.
+    expect(
+      classifyWheel({ ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 100 }),
+    ).toBe("zoom-notch");
+    expect(
+      classifyWheel({ ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: -120 }),
+    ).toBe("zoom-notch");
+  });
+
+  it("reads a two-finger scroll as a pan", () => {
+    // The case that was broken: this used to zoom.
+    expect(classifyWheel(twoFinger)).toBe("pan");
+    // Each of the three things that disqualify a coarse delta from being a notch, one at a time —
+    // so a rule that drops any one of them still fails a test.
+    expect(classifyWheel({ ctrlKey: false, deltaMode: 0, deltaX: 3, deltaY: 100 })).toBe("pan");
+    expect(classifyWheel({ ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 100.5 })).toBe("pan");
+    expect(classifyWheel({ ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 12 })).toBe("pan");
+  });
+});
+
+describe("pinchFactor", () => {
+  it("zooms in on a negative delta and out on a positive one", () => {
+    expect(pinchFactor(-10, 20)).toBeGreaterThan(1);
+    expect(pinchFactor(10, 20)).toBeLessThan(1);
+  });
+
+  it("scales with the delta, unlike a notch", () => {
+    // The whole difference between the two paths. A pinch is a continuous gesture delivered as many
+    // small events, and applying a fixed step to each is what made trackpad zoom unusably fast.
+    expect(pinchFactor(-20, 20)).toBeGreaterThan(pinchFactor(-5, 20));
+  });
+
+  it("is exactly reversible, so a pinch out undoes a pinch in", () => {
+    // Exponential rather than linear precisely for this: exp(a)·exp(-a) is 1, where a linear factor
+    // leaves the scale drifted after a gesture and its reverse.
+    expect(pinchFactor(-13.7, 25) * pinchFactor(13.7, 25)).toBeCloseTo(1, 12);
+  });
+
+  it("is neutral at zero movement and at zero sensitivity", () => {
+    expect(pinchFactor(0, 25)).toBeCloseTo(1, 12);
+    expect(pinchFactor(-50, 0)).toBeCloseTo(1, 12);
   });
 });

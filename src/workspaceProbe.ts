@@ -52,12 +52,15 @@ import { attributeMovement, pointMoved, type InputChannel } from "./probe/worksp
 import {
   MAX_SCALE,
   MIN_SCALE,
+  classifyWheel,
   fitToViewport,
   panBy,
+  pinchFactor,
   viewFromScreenRect,
   wheelFactor,
   zoomAbout,
   type View,
+  type WheelIntent,
 } from "./probe/viewTransform";
 import type { ScreenPoint } from "./probe/viewportSettle";
 
@@ -103,6 +106,30 @@ const MOVEMENTS_LOGGED_PER_CHANNEL = 3;
  * constant nobody can move during the run turns that into a second session.
  */
 const DEFAULT_ZOOM_STEP_PERCENT = 12;
+
+/**
+ * How hard a trackpad pinch zooms, per pixel of finger movement — **the second feel knob**.
+ *
+ * Separate from the notch step because a pinch is a different gesture, not a different device
+ * sending the same one. A notch is discrete and its magnitude is an arbitrary number the browser
+ * chose; a pinch is continuous and its magnitude is the fingers actually moving. Applying a whole
+ * notch to each event of a pinch's stream is what made trackpad zoom unusably fast — dozens of 12%
+ * steps for one gesture.
+ */
+const DEFAULT_PINCH_SENSITIVITY = 1;
+
+/**
+ * How far one press moves the pinch sensitivity, and the range it may be swept over.
+ *
+ * The units are **percent of zoom per pixel of finger movement**, which is what makes them
+ * meaningful to sweep — 1 means a hundred pixels of pinch roughly doubles the scale. The first
+ * draft of this had the default at 100 and one synthetic event took the zoom from 112% to the
+ * 3200% ceiling, because at that value the factor is `exp(-deltaY)` outright. Worth recording that
+ * the sensible-looking number was the wrong one by two orders of magnitude.
+ */
+const PINCH_NUDGE = 0.1;
+const MIN_PINCH = 0.1;
+const MAX_PINCH = 4;
 
 /** How far one press of the step keys moves it, and the range it may be swept over. */
 const ZOOM_STEP_NUDGE = 2;
@@ -157,6 +184,9 @@ const tally = {
  * indistinguishable in principle and often distinguishable in practice by exactly these numbers.
  */
 const wheelShape = {
+  /** What each event was taken to mean — the heuristic made visible. */
+  intents: { "zoom-notch": 0, "zoom-pinch": 0, pan: 0 } as Record<WheelIntent, number>,
+  lastIntent: "nothing yet" as WheelIntent | "nothing yet",
   modes: new Set<number>(),
   smallestAbsDelta: Infinity,
   largestAbsDelta: 0,
@@ -210,7 +240,9 @@ let view: View = { scale: 1, x: 0, y: 0 };
 /** The view Owlbear was showing when the sheet went up, so `r` can return to it. */
 let openingView: View | null = null;
 let zoomStepPercent = DEFAULT_ZOOM_STEP_PERCENT;
+let pinchSensitivity = DEFAULT_PINCH_SENSITIVITY;
 let wheelInverted = false;
+let panInverted = false;
 let showMaskLayer = true;
 let dirty = true;
 
@@ -259,9 +291,12 @@ function dismiss(why: string): void {
   devLog(
     "info",
     `workspace probe (${variant}): closing — ${why}. ` +
-      `NAVIGATION: zoom step ${zoomStepPercent}% per notch` +
-      `${wheelInverted ? " INVERTED" : ""}, final scale ${view.scale.toFixed(3)}, ` +
+      `NAVIGATION: notch ${zoomStepPercent}% per wheel step, pinch ${pinchSensitivity.toFixed(2)}% per ` +
+      `trackpad pixel${wheelInverted ? ", zoom INVERTED" : ""}` +
+      `${panInverted ? ", pan INVERTED" : ""}, final scale ${view.scale.toFixed(3)}, ` +
       `mask layer ${showMaskLayer ? "on" : "off"}. ` +
+      `INTENTS: ${wheelShape.intents["zoom-notch"]} notch, ${wheelShape.intents["zoom-pinch"]} ` +
+      `pinch, ${wheelShape.intents.pan} pan. ` +
       `FRAMES: ${frames.drawn} drawn, draw ${average(frames.drawMs).toFixed(1)}ms mean / ` +
       `${worst(frames.drawMs).toFixed(1)}ms worst, frame ${frameMean.toFixed(1)}ms mean / ` +
       `${worst(frames.frameMs).toFixed(1)}ms worst` +
@@ -383,7 +418,13 @@ function render(): void {
     `\n` +
     `zoom      ${(view.scale * 100).toFixed(0)}% of image pixels` +
     `${view.scale >= MAX_SCALE ? " (at maximum)" : view.scale <= MIN_SCALE ? " (at minimum)" : ""}\n` +
-    `step      <b>${zoomStepPercent}%</b> per notch${wheelInverted ? " · <b>inverted</b>" : ""}\n` +
+    `notch     <b>${zoomStepPercent}%</b> per wheel step${wheelInverted ? " · <b>zoom inverted</b>" : ""}\n` +
+    `pinch     <b>${pinchSensitivity.toFixed(2)}%</b> per trackpad pixel${panInverted ? " · <b>pan inverted</b>" : ""}\n` +
+    // The heuristic, made checkable. If a two-finger scroll shows up as a notch, or a mouse wheel
+    // as a pan, this line says so while the hand that made the gesture is still on the device.
+    `wheel     last <b>${wheelShape.lastIntent}</b> · ` +
+    `${wheelShape.intents["zoom-notch"]} notch / ${wheelShape.intents["zoom-pinch"]} pinch / ` +
+    `${wheelShape.intents.pan} pan\n` +
     `frames    ${frames.drawn} drawn · draw ${average(frames.drawMs).toFixed(1)}ms mean, ` +
     `${worst(frames.drawMs).toFixed(1)}ms worst · ` +
     `${frameMean > 0 ? `${(1000 / frameMean).toFixed(0)}fps` : "—"} while moving\n` +
@@ -398,7 +439,8 @@ function render(): void {
     `keyboard  ${focusAttempt.held ? `ours, claimed ${focusAttempt.claimedAtMs.toFixed(0)}ms in` : focusAttempt.note}\n` +
     `\n` +
     `<span class="key">drag</span> pan · <span class="key">wheel</span> zoom · ` +
-    `<span class="key">[ ]</span> step · <span class="key">i</span> invert · ` +
+    `<span class="key">[ ]</span> notch · <span class="key">, .</span> pinch · ` +
+    `<span class="key">i</span> invert zoom · <span class="key">p</span> invert pan · ` +
     `<span class="key">f</span> fit · <span class="key">r</span> reopen view · ` +
     `<span class="key">m</span> mask · <span class="key">h</span> hide this · ` +
     `<span class="key">Esc</span> close\n` +
@@ -475,13 +517,29 @@ if (sheet instanceof HTMLElement) {
       }
       if (event.ctrlKey) wheelShape.withCtrl += 1;
 
-      setView(
-        zoomAbout(
-          view,
-          { x: event.clientX, y: event.clientY },
-          wheelFactor(event.deltaY, zoomStepPercent, wheelInverted),
-        ),
-      );
+      /*
+        Three intents down one event, from two devices.
+
+        Treating them as one is what made a two-finger scroll zoom the map, and what made a pinch
+        apply a full notch per event. `classifyWheel` carries the reasoning and the measurements it
+        came from.
+      */
+      const intent = classifyWheel(event);
+      wheelShape.intents[intent] += 1;
+      wheelShape.lastIntent = intent;
+
+      if (intent === "pan") {
+        // The browser's own sign convention, so whatever the OS is set to — natural scrolling or
+        // not — this follows it rather than second-guessing it.
+        const direction = panInverted ? -1 : 1;
+        setView(panBy(view, -event.deltaX * direction, -event.deltaY * direction));
+      } else {
+        const factor =
+          intent === "zoom-pinch"
+            ? pinchFactor(wheelInverted ? -event.deltaY : event.deltaY, pinchSensitivity)
+            : wheelFactor(event.deltaY, zoomStepPercent, wheelInverted);
+        setView(zoomAbout(view, { x: event.clientX, y: event.clientY }, factor));
+      }
       render();
     },
     // Explicitly non-passive: the root defaults to passive in Chrome and Firefox, where
@@ -531,8 +589,10 @@ document.addEventListener(
 function logStep(): void {
   devLog(
     "info",
-    `workspace probe (${variant}): zoom step now ${zoomStepPercent}% per notch` +
-      `${wheelInverted ? ", wheel INVERTED" : ""} — scale ${view.scale.toFixed(3)}`,
+    `workspace probe (${variant}): feel — notch ${zoomStepPercent}% per wheel step, ` +
+      `pinch ${pinchSensitivity.toFixed(2)}% per trackpad pixel` +
+      `${wheelInverted ? ", zoom INVERTED" : ""}${panInverted ? ", pan INVERTED" : ""} ` +
+      `— scale ${view.scale.toFixed(3)}`,
   );
 }
 
@@ -570,6 +630,18 @@ window.addEventListener("keydown", (event) => {
       break;
     case "r":
       if (openingView) setView(openingView);
+      break;
+    case ",":
+      pinchSensitivity = Math.max(MIN_PINCH, Math.round((pinchSensitivity - PINCH_NUDGE) * 100) / 100);
+      logStep();
+      break;
+    case ".":
+      pinchSensitivity = Math.min(MAX_PINCH, Math.round((pinchSensitivity + PINCH_NUDGE) * 100) / 100);
+      logStep();
+      break;
+    case "p":
+      panInverted = !panInverted;
+      logStep();
       break;
     case "[":
       zoomStepPercent = Math.max(MIN_ZOOM_STEP, zoomStepPercent - ZOOM_STEP_NUDGE);

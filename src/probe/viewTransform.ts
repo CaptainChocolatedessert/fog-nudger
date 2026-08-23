@@ -168,3 +168,74 @@ export function wheelFactor(deltaY: number, stepPercent: number, inverted = fals
   const zoomingIn = inverted ? deltaY > 0 : deltaY < 0;
   return zoomingIn ? step : 1 / step;
 }
+
+/**
+ * What a wheel event was meant to do.
+ *
+ * Three intents arrive down one event, from two devices, and treating them as one is what made a
+ * two-finger scroll zoom the map.
+ */
+export type WheelIntent = "zoom-notch" | "zoom-pinch" | "pan";
+
+/**
+ * A `deltaY` at or above this, integer and with no horizontal component, is a mouse notch.
+ *
+ * The backstop for a browser that reports mouse wheels in pixels rather than lines — Chrome sends
+ * 100 or 120 per notch where Firefox sends lines. A trackpad reaching this while being exactly
+ * integer and exactly vertical is possible and rare, and costs one zoom notch when it happens.
+ */
+export const COARSE_NOTCH_MIN = 40;
+
+/**
+ * Decide what a wheel event meant, from what the device actually sent.
+ *
+ * **Measured rather than reasoned**, on the run that found the problem: 315 wheel events, of which
+ * 168 carried `ctrlKey` — the trackpad's pinch — and the rest split between `deltaMode 1` notches
+ * from the mouse and fractional `deltaMode 0` deltas from a two-finger scroll. The rules below are
+ * that observation, in order of how much each is to be trusted.
+ *
+ * 1. **`ctrlKey` is a pinch.** Not a modifier the GM is holding: browsers synthesise it for a
+ *    trackpad pinch, and it is the one signal here that is a convention rather than a heuristic.
+ * 2. **A `deltaMode` other than pixels is a mouse.** Lines and pages are notch units; no trackpad
+ *    reports them.
+ * 3. **A coarse, integer, purely vertical delta is a mouse** in a browser that reports pixels.
+ * 4. **Everything else is a two-finger scroll**, and it means pan.
+ *
+ * The cost, stated: rules 3 and 4 are a guess about a device from the shape of its numbers, and no
+ * such guess is reliable in general. It is checkable rather than silent — the probe reports what it
+ * classified each event as — and the failure is one wrong gesture, visible immediately and undone
+ * by making the opposite one.
+ */
+export function classifyWheel(event: {
+  readonly ctrlKey: boolean;
+  readonly deltaMode: number;
+  readonly deltaX: number;
+  readonly deltaY: number;
+}): WheelIntent {
+  if (event.ctrlKey) return "zoom-pinch";
+  if (event.deltaMode !== 0) return "zoom-notch";
+  if (
+    event.deltaX === 0 &&
+    Number.isInteger(event.deltaY) &&
+    Math.abs(event.deltaY) >= COARSE_NOTCH_MIN
+  ) {
+    return "zoom-notch";
+  }
+  return "pan";
+}
+
+/**
+ * The multiplier a pinch applies, which — unlike a notch — **does** scale with the delta.
+ *
+ * A notch is one discrete event and its magnitude is an arbitrary number the browser chose, so
+ * `wheelFactor` ignores it. A pinch is a continuous gesture delivered as a stream of small events,
+ * and its magnitude is the actual movement of the fingers. Applying a whole notch to each event of
+ * that stream is what made trackpad zoom unusably fast: dozens of 12% steps for one gesture.
+ *
+ * Exponential rather than linear, so the same finger movement zooms by the same *ratio* wherever it
+ * starts — and so that a pinch out exactly undoes a pinch in, since `exp(a)·exp(−a)` is 1. A linear
+ * factor fails both.
+ */
+export function pinchFactor(deltaY: number, sensitivity: number): number {
+  return Math.exp((-deltaY * Math.max(0, sensitivity)) / 100);
+}
