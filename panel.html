@@ -416,6 +416,21 @@
         it covers. It closes itself on a timer — <em>Close overlay</em> is only a convenience, since
         this panel disappears the moment you click the map.
       </p>
+
+      <div class="actions">
+        <button id="workspace-probe-bare" disabled>Workspace probe</button>
+        <button id="workspace-probe-framed" disabled>…framed</button>
+        <button id="workspace-probe-close" class="quiet" disabled>Close workspace</button>
+      </div>
+      <p class="note">
+        <em>Workspace probe</em> puts up an <strong>opaque</strong> full-screen sheet that keeps its
+        own input, which is what stage one would eventually be drawn on. Drag on the pad, spin the
+        wheel, right-click, and type in the box; the sheet reports whether Owlbear moved underneath,
+        which you cannot see, because the sheet is covering it. <em>…framed</em> is the same thing
+        inside Owlbear's own modal card, to find out what that frame costs. Both last 60 seconds and
+        close on Escape, on their own button, or on their own timer — three ways out, because an
+        opaque sheet is a worse thing to be stuck behind than a transparent one.
+      </p>
     </section>
 
     <p id="result">Waiting for a scene.</p>

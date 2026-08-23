@@ -67,6 +67,7 @@ export default defineConfig({
         // them anywhere else and forgetting these lines is the only way they can go missing.
         overlayProbe: "overlay-probe.html",
         overlay: "overlay.html",
+        workspaceProbe: "workspace-probe.html",
       },
     },
   },

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fog Nudger — workspace probe</title>
+    <style>
+      /*
+        Opaque everywhere, deliberately, and that is the inverse of the overlay probe's stylesheet.
+
+        That page set `background: transparent` on `html` and `body` so it could not answer "is the
+        modal transparent" about its own CSS instead of about Owlbear. This page is asking the
+        opposite question — can a modal be an opaque window — so it paints a solid ground and the
+        thing to look for is anything of Owlbear's showing *through* or *over* it.
+      */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0e1020;
+        color: #e8e9f5;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 0.74rem;
+        line-height: 1.5;
+        overflow: hidden;
+        /*
+          The sheet is a working surface, not a document. A stray double-click selecting a run of
+          the readout would put a text caret in the middle of a drag test, and on a real workspace
+          it would fight the brush.
+        */
+        user-select: none;
+      }
+
+      #sheet {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        padding: 0.8rem;
+        box-sizing: border-box;
+        /*
+          A visible weave rather than a flat slab. A flat colour cannot tell "we are opaque" from
+          "the page failed to load and this is Owlbear's own dark backdrop", and those two look
+          identical at a glance. A pattern only this page can be drawing settles it.
+        */
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+        background-size: 32px 32px;
+      }
+
+      /*
+        This iframe's exact extent. On the bare variant it should hug the window; on the framed one
+        the gap between this line and the screen edge IS the inset Owlbear's card costs us, which
+        is the number that decides whether a frame is usable.
+      */
+      #frame {
+        position: fixed;
+        inset: 0;
+        border: 2px dashed rgba(255, 96, 160, 0.75);
+        pointer-events: none;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 0.9rem;
+        letter-spacing: 0.02em;
+      }
+      h1 span {
+        color: #bb99ff;
+      }
+
+      #controls {
+        display: flex;
+        gap: 0.8rem;
+        align-items: stretch;
+        min-height: 0;
+        flex: 1 1 auto;
+      }
+
+      /*
+        The drag pad draws the trail of every pointermove it receives. A count in the readout says
+        events arrived; a continuous line says they arrived *at a usable rate* and were not
+        delivered as a down and an up with nothing between, which is what a surface that half-owns
+        a drag would produce.
+      */
+      #pad {
+        flex: 1 1 auto;
+        min-width: 0;
+        border-radius: 0.4rem;
+        background: #171a30;
+        box-shadow: inset 0 0 0 1px rgba(187, 153, 255, 0.35);
+        touch-action: none;
+        cursor: crosshair;
+        display: block;
+      }
+
+      #side {
+        width: 15rem;
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      label {
+        display: block;
+        color: #9aa0c8;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.45rem 0.5rem;
+        border-radius: 0.35rem;
+        border: 1px solid rgba(187, 153, 255, 0.45);
+        background: #171a30;
+        color: #e8e9f5;
+        font: inherit;
+        user-select: text;
+      }
+
+      button {
+        padding: 0.5rem 0.6rem;
+        border-radius: 0.35rem;
+        border: 1px solid rgba(187, 153, 255, 0.45);
+        background: #221a3a;
+        color: #e8e9f5;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #2c2250;
+      }
+
+      #verdicts {
+        margin: 0;
+        padding: 0.5rem 0.6rem;
+        border-radius: 0.35rem;
+        background: rgba(255, 255, 255, 0.05);
+        white-space: pre-wrap;
+      }
+
+      /*
+        A fixed height rather than one that grows with the text.
+
+        The readout starts as one line and settles at eleven, and letting it grow reflows the pad
+        above it — which resizes the pad's canvas, which clears the trail being drawn on it. Holding
+        the height still means the layout below the pad never moves after first paint, so the only
+        resize the pad ever sees is a real one.
+      */
+      #readout {
+        margin: 0;
+        flex: 0 0 auto;
+        height: 11.5rem;
+        overflow: hidden;
+        white-space: pre-wrap;
+        color: #c9cdea;
+      }
+      #readout b {
+        color: #bb99ff;
+      }
+      /* The one thing that must be readable from across the room if it ever appears. */
+      #readout .bad,
+      #verdicts .bad {
+        color: #ff8080;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      A throwaway measurement page, not product UI, and not the workspace.
+
+      The ink overlay's modal is proven: full screen, no backdrop, no paper, pointer events
+      DISABLED. The workspace needs the same modal with pointer events *enabled*, and that
+      combination has never been opened by this project, by the sibling, or by Dynamic Fog. What is
+      unknown is not whether it appears — it is whether the input a workspace would live on
+      actually arrives.
+
+      Five questions, and the first is the one that cannot be answered by looking:
+
+        1. Does input reach Owlbear as well as us? The sheet is OPAQUE, so the map underneath is
+           hidden, so the GM cannot see whether it moved. It has to be measured — the page asks
+           Owlbear where one fixed world point is, on a poll, and blames any movement on whichever
+           of our channels was most recent.
+        2. Do drags arrive as drags? The pad draws the trail, so a stream of moves looks different
+           from a down and an up with a hole between them.
+        3. Does the wheel belong to us, and is it cancelable? A passive listener cannot stop a zoom
+           however many events it sees.
+        4. Do keystrokes arrive, and do they need a click first? Those are different products.
+        5. What does the modal cover, and what does a frame cost? The dashed line is this iframe's
+           exact extent.
+
+      Pan and zoom are deliberately absent. The map is not drawn and no mask is computed: this is
+      about whether the surface can be owned at all, and the navigation on top of it is a separate
+      conversation.
+
+      THE WAY OUT is three independent mechanisms, because an opaque sheet that swallows input is a
+      worse trap than the transparent click-through one. The timer is the one that has to work: it
+      fires whether or not anything on screen can be clicked, and it is armed before anything that
+      could throw. The button and Escape are also the tests for pointer and keyboard capture, which
+      is deliberate — the way out is the experiment.
+    -->
+    <div id="sheet">
+      <div id="frame"></div>
+
+      <h1>Fog Nudger — workspace probe <span id="variant">…</span></h1>
+
+      <div id="controls">
+        <canvas id="pad"></canvas>
+        <div id="side">
+          <label for="typing">type here (keyboard capture)</label>
+          <input id="typing" type="text" placeholder="does typing reach us?" />
+          <p id="verdicts">Waiting…</p>
+          <button id="close">Close (or press Escape)</button>
+        </div>
+      </div>
+
+      <pre id="readout">Workspace probe starting…</pre>
+    </div>
+
+    <script type="module" src="./src/workspaceProbe.ts"></script>
+  </body>
+</html>

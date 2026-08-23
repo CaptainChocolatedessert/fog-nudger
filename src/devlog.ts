@@ -42,7 +42,7 @@ export function setDevLogLabel(label: string): void {
  * separate JavaScript realms sharing nothing, so they log independently and their lines interleave
  * — and the two are easy to confuse, because the same message can plausibly come from either.
  */
-export type DevLogSurface = "bg" | "ui" | "overlay";
+export type DevLogSurface = "bg" | "ui" | "overlay" | "workspace";
 
 /**
  * Build the label that identifies one surface of one client.

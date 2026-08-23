@@ -17,6 +17,7 @@ import { themeVariables } from "./theme";
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 import { closeOverlayProbe, openOverlayProbe } from "./probe/overlayProbeControl";
+import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
 import { closeInkOverlay, openInkOverlay } from "./overlay/overlayControl";
 import { HEARTBEAT_MS, PANEL_PRESENCE_CHANNEL } from "./overlay/panelPresence";
 import { dryRun, lastInkWidth, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
@@ -693,6 +694,9 @@ OBR.onReady(async () => {
     wireButton("inspect", inspectFogShapes),
     wireButton("overlay-probe", openOverlayProbe),
     wireButton("overlay-probe-close", closeOverlayProbe),
+    wireButton("workspace-probe-bare", () => openWorkspaceProbe("bare")),
+    wireButton("workspace-probe-framed", () => openWorkspaceProbe("framed")),
+    wireButton("workspace-probe-close", closeWorkspaceProbe),
     wireButton("restyle", restyleStaged),
     ...STAGES.map((stage) => wireButton(`reset-${stage}`, () => resetStageSettings(stage))),
   ];
