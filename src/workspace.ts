@@ -20,13 +20,25 @@
  * split put that control in stage two. Drawing it here would put a stage-two outcome on a
  * stage-one surface and break the property that makes the split worth having.
  *
- * ## Blank rather than stale
+ * ## Blank rather than stale, and on release rather than live
  *
- * A stage-one control changes the mask and a mask costs about 690ms, so a slider produces values
- * faster than masks can be made for them. Whenever the mask in hand is not the mask for the
- * settings on screen, **nothing is painted**. Ink drawn for settings the GM has moved past does not
- * lag, it lies — and comparing ink against linework is the whole of stage one. `maskRequest.ts`
- * carries that rule and its tests.
+ * A stage-one control changes the mask and a mask costs about 690ms. Whenever the mask in hand is
+ * not the mask for the settings that have been **applied**, nothing is painted: ink drawn for
+ * settings the GM has moved past does not lag, it lies, and comparing ink against linework is the
+ * whole of stage one. `maskRequest.ts` carries that rule and its tests.
+ *
+ * The re-read happens on **release**, not per drag frame — tried live, reported unusable from a
+ * room, reverted 2026-08-23. The coalescing was never the problem and is still here: it blanks on
+ * change, keeps only the latest value, and drops any answer a newer one supersedes. What defeats a
+ * live drag is that the re-read is *synchronous*, so its 690ms is 690ms the slider cannot move, and
+ * the cancel-and-retry can never fire because the work it would cancel holds the thread that would
+ * cancel it. Live needs the work off the main thread or cropped to the visible region — measure
+ * first, then choose.
+ *
+ * While a slider is moving the mask **stays up**, and that is not a violation of the rule above: it
+ * is the last reading the GM *applied*, which is the thing they are dragging away from and so the
+ * thing worth seeing. Blanking there would mean adjusting blind, which is the complaint that
+ * produced this shape. The state line says the slider is ahead of the map.
  *
  * ## Getting out
  *
@@ -192,6 +204,19 @@ function say(text: string, tone: "" | "working" | "bad" = ""): void {
 }
 
 /**
+ * Report a finished reading, unless a slider has since been picked up.
+ *
+ * The race is real and reachable on the first open: a mask started at load can land while a slider
+ * is already being dragged, and the plain success message would replace "release to re-read" with
+ * "ink 7.2%" — announcing as current a figure for a value the GM is in the middle of moving away
+ * from. The pending message wins, because it is the one that is still true.
+ */
+function sayIfSettled(text: string, tone: "" | "working" | "bad" = ""): void {
+  if (pendingEdit) return;
+  say(text, tone);
+}
+
+/**
  * Rasterise the mask into an offscreen canvas at the map's own resolution.
  *
  * Once per mask, not once per frame: every subsequent view change is a `drawImage` with a different
@@ -258,7 +283,7 @@ async function refreshMask(): Promise<void> {
     }
 
     const share = shareOfInk(result.mask);
-    say(`ink ${(share * 100).toFixed(1)}% ${result.reused ? "(cached)" : ""}`.trim());
+    sayIfSettled(`ink ${(share * 100).toFixed(1)}% ${result.reused ? "(cached)" : ""}`.trim());
     devLog(
       "info",
       `workspace: mask ${generation} painted for "${result.mapName}" — ` +
@@ -338,21 +363,45 @@ function settingRow(control: Control): HTMLElement {
   };
   paintHint(value);
 
+  /*
+    Re-reads on **release**, not while dragging — reverted 2026-08-23 after a room reported the
+    sliders as unusable.
+
+    Recomputing per drag frame was the intent, and the machinery for it is still here and still
+    correct: `maskRequest.ts` blanks on change, keeps only the latest value, and drops any answer a
+    newer one has superseded. What defeats it is that the re-read is *synchronous*, so the 690ms it
+    takes is 690ms the slider itself cannot move. The cancel-and-retry can never fire, because the
+    thing it would cancel is holding the thread that would cancel it. Making it live needs the work
+    off the main thread, or cropped to the visible region — measured first, then chosen.
+
+    So `input` moves only the readout and the hint, and `change` is what re-reads.
+  */
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
     readout.textContent = formatValue(current, limits, scale);
     paintHint(current);
-    settings = writeParameter(settings, control.name, current);
-    // Blank immediately. Not when the recomputation starts — the gap between the two is a window in
-    // which the previous mask is on screen under the new settings.
-    requests.request();
-    dirty = true;
-    void refreshMask();
+    /*
+      The mask **stays up** while the slider moves, and it is not stale in the sense the blanking
+      rule is about. That rule guards against ink drawn for settings the GM has *applied* and moved
+      past; this is ink for the last reading they applied, which is the thing they are dragging
+      away from and therefore the thing worth seeing. Blanking here would mean adjusting blind,
+      which is the complaint that produced this change.
+
+      What it must not do is look current, so the state line says the slider is ahead of the map.
+    */
+    pendingEdit = true;
+    say("slider moved — release to re-read", "working");
   });
 
   input.addEventListener("change", () => {
     const current = fromSlider(Number(input.value), limits, scale);
     settings = writeParameter(settings, control.name, current);
+    pendingEdit = false;
+    // Blank now, at the moment the change is applied, rather than when the recomputation starts:
+    // the gap between the two is a window in which the old mask sits under the new settings.
+    requests.request();
+    dirty = true;
+    void refreshMask();
     void persist();
   });
 
@@ -400,6 +449,15 @@ function displayRow(control: Control): HTMLElement {
  * that does not depend on Owlbear.
  */
 let controlsLive = false;
+
+/**
+ * Whether a slider is mid-drag with its value not yet applied.
+ *
+ * The mask on screen is the last *applied* reading, which is worth keeping visible — but it must
+ * not be mistaken for the value the slider is now showing. This is what the state line reads to say
+ * so, and what stops a repaint from quietly overwriting that message.
+ */
+let pendingEdit = false;
 
 function renderControls(): void {
   for (const section of ["ink", "walls", "display"]) {
@@ -676,7 +734,7 @@ async function run(): Promise<void> {
   lastMask = result.mask;
   if (requests.fulfil(generation) && rasterise(result.mask, settings.overlay.inkColour)) {
     const share = shareOfInk(result.mask);
-    say(`ink ${(share * 100).toFixed(1)}% ${result.reused ? "(cached)" : ""}`.trim());
+    sayIfSettled(`ink ${(share * 100).toFixed(1)}% ${result.reused ? "(cached)" : ""}`.trim());
     devLog(
       "info",
       `workspace: opened on "${result.mapName}" — mask ${result.mask.width}x${result.mask.height}, ` +
