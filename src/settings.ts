@@ -126,7 +126,7 @@ export interface TraceSettings {
    */
   readonly gapTravelPx: number;
   /**
-   * The widest highlighted break to **fill**, in raster pixels. Zero is off.
+   * Which of the marked breaks to **fill**, as a share of `gapWidthPx` from 0 to 1. Zero is off.
    *
    * Repairs walls thinned or severed upstream, so that two rooms do not merge across a break the
    * map does not actually have. Morphologically a closing — the exact inverse of the minimum stroke
@@ -139,10 +139,23 @@ export interface TraceSettings {
    * door and block line of sight through it, silently. Filling only marked breaks gives the
    * invariant instead: **every pixel the fill invents belongs to a break with a ring on it.**
    *
-   * Not clamped to `gapWidthPx`. Pushed past it, the search widens to cover it, so a fill can never
-   * outrun the highlighting and act unseen.
+   * ## Why a share rather than a width of its own
+   *
+   * The two are linked, and this is what links them (user, 2026-08-23). Marking places candidates;
+   * filling selects from among them. Expressed as a proportion, the fill **cannot** exceed the mark
+   * — not by a clamp that has to be applied and could be forgotten, but because there is no value
+   * of this parameter that means "wider than what is marked". At 1 every marked break is filled,
+   * which is the natural top of the sweep.
+   *
+   * It also survives a change to `gapWidthPx` without needing to be rewritten. An absolute width
+   * would have to be clamped down when the mark narrowed, which is a stored setting silently
+   * changing itself — the worst failure a control has, and the one the round-tripping tests exist
+   * to prevent.
+   *
+   * The cost, stated: this is not a width, so what it means in pixels moves when the mark moves. The
+   * readout gives the pixel figure alongside the percentage for that reason.
    */
-  readonly gapFillPx: number;
+  readonly gapFillShare: number;
   /**
    * Smallest area kept as a room, in grid squares.
    *
@@ -228,7 +241,7 @@ export const DEFAULT_SETTINGS: Settings = {
     // Filling is **off** by default, and the asymmetry is deliberate. Looking costs nothing but
     // time; inventing ink changes what gets emitted, and no control that writes into the map's
     // linework should do so before a GM has looked at what it would write.
-    gapFillPx: 0,
+    gapFillShare: 0,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -285,9 +298,9 @@ export const SETTING_LIMITS = {
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
   // the marks; the bottom end marks every break that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },
-  // The same range as the highlight, so the sweep can reach every ring the highlight found. Going
-  // past it is allowed and safe — the search widens to match, so nothing is ever filled unringed.
-  gapFillPx: { min: 0, max: 80, step: 1 },
+  // A share of the highlight width, so the top of the track means "every break that is marked" and
+  // there is no position on it that means "something that is not".
+  gapFillShare: { min: 0, max: 1, step: 0.02 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -330,7 +343,7 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   inkOpacity: "read",
   gapWidthPx: "read",
   gapTravelPx: "read",
-  gapFillPx: "read",
+  gapFillShare: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
@@ -378,7 +391,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   inkOpacity: "display",
   gapWidthPx: "pipeline",
   gapTravelPx: "pipeline",
-  gapFillPx: "pipeline",
+  gapFillShare: "pipeline",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
@@ -459,7 +472,7 @@ const POST_READING: readonly SettingName[] = [
   "minIslandPx",
   "gapWidthPx",
   "gapTravelPx",
-  "gapFillPx",
+  "gapFillShare",
 ];
 
 /** Every reading-stage pipeline parameter, in declaration order. */
@@ -555,7 +568,7 @@ export function normaliseSettings(raw: unknown): Settings {
       minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
       gapWidthPx: clamp(trace.gapWidthPx, "gapWidthPx", t.gapWidthPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
-      gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
+      gapFillShare: clamp(trace.gapFillShare, "gapFillShare", t.gapFillShare),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,
@@ -603,7 +616,7 @@ export function describeSettings(settings: Settings): string {
     `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `gaps ${trace.gapWidthPx === 0 ? "marking off" : `mark ${trace.gapWidthPx}px, travel ${trace.gapTravelPx}px`}` +
-    `, ${trace.gapFillPx === 0 ? "fill off" : `fill ${trace.gapFillPx}px`}` +
+    `, ${trace.gapFillShare === 0 ? "fill off" : `fill ${Math.round(trace.gapFillShare * 100)}% of that`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
   );
 }

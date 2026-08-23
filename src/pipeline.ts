@@ -689,11 +689,16 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
   // The fill adds the pixels of **marked** breaks and nothing else — never a blanket closing. A
   // blanket closing would also seal channels that failed the travel test, the clearest example being
   // a narrow doorway beside a corner, and it would do so with nothing to see. See `gaps.ts`.
+  //
+  // The fill width is a **share** of the marking width rather than a width of its own, so there is
+  // no value of the control that means "wider than what is marked". Marking places the candidates;
+  // filling selects among them.
   const gapStarted = performance.now();
+  const gapFillPx = settings.trace.gapWidthPx * settings.trace.gapFillShare;
   const gaps = findGaps(filteredMask, {
     widthPx: settings.trace.gapWidthPx,
     travelPx: settings.trace.gapTravelPx,
-    fillPx: settings.trace.gapFillPx,
+    fillPx: gapFillPx,
   });
   const inkedMask = applyGapFill(filteredMask, gaps.labels);
 
@@ -705,8 +710,9 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
         `through; ${gaps.marks.length} had banks more than ${settings.trace.gapTravelPx}px apart ` +
         `along the ink and are marked. ` +
         (gaps.fillRadius > 0
-          ? `Fill at ${settings.trace.gapFillPx}px (radius ${gaps.fillRadius}px) closed ` +
-            `${gaps.filled} of them, inventing ${gaps.filledArea} px of ink.`
+          ? `Fill at ${Math.round(settings.trace.gapFillShare * 100)}% of the marking width is ` +
+            `${gapFillPx.toFixed(1)}px (radius ${gaps.fillRadius}px), which closed ${gaps.filled} ` +
+            `of them, inventing ${gaps.filledArea} px of ink.`
           : `Fill is off, so all ${gaps.marks.length} are left open.`),
     );
     // The number that says whether the marks are worth reading. A map reporting hundreds is either

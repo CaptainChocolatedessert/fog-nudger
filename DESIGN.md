@@ -965,8 +965,13 @@ trade on a control whose effect could not be seen.
 ### The controls
 
 Three for stage 1a — ink threshold, texture blur, detail window. Two for stage 1b — minimum stroke
-width, smallest ink island. Three for the breaks — largest break to mark, same-wall distance,
-largest break to fill. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
+width, smallest ink island. Three for the breaks — largest break to mark, same-wall distance, and
+how many of them to fill.
+
+**One of those is a share of another**, and it is the only pair in the product that is not
+independent: filling selects from among the breaks marking has found, so it is denominated as a
+proportion of the marking width and cannot exceed it. The consequence for the UI is that a commit to
+any control repaints **every** readout, not just its own. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
 proposal is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
 reading tab but are **display** parameters (below).
 
@@ -1113,7 +1118,7 @@ Where each parameter landed:
 | Smallest ink island | **px** (was squares) | a size on the image, and ink width is not trusted here |
 | Largest break to mark | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes the marks invisibly |
 | Same-wall distance | px | a distance travelled across the image; nothing about it is a stroke or a square |
-| Largest break to fill | px | the same quantity as the highlight width, so the same unit |
+| How many to fill | **share of the mark** | not a width at all: it selects from among the marked breaks, so a proportion is the only unit under which it cannot exceed them |
 | Smallest room | squares | it really is an area on the map's grid, and a GM thinks in squares |
 | Edge simplification | ink widths | its safety bound *is* half an ink width |
 
@@ -2275,11 +2280,35 @@ Consequences worth stating:
   never filled. Marking on a guess is a warning; inventing ink on a guess is not.
 - **A break only partly inside the fill width stays open.** A break sealed along part of its length
   is still a break at the rest of it, so a partial fill is no fill at all.
-- **The fill is not clamped to the highlight.** Pushed past it, the *search* widens to match, so a
-  fill can never outrun what is being shown.
 - **Filling defaults to off while highlighting defaults to on.** Looking costs nothing but time;
   inventing ink changes what gets emitted, and no control that writes into a map's linework should
   do so before a GM has looked at what it would write.
+
+##### The two controls are linked, and the fill is a share of the mark — user, 2026-08-23
+
+**Marking places the candidates; filling selects among them.** The fill's control therefore runs
+**from nothing to all of what is marked**, as a proportion, and the first version of this was wrong
+about it: it gave the fill an absolute width in pixels of its own and let it be pushed past the
+marking width, widening the *search* to compensate. That kept the invariant, but it admitted a state
+the design has no meaning for — a fill wider than what is being looked at.
+
+**Expressed as a share, the relationship is enforced by construction.** There is no position on the
+track that means "wider than what is marked", so nothing has to be clamped, checked, or remembered.
+At the top of the track every marked break is filled, which is the natural end of the sweep.
+
+A share also survives a change to the marking width. An absolute width would have to be clamped down
+when the mark narrowed — a stored setting silently rewriting itself, which is the worst failure a
+control has and the one the round-tripping tests exist to prevent.
+
+**The cost, stated:** this is not a width, so what it means in pixels moves when the mark moves. The
+readout carries the pixel figure beside the percentage for that reason, and **every readout is
+repainted whenever any control commits**, because the controls are no longer independent. A figure
+captured when a row was built would go on reporting the old pixel width after the mark changed —
+a readout lying quietly, which is the failure this surface exists to prevent one level up.
+
+The `max` of the two radii stays inside the pure gap finder, unreachable through the controls. It is
+that function's own contract rather than a consequence of the UI being wired correctly: handed a
+wider fill by any caller, it widens what it looks at rather than repairing something it never marked.
 
 ##### The ink is composed from layers now — the user's framing, 2026-08-23
 

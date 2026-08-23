@@ -412,9 +412,16 @@ describe("findGaps, filling", () => {
     }
   });
 
-  it("widens the search when the fill is pushed past the highlight", () => {
-    // Highlighting set narrower than the break; the fill reaches it, so the search has to as well
-    // or the fill would be acting on something with no mark on it.
+  it("widens the search rather than filling unseen if a caller passes a wider fill", () => {
+    /*
+      Unreachable through the controls, and kept deliberately.
+
+      The fill control is a **share** of the marking width, so no position on its track can ask for
+      something wider than what is marked — that is where the relationship is enforced. This pins
+      the pure function's own contract underneath it: handed a wider fill anyway, it widens what it
+      looks at rather than repairing something it never marked. The invariant is a property of this
+      function, not a consequence of the UI being set up correctly.
+    */
     const mask = maskFromRows(WIDE_BREAK);
     const found = findGaps(mask, { widthPx: 2, travelPx: 6, fillPx: 4 });
     expect(found.searchRadius).toBe(2);

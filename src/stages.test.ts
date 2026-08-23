@@ -32,6 +32,7 @@ import {
   type SettingName,
   type Stage,
 } from "./settings";
+import { fromSlider, SLIDER_STEPS } from "./sliderScale";
 
 const ALL_NAMES = Object.keys(SETTING_LIMITS) as SettingName[];
 
@@ -185,6 +186,44 @@ describe("readingFingerprint", () => {
     );
     expect(post.length).toBeGreaterThan(0);
     expect(reading.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The one place two controls are related to each other rather than independent.
+ *
+ * Filling selects from among the breaks marking has found, so a fill wider than the mark would be
+ * repairing something the GM was never shown — which is the failure the marks exist to prevent. The
+ * relationship is enforced by expressing the fill as a *share*, and these pin that there is no
+ * position on its track that can break it.
+ */
+describe("the fill is a share of the mark", () => {
+  it("cannot exceed the marking width anywhere on its track", () => {
+    const limits = SETTING_LIMITS.gapFillShare;
+    for (let position = 0; position <= SLIDER_STEPS; position += 25) {
+      const share = fromSlider(position, limits, "linear");
+      expect(share).toBeGreaterThanOrEqual(0);
+      expect(share).toBeLessThanOrEqual(1);
+      // Which is the whole guarantee, since the pipeline's fill width is the product of the two.
+      for (const marked of [0, 1, 12, 80]) {
+        expect(share * marked).toBeLessThanOrEqual(marked);
+      }
+    }
+  });
+
+  it("reaches all of the marked breaks at the top of its track, and none at the bottom", () => {
+    const limits = SETTING_LIMITS.gapFillShare;
+    expect(fromSlider(0, limits, "linear")).toBe(0);
+    expect(fromSlider(SLIDER_STEPS, limits, "linear")).toBe(1);
+  });
+
+  it("fills nothing when nothing is marked", () => {
+    // Marking off means the fill has an empty set to select from, whatever it is set to. Zero times
+    // anything is zero, so this is arithmetic rather than a special case — pinned because a later
+    // change to either control could quietly introduce one.
+    const off = writeParameter(DEFAULT_SETTINGS, "gapWidthPx", 0);
+    const eager = writeParameter(off, "gapFillShare", 1);
+    expect(readParameter(eager, "gapWidthPx") * readParameter(eager, "gapFillShare")).toBe(0);
   });
 });
 

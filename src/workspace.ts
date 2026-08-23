@@ -502,6 +502,27 @@ function measured(): Measured {
   return { pxPerSquare: lastPixelsPerSquare(), inkWidth: lastInkWidth() };
 }
 
+/** The number beside a slider, in whatever the control says a GM thinks in. */
+function show(control: Control, value: number): string {
+  return (
+    control.format?.(value) ??
+    formatValue(value, SETTING_LIMITS[control.name], control.scale ?? "linear")
+  );
+}
+
+/**
+ * One repaint function per row, so a change to one control can refresh the readouts of the others.
+ *
+ * Needed because the controls are no longer independent: the fill is expressed as a share of the
+ * mark, so moving the mark changes what the fill's readout should say in pixels. Rebuilt whenever
+ * the rows are, which is the only time these can go stale.
+ */
+let hintPainters: (() => void)[] = [];
+
+function refreshHints(): void {
+  for (const paint of hintPainters) paint();
+}
+
 /**
  * Build one slider.
  *
@@ -535,7 +556,7 @@ function settingRow(control: Control): HTMLElement {
   label.htmlFor = `control-${control.name}`;
   const readout = document.createElement("span");
   readout.className = "value";
-  readout.textContent = formatValue(value, limits, scale);
+  readout.textContent = show(control, value);
   top.append(label, readout);
 
   const input = document.createElement("input");
@@ -548,12 +569,17 @@ function settingRow(control: Control): HTMLElement {
 
   const hint = document.createElement("p");
   hint.className = "hint";
-  const facts = measured();
   const paintHint = (current: number): void => {
-    const derived = control.derive ? control.derive(current, facts) : "";
+    // The measurements and the settings are both read at paint time rather than captured once. One
+    // readout is a share of *another* control, so a figure fixed when the row was built would go on
+    // reporting the old pixel width after the mark moved — a readout that lies quietly, which is
+    // the failure this whole surface exists to avoid one level up.
+    const derived = control.derive ? control.derive(current, measured(), settings) : "";
     hint.innerHTML = derived ? `${control.hint} <b>${derived}</b>` : control.hint;
   };
   paintHint(value);
+  // Registered so a change to one control can refresh the readouts of the others.
+  hintPainters.push(() => paintHint(fromSlider(Number(input.value), limits, scale)));
 
   /*
     Re-reads on **release**, not while dragging — reverted 2026-08-23 after a room reported the
@@ -572,7 +598,7 @@ function settingRow(control: Control): HTMLElement {
 
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = formatValue(current, limits, scale);
+    readout.textContent = show(control, current);
     paintHint(current);
 
     if (kind === "display") {
@@ -599,6 +625,10 @@ function settingRow(control: Control): HTMLElement {
     const current = fromSlider(Number(input.value), limits, scale);
     settings = writeParameter(settings, control.name, current);
     pendingEdit = false;
+
+    // One control's value can change what another's readout means — the fill is a share of the
+    // mark — so every readout is repainted on any commit rather than only its own.
+    refreshHints();
 
     if (kind === "pipeline") {
       // Blank now, at the moment the change is applied, rather than when the recomputation starts:
@@ -637,6 +667,9 @@ let controlsLive = false;
 let pendingEdit = false;
 
 function renderControls(): void {
+  // Cleared with the rows they belong to, or a rebuild would leave painters pointing at detached
+  // elements and grow the list every time the settings arrive.
+  hintPainters = [];
   for (const section of ["ink", "walls", "gaps", "display"]) {
     const container = document.getElementById(`section-${section}`);
     if (!container) continue;

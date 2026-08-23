@@ -21,7 +21,7 @@
  * No DOM, no SDK.
  */
 
-import type { SettingName } from "./settings";
+import type { SettingName, Settings } from "./settings";
 import type { Scale } from "./sliderScale";
 
 /**
@@ -61,12 +61,27 @@ export interface Control {
   readonly section: string;
   readonly scale?: Scale;
   /**
+   * How the value itself is written beside the slider, when the stored number is not what a GM
+   * thinks in.
+   *
+   * Separate from `scale`, which decides how the *track* maps to values and must not be conflated
+   * with how one is printed. Only the fill share needs it: it is stored as a fraction because it is
+   * multiplied by another setting, and shown as a percentage because that is what it means — "how
+   * many of the marked breaks", not "0.50 of something".
+   */
+  readonly format?: (value: number) => string;
+  /**
    * Renders the value in a unit the GM can feel.
    *
    * Returns an empty string when it cannot say anything honest yet, which is how a control reports
    * "no measurement" without the caller having to know which readouts need which measurement.
+   *
+   * Takes the whole settings object as well as the measurements, because one control is expressed
+   * as a **share of another**: the fill selects from among the marked breaks, so what it means in
+   * pixels depends on the mark's width. A readout that could not see the other setting would have
+   * to report a bare percentage, which says nothing about the map.
    */
-  readonly derive?: (value: number, measured: Measured) => string;
+  readonly derive?: (value: number, measured: Measured, settings: Settings) => string;
 }
 
 /**
@@ -138,14 +153,20 @@ export const CONTROLS: readonly Control[] = [
     derive: (value) => (value <= 0 ? "mark every break" : `${Math.round(value)}px along the ink`),
   },
   {
-    name: "gapFillPx",
+    name: "gapFillShare",
     section: "gaps",
-    label: "Largest break to fill",
-    hint: "Repairs the marked breaks up to this width, so two rooms do not merge across a break the map has not got. Filled ones turn <b class='gap-key filled'>green</b>; the rest stay <b class='gap-key'>purple</b>. In pixels; <b>zero fills nothing</b>. Settle the width above first, then sweep this one.",
-    derive: (value, { pxPerSquare }) => {
+    label: "How many to fill",
+    format: (value) => `${Math.round(value * 100)}%`,
+    hint: "Selects from the breaks marked above and repairs them, so two rooms do not merge across a break the map has not got. Selected ones turn <b class='gap-key filled'>green</b> and composite into the final ink; the rest stay <b class='gap-key'>purple</b>. <b>Zero fills nothing</b>; the top of the track fills every break that is marked.",
+    derive: (value, _measured, settings) => {
       if (value <= 0) return "nothing filled";
-      if (pxPerSquare === null) return `${Math.round(value)}px`;
-      return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
+      const marked = settings.trace.gapWidthPx;
+      if (marked <= 0) return "nothing is marked, so there is nothing to fill";
+      // Reported in pixels as well as a percentage, because the percentage alone says nothing about
+      // the map — and this is the one control whose meaning in pixels moves when another moves.
+      return value >= 1
+        ? `every marked break, up to ${Math.round(marked)}px`
+        : `marked breaks up to ${Math.round(value * marked)}px of ${Math.round(marked)}px`;
     },
   },
   {

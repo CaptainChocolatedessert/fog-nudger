@@ -44,18 +44,24 @@
  * Travel is measured through the ink rather than inside a cropped window on purpose: a wall that
  * bulges out of a window and back is still one wall, and travel says so where a crop would not.
  *
- * ## Highlighting and filling are two separate widths, and that is the workflow
+ * ## Marking places the candidates; filling selects among them
  *
- * `widthPx` decides what is **shown**; `fillPx` decides which of those is **repaired**. The point of
- * separating them (user, 2026-08-23) is that a GM can settle the first to get a stable set of places
- * worth attention, then sweep the second and watch how many of that fixed set turn from open to
- * filled — judging the trade with the reference set held still underneath it.
+ * `widthPx` decides what is **shown**; `fillPx` decides which of those is **repaired**, and the
+ * second is never allowed to exceed the first. The point of separating them (user, 2026-08-23) is
+ * that a GM can settle the marking width to get a stable set of places worth attention, then sweep
+ * the fill and watch how many of that fixed set turn from open to filled — judging the trade with
+ * the reference set held still underneath it.
  *
- * **The search runs at the larger of the two radii**, so pushing the fill past the highlight widens
- * what is looked at rather than filling anything unseen. That gives the invariant the whole design
- * rests on:
+ * **The control that drives `fillPx` is a share of the marking width**, from nothing to all of it,
+ * so there is no position on its track that means "wider than what is marked". That is where the
+ * relationship is enforced; what this function does is honour it rather than assume it, by running
+ * the search at the larger of the two radii. Either way the invariant holds:
  *
  * > **Every pixel the fill invents belongs to a break that has a mark on it.**
+ *
+ * The `max` is therefore unreachable through the controls, and it stays because this is a pure
+ * function with its own contract: a caller that passes a wider fill gets a wider search, not a
+ * silent repair of something it was never shown.
  *
  * ## Why the fill is not simply a closing
  *
