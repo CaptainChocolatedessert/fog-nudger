@@ -114,17 +114,19 @@ const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[]
 ];
 
 /**
- * The two colours a break can be drawn in, and the difference between them is the whole point.
+ * The colour a repaired break is drawn in — and it is the only ink on this surface the map does not
+ * contain.
  *
- * **Purple is a break left open; green is one the fill closed.** A GM settles the highlight width to
- * get a stable set of places worth attention, then sweeps the fill and watches how much of that
- * fixed set turns green — judging the trade with the reference set held still underneath it (user,
- * 2026-08-23).
+ * `DESIGN.md` §8 requires that invented ink never be indistinguishable from read ink, and this is
+ * that rule met: a different colour from the ink, drawn at full alpha on its own layer, with a ring
+ * round it. A GM who has tinted the ink down to look at the linework underneath has not also turned
+ * the repair down.
  *
- * Green pixels are also the only ink on this surface that the map does not contain. `DESIGN.md` §8
- * requires that invented ink never be indistinguishable from read ink, and this is that rule met:
- * they are a different colour from the ink, a different colour from an unrepaired break, and they
- * are ringed.
+ * There were briefly two colours — purple for a break found, green for one repaired — when finding
+ * and repairing were separate controls. With one control everything found is repaired, so there is
+ * one state and one colour. The **second** colour survives only for the one case that is genuinely
+ * different: a break the search could not finish examining is ringed and *not* filled, so it shows
+ * as an empty ring. Marking on a guess is a warning; inventing ink on a guess is not.
  *
  * **Fixed rather than a swatch row**, unlike the ink colour, and the reason the ink colour is
  * adjustable applies here too: no colour is readable on every map. The ring is what carries the
@@ -132,10 +134,9 @@ const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[]
  * against anything underneath, and it is a shape nothing on a map looks like. If a room reports the
  * marks vanishing into the paper anyway, a picker is the answer.
  *
- * Kept in step with the `.gap-key` colours in the page's own stylesheet by hand.
+ * Kept in step with the `.gap-key` colour in the page's own stylesheet by hand.
  */
-const GAP_OPEN_COLOUR = "#a855f7";
-const GAP_FILLED_COLOUR = "#22c55e";
+const GAP_COLOUR = "#a855f7";
 
 /**
  * The ring is drawn in **screen** pixels, which is the whole point of it.
@@ -271,7 +272,7 @@ function drawGapRings(context: CanvasRenderingContext2D, viewWidth: number, view
     context.strokeStyle = "rgba(6, 4, 12, 0.7)";
     context.stroke();
     context.lineWidth = 2;
-    context.strokeStyle = mark.filled ? GAP_FILLED_COLOUR : GAP_OPEN_COLOUR;
+    context.strokeStyle = GAP_COLOUR;
     context.stroke();
   }
 }
@@ -390,11 +391,13 @@ async function refreshMask(): Promise<void> {
     gapTotal = result.gaps.marks.length;
     gapFilled = result.gaps.filled;
     sayReading();
+    // The measurements a readout reports against only exist once a reading has landed.
+    refreshHints();
     devLog(
       "info",
       `workspace: mask ${generation} painted for "${result.mapName}" — ` +
         `${result.mask.width}x${result.mask.height}, ink ${(lastInkShare * 100).toFixed(1)}%, ` +
-        `${gapTotal} breaks of which ${gapFilled} filled, ` +
+        `${gapTotal} breaks of which ${gapFilled} repaired, ` +
         `${
           result.reused
             ? "reused whole"
@@ -428,7 +431,7 @@ function shareOfInk(mask: { data: Uint8Array; width: number; height: number }): 
 /** The last reading's headline figures, so the two paths that report them cannot word it differently. */
 let lastInkShare: number | null = null;
 let lastReused = false;
-/** How many breaks the last reading found, and how many of them the fill closed. */
+/** How many breaks the last reading found, and how many of them it repaired. */
 let gapTotal = 0;
 let gapFilled = 0;
 
@@ -445,10 +448,19 @@ function sayReading(): void {
     A found break is a finding rather than a fault — most maps will have a few, and a status line
     that is permanently red is a status line nobody reads, which is the failure §8 is about. The
     rings are the channel that has to be noticed; this is the count that tells a GM whether the
-    ones they can see are all of them, and how far the fill has got through them.
+    ones they can see are all of them.
+
+    The count is deliberately not offered as a tally of distinct faults. Channels merge as the
+    repair width grows, so it moves around for reasons that have nothing to do with the map getting
+    better or worse — which is the fact that collapsed the two-slider design.
   */
   const breaks = gapTotal === 1 ? "1 break" : `${gapTotal} breaks`;
-  sayIfSettled(`${ink} · ${breaks}, ${gapFilled} filled`);
+  const unrepaired = gapTotal - gapFilled;
+  sayIfSettled(
+    unrepaired > 0
+      ? `${ink} · ${breaks} repaired, ${unrepaired} not examined`
+      : `${ink} · ${breaks} repaired`,
+  );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -475,11 +487,11 @@ function paintBreaks(gaps: GapFinding): void {
     return;
   }
 
-  const open = parseColour(GAP_OPEN_COLOUR);
-  const filled = parseColour(GAP_FILLED_COLOUR);
-  if (!open || !filled) return;
+  const colour = parseColour(GAP_COLOUR);
+  if (!colour) return;
 
-  const buffer = paintGaps(gaps.labels, open, filled, paintedGaps?.buffer);
+  // Both states get the same colour: an unrepaired break has no pixels to paint, only a ring.
+  const buffer = paintGaps(gaps.labels, colour, colour, paintedGaps?.buffer);
   const target = paintedGaps?.canvas ?? document.createElement("canvas");
   target.width = gaps.labels.width;
   target.height = gaps.labels.height;
@@ -502,20 +514,17 @@ function measured(): Measured {
   return { pxPerSquare: lastPixelsPerSquare(), inkWidth: lastInkWidth() };
 }
 
-/** The number beside a slider, in whatever the control says a GM thinks in. */
-function show(control: Control, value: number): string {
-  return (
-    control.format?.(value) ??
-    formatValue(value, SETTING_LIMITS[control.name], control.scale ?? "linear")
-  );
-}
-
 /**
- * One repaint function per row, so a change to one control can refresh the readouts of the others.
+ * One repaint function per row, so every derived readout can be refreshed when a reading lands.
  *
- * Needed because the controls are no longer independent: the fill is expressed as a share of the
- * mark, so moving the mark changes what the fill's readout should say in pixels. Rebuilt whenever
- * the rows are, which is the only time these can go stale.
+ * Several readouts report a setting against a **measurement** — the minimum stroke width against the
+ * measured ink width, the break widths against pixels per square — and before a first trace those
+ * say "trace once for a figure". Without this they would go on saying it until the row's own slider
+ * was touched, which is a readout being quietly wrong about what it knows.
+ *
+ * It arrived for a different reason: the repair width was briefly a share of a separate marking
+ * width, so moving one changed what the other's readout meant. That coupling is gone and this is
+ * not — the measurement case was always the stronger one.
  */
 let hintPainters: (() => void)[] = [];
 
@@ -556,7 +565,7 @@ function settingRow(control: Control): HTMLElement {
   label.htmlFor = `control-${control.name}`;
   const readout = document.createElement("span");
   readout.className = "value";
-  readout.textContent = show(control, value);
+  readout.textContent = formatValue(value, limits, scale);
   top.append(label, readout);
 
   const input = document.createElement("input");
@@ -570,11 +579,10 @@ function settingRow(control: Control): HTMLElement {
   const hint = document.createElement("p");
   hint.className = "hint";
   const paintHint = (current: number): void => {
-    // The measurements and the settings are both read at paint time rather than captured once. One
-    // readout is a share of *another* control, so a figure fixed when the row was built would go on
-    // reporting the old pixel width after the mark moved — a readout that lies quietly, which is
-    // the failure this whole surface exists to avoid one level up.
-    const derived = control.derive ? control.derive(current, measured(), settings) : "";
+    // Measurements are read at paint time rather than captured when the row was built: the first
+    // trace of a session lands after these exist, and a figure fixed here would go on reporting
+    // "trace once for a figure" for the rest of the session.
+    const derived = control.derive ? control.derive(current, measured()) : "";
     hint.innerHTML = derived ? `${control.hint} <b>${derived}</b>` : control.hint;
   };
   paintHint(value);
@@ -598,7 +606,7 @@ function settingRow(control: Control): HTMLElement {
 
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = show(control, current);
+    readout.textContent = formatValue(current, limits, scale);
     paintHint(current);
 
     if (kind === "display") {
@@ -625,10 +633,6 @@ function settingRow(control: Control): HTMLElement {
     const current = fromSlider(Number(input.value), limits, scale);
     settings = writeParameter(settings, control.name, current);
     pendingEdit = false;
-
-    // One control's value can change what another's readout means — the fill is a share of the
-    // mark — so every readout is repainted on any commit rather than only its own.
-    refreshHints();
 
     if (kind === "pipeline") {
       // Blank now, at the moment the change is applied, rather than when the recomputation starts:
@@ -957,10 +961,12 @@ async function run(): Promise<void> {
     gapTotal = result.gaps.marks.length;
     gapFilled = result.gaps.filled;
     sayReading();
+    // The measurements a readout reports against only exist once a reading has landed.
+    refreshHints();
     devLog(
       "info",
       `workspace: opened on "${result.mapName}" — mask ${result.mask.width}x${result.mask.height}, ` +
-        `ink ${(lastInkShare * 100).toFixed(1)}%, ${gapTotal} breaks of which ${gapFilled} filled, ` +
+        `ink ${(lastInkShare * 100).toFixed(1)}%, ${gapTotal} breaks of which ${gapFilled} repaired, ` +
         `${result.reused ? "reused from cache" : "recomputed"}`,
     );
   }

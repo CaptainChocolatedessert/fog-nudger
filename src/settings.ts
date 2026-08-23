@@ -107,30 +107,11 @@ export interface TraceSettings {
    */
   readonly minIslandPx: number;
   /**
-   * The widest break in the linework to **highlight**, in raster pixels. Zero turns the marks off.
+   * The widest break in the linework to find and repair, in raster pixels. Zero is off.
    *
-   * In pixels rather than measured ink widths, and that was a decision rather than a default (user,
-   * 2026-08-23): stage one stays close to the raster, and a threshold that moved with a measurement
-   * would change the marks for reasons a GM has no way to see.
-   *
-   * This is the **stable reference set** in the two-slider workflow: settle it first, then sweep the
-   * fill against it and watch how many rings turn from unfilled to filled.
-   */
-  readonly gapWidthPx: number;
-  /**
-   * How far apart two banks of a break may be **along the ink** and still count as one piece of
-   * wall, in raster pixels.
-   *
-   * The whole discriminator between a crack and a ragged edge. Zero is meaningful rather than off:
-   * it marks every break that passes through, which is the loudest the detector goes.
-   */
-  readonly gapTravelPx: number;
-  /**
-   * Which of the marked breaks to **fill**, as a share of `gapWidthPx` from 0 to 1. Zero is off.
-   *
-   * Repairs walls thinned or severed upstream, so that two rooms do not merge across a break the
-   * map does not actually have. Morphologically a closing — the exact inverse of the minimum stroke
-   * width — but applied only to breaks the detector has marked, never as a blanket operation.
+   * Repairs walls thinned or severed upstream, so two rooms do not merge across a break the map has
+   * not actually got. Morphologically a closing — the exact inverse of the minimum stroke width —
+   * but applied only to breaks the detector has **marked**, never as a blanket operation.
    *
    * **That restriction is the safety property, not an optimisation.** A blanket closing also seals
    * through-channels that failed the travel test, and the clearest example of one is a narrow
@@ -139,23 +120,43 @@ export interface TraceSettings {
    * door and block line of sight through it, silently. Filling only marked breaks gives the
    * invariant instead: **every pixel the fill invents belongs to a break with a ring on it.**
    *
-   * ## Why a share rather than a width of its own
+   * In pixels rather than measured ink widths (user, 2026-08-23): stage one stays close to the
+   * raster, and a threshold that moved with a measurement would change what is repaired for reasons
+   * a GM has no way to see.
    *
-   * The two are linked, and this is what links them (user, 2026-08-23). Marking places candidates;
-   * filling selects from among them. Expressed as a proportion, the fill **cannot** exceed the mark
-   * — not by a clamp that has to be applied and could be forgotten, but because there is no value
-   * of this parameter that means "wider than what is marked". At 1 every marked break is filled,
-   * which is the natural top of the sweep.
+   * ## Superseded: this was two controls for one commit
    *
-   * It also survives a change to `gapWidthPx` without needing to be rewritten. An absolute width
-   * would have to be clamped down when the mark narrowed, which is a stored setting silently
-   * changing itself — the worst failure a control has, and the one the round-tripping tests exist
-   * to prevent.
+   * Finding and filling were briefly separate — one width to *highlight* candidates, a second share
+   * of it to select which got *repaired* — so that a GM could settle a stable set of places worth
+   * attention and then sweep the repair against it. **It was abandoned on evidence from a room**
+   * (user, 2026-08-23): the premise was false.
    *
-   * The cost, stated: this is not a width, so what it means in pixels moves when the mark moves. The
-   * readout gives the pixel figure alongside the percentage for that reason.
+   * Breaks are not discrete items that appear one at a time as the width rises. Where two uneven
+   * lines run close together, a closing carves the space between them into several channels at the
+   * pinch points, and those channels **merge into one** as the radius grows. A break therefore has
+   * no stable identity across radii — and because a channel was only repaired when *all* of it fell
+   * inside the fill radius, raising the highlight could **prevent** a repair that a lower one
+   * allowed. Non-monotonic, and unexplainable to anyone turning the knob.
+   *
+   * One control is well behaved for a precise reason: what is being tuned is then the **set of
+   * pixels repaired**, which grows with the radius, rather than a set of discrete marks, which does
+   * not. The count of marks still jumps around as channels merge; it is a diagnostic, not the thing
+   * being adjusted.
+   *
+   * **Renamed from `gapWidthPx` rather than reinterpreted.** That key meant "highlight only", and a
+   * scene storing it would silently have started inventing ink at whatever width had been chosen for
+   * looking. A rename falls back to this default, which is the loud version of the same event.
    */
-  readonly gapFillShare: number;
+  readonly gapFillPx: number;
+  /**
+   * How far apart two banks of a break may be **along the ink** and still count as one piece of
+   * wall, in raster pixels.
+   *
+   * The whole discriminator between a crack and a ragged edge, and the reason a doorway beside a
+   * corner is not sealed. Zero is meaningful rather than off: it repairs every break that passes
+   * through, which is the most eager the detector gets.
+   */
+  readonly gapTravelPx: number;
   /**
    * Smallest area kept as a room, in grid squares.
    *
@@ -234,14 +235,13 @@ export const DEFAULT_SETTINGS: Settings = {
     sauvolaRadiusPx: 13,
     minStrokeInkWidths: 0,
     minIslandPx: 0,
-    // Highlighting is on by default. A break in a wall merges two rooms, which is this project's
-    // worst outcome, and the GM who never reaches for this control is the one who needs telling.
-    gapWidthPx: 12,
+    // On by default, and it does invent ink. Three things make that the right side of the trade: a
+    // break in a wall merges two rooms, which is this project's worst outcome; the repair cannot
+    // act unseen, since every pixel of it is painted in its own colour and ringed on the workspace;
+    // and every other stage-one default already invents a partition the GM reviews before staging.
+    // A GM who never reaches for this control is the one it exists for.
+    gapFillPx: 12,
     gapTravelPx: 40,
-    // Filling is **off** by default, and the asymmetry is deliberate. Looking costs nothing but
-    // time; inventing ink changes what gets emitted, and no control that writes into the map's
-    // linework should do so before a GM has looked at what it would write.
-    gapFillShare: 0,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -291,16 +291,13 @@ export const SETTING_LIMITS = {
   // without taking the overlay down and losing its position.
   inkOpacity: { min: 0, max: 1, step: 0.02 },
   // Runs past a doorway on purpose, like the two filters above it: at the top end whole doorways
-  // are marked, which is what makes the middle of the track feel like a choice. No measurement can
+  // get sealed, which is what makes the middle of the track feel like a choice. No measurement can
   // separate a doorway from a severed wall — both are a break of some width — so where that line
   // falls is the GM's to decide, and the control has to reach far enough for them to decide it.
-  gapWidthPx: { min: 0, max: 80, step: 1 },
+  gapFillPx: { min: 0, max: 80, step: 1 },
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
-  // the marks; the bottom end marks every break that passes through, doorways included.
+  // the repair; the bottom end repairs every break that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },
-  // A share of the highlight width, so the top of the track means "every break that is marked" and
-  // there is no position on it that means "something that is not".
-  gapFillShare: { min: 0, max: 1, step: 0.02 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -341,9 +338,8 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   minStrokeInkWidths: "read",
   minIslandPx: "read",
   inkOpacity: "read",
-  gapWidthPx: "read",
+  gapFillPx: "read",
   gapTravelPx: "read",
-  gapFillShare: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
@@ -389,9 +385,8 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   minStrokeInkWidths: "pipeline",
   minIslandPx: "pipeline",
   inkOpacity: "display",
-  gapWidthPx: "pipeline",
+  gapFillPx: "pipeline",
   gapTravelPx: "pipeline",
-  gapFillShare: "pipeline",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
@@ -470,9 +465,8 @@ export function maskFingerprint(settings: Settings): string {
 const POST_READING: readonly SettingName[] = [
   "minStrokeInkWidths",
   "minIslandPx",
-  "gapWidthPx",
+  "gapFillPx",
   "gapTravelPx",
-  "gapFillShare",
 ];
 
 /** Every reading-stage pipeline parameter, in declaration order. */
@@ -566,9 +560,8 @@ export function normaliseSettings(raw: unknown): Settings {
         t.minStrokeInkWidths,
       ),
       minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
-      gapWidthPx: clamp(trace.gapWidthPx, "gapWidthPx", t.gapWidthPx),
+      gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
-      gapFillShare: clamp(trace.gapFillShare, "gapFillShare", t.gapFillShare),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,
@@ -615,8 +608,7 @@ export function describeSettings(settings: Settings): string {
     `min island ${trace.minIslandPx}px, ` +
     `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
-    `gaps ${trace.gapWidthPx === 0 ? "marking off" : `mark ${trace.gapWidthPx}px, travel ${trace.gapTravelPx}px`}` +
-    `, ${trace.gapFillShare === 0 ? "fill off" : `fill ${Math.round(trace.gapFillShare * 100)}% of that`}` +
+    `breaks ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
   );
 }

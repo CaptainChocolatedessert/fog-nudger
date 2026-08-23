@@ -21,7 +21,7 @@
  * No DOM, no SDK.
  */
 
-import type { SettingName, Settings } from "./settings";
+import type { SettingName } from "./settings";
 import type { Scale } from "./sliderScale";
 
 /**
@@ -61,27 +61,17 @@ export interface Control {
   readonly section: string;
   readonly scale?: Scale;
   /**
-   * How the value itself is written beside the slider, when the stored number is not what a GM
-   * thinks in.
-   *
-   * Separate from `scale`, which decides how the *track* maps to values and must not be conflated
-   * with how one is printed. Only the fill share needs it: it is stored as a fraction because it is
-   * multiplied by another setting, and shown as a percentage because that is what it means — "how
-   * many of the marked breaks", not "0.50 of something".
-   */
-  readonly format?: (value: number) => string;
-  /**
    * Renders the value in a unit the GM can feel.
    *
    * Returns an empty string when it cannot say anything honest yet, which is how a control reports
    * "no measurement" without the caller having to know which readouts need which measurement.
    *
-   * Takes the whole settings object as well as the measurements, because one control is expressed
-   * as a **share of another**: the fill selects from among the marked breaks, so what it means in
-   * pixels depends on the mark's width. A readout that could not see the other setting would have
-   * to report a bare percentage, which says nothing about the map.
+   * Takes only the measurements. It briefly took the whole settings object, when the repair width
+   * was expressed as a share of a separate marking width; with one control there is nothing here
+   * that is relative to another setting, and a readout that cannot see its neighbours cannot go
+   * stale when one of them moves.
    */
-  readonly derive?: (value: number, measured: Measured, settings: Settings) => string;
+  readonly derive?: (value: number, measured: Measured) => string;
 }
 
 /**
@@ -135,10 +125,10 @@ export const CONTROLS: readonly Control[] = [
     derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
   },
   {
-    name: "gapWidthPx",
+    name: "gapFillPx",
     section: "gaps",
-    label: "Largest break to mark",
-    hint: "Marks narrow breaks in the linework, which are what merge two rooms into one. In pixels; <b>zero is off</b>. Past a doorway's width it starts marking doorways, and no measurement can tell those apart.",
+    label: "Largest break to repair",
+    hint: "Finds narrow breaks in the linework — what merge two rooms into one — and fills them, in <b class='gap-key'>purple</b>. In pixels; <b>zero is off</b>. Past a doorway's width it starts sealing doorways, and no measurement can tell those apart.",
     derive: (value, { pxPerSquare }) => {
       if (value <= 0) return "off";
       if (pxPerSquare === null) return `${Math.round(value)}px`;
@@ -149,25 +139,9 @@ export const CONTROLS: readonly Control[] = [
     name: "gapTravelPx",
     section: "gaps",
     label: "Same-wall distance",
-    hint: "How far apart two edges of a break can be <b>along the ink</b> and still count as one piece of wall. Low marks more: a crack beside a corner starts counting. High treats distant linework as connected and goes quiet.",
-    derive: (value) => (value <= 0 ? "mark every break" : `${Math.round(value)}px along the ink`),
-  },
-  {
-    name: "gapFillShare",
-    section: "gaps",
-    label: "How many to fill",
-    format: (value) => `${Math.round(value * 100)}%`,
-    hint: "Selects from the breaks marked above and repairs them, so two rooms do not merge across a break the map has not got. Selected ones turn <b class='gap-key filled'>green</b> and composite into the final ink; the rest stay <b class='gap-key'>purple</b>. <b>Zero fills nothing</b>; the top of the track fills every break that is marked.",
-    derive: (value, _measured, settings) => {
-      if (value <= 0) return "nothing filled";
-      const marked = settings.trace.gapWidthPx;
-      if (marked <= 0) return "nothing is marked, so there is nothing to fill";
-      // Reported in pixels as well as a percentage, because the percentage alone says nothing about
-      // the map — and this is the one control whose meaning in pixels moves when another moves.
-      return value >= 1
-        ? `every marked break, up to ${Math.round(marked)}px`
-        : `marked breaks up to ${Math.round(value * marked)}px of ${Math.round(marked)}px`;
-    },
+    hint: "How far apart two edges of a break can be <b>along the ink</b> and still count as one piece of wall. Low repairs more: a crack beside a corner starts counting. High treats distant linework as connected and goes quiet.",
+    derive: (value) =>
+      value <= 0 ? "repair every break" : `${Math.round(value)}px along the ink`,
   },
   {
     name: "minRoomSquares",

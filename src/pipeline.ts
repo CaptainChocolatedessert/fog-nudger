@@ -690,15 +690,13 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
   // blanket closing would also seal channels that failed the travel test, the clearest example being
   // a narrow doorway beside a corner, and it would do so with nothing to see. See `gaps.ts`.
   //
-  // The fill width is a **share** of the marking width rather than a width of its own, so there is
-  // no value of the control that means "wider than what is marked". Marking places the candidates;
-  // filling selects among them.
+  // One width, not two. Finding and repairing were briefly separate controls; a room showed that
+  // channels merge as the radius grows, so the marks are not a stable set to select from. See
+  // `gaps.ts`.
   const gapStarted = performance.now();
-  const gapFillPx = settings.trace.gapWidthPx * settings.trace.gapFillShare;
   const gaps = findGaps(filteredMask, {
-    widthPx: settings.trace.gapWidthPx,
+    widthPx: settings.trace.gapFillPx,
     travelPx: settings.trace.gapTravelPx,
-    fillPx: gapFillPx,
   });
   const inkedMask = applyGapFill(filteredMask, gaps.labels);
 
@@ -708,12 +706,8 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
       `trace: breaks in ${Math.round(performance.now() - gapStarted)}ms — search radius ` +
         `${gaps.searchRadius}px found ${gaps.channels} narrow channels, ${gaps.through} passing ` +
         `through; ${gaps.marks.length} had banks more than ${settings.trace.gapTravelPx}px apart ` +
-        `along the ink and are marked. ` +
-        (gaps.fillRadius > 0
-          ? `Fill at ${Math.round(settings.trace.gapFillShare * 100)}% of the marking width is ` +
-            `${gapFillPx.toFixed(1)}px (radius ${gaps.fillRadius}px), which closed ${gaps.filled} ` +
-            `of them, inventing ${gaps.filledArea} px of ink.`
-          : `Fill is off, so all ${gaps.marks.length} are left open.`),
+        `along the ink and are breaks. Repaired ${gaps.filled} of them, inventing ` +
+        `${gaps.filledArea} px of ink.`,
     );
     // The number that says whether the marks are worth reading. A map reporting hundreds is either
     // drawn with hollow walls or has a reading that is falling apart, and either way the count is
@@ -723,8 +717,9 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
         "warn",
         `trace: ${gaps.marks.length} breaks is a great many for one map. Two usual causes: walls ` +
           `drawn as two parallel strokes, whose hollow interiors are all narrow channels, or a ` +
-          `reading that is breaking the linework up. Narrow the largest break to mark, or look at ` +
-          `the ink before trusting the rings.`,
+          `reading that is breaking the linework up. Narrow the largest break to repair, or look ` +
+          `at the ink before trusting the result. The count also moves around as channels merge, ` +
+          `so it is not a tally of distinct faults.`,
       );
     }
     if (gaps.budgetHits > 0) {

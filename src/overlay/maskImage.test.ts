@@ -174,6 +174,15 @@ describe("paintGaps", () => {
     expect([...out.slice(8, 12)]).toEqual([40, 210, 120, 255]);
   });
 
+  it("leaves an unrepaired break unpainted when no colour is given for it", () => {
+    // What the workspace asks for. A break the search could not finish examining has no invented
+    // pixels, and painting it like a repair would claim ink was added where none was — it draws as
+    // a ring with nothing inside instead.
+    const out = paintGaps(labels([1, 2]), null, FILLED);
+    expect([...out.slice(0, 4)]).toEqual([0, 0, 0, 0]);
+    expect([...out.slice(4, 8)]).toEqual([40, 210, 120, 255]);
+  });
+
   it("clears a reused buffer rather than leaving last run's marks behind", () => {
     // A break that has been filled, or has gone away entirely, must stop being drawn. Stale alpha
     // here would show breaks the current settings do not have, which is worse than showing none.

@@ -132,15 +132,12 @@
         color: #c9cdea;
       }
       /*
-        Named in the colour they are drawn in, so the words and the rings on the map identify each
-        other. Kept in step with GAP_OPEN_COLOUR and GAP_FILLED_COLOUR by hand — the panel is static
-        markup and the canvas is not.
+        Named in the colour it is drawn in, so the word and the rings on the map identify each
+        other. Kept in step with GAP_COLOUR by hand — the panel is static markup and the canvas is
+        not.
       */
       .gap-key {
         color: #a855f7;
-      }
-      .gap-key.filled {
-        color: #22c55e;
       }
 
       .swatches {
@@ -260,10 +257,9 @@
 
         <h2>Breaks in the linework</h2>
         <p class="sub">
-          A wall with a section missing merges two rooms, which is the worst this can get wrong. The
-          first slider marks the candidates; the second picks how many of them to repair. Every
-          candidate gets a ring: <b class="gap-key">purple</b> for one left open,
-          <b class="gap-key filled">green</b> for one that will composite into the final ink.
+          A wall with a section missing merges two rooms, which is the worst this can get wrong.
+          Breaks up to the width below are filled in <b class="gap-key">purple</b> and ringed. Purple
+          is ink that is not on the map.
         </p>
         <div id="section-gaps"></div>
 

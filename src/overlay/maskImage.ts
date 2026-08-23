@@ -91,16 +91,22 @@ export function paintMask(
 }
 
 /**
- * Paint the gap labels: one colour for a break left open, another for one the fill closed.
+ * Paint the gap labels: one colour for a break the repair closed, and optionally another for one it
+ * did not.
  *
  * Two states in one pass rather than two layers, because they are disjoint by construction and a
- * second full-resolution buffer is 34MB on this project's test map. The distinction itself is not
- * cosmetic — `DESIGN.md` §8 requires that invented ink never be indistinguishable from read ink, and
- * these are exactly the pixels the fill invented.
+ * second full-resolution buffer is 34MB on this project's test map. The distinction is not cosmetic
+ * — `DESIGN.md` §8 requires that invented ink never be indistinguishable from read ink, and the
+ * filled state is exactly the pixels the repair invented.
+ *
+ * **`open` may be `null`, and that is what the workspace passes.** A break the search could not
+ * finish examining is reported but never repaired, so it has no invented pixels to draw: painting it
+ * in the same colour as a repair would say ink was added where none was. It shows as a ring with
+ * nothing inside instead.
  */
 export function paintGaps(
   labels: { width: number; height: number; data: Uint8Array },
-  open: Rgb,
+  open: Rgb | null,
   filled: Rgb,
   into?: Uint8ClampedArray<ArrayBuffer>,
 ): Uint8ClampedArray<ArrayBuffer> {
@@ -109,8 +115,8 @@ export function paintGaps(
 
   for (let i = 0, p = 0; i < labels.data.length; i++, p += 4) {
     const value = labels.data[i];
-    if (value === 1 || value === 2) {
-      const colour = value === 2 ? filled : open;
+    const colour = value === 2 ? filled : value === 1 ? open : null;
+    if (colour) {
       out[p] = colour.r;
       out[p + 1] = colour.g;
       out[p + 2] = colour.b;

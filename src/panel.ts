@@ -283,7 +283,6 @@ function settingRow(
   hint: string,
   scale: Scale,
   derive: Control["derive"],
-  format: Control["format"],
   value: number,
   onChange: (value: number) => void,
 ): HTMLElement {
@@ -298,7 +297,7 @@ function settingRow(
   const readout = document.createElement("output");
   readout.className = "value";
   readout.htmlFor = `set-${name}`;
-  readout.textContent = format?.(value) ?? formatValue(value, limits, scale);
+  readout.textContent = formatValue(value, limits, scale);
 
   const input = document.createElement("input");
   input.type = "range";
@@ -315,7 +314,7 @@ function settingRow(
   // and neither can change while a slider is being moved.
   const measured: Measured = { pxPerSquare: lastPixelsPerSquare(), inkWidth: lastInkWidth() };
   const paintHint = (current: number): void => {
-    const derived = derive ? derive(current, measured, settings) : "";
+    const derived = derive ? derive(current, measured) : "";
     note.innerHTML = derived ? `${hint} <b>${derived}</b>` : hint;
   };
   paintHint(value);
@@ -326,7 +325,7 @@ function settingRow(
   // writes: committing mid-drag would put a hundred values through scene metadata to reach one.
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = format?.(current) ?? formatValue(current, limits, scale);
+    readout.textContent = formatValue(current, limits, scale);
     paintHint(current);
   });
   input.addEventListener("change", () => {
@@ -367,7 +366,6 @@ function renderSettings(): void {
             control.hint,
             control.scale ?? "linear",
             control.derive,
-            control.format,
             readParameter(settings, control.name),
             (next) => {
               void save(writeParameter(settings, control.name, next), stage);

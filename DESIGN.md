@@ -965,13 +965,13 @@ trade on a control whose effect could not be seen.
 ### The controls
 
 Three for stage 1a — ink threshold, texture blur, detail window. Two for stage 1b — minimum stroke
-width, smallest ink island. Three for the breaks — largest break to mark, same-wall distance, and
-how many of them to fill.
+width, smallest ink island. Two for the breaks — largest break to repair, same-wall distance.
 
-**One of those is a share of another**, and it is the only pair in the product that is not
-independent: filling selects from among the breaks marking has found, so it is denominated as a
-proportion of the marking width and cannot exceed it. The consequence for the UI is that a commit to
-any control repaints **every** readout, not just its own. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
+**Every control is independent of every other.** One pair briefly was not — a repair width expressed
+as a share of a separate marking width — and it was withdrawn when the premise behind the split
+turned out to be false (§11 item 3). What survives from it is that a derived readout is repainted
+when a reading lands rather than only when its own slider moves, because several of them report a
+setting against a *measurement* that does not exist until then. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
 proposal is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
 reading tab but are **display** parameters (below).
 
@@ -1116,9 +1116,8 @@ Where each parameter landed:
 | Detail window | **px** (was squares) | a filter kernel size, and it is tuned beside the blur |
 | Minimum stroke width | ink widths | genuinely a statement about stroke thickness |
 | Smallest ink island | **px** (was squares) | a size on the image, and ink width is not trusted here |
-| Largest break to mark | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes the marks invisibly |
+| Largest break to repair | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes what is repaired invisibly |
 | Same-wall distance | px | a distance travelled across the image; nothing about it is a stroke or a square |
-| How many to fill | **share of the mark** | not a width at all: it selects from among the marked breaks, so a proportion is the only unit under which it cannot exceed them |
 | Smallest room | squares | it really is an area on the map's grid, and a GM thinks in squares |
 | Edge simplification | ink widths | its safety bound *is* half an ink width |
 
@@ -2245,18 +2244,11 @@ search runs off the mask rather than off the map.
 
 #### 3. Bridging small gaps — BUILT 2026-08-23
 
-**Two sliders, and the separation is the design** (user, 2026-08-23). One sets which breaks are
-**highlighted**; the other sets which of those are **filled**. The workflow that buys:
+**One slider** (user, 2026-08-23, after two were tried and abandoned — see below). It sets the widest
+break to find, and everything it finds is repaired.
 
-> Settle the first to get a stable set of places worth paying attention to. Then sweep the second,
-> and watch how many of that fixed set turn from open to filled — judging the trade with the
-> reference set held still underneath it.
-
-**Purple rings are breaks left open; green rings are breaks the fill closed.** The pixels are painted
-the same two colours. Green is the only ink on the surface that the map does not contain.
-
-**The user notes this could be a model for other tweaks** — show one thing at a time while holding
-the rest still. Not generalised; this is the only place it exists.
+**Repaired pixels are drawn purple, at full alpha on their own layer, with a screen-space ring round
+each break.** Purple is the only ink on the surface that the map does not contain.
 
 ##### The fill is not a closing, and that is a safety property
 
@@ -2284,31 +2276,68 @@ Consequences worth stating:
   inventing ink changes what gets emitted, and no control that writes into a map's linework should
   do so before a GM has looked at what it would write.
 
-##### The two controls are linked, and the fill is a share of the mark — user, 2026-08-23
+##### Superseded within a day: two controls, discover and fill — user, 2026-08-23
 
-**Marking places the candidates; filling selects among them.** The fill's control therefore runs
-**from nothing to all of what is marked**, as a proportion, and the first version of this was wrong
-about it: it gave the fill an absolute width in pixels of its own and let it be pushed past the
-marking width, widening the *search* to compensate. That kept the invariant, but it admitted a state
-the design has no meaning for — a fill wider than what is being looked at.
+**Built, tried in a room, and abandoned.** One width highlighted candidates; a second, expressed as a
+share of the first, selected which of them were repaired. Purple rings for a break left open, green
+for one filled. The workflow it was for: settle the first to get a stable set of places worth
+attention, then sweep the second and watch how many of that fixed set turn green, judging the trade
+with the reference set held still underneath.
 
-**Expressed as a share, the relationship is enforced by construction.** There is no position on the
-track that means "wider than what is marked", so nothing has to be clamped, checked, or remembered.
-At the top of the track every marked break is filled, which is the natural end of the sweep.
+**The premise was false, and a map said so.** Breaks are not discrete items discovered one at a time
+as the width rises. Where two uneven lines run close together — which is most hand-drawn linework —
+a closing carves the space between them into **several channels at the pinch points**, and those
+channels **merge into one** as the radius grows. A break therefore has no stable identity across
+radii, so there is no reference set to hold still.
 
-A share also survives a change to the marking width. An absolute width would have to be clamped down
-when the mark narrowed — a stored setting silently rewriting itself, which is the worst failure a
-control has and the one the round-tripping tests exist to prevent.
+It was worse than merely odd. A channel was only repaired when **all** of it fell inside the fill
+radius, so once several small channels merged into one large one, that one no longer fitted — and
+**raising the highlight could prevent a repair that a lower setting allowed.** Non-monotonic, and
+unexplainable to anyone turning the knob.
 
-**The cost, stated:** this is not a width, so what it means in pixels moves when the mark moves. The
-readout carries the pixel figure beside the percentage for that reason, and **every readout is
-repainted whenever any control commits**, because the controls are no longer independent. A figure
-captured when a row was built would go on reporting the old pixel width after the mark changed —
-a readout lying quietly, which is the failure this surface exists to prevent one level up.
+**One control is well behaved for a precise reason.** What a GM tunes is then the **set of pixels
+repaired**, which grows with the radius, rather than a set of discrete marks, which does not. The
+channel count still moves around as channels merge — it stays in the log and on the state line as a
+diagnostic, and it is explicitly **not** a tally of distinct faults.
 
-The `max` of the two radii stays inside the pure gap finder, unreachable through the controls. It is
-that function's own contract rather than a consequence of the UI being wired correctly: handed a
-wider fill by any caller, it widens what it looks at rather than repairing something it never marked.
+**What carried over unchanged**, because none of it depended on there being two controls: the
+definition of a gap, the three-step detector, the targeted fill and its invariant, the separate
+full-alpha layer, and the screen-space rings.
+
+**What changed with it:**
+
+- One colour, purple, for repaired pixels and their rings. The second colour survived only for the
+  one case that is genuinely different — see below.
+- `Control.format` was introduced so the share could read as `50%` rather than `0.50`, and went with
+  it. So did `derive` taking the whole settings object: nothing is expressed relative to another
+  setting any more, and a readout that cannot see its neighbours cannot go stale when one moves.
+- The per-row hint repainting **stayed**, on a better justification than the one it arrived with.
+  Several readouts report a setting against a *measurement*, and before a first trace they say "trace
+  once for a figure"; without a refresh they would go on saying it until that row's own slider was
+  touched.
+- `gapWidthPx` was **renamed** to `gapFillPx` rather than reinterpreted. The old key meant "highlight
+  only", so a scene storing it would silently have begun inventing ink at whatever width had been
+  chosen for looking. A rename falls back to the default, which is the loud version.
+
+##### One exception to "everything found is repaired"
+
+A channel whose flood ran out of budget was never *proved* broken. **Marking on a guess is a warning;
+inventing ink on a guess is not.** Those get a ring and no fill, which reads on the surface as an
+empty ring — a state that is visibly different from a repair without needing a second colour. The
+painter takes `null` for that state rather than a colour, so it cannot be drawn as though ink had
+been added where none was. The state line names the count separately.
+
+##### On by default, and it does invent ink
+
+The asymmetry that justified defaulting the fill off — looking costs nothing, writing does — has no
+place to live once there is one control. Three things put the balance on "on":
+
+- A break in a wall merges two rooms, which is this project's worst outcome, and the GM who never
+  reaches for this control is the one it exists for.
+- It **cannot act unseen**: every invented pixel is painted in its own colour, at full alpha on its
+  own layer, with a screen-space ring round it. That is §8's test, met.
+- Every other stage-one default already invents a partition, which the GM reviews on the workspace
+  and then stages explicitly. This is one more default in that chain, not a new kind of thing.
 
 ##### The ink is composed from layers now — the user's framing, 2026-08-23
 
