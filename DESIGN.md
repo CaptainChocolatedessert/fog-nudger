@@ -924,6 +924,11 @@ exterior and it fails on any map whose rooms run to the edge.
 
 #### Measured in a room, 2026-08-17 — *Lair Of The Lamb*
 
+**Not comparable with the 2026-08-22 figures below.** The map was resized in the scene between the
+two, from 68.7 grid squares across to 64.7, so the raster density went from 48 to 51 px per square
+and every grid-denominated constant moved with it. Both readings are of the same image; only its
+placement changed.
+
 > 260 regions covering 92.8% of the raster; largest first 75.0%, 1.5%, 1.2%, 0.6%, 0.5%; 115 at
 > least a grid square, median 0.84 sq; 1 touches the border; dropped 247 below the minimum (0.1% of
 > the raster). Labelled in 342ms; whole dry run 1259ms.
@@ -954,7 +959,7 @@ Open, and carried into step 5 rather than resolved:
 - **That the 75% region is the exterior is an assumption, not a measurement.** Consistent with the
   histogram's 79% mid-tone and with only one region touching the border; not confirmed.
 
-**5. Boundary tracing — built and tested, not yet run in a room.** One closed polygon per region,
+**5. Boundary tracing — done, run in a room 2026-08-22.** One closed polygon per region,
 plus a ring per hole, traced along the *cracks between* pixels so every vertex lands on an integer
 lattice corner. All three of the things it had to get right are done:
 
@@ -1012,7 +1017,7 @@ joined, and the whole of step 5's suite is built that way.
 **Steps 5 and 6 are a pair.** An item's command array caps at exactly 8192 entries (§7), and step 5
 alone produces polygons that are correct and unusable. Do not read its vertex counts as a problem.
 
-**6. Simplify — built and tested, not yet run in a room.** Douglas–Peucker, ported from the sibling,
+**6. Simplify — done, run in a room 2026-08-22.** Douglas–Peucker, ported from the sibling,
 with the tolerance denominated in **measured ink width** rather than raster pixels (§5).
 
 *That unit is the safety argument, not just portability.* Douglas–Peucker keeps a subset of the
@@ -1074,8 +1079,10 @@ anything about real ink. The raggedness is a sine wave, and vertex count is exac
 raggedness drives, so the reduction figure is a property of the fixture. The real numbers come from
 a room.
 
-**7. World placement — built and tested as far as anything pure can be; the room check is
-outstanding.** Raster pixels to Owlbear world coordinates, per axis, with each region anchored at
+**7. World placement — done and settled 2026-08-22.** Confirmed by eye in a room: the regions sit
+correctly on the map in all four corners, which is the one check no number can make.
+
+Raster pixels to Owlbear world coordinates, per axis, with each region anchored at
 the centre of its own world box and its rings expressed relative to that anchor — which is the
 contract a `Path` wants, since its commands are relative to its `position` (§4, measured in a room).
 
@@ -1115,8 +1122,10 @@ not need eyes on a map.
 asymmetric shape §9 asks for has to be *looked at*. So step 7's room check is really step 8's first
 run, the same way step 5 was unusable without step 6.
 
-**8. Emit — built; the first run in a room is outstanding, and it carries step 7's check with it.**
-Three gestures on the panel: **stage**, **accept**, **remove**.
+**8. Emit — done, run in a room 2026-08-22.** Four gestures on the panel: **stage**, **accept**,
+**back to staging**, **remove** — plus **apply to staged**, which restyles proposals without
+re-tracing, since appearance is a stage-two question and must be answerable without touching stage
+one.
 
 *Staging writes proposals to `DRAWING`, not fog*, per §4. Every property of that decision was
 measured in step 1, and together they make a first run inert: a staged item renders in its own

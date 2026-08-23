@@ -3,13 +3,15 @@
 An [Owlbear Rodeo](https://www.owlbear.rodeo/) extension: **trace a map image into the fog regions
 you reveal room by room.**
 
-> **Pre-release, and unproven.** The trace pipeline now runs end to end: it reads a scene's map,
-> finds the enclosed regions, traces and simplifies their boundaries, and can stage the result in
-> the scene as editable proposals. **Nobody has yet looked at the output on a real map**, so treat
-> every number it reports as untested against the thing that matters.
+> **Pre-release.** The pipeline runs end to end and has been run on a real map: it reads the scene's
+> map image, finds the enclosed regions, traces and simplifies their boundaries, places them, and
+> stages the result as editable proposals. Placement is confirmed correct. **What is still unproven
+> is whether the partition it finds is the one a GM wants** — that is judged by looking, and the
+> looking has barely started.
 >
-> Proposals are staged on the drawing layer, where they are magenta, invisible to players, and
-> produce no walls — so a run cannot affect play. They only become fog when accepted.
+> Proposals are staged on the drawing layer, coloured so neighbouring regions differ, invisible to
+> players, and producing no walls at all — so a run cannot affect play whatever it gets wrong. They
+> become fog only when you accept them, and going back to staging undoes that without losing edits.
 
 ## The idea
 
