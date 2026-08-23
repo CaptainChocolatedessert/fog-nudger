@@ -17,7 +17,9 @@ import {
   DEFAULT_SETTINGS,
   isStageDefault,
   maskFingerprint,
+  normaliseColour,
   normaliseSettings,
+  PARAMETER_KIND,
   PARAMETER_STAGE,
   readParameter,
   resetStage,
@@ -71,12 +73,37 @@ describe("the stage declaration", () => {
 });
 
 describe("maskFingerprint", () => {
-  it("changes when any reading parameter changes", () => {
+  it("changes when any reading PIPELINE parameter changes", () => {
     const base = maskFingerprint(DEFAULT_SETTINGS);
     for (const name of stageParameters("read")) {
+      if (PARAMETER_KIND[name] !== "pipeline") continue;
       const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
       expect(maskFingerprint(changed)).not.toBe(base);
     }
+  });
+
+  it("does NOT change for a reading-stage DISPLAY parameter", () => {
+    // The reason the two axes exist. The overlay's opacity sits on the reading tab because that is
+    // where the overlay is looked at, but it changes nothing the pipeline computes. Filing it as a
+    // reading parameter would throw away the cached mask and force a full re-binarisation every
+    // time the GM nudged the slider — a second of work to arrive at an identical image.
+    const base = maskFingerprint(DEFAULT_SETTINGS);
+    for (const name of stageParameters("read")) {
+      if (PARAMETER_KIND[name] !== "display") continue;
+      const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
+      expect(maskFingerprint(changed)).toBe(base);
+    }
+  });
+
+  it("does NOT change when the overlay colour changes", () => {
+    // The colour is not a number, so it lives outside the numeric machinery entirely and could not
+    // reach the fingerprint even by accident today. Pinned anyway, because "could not reach it"
+    // is a property of the current implementation rather than of the design.
+    const recoloured: typeof DEFAULT_SETTINGS = {
+      ...DEFAULT_SETTINGS,
+      overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" },
+    };
+    expect(maskFingerprint(recoloured)).toBe(maskFingerprint(DEFAULT_SETTINGS));
   });
 
   it("does NOT change when a deriving or adjusting parameter changes", () => {
@@ -182,5 +209,50 @@ describe("isStageDefault and resetStage", () => {
     expect(maskFingerprint(resetStage(edited, "read" as Stage))).toBe(
       maskFingerprint(DEFAULT_SETTINGS),
     );
+  });
+});
+
+describe("the overlay colour", () => {
+  it("survives a round trip through the normaliser unchanged", () => {
+    // The failure this is aimed at is silent: if the stored form and the panel's form differ, then
+    // merely opening the panel rewrites the setting and marks it edited. The colour input reports
+    // lower case, so the store must too.
+    for (const colour of ["#ff2020", "#000000", "#ffffff", "#00c8ff"]) {
+      const stored = normaliseSettings({ overlay: { inkColour: colour } });
+      expect(stored.overlay.inkColour).toBe(colour);
+      expect(normaliseSettings(stored).overlay.inkColour).toBe(colour);
+    }
+  });
+
+  it("lower-cases what it accepts, so the panel cannot disagree with the store", () => {
+    expect(normaliseColour("#FF2020", "#000000")).toBe("#ff2020");
+  });
+
+  it("falls back for anything malformed rather than storing it", () => {
+    for (const bad of [undefined, null, 42, "", "#fff", "red", "#ggg000", { r: 1 }]) {
+      expect(normaliseColour(bad, "#ff2020")).toBe("#ff2020");
+    }
+  });
+
+  it("falls back per field, so a bad colour does not discard the opacity beside it", () => {
+    const mixed = normaliseSettings({ overlay: { inkColour: "nonsense", inkOpacity: 0.5 } });
+    expect(mixed.overlay.inkColour).toBe(DEFAULT_SETTINGS.overlay.inkColour);
+    expect(mixed.overlay.inkOpacity).toBe(0.5);
+  });
+
+  it("is put back by resetting the reading stage, being a reading-tab control", () => {
+    // The colour is not in SETTING_LIMITS, so every function that walks a stage's parameters has to
+    // remember it separately. This is the one that would be forgotten.
+    const edited = { ...DEFAULT_SETTINGS, overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" } };
+    expect(isStageDefault(edited, "read")).toBe(false);
+    expect(resetStage(edited, "read").overlay.inkColour).toBe(DEFAULT_SETTINGS.overlay.inkColour);
+  });
+
+  it("is left alone by resetting the other stages", () => {
+    const edited = { ...DEFAULT_SETTINGS, overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" } };
+    for (const stage of ["derive", "adjust"] as const) {
+      expect(isStageDefault(edited, stage)).toBe(true);
+      expect(resetStage(edited, stage).overlay.inkColour).toBe("#00ff00");
+    }
   });
 });

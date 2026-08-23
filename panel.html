@@ -185,6 +185,44 @@
       }
       .setting .hint b { font-weight: 600; color: var(--text); }
 
+      /*
+        Colour swatches, plus a native picker beside them.
+
+        The swatches exist because a native colour dialog opened from a sandboxed third-party iframe
+        is the rendering path that already burned this panel once, when the map dropdown painted its
+        options white-on-white against the *system* background and looked empty. Buttons we draw
+        ourselves cannot fail that way. The picker is offered as well because when it works it beats
+        any fixed palette.
+      */
+      .swatches {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.3rem;
+        margin-bottom: 0.5rem;
+      }
+      .swatches button {
+        width: 1.5rem;
+        height: 1.5rem;
+        margin: 0;
+        padding: 0;
+        border-radius: 0.3rem;
+        border: 2px solid transparent;
+        /* A ring in the panel's own colour, so a chosen swatch reads as chosen against any hue. */
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+      }
+      .swatches button[aria-pressed="true"] { border-color: var(--accent); }
+      .swatches input[type="color"] {
+        width: 1.9rem;
+        height: 1.6rem;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 0.3rem;
+        background: transparent;
+        cursor: pointer;
+      }
+      .swatches input:disabled, .swatches button:disabled { opacity: 0.45; cursor: default; }
+
       .actions { margin: 0.5rem 0 0.2rem; }
       button.quiet { background: transparent; color: var(--dim); }
       button.quiet:hover:not(:disabled) { color: var(--text); }
@@ -251,6 +289,33 @@
 
       <p class="field">What counts as ink</p>
       <div class="settings" id="read-settings"></div>
+
+      <!--
+        How the overlay is painted. These sit here rather than on tab 3 because a display control
+        belongs with the thing it displays, and the overlay is what the controls above produce —
+        flipping tabs to recolour what you are looking at would be absurd. They destroy nothing and
+        recompute nothing; `PARAMETER_KIND` is what keeps them out of the mask fingerprint.
+
+        Swatches as well as a colour input, deliberately. A native colour dialog inside a
+        third-party iframe is the same rendering path that made the map <select> render
+        white-on-white and look empty — not something we control or can style. The swatches cannot
+        fail that way, so the picker is the convenience and they are the floor.
+      -->
+      <p class="field">Ink overlay</p>
+      <div class="swatches" id="ink-swatches" role="group" aria-label="Overlay colour"></div>
+      <div class="settings" id="read-display"></div>
+
+      <div class="actions">
+        <button id="overlay-open" disabled>Show ink overlay</button>
+        <button id="overlay-close" class="quiet" disabled>Hide</button>
+      </div>
+      <p class="note">
+        Paints the mask over the map: everything the trace calls ink, and nothing else. It blanks
+        while you pan or zoom and repaints once the view settles — an overlay that lagged would show
+        ink beside the linework it is meant to sit on, which reads as the trace being wrong. It
+        covers Owlbear's tools too, but clicks pass through, so the toolbar and this panel keep
+        working underneath.
+      </p>
 
       <div class="actions">
         <button id="dry-run" disabled>Trace, emit nothing</button>

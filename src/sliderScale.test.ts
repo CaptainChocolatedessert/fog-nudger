@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "./sliderScale";
-import { SETTING_LIMITS } from "./settings";
+import { DEFAULT_SETTINGS, readParameter, SETTING_LIMITS, type SettingName } from "./settings";
 
 const linear = { min: 0, max: 1, step: 0.02 };
 /** The smallest-room threshold: three orders of magnitude, and every useful value near the bottom. */
@@ -82,16 +82,10 @@ describe("round-tripping", () => {
   it("returns every default unchanged", () => {
     for (const [name, limits] of Object.entries(SETTING_LIMITS)) {
       const scale = name === "minRoomSquares" ? "log" : "linear";
-      const defaults: Record<string, number> = {
-        blurSigma: 1,
-        sauvolaK: 0.34,
-        sauvolaRadiusSquares: 0.25,
-        minRoomSquares: 0.1,
-        simplifyInkWidths: 0.25,
-        fillOpacity: 0.22,
-        strokeSquares: 1 / 12,
-      };
-      const value = defaults[name]!;
+      // Read from the real defaults rather than a copy of them. A hand-maintained list here went
+      // stale the moment a setting was added, and failed as `NaN` — which reads as a scaling bug
+      // rather than as a missing entry.
+      const value = readParameter(DEFAULT_SETTINGS, name as SettingName);
       const back = fromSlider(toSlider(value, limits, scale), limits, scale);
       // A twelfth of a square cannot land on a hundredth-step track exactly; a step's worth is the
       // most any setting may move, and that only for values that were never on the track.

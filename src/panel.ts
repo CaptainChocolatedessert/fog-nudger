@@ -17,16 +17,19 @@ import { themeVariables } from "./theme";
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 import { closeOverlayProbe, openOverlayProbe } from "./probe/overlayProbeControl";
+import { closeInkOverlay, openInkOverlay } from "./overlay/overlayControl";
 import { dryRun, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
 import {
   DEFAULT_SETTINGS,
   isStageDefault,
+  PARAMETER_KIND,
   PARAMETER_STAGE,
   readParameter,
   resetStage,
   SETTING_LIMITS,
   STAGES,
   writeParameter,
+  type ParameterKind,
   type SettingName,
   type Settings,
   type Stage,
@@ -338,6 +341,29 @@ const CONTROLS: readonly Control[] = [
     label: "Proposal outline",
     hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
   },
+  {
+    name: "inkOpacity",
+    label: "Overlay opacity",
+    hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
+  },
+];
+
+/**
+ * Preset overlay colours.
+ *
+ * A spread of hues plus both extremes of neutral, because the only thing that makes a colour good
+ * here is contrast against a particular map — red vanishes on red stonework and shouts on a grey
+ * plan, and only the GM can see which they have. Six is enough to find something workable on any
+ * map in one click, with the picker there for the rest.
+ */
+const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[] = [
+  { value: "#ff2020", name: "Red" },
+  { value: "#ff20d0", name: "Magenta" },
+  { value: "#00c8ff", name: "Cyan" },
+  { value: "#ffd000", name: "Yellow" },
+  { value: "#00e070", name: "Green" },
+  { value: "#ffffff", name: "White" },
+  { value: "#000000", name: "Black" },
 ];
 
 let settings: Settings = DEFAULT_SETTINGS;
@@ -400,14 +426,67 @@ function settingRow(
   return row;
 }
 
+/**
+ * Repaint the overlay colour swatches, marking the chosen one.
+ *
+ * Rebuilt from the settings rather than tracking selection in the DOM, for the same reason the
+ * sliders repaint from what the store returned: the panel must show what is *stored*, not what was
+ * last clicked. A colour the normaliser rejected would otherwise sit highlighted while the overlay
+ * painted something else.
+ */
+function renderSwatches(): void {
+  const container = document.getElementById("ink-swatches");
+  if (!container) return;
+  const chosen = settings.overlay.inkColour;
+  container.replaceChildren();
+
+  for (const swatch of INK_SWATCHES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.style.background = swatch.value;
+    button.title = swatch.name;
+    button.setAttribute("aria-label", swatch.name);
+    button.setAttribute("aria-pressed", String(swatch.value === chosen));
+    button.disabled = !sceneReady;
+    button.addEventListener("click", () => {
+      void save({ ...settings, overlay: { ...settings.overlay, inkColour: swatch.value } }, "read");
+    });
+    container.append(button);
+  }
+
+  // Offered alongside rather than instead of the swatches. If Owlbear's iframe sandbox makes the
+  // native dialog unusable — the failure mode the map dropdown already hit — the swatches are
+  // still a complete control.
+  const picker = document.createElement("input");
+  picker.type = "color";
+  picker.value = chosen;
+  picker.title = "Any colour";
+  picker.setAttribute("aria-label", "Overlay colour, any");
+  picker.disabled = !sceneReady;
+  // `change` rather than `input`: a native picker streams every colour the cursor crosses while it
+  // is open, and each one would be a write to scene metadata.
+  picker.addEventListener("change", () => {
+    void save({ ...settings, overlay: { ...settings.overlay, inkColour: picker.value } }, "read");
+  });
+  container.append(picker);
+}
+
 /** Repaint every stage's controls from the current settings, and refresh the derived figures. */
 function renderSettings(): void {
   for (const stage of STAGES) {
-    const container = document.getElementById(`${stage}-settings`);
-    if (container) {
-      container.replaceChildren();
-      for (const control of CONTROLS) {
-        if (PARAMETER_STAGE[control.name] !== stage) continue;
+    // Pipeline controls and display controls are painted into separate containers, because a
+    // display control belongs beside the thing it displays rather than beside the knobs that share
+    // its stage. A stage with no display container simply has all its controls in the one place.
+    const containers: Record<ParameterKind, HTMLElement | null> = {
+      pipeline: document.getElementById(`${stage}-settings`),
+      display: document.getElementById(`${stage}-display`) ?? document.getElementById(`${stage}-settings`),
+    };
+    for (const container of new Set(Object.values(containers))) container?.replaceChildren();
+
+    for (const control of CONTROLS) {
+      if (PARAMETER_STAGE[control.name] !== stage) continue;
+      const container = containers[PARAMETER_KIND[control.name]];
+      if (container) {
         container.append(
           settingRow(
             control.name,
@@ -433,6 +512,7 @@ function renderSettings(): void {
     }
   }
 
+  renderSwatches();
   setSettingsEnabled(sceneReady);
 }
 
@@ -533,6 +613,8 @@ OBR.onReady(async () => {
   const buttons = [
     wireButton("dry-run", dryRun),
     wireButton("probe", probeViewportCentre),
+    wireButton("overlay-open", openInkOverlay),
+    wireButton("overlay-close", closeInkOverlay),
     wireButton("stage", stageRegions),
     wireButton("accept", acceptStaged),
     wireButton("unaccept", returnToStaging),

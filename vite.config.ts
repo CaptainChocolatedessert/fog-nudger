@@ -63,9 +63,10 @@ export default defineConfig({
         background: "background.html",
         // Loaded by Owlbear via the manifest action's `popover`.
         panel: "panel.html",
-        // Opened as a full-screen modal by the panel, not by the manifest — so nothing declares
-        // it anywhere else and forgetting this line is the only way it can go missing.
+        // Opened as full-screen modals by the panel, not by the manifest — so nothing declares
+        // them anywhere else and forgetting these lines is the only way they can go missing.
         overlayProbe: "overlay-probe.html",
+        overlay: "overlay.html",
       },
     },
   },

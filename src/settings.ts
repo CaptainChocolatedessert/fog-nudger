@@ -93,9 +93,35 @@ export interface ReviewSettings {
   readonly strokeSquares: number;
 }
 
+/**
+ * How the stage-one overlay paints the mask.
+ *
+ * Purely how it looks. Nothing here reaches the pipeline, which is why these are display parameters
+ * rather than reading ones despite living on the reading tab — see `PARAMETER_KIND`.
+ */
+export interface OverlaySettings {
+  /**
+   * The colour ink is painted in, as `#rrggbb`.
+   *
+   * Adjustable because no single colour works on every map. Red is invisible on a red-tinted map
+   * and screams on a grey one, and the GM is the only one who can see which they have.
+   */
+  readonly inkColour: string;
+  /**
+   * How opaque that paint is.
+   *
+   * Defaults to fully opaque, which is the honest starting point: the question stage one asks is
+   * "is this what you call a wall", and a solid answer is easiest to read. Lowering it turns the
+   * overlay into a tint the map shows through, which is what you want when the question shifts to
+   * "does this line up with the linework underneath".
+   */
+  readonly inkOpacity: number;
+}
+
 export interface Settings {
   readonly trace: TraceSettings;
   readonly review: ReviewSettings;
+  readonly overlay: OverlaySettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -110,7 +136,21 @@ export const DEFAULT_SETTINGS: Settings = {
     fillOpacity: 0.22,
     strokeSquares: 1 / 12,
   },
+  overlay: {
+    inkColour: "#ff2020",
+    inkOpacity: 1,
+  },
 };
+
+/**
+ * The fallback colour, and the shape every stored colour must have.
+ *
+ * Validated rather than trusted for the same reason every number here is clamped: this arrives from
+ * scene metadata, so it can have been written by an older build or hand-edited. An unvalidated
+ * string goes straight into a canvas fill style, where a malformed value is silently ignored and
+ * the overlay paints in whatever colour was set last — which reads as the control being broken.
+ */
+const COLOUR_PATTERN = /^#[0-9a-f]{6}$/i;
 
 /** Bounds for every field, and the step a control should offer. */
 export const SETTING_LIMITS = {
@@ -126,6 +166,9 @@ export const SETTING_LIMITS = {
   simplifyInkWidths: { min: 0.02, max: 0.45, step: 0.01 },
   fillOpacity: { min: 0, max: 1, step: 0.02 },
   strokeSquares: { min: 0, max: 0.3, step: 0.01 },
+  // Not floored above zero. Dragging it to nothing is a legitimate way to check what is underneath
+  // without taking the overlay down and losing its position.
+  inkOpacity: { min: 0, max: 1, step: 0.02 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -163,10 +206,41 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   sauvolaK: "read",
   blurSigma: "read",
   sauvolaRadiusSquares: "read",
+  inkOpacity: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
+};
+
+/**
+ * Whether a parameter feeds the pipeline or only decides how its result is drawn.
+ *
+ * **The second axis, and it is not the same as the stage.** The stage says which tab a control
+ * appears on, which is decided by *what it displays*: the overlay's colour belongs beside the
+ * reading controls because the overlay is what those controls produce, and flipping tabs to recolour
+ * the thing you are looking at would be absurd. But recolouring destroys nothing and recomputes
+ * nothing.
+ *
+ * Conflating the two would be a real bug rather than untidiness: the mask fingerprint reads the
+ * reading stage, so a display parameter filed as a reading parameter would throw away a cached mask
+ * and force a full re-binarisation **every time the GM nudged the opacity slider**. Hence
+ * `maskFingerprint` reads pipeline parameters only, and a test pins that.
+ *
+ * The cascade in `Stage` therefore governs pipeline parameters. Display parameters are orthogonal
+ * to it: they live with the thing they display and they destroy nothing, wherever they sit.
+ */
+export type ParameterKind = "pipeline" | "display";
+
+export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
+  sauvolaK: "pipeline",
+  blurSigma: "pipeline",
+  sauvolaRadiusSquares: "pipeline",
+  inkOpacity: "display",
+  minRoomSquares: "pipeline",
+  simplifyInkWidths: "pipeline",
+  fillOpacity: "display",
+  strokeSquares: "display",
 };
 
 /** Every parameter belonging to one stage, in declaration order. */
@@ -185,8 +259,10 @@ export function stageParameters(stage: Stage): readonly SettingName[] {
  * failure a control can have. So storage keeps its two groups and the stage mapping above is what
  * carries the semantics.
  */
-function groupOf(name: SettingName): "trace" | "review" {
-  return name in DEFAULT_SETTINGS.review ? "review" : "trace";
+function groupOf(name: SettingName): "trace" | "review" | "overlay" {
+  if (name in DEFAULT_SETTINGS.review) return "review";
+  if (name in DEFAULT_SETTINGS.overlay) return "overlay";
+  return "trace";
 }
 
 /** Read one parameter by name, whichever group it is stored in. */
@@ -214,25 +290,45 @@ export function writeParameter(
  */
 export function maskFingerprint(settings: Settings): string {
   return stageParameters("read")
+    .filter((name) => PARAMETER_KIND[name] === "pipeline")
     .map((name) => `${name}=${readParameter(settings, name)}`)
     .join(",");
 }
 
+/**
+ * The stage the overlay's colour belongs to.
+ *
+ * Stated once rather than in each of the two places below. The colour is the one setting that is
+ * not a number, so it sits outside `SETTING_LIMITS` and therefore outside `stageParameters` — which
+ * means every function that walks a stage's parameters has to remember it separately. That is the
+ * cost of having one non-numeric setting, and naming it here is cheaper than a second machinery.
+ */
+const COLOUR_STAGE: Stage = "read";
+
 /** Whether one stage's parameters are all at their defaults, ignoring the other stages. */
 export function isStageDefault(settings: Settings, stage: Stage): boolean {
   const normalised = normaliseSettings(settings);
-  return stageParameters(stage).every(
+  const numbersMatch = stageParameters(stage).every(
     (name) => readParameter(normalised, name) === readParameter(DEFAULT_SETTINGS, name),
   );
+  const colourMatches =
+    stage !== COLOUR_STAGE ||
+    normalised.overlay.inkColour === DEFAULT_SETTINGS.overlay.inkColour;
+  return numbersMatch && colourMatches;
 }
 
 /** A copy of `settings` with one stage's parameters back to their defaults, leaving the rest alone. */
 export function resetStage(settings: Settings, stage: Stage): Settings {
-  return stageParameters(stage).reduce(
+  const numbers = stageParameters(stage).reduce(
     (accumulated, name) =>
       writeParameter(accumulated, name, readParameter(DEFAULT_SETTINGS, name)),
     settings,
   );
+  if (stage !== COLOUR_STAGE) return numbers;
+  return {
+    ...numbers,
+    overlay: { ...numbers.overlay, inkColour: DEFAULT_SETTINGS.overlay.inkColour },
+  };
 }
 
 function clamp(value: unknown, name: SettingName, fallback: number): number {
@@ -251,8 +347,10 @@ export function normaliseSettings(raw: unknown): Settings {
   const source = (raw ?? {}) as Record<string, unknown>;
   const trace = (source.trace ?? {}) as Record<string, unknown>;
   const review = (source.review ?? {}) as Record<string, unknown>;
+  const overlay = (source.overlay ?? {}) as Record<string, unknown>;
   const t = DEFAULT_SETTINGS.trace;
   const r = DEFAULT_SETTINGS.review;
+  const o = DEFAULT_SETTINGS.overlay;
 
   return {
     trace: {
@@ -274,7 +372,23 @@ export function normaliseSettings(raw: unknown): Settings {
       fillOpacity: clamp(review.fillOpacity, "fillOpacity", r.fillOpacity),
       strokeSquares: clamp(review.strokeSquares, "strokeSquares", r.strokeSquares),
     },
+    overlay: {
+      inkColour: normaliseColour(overlay.inkColour, o.inkColour),
+      inkOpacity: clamp(overlay.inkOpacity, "inkOpacity", o.inkOpacity),
+    },
   };
+}
+
+/**
+ * Take anything and return a usable `#rrggbb`.
+ *
+ * Lower-cased so a value round-trips unchanged through the panel's colour input, which reports in
+ * lower case. Without that, opening the panel on a scene storing `#FF2020` would write back
+ * `#ff2020` and mark the settings edited — the same "merely opening the panel changed something"
+ * failure the slider round-tripping tests exist to prevent, in a place nobody would think to look.
+ */
+export function normaliseColour(value: unknown, fallback: string): string {
+  return typeof value === "string" && COLOUR_PATTERN.test(value) ? value.toLowerCase() : fallback;
 }
 
 /** Whether a set differs from the defaults, so the panel can offer a meaningful reset. */

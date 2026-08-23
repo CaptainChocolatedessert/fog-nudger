@@ -519,6 +519,65 @@ async function computeMask(
   };
 }
 
+/** What the overlay needs: the mask, and where the raster sits in the world. */
+export interface MaskForOverlay {
+  readonly mask: BinaryMask;
+  readonly bounds: WorldBounds;
+  readonly mapName: string;
+  /** Whether this run recomputed the mask or reused the cached one, for the log. */
+  readonly reused: boolean;
+}
+
+/**
+ * Run stage one alone, for the overlay.
+ *
+ * **Not a third mode, and not a second implementation.** `computeMask` is already a discrete
+ * function with `runTrace` as its caller; this adds a second caller to the *same* function rather
+ * than a second copy of the chain. The distinction is the one the sibling paid for: what must never
+ * be duplicated is the chain, because a duplicate drifts and then disagrees with a real room in a
+ * direction nobody can account for.
+ *
+ * It exists because the overlay lives in a **different iframe** from the panel. The two share no
+ * memory at all, so the mask cannot be handed across — and it certainly cannot be sent, since the
+ * sibling measured the message bus wedging at 1.37MB against a mask that is 8.4MB here. The overlay
+ * therefore reads the same scene metadata and runs the same stage one, and gets its own cache in
+ * its own iframe for free.
+ *
+ * Deliberately quiet compared with `runTrace`: the trace is where a GM goes to read numbers, and an
+ * overlay repainting because a colour changed should not fill the log with resolution and polarity
+ * reports every time.
+ */
+export async function maskForOverlay(): Promise<MaskForOverlay | null> {
+  const settings = await readSettings();
+  const map = await resolveTraceMap();
+  if (!map) return null;
+
+  const dpi = await readGridDpi();
+  const fingerprint = maskIdentity(map, dpi, settings);
+
+  if (cachedMask && cachedMask.fingerprint === fingerprint) {
+    return {
+      mask: cachedMask.reading.mask,
+      bounds: cachedMask.bounds,
+      mapName: cachedMask.name,
+      reused: true,
+    };
+  }
+
+  const computed = await computeMask(map, dpi, settings, fingerprint);
+  if (!computed) {
+    cachedMask = null;
+    return null;
+  }
+  cachedMask = computed;
+  return {
+    mask: computed.reading.mask,
+    bounds: computed.bounds,
+    mapName: computed.name,
+    reused: false,
+  };
+}
+
 /**
  * Trace the scene's map through every stage the pipeline has, and report each one.
  *
