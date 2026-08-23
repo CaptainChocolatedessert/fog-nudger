@@ -501,9 +501,20 @@ the run is built on. A run that reused and a run that recomputed must not produc
 ### The stage-one overlay — measured in a room, 2026-08-23
 
 Stage two's representation is the coloured proposals staged on the drawing layer. Stage one needs a
-different one, because its data is a different *kind* of thing: a per-pixel classification at native
-resolution — ink, kept floor, discarded floor — which is dense, unsummarisable, and today only
-answerable one pixel at a time by the point probe. **The overlay is the point probe made total.**
+different one, because its data is a different *kind* of thing: a per-pixel verdict at native
+resolution, dense and unsummarisable, answerable today only one pixel at a time by the point probe.
+**The overlay is the point probe made total.**
+
+*Corrected 2026-08-23 (user): stage one's mask is **binary** — ink or not.* An earlier draft of this
+section called it a tri-state of ink, kept floor and discarded floor, and that was wrong on two
+counts. "Discarded floor" is floor whose region fell below the **smallest-room** filter, which the
+three-stage split (§4) moved into **stage two** — so a tri-state overlay would put a stage-two
+outcome on a stage-one surface, breaking the property that makes the split worth having: each stage
+is exactly what one representation can show. And it describes something that was never built;
+`paintMask` has always painted ink and left everything else transparent. The code was right and the
+prose drifted. Discarded floor is still visible where it belongs — as bare map under stage two's
+proposals, which is how a GM found it — and the point probe still reports it, because a diagnostic
+answering "what is here?" is deliberately allowed to cross stages.
 
 **Rasters cannot go into the scene**, and that is settled rather than assumed: the sibling measured
 `data:` URLs rendering as a broken-image placeholder at 0.3KB, refused outright at 21.6KB, and
@@ -550,7 +561,7 @@ fix to the one residual flaw — detection is itself a poll, so there is a windo
 moved and the sheet is still up. At 120ms that window is 120ms; at 3ms a poll we can afford 30–40ms,
 about two frames.
 
-**View changes need no recompute, only re-projection.** Render the tri-state classification once
+**View changes need no recompute, only re-projection.** Render the ink mask once
 into an offscreen canvas at raster resolution — 3300×2550 is about 34MB, and the pipeline already
 draws a canvas that size to read the map's pixels — and every subsequent view change is one
 `drawImage` with a different transform. So the blank is a flicker rather than a pause, and the
