@@ -1,43 +1,43 @@
 /**
- * The workspace probe — can a modal be an **opaque window that owns its own input**?
+ * The workspace probe — an opaque modal that draws the map and navigates it.
  *
- * ## Why a probe rather than a feature
+ * ## What it has already answered
  *
- * The ink overlay's modal is measured and works: `fullScreen` + `hideBackdrop` + `hidePaper` +
- * `disablePointerEvents`. The workspace (DESIGN.md §4, "Superseding all of the above") needs that
- * same modal **without** `disablePointerEvents`, and that combination has never been opened — not
- * here, not in the sibling, not in Dynamic Fog. There is nothing to read and nothing to copy.
+ * The input half, settled 2026-08-23 over fifteen runs and written up in `DESIGN.md` §4. A
+ * `fullScreen` modal *without* `disablePointerEvents` owns pointer, wheel and right-click
+ * completely, and Owlbear's viewport never moves underneath. The keyboard is **taken rather than
+ * given** — nothing arrives unasked, and until it is claimed every keystroke reaches Owlbear's page
+ * and does whatever it does there.
  *
- * What is unknown is not whether it appears. It is whether the input a working surface would live
- * on actually arrives: drags as drags, a wheel we can cancel, keystrokes without a fight — and,
- * the one that decides the design, whether Owlbear acts on any of it underneath at the same time.
+ * The drag pad and the text box that established that are gone. They were superseded by the map:
+ * panning it is a better drag test than a scratch canvas, because it is the actual gesture.
  *
- * ## The measurement that cannot be replaced by looking
+ * ## What it is for now
  *
- * The sheet is **opaque**. So the map underneath is hidden, so a GM dragging on it cannot see
- * whether the map moved too. The probe's central question is invisible on the probe's own surface,
- * which is why this page does arithmetic rather than just drawing something. It asks Owlbear where
- * two fixed world points are, on a poll, and blames any movement on whichever input channel of
- * ours was most recent.
+ * **Does pan and zoom feel right beside Owlbear's own?** That is the question nothing but a human's
+ * hands can answer, and it is the one the whole surface rests on — if the navigation jars, the
+ * workspace is worse than the click-through overlay it would replace, whatever else it can do.
  *
- * That is a *guess* rather than a proof — it is attribution by timing, and it is labelled as such
- * in `workspaceInput`. It is the strongest thing available from inside an opaque box.
+ * Two things make the answer sharper than "yes" or "no":
  *
- * ## What is deliberately absent
+ * - **It opens on exactly the view Owlbear was showing.** Nothing appears to jump when the sheet
+ *   goes up, and the two navigations start from the same place, which is what makes comparing them
+ *   fair rather than a comparison of two different framings.
+ * - **The feel constants are adjustable from the keyboard, and logged.** "Too fast" is a complaint.
+ *   "22% a notch" is a number the workspace can be built with, and finding it takes one run.
  *
- * No pan, no zoom, no map, no mask. Navigation is the next conversation and this probe must not
- * pre-empt it; frame cost is worth measuring only with a map-sized image being drawn per frame,
- * which is that same conversation.
+ * ## And the other unknown
  *
- * ## The way out is the experiment
+ * **Frame cost**, with a map-sized image drawn every frame *plus a second one standing in for the
+ * mask* — which is the real workload, and the reason a single-layer measurement would flatter it.
+ * Reported as the time in the draw call and the interval between frames, during motion only, since
+ * a still view redraws nothing and would report a beautiful zero.
  *
- * An opaque sheet that swallows input is a worse trap than a transparent click-through one, so
- * there are three independent ways to dismiss it and they do not share a mechanism:
+ * ## Still three ways out, sharing no mechanism
  *
- * - **the timer**, which fires whether or not anything on screen can be clicked, and which is armed
- *   before any code that could throw. This is the one that has to work.
- * - **the button**, which is also the pointer-capture test.
- * - **Escape**, which is also the keyboard test.
+ * The timer armed at module load, the close button, and Escape. An opaque sheet that swallows input
+ * is a worse trap than a click-through one, and the timer is the one that has to work: it depends
+ * on nothing, not even the SDK becoming ready.
  *
  * Development only. Draws nothing into the scene and writes nothing anywhere.
  */
@@ -46,15 +46,19 @@ import OBR from "@owlbear-rodeo/sdk";
 
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
+import { resolveTraceMap } from "./map/mapImage";
 import { WORKSPACE_PROBE_ID } from "./probe/workspaceProbeControl";
+import { attributeMovement, pointMoved, type InputChannel } from "./probe/workspaceInput";
 import {
-  attributeMovement,
-  channelVerdict,
-  describeKeyboardFocus,
-  pointMoved,
-  summariseCapture,
-  type InputChannel,
-} from "./probe/workspaceInput";
+  MAX_SCALE,
+  MIN_SCALE,
+  fitToViewport,
+  panBy,
+  viewFromScreenRect,
+  wheelFactor,
+  zoomAbout,
+  type View,
+} from "./probe/viewTransform";
 import type { ScreenPoint } from "./probe/viewportSettle";
 
 installDevLog("workspace");
@@ -62,110 +66,102 @@ installDevLog("workspace");
 /**
  * How long the probe stays up.
  *
- * Longer than the overlay probe's 25 seconds, because this one asks for four separate gestures —
- * drag, wheel, type, click — and a timer that expires mid-experiment turns a measurement into two
- * measurements. Short enough that being stuck behind an opaque sheet is an annoyance.
+ * Longer than the overlay probe's 25 seconds. Judging navigation is not a glance — it wants a pan,
+ * a zoom in, a zoom out, a comparison against Owlbear's, and a sweep of the step constant.
  */
-const LIFETIME_MS = 60_000;
+const LIFETIME_MS = 90_000;
 
-/**
- * How often Owlbear is asked where our two fixed world points are.
- *
- * The measured cost of that pair is 2–4ms, so this is nowhere near a burden. The rate is chosen
- * for **attribution resolution** instead: a movement is blamed on the most recent input event, and
- * polling slowly widens the interval in which some other event could have slipped in.
- */
+/** How often Owlbear is asked where our two fixed world points are. */
 const POLL_MS = 150;
 
-/**
- * How often to ask again while the keyboard is still not ours.
- *
- * The claim is made at load, but an iframe that is not yet ready to take focus will refuse it
- * silently, so one attempt is a coin toss. Asking repeatedly until it sticks is the whole mechanism
- * for closing the window in which keys go to Owlbear.
- */
+/** How often to ask again while the keyboard is still not ours. */
 const FOCUS_RETRY_MS = 100;
 
-/**
- * How long to keep asking before giving up and saying so.
- *
- * Three seconds. Past that the failure is real rather than a slow start, and continuing to grab at
- * focus every tenth of a second would be a page fighting its user for the rest of the session.
- */
+/** How long to keep asking before giving up and saying so. */
 const FOCUS_RETRY_LIMIT_MS = 3_000;
 
-/**
- * When the leak detector's control experiment runs.
- *
- * Late enough that the poll loop has a previous reading to compare against, early enough that a
- * short run still gets the answer — a probe closed after five seconds should not be one whose only
- * safety check never happened.
- */
+/** How long after asking before the result is read, letting the focus change settle. */
+const FOCUS_SETTLE_MS = 150;
+
+/** When the leak detector's control experiment runs. */
 const SELF_TEST_AT_MS = 2_000;
 
-/**
- * How far the viewport is deliberately moved, in its own position units.
- *
- * Far enough to clear the one-pixel stillness threshold at any sane zoom, small enough that if the
- * restore ever failed the GM's camera is a nudge off rather than somewhere else entirely.
- */
+/** How far the viewport is deliberately moved, in its own position units. */
 const SELF_TEST_NUDGE = 60;
 
 /** How long to hold each end of the nudge, comfortably more than one poll interval. */
 const SELF_TEST_SETTLE_MS = 500;
 
-/** How long after asking before the result is read, letting the focus change settle. */
-const FOCUS_SETTLE_MS = 150;
-
-/**
- * How many movements to narrate per channel before falling silent and merely counting.
- *
- * A genuine leak during a drag would log one of these every poll and bury the rest of the run.
- * Three is enough to establish that it is happening and roughly when.
- */
+/** How many movements to narrate per channel before falling silent and merely counting. */
 const MOVEMENTS_LOGGED_PER_CHANNEL = 3;
 
+/**
+ * How much one wheel notch changes the zoom, as a percentage — **the feel knob**.
+ *
+ * A first guess and nothing more. It is adjustable from the keyboard precisely because no value
+ * written here can be right: the whole point of the run is to find out what matches Owlbear, and a
+ * constant nobody can move during the run turns that into a second session.
+ */
+const DEFAULT_ZOOM_STEP_PERCENT = 12;
+
+/** How far one press of the step keys moves it, and the range it may be swept over. */
+const ZOOM_STEP_NUDGE = 2;
+const MIN_ZOOM_STEP = 2;
+const MAX_ZOOM_STEP = 60;
+
+/** How many frames of timing to keep. About two seconds of motion at 60Hz. */
+const FRAME_WINDOW = 120;
+
 const sheet = document.getElementById("sheet");
-const pad = document.getElementById("pad");
-const typing = document.getElementById("typing");
+const canvas = document.getElementById("canvas");
+const hud = document.getElementById("hud");
 const closeButton = document.getElementById("close");
-const readout = document.getElementById("readout");
-const verdicts = document.getElementById("verdicts");
-const variantLabel = document.getElementById("variant");
 
 /** Which chrome variant the opener asked for, purely so the readout can name it. */
 const variant = new URLSearchParams(window.location.search).get("variant") ?? "unknown";
 
-function say(element: Element | null, html: string): void {
-  if (element) element.innerHTML = html;
-}
+/**
+ * When the sheet went up — the single origin for the countdown, the dismissal timer and the
+ * keyboard claim's timing. Set at module load and never reassigned.
+ */
+const opened = performance.now();
 
-/** Everything the readout reports, in one place so nothing is counted in two. */
+let stopped = false;
+
+// ---------------------------------------------------------------------------------------------
+// What the run measures
+// ---------------------------------------------------------------------------------------------
+
+/** Input counts, kept because a navigation gesture is still an input gesture. */
 const tally = {
   pointerDown: 0,
   pointerMove: 0,
   pointerUp: 0,
   wheel: 0,
+  wheelCancelable: 0,
   contextMenu: 0,
   keyDown: 0,
-  /** Wheel events that arrived `cancelable`, which is what decides whether a zoom can be stopped. */
-  wheelCancelable: 0,
-  /** Keys seen before any pointer event at all — the proof that focus did not need a click. */
   keysBeforeAnyPointer: 0,
-  keysAfterAPointer: 0,
-  /**
-   * Keys that arrived before the page asked for focus.
-   *
-   * The only evidence that separates focus we were *given* from focus we *took*. Once the page asks
-   * automatically, a key with no click beforehand is explained equally well by either, and the
-   * order is the only thing that tells them apart.
-   */
-  keysBeforeFocusAttempt: 0,
-  /** Viewport movements observed, split by which channel of ours was most recent. */
   blamed: { drag: 0, wheel: 0, key: 0, other: 0 } as Record<InputChannel, number>,
   polls: 0,
   worstPollMs: 0,
   totalPollMs: 0,
+};
+
+/**
+ * What the wheel actually reports on this machine.
+ *
+ * Not used to decide anything — recorded because trackpad handling is the device quirk most likely
+ * to bite, and the sensible way to find out what a trackpad sends here is to look rather than to
+ * reason about `deltaMode` from the specification. A mouse notch and a two-finger scroll are
+ * indistinguishable in principle and often distinguishable in practice by exactly these numbers.
+ */
+const wheelShape = {
+  modes: new Set<number>(),
+  smallestAbsDelta: Infinity,
+  largestAbsDelta: 0,
+  fractional: 0,
+  withCtrl: 0,
 };
 
 /** When each channel last fired, feeding the attribution of an observed movement. */
@@ -176,87 +172,114 @@ const lastEventAt: Record<InputChannel, number | null> = {
   other: null,
 };
 
-/**
- * The leak detector's own control experiment.
- *
- * "Owlbear moved 0 times" and "the movement check is broken" produce identical output, and the
- * first three runs of this probe reported that zero and had a conclusion drawn from it. The
- * project's own rule is to treat a clean diagnostic as evidence about the diagnostic until it has
- * failed at least once — so the probe moves the viewport itself, on purpose, and reports whether it
- * noticed.
- *
- * Movements during the self-test are counted **here** and deliberately not blamed on an input
- * channel: the probe caused them, and letting them fall through the ordinary attribution would have
- * the control experiment report itself as a leak.
- */
-const selfTest = {
-  /** True only while the deliberate movement is in flight. */
-  active: false,
-  ran: false,
-  movementsSeen: 0,
-  note: "not run yet",
-};
+/** The leak detector's own control experiment. */
+const selfTest = { active: false, ran: false, movementsSeen: 0, note: "not run yet" };
 
-/**
- * What happened when the page asked for the keyboard.
- *
- * Kept apart from `hadFocusAtOpen` because they answer different questions and conflating them
- * would lose the only interesting one: whether asking *changes* anything.
- */
+/** What happened when the page asked for the keyboard. */
 const focusAttempt = {
   made: false,
-  /** True while the keyboard is ours; cleared if it goes back to Owlbear. */
   held: false,
   tries: 0,
-  /** How long after load the keyboard actually became ours — the width of the dead window. */
   claimedAtMs: 0,
   losses: 0,
-  /** Set once the retry budget is spent, so the failure is reported once rather than per click. */
   gaveUp: false,
-  /** `document.hasFocus()` immediately before the first ask, and again after the latest settled. */
   before: false,
-  after: false,
   note: "asking for the keyboard…",
 };
 
-let hadFocusAtOpen = false;
-let lastPointer = "—";
-let lastWheel = "—";
-let lastKey = "—";
-
-/** Owlbear's own idea of the viewport, read once at open. */
-let viewWidth = 0;
-let viewHeight = 0;
-
-let stopped = false;
-
 /**
- * Close the modal.
+ * Frame timing, gathered only while the view is moving.
  *
- * Idempotent by way of `stopped`, because all three exits can race — pressing Escape as the timer
- * fires would otherwise close a modal that is already gone, and the rejection would be logged as a
- * fault when nothing is wrong.
+ * A still view redraws nothing, so including idle frames would report a beautiful number about a
+ * canvas that was not being drawn. `drawMs` is the time inside the draw call; `frameMs` is the gap
+ * between consecutive drawn frames, which is what a stutter actually is — a draw can be fast and
+ * the frame still late.
  */
+const frames = {
+  drawMs: [] as number[],
+  frameMs: [] as number[],
+  lastFrameAt: 0,
+  drawn: 0,
+};
+
+// ---------------------------------------------------------------------------------------------
+// The view
+// ---------------------------------------------------------------------------------------------
+
+let view: View = { scale: 1, x: 0, y: 0 };
+/** The view Owlbear was showing when the sheet went up, so `r` can return to it. */
+let openingView: View | null = null;
+let zoomStepPercent = DEFAULT_ZOOM_STEP_PERCENT;
+let wheelInverted = false;
+let showMaskLayer = true;
+let dirty = true;
+
+/** The map image, and a synthetic second layer standing in for the mask. */
+let mapImage: HTMLImageElement | null = null;
+let maskLayer: HTMLCanvasElement | null = null;
+let mapNote = "no map yet";
+
+function viewportSize(): { width: number; height: number } {
+  return { width: window.innerWidth, height: window.innerHeight };
+}
+
+function average(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  let total = 0;
+  for (const value of values) total += value;
+  return total / values.length;
+}
+
+function worst(values: readonly number[]): number {
+  let highest = 0;
+  for (const value of values) if (value > highest) highest = value;
+  return highest;
+}
+
+function record(into: number[], value: number): void {
+  into.push(value);
+  if (into.length > FRAME_WINDOW) into.shift();
+}
+
+function noteEvent(channel: Exclude<InputChannel, "other">): void {
+  lastEventAt[channel] = performance.now();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Leaving
+// ---------------------------------------------------------------------------------------------
+
 function dismiss(why: string): void {
   if (stopped) return;
   stopped = true;
 
-  const mean = tally.totalPollMs / Math.max(1, tally.polls);
+  const pollMean = tally.totalPollMs / Math.max(1, tally.polls);
+  const frameMean = average(frames.frameMs);
+
   devLog(
     "info",
     `workspace probe (${variant}): closing — ${why}. ` +
-      `pointer ${tally.pointerDown}/${tally.pointerMove}/${tally.pointerUp} down/move/up, ` +
-      `wheel ${tally.wheel} (${tally.wheelCancelable} cancelable), ` +
-      `context ${tally.contextMenu}, keys ${tally.keyDown} ` +
-      `(${tally.keysBeforeAnyPointer} before any click). ` +
-      `Owlbear moved ${tally.blamed.drag + tally.blamed.wheel + tally.blamed.key + tally.blamed.other} ` +
+      `NAVIGATION: zoom step ${zoomStepPercent}% per notch` +
+      `${wheelInverted ? " INVERTED" : ""}, final scale ${view.scale.toFixed(3)}, ` +
+      `mask layer ${showMaskLayer ? "on" : "off"}. ` +
+      `FRAMES: ${frames.drawn} drawn, draw ${average(frames.drawMs).toFixed(1)}ms mean / ` +
+      `${worst(frames.drawMs).toFixed(1)}ms worst, frame ${frameMean.toFixed(1)}ms mean / ` +
+      `${worst(frames.frameMs).toFixed(1)}ms worst` +
+      `${frameMean > 0 ? ` (${(1000 / frameMean).toFixed(0)}fps while moving)` : ""}. ` +
+      `WHEEL: deltaMode ${[...wheelShape.modes].join("/") || "—"}, |deltaY| ` +
+      `${Number.isFinite(wheelShape.smallestAbsDelta) ? wheelShape.smallestAbsDelta.toFixed(1) : "—"}` +
+      `–${wheelShape.largestAbsDelta.toFixed(1)}, ${wheelShape.fractional} fractional, ` +
+      `${wheelShape.withCtrl} with ctrl. ` +
+      `INPUT: pointer ${tally.pointerDown}/${tally.pointerMove}/${tally.pointerUp}, ` +
+      `wheel ${tally.wheel} (${tally.wheelCancelable} cancelable), context ${tally.contextMenu}, ` +
+      `keys ${tally.keyDown} (${tally.keysBeforeAnyPointer} before any click). ` +
+      `KEYBOARD: ${focusAttempt.held ? `claimed at ${focusAttempt.claimedAtMs.toFixed(0)}ms` : focusAttempt.note}` +
+      `${focusAttempt.losses > 0 ? `, lost ${focusAttempt.losses}x` : ""}. ` +
+      `OWLBEAR moved ${tally.blamed.drag + tally.blamed.wheel + tally.blamed.key + tally.blamed.other} ` +
       `times: drag ${tally.blamed.drag}, wheel ${tally.blamed.wheel}, key ${tally.blamed.key}, ` +
-      `unattributed ${tally.blamed.other}. ` +
-      // Reported beside the zero it qualifies, because a zero whose detector was never checked is
-      // not the same fact as a zero whose detector demonstrably fires.
-      `Detector self-test: ${selfTest.note}. ` +
-      `Poll ${mean.toFixed(0)}ms mean, ${tally.worstPollMs.toFixed(0)}ms worst over ${tally.polls}. ` +
-      `iframe ${window.innerWidth}x${window.innerHeight} against viewport ${viewWidth}x${viewHeight}.`,
+      `unattributed ${tally.blamed.other}. Detector self-test: ${selfTest.note}. ` +
+      `Poll ${pollMean.toFixed(0)}ms mean over ${tally.polls}. ` +
+      `iframe ${window.innerWidth}x${window.innerHeight}. Map: ${mapNote}.`,
   );
 
   void OBR.modal.close(WORKSPACE_PROBE_ID).catch((error: unknown) => {
@@ -264,134 +287,83 @@ function dismiss(why: string): void {
   });
 }
 
-/**
- * Note that one of our channels just fired.
- *
- * Every input handler goes through here so there is exactly one place that decides what "recent"
- * means. Two handlers keeping their own timestamps is how one of them ends up not keeping any.
- */
-function noteEvent(channel: Exclude<InputChannel, "other">): void {
-  lastEventAt[channel] = performance.now();
-}
-
 // ---------------------------------------------------------------------------------------------
-// The drag pad
+// Drawing
 // ---------------------------------------------------------------------------------------------
 
-/**
- * The pad draws the trail of every move it receives.
- *
- * A count in the readout says events arrived. A *continuous line* says they arrived at a usable
- * rate and were not delivered as a lonely down and up with a hole between them, which is what a
- * surface that only half-owns a drag would produce — and a hole is the kind of thing a number
- * cannot show and a picture can.
- */
-function setUpPad(canvas: HTMLCanvasElement): void {
+function draw(): void {
+  if (!(canvas instanceof HTMLCanvasElement)) return;
   const context = canvas.getContext("2d");
-  let drawing = false;
+  if (!context) return;
 
-  const resize = (): void => {
-    const ratio = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (width === 0 || height === 0) return;
-    if (canvas.width === Math.round(width * ratio) && canvas.height === Math.round(height * ratio)) {
-      // Assigning either dimension clears the canvas even when the value is unchanged, which would
-      // wipe a trail mid-stroke every time an observer fired for a layout that did not move.
-      return;
-    }
-    // Backing store in device pixels, CSS box in layout pixels, or a one-pixel trail lands as a
-    // two-pixel smear on a HiDPI display and a gap in it becomes hard to see.
+  const started = performance.now();
+  const { width, height } = viewportSize();
+  const ratio = window.devicePixelRatio || 1;
+
+  if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
-    context?.setTransform(ratio, 0, 0, ratio, 0, 0);
-  };
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+  }
 
-  /*
-    Sized once, synchronously, and then watched.
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.fillStyle = "#0e1020";
+  context.fillRect(0, 0, width, height);
 
-    The synchronous call is not redundant with the observer below it. Reading `clientWidth` forces
-    layout, so this gets real dimensions even at module load — whereas a `ResizeObserver`'s first
-    delivery is scheduled with the rendering steps, and a page that is not being painted may not get
-    one at all. Leaving the initial sizing to the observer means a first drag drawn into the canvas
-    element's 300x150 default, which is what happened when this was observer-only: the trail
-    appeared, in the wrong place, at the wrong scale.
-  */
-  resize();
+  if (mapImage) {
+    /*
+      Smoothing off above 1:1.
 
-  /*
-    A `ResizeObserver` on the canvas, not a window resize listener.
+      Zoomed in past one screen pixel per image pixel, the GM is looking at individual ink pixels —
+      which is a thing this surface exists for — and an interpolated blur there is the browser
+      inventing detail the trace does not see. Below 1:1 smoothing is what keeps thin linework from
+      disappearing between samples.
+    */
+    context.imageSmoothingEnabled = view.scale < 1;
 
-    The window listener was the first draft and it was wrong in a way that matters here more than
-    almost anywhere: this canvas is sized by flex against its siblings, so it reflows when the
-    *readout below it grows*, with no window resize to hear. Measured at 1074x550 in the box against
-    a 1074x658 backing store — the pad would have drawn every trail displaced from the cursor that
-    made it, on the one surface whose entire job is showing that a drag registers where it happened.
-  */
-  new ResizeObserver(resize).observe(canvas);
+    const width_ = mapImage.naturalWidth * view.scale;
+    const height_ = mapImage.naturalHeight * view.scale;
+    context.drawImage(mapImage, view.x, view.y, width_, height_);
 
-  const at = (event: PointerEvent): ScreenPoint => {
-    const box = canvas.getBoundingClientRect();
-    return { x: event.clientX - box.left, y: event.clientY - box.top };
-  };
-
-  canvas.addEventListener("pointerdown", (event) => {
-    noteEvent("drag");
-    tally.pointerDown += 1;
-    drawing = true;
-    // Capture, so a drag that leaves the pad keeps reporting. Without it a fast gesture ends at the
-    // pad's edge and the trail would show a break that is ours rather than Owlbear's.
-    //
-    // Guarded because `setPointerCapture` throws on a pointer the browser no longer considers
-    // active, and an exception here would abandon the rest of the handler — losing the trail and
-    // the readout for the gesture that was being measured. A capture that fails is worth knowing
-    // about; it is not worth losing the measurement over.
-    try {
-      canvas.setPointerCapture(event.pointerId);
-    } catch (error) {
-      devLog("warn", "workspace probe: could not capture the pointer", describeError(error));
+    // The stand-in for stage one's mask. Same size and transform, because the real workload is two
+    // map-sized layers per frame and measuring one would flatter it.
+    if (showMaskLayer && maskLayer) {
+      context.globalAlpha = 0.5;
+      context.drawImage(maskLayer, view.x, view.y, width_, height_);
+      context.globalAlpha = 1;
     }
-    const point = at(event);
-    lastPointer = `down at ${point.x.toFixed(0)}, ${point.y.toFixed(0)} (${event.pointerType})`;
-    if (context) {
-      context.strokeStyle = "#bb99ff";
-      context.lineWidth = 2;
-      context.lineCap = "round";
-      context.beginPath();
-      context.moveTo(point.x, point.y);
-    }
-    render();
-  });
+  }
 
-  canvas.addEventListener("pointermove", (event) => {
-    if (!drawing) return;
-    noteEvent("drag");
-    tally.pointerMove += 1;
-    const point = at(event);
-    lastPointer = `move at ${point.x.toFixed(0)}, ${point.y.toFixed(0)}`;
-    if (context) {
-      context.lineTo(point.x, point.y);
-      context.stroke();
-    }
-    render();
-  });
+  const now = performance.now();
+  record(frames.drawMs, now - started);
+  if (frames.lastFrameAt > 0) record(frames.frameMs, now - frames.lastFrameAt);
+  frames.lastFrameAt = now;
+  frames.drawn += 1;
+}
 
-  const finish = (event: PointerEvent): void => {
-    if (!drawing) return;
-    noteEvent("drag");
-    tally.pointerUp += 1;
-    drawing = false;
-    const point = at(event);
-    lastPointer = `up at ${point.x.toFixed(0)}, ${point.y.toFixed(0)}`;
-    render();
-  };
-  canvas.addEventListener("pointerup", finish);
-  // A cancel is a real answer rather than a tidy-up: it means something above us took the gesture
-  // away mid-drag, which for a painting surface is the same failure as never getting it.
-  canvas.addEventListener("pointercancel", (event) => {
-    lastPointer = "POINTERCANCEL — the gesture was taken away";
-    finish(event);
-  });
+/**
+ * Redraw only when the view has changed.
+ *
+ * A still surface costs nothing, which is both correct and the reason the frame numbers are honest:
+ * they come from frames that actually drew, during motion, rather than being diluted by idle ones.
+ * `lastFrameAt` is cleared when the view settles, so the gap across a pause is not later recorded
+ * as one enormous frame.
+ */
+function frameLoop(): void {
+  if (stopped) return;
+  if (dirty) {
+    dirty = false;
+    draw();
+  } else {
+    frames.lastFrameAt = 0;
+  }
+  window.requestAnimationFrame(frameLoop);
+}
+
+function setView(next: View): void {
+  view = next;
+  dirty = true;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -399,77 +371,369 @@ function setUpPad(canvas: HTMLCanvasElement): void {
 // ---------------------------------------------------------------------------------------------
 
 function render(): void {
-  const dragVerdict = channelVerdict(tally.pointerDown, tally.blamed.drag);
-  const wheelVerdict = channelVerdict(tally.wheel, tally.blamed.wheel);
-  const capture = summariseCapture({ drag: dragVerdict, wheel: wheelVerdict });
-
-  const focus = describeKeyboardFocus({
-    hadFocusAtOpen,
-    keysBeforeAnyPointer: tally.keysBeforeAnyPointer,
-    keysAfterAPointer: tally.keysAfterAPointer,
-    focusWasAsked: focusAttempt.made,
-    keysBeforeFocusAttempt: tally.keysBeforeFocusAttempt,
-  });
-
-  const leaked = dragVerdict === "leaking" || wheelVerdict === "leaking";
-  say(
-    verdicts,
-    `<b>input capture</b>\n` +
-      `${leaked ? `<span class="bad">${capture}</span>` : capture}\n` +
-      `<b>keyboard</b>\n${focus}\n${focusAttempt.note}`,
-  );
+  if (!hud) return;
 
   const remaining = Math.max(0, LIFETIME_MS - (performance.now() - opened));
-  const meanPoll = tally.totalPollMs / Math.max(1, tally.polls);
-  /*
-    The viewport is 0x0 until Owlbear has answered, and a difference computed against zero produces
-    a confident negative "frame cost" — a number where the honest answer is "not known yet". Same
-    failure as the coverage line that reported 0.00% bare on a map with bare patches: an arithmetic
-    result standing in for a measurement that never happened.
-  */
-  const viewportKnown = viewWidth > 0 && viewHeight > 0;
-  const sameRect = window.innerWidth === viewWidth && window.innerHeight === viewHeight;
+  const frameMean = average(frames.frameMs);
+  const leaks = tally.blamed.drag + tally.blamed.wheel + tally.blamed.key;
 
-  say(
-    readout,
-    `pointer   down ${tally.pointerDown} · move ${tally.pointerMove} · up ${tally.pointerUp} · ${lastPointer}\n` +
-      `wheel     ${tally.wheel} events, ${tally.wheelCancelable} cancelable · ${lastWheel}\n` +
-      `context   ${tally.contextMenu} right-clicks reached us\n` +
-      `keys      ${tally.keyDown} · last ${lastKey} · document.hasFocus() ${document.hasFocus()}\n` +
-      `\n` +
-      `Owlbear moved underneath: drag ${tally.blamed.drag} · wheel ${tally.blamed.wheel} · ` +
-      `key ${tally.blamed.key} · unattributed ${tally.blamed.other}\n` +
-      `  (unattributed is not a leak — another player panning looks like this)\n` +
-      `detector  ${
-        selfTest.ran && selfTest.movementsSeen === 0
-          ? `<span class="bad">${selfTest.note}</span>`
-          : selfTest.note
-      }\n` +
-      `poll      ${meanPoll.toFixed(0)}ms mean, ${tally.worstPollMs.toFixed(0)}ms worst over ${tally.polls}\n` +
-      `\n` +
-      `iframe    ${window.innerWidth}x${window.innerHeight} · Owlbear viewport ` +
-      (!viewportKnown
-        ? "not read yet"
-        : sameRect
-          ? `${viewWidth}x${viewHeight} (same rectangle)`
-          : `${viewWidth}x${viewHeight} <b>(frame costs ` +
-            `${viewWidth - window.innerWidth}x${viewHeight - window.innerHeight})</b>`) +
-      `\n` +
-      `closes in ${(remaining / 1000).toFixed(0)}s`,
+  hud.innerHTML =
+    `<b>Fog Nudger — workspace probe · ${variant}</b>\n` +
+    `Does this feel like Owlbear's? Drag to pan, wheel to zoom.\n` +
+    `\n` +
+    `zoom      ${(view.scale * 100).toFixed(0)}% of image pixels` +
+    `${view.scale >= MAX_SCALE ? " (at maximum)" : view.scale <= MIN_SCALE ? " (at minimum)" : ""}\n` +
+    `step      <b>${zoomStepPercent}%</b> per notch${wheelInverted ? " · <b>inverted</b>" : ""}\n` +
+    `frames    ${frames.drawn} drawn · draw ${average(frames.drawMs).toFixed(1)}ms mean, ` +
+    `${worst(frames.drawMs).toFixed(1)}ms worst · ` +
+    `${frameMean > 0 ? `${(1000 / frameMean).toFixed(0)}fps` : "—"} while moving\n` +
+    `layers    map${showMaskLayer && maskLayer ? " + mask stand-in" : " only"}\n` +
+    `map       ${mapNote}\n` +
+    `\n` +
+    `Owlbear   ${
+      leaks > 0
+        ? `<span class="bad">MOVED ${leaks}x from our input — navigation is leaking</span>`
+        : `still (${tally.blamed.other} unattributed) · detector ${selfTest.note}`
+    }\n` +
+    `keyboard  ${focusAttempt.held ? `ours, claimed ${focusAttempt.claimedAtMs.toFixed(0)}ms in` : focusAttempt.note}\n` +
+    `\n` +
+    `<span class="key">drag</span> pan · <span class="key">wheel</span> zoom · ` +
+    `<span class="key">[ ]</span> step · <span class="key">i</span> invert · ` +
+    `<span class="key">f</span> fit · <span class="key">r</span> reopen view · ` +
+    `<span class="key">m</span> mask · <span class="key">h</span> hide this · ` +
+    `<span class="key">Esc</span> close\n` +
+    `closes in ${(remaining / 1000).toFixed(0)}s`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------------------------
+
+if (sheet instanceof HTMLElement) {
+  let panning = false;
+  let last: ScreenPoint | null = null;
+
+  sheet.addEventListener("pointerdown", (event) => {
+    noteEvent("drag");
+    tally.pointerDown += 1;
+    // Any button pans. A left-drag will eventually belong to the brush and panning will move to the
+    // middle button or a held key — but that is a decision for the workspace, and forcing it now
+    // would have the probe measure the feel of a gesture nobody has agreed on.
+    panning = true;
+    last = { x: event.clientX, y: event.clientY };
+    sheet.classList.add("dragging");
+    try {
+      sheet.setPointerCapture(event.pointerId);
+    } catch (error) {
+      devLog("warn", "workspace probe: could not capture the pointer", describeError(error));
+    }
+    if (!focusAttempt.held) claimTheKeyboard();
+    render();
+  });
+
+  sheet.addEventListener("pointermove", (event) => {
+    if (!panning || !last) return;
+    noteEvent("drag");
+    tally.pointerMove += 1;
+    setView(panBy(view, event.clientX - last.x, event.clientY - last.y));
+    last = { x: event.clientX, y: event.clientY };
+  });
+
+  const endPan = (): void => {
+    if (!panning) return;
+    panning = false;
+    last = null;
+    tally.pointerUp += 1;
+    sheet.classList.remove("dragging");
+    render();
+  };
+  sheet.addEventListener("pointerup", endPan);
+  sheet.addEventListener("pointercancel", () => {
+    devLog("warn", "workspace probe: the pan gesture was cancelled by something above us");
+    endPan();
+  });
+
+  sheet.addEventListener(
+    "wheel",
+    (event) => {
+      noteEvent("wheel");
+      tally.wheel += 1;
+      if (event.cancelable) {
+        tally.wheelCancelable += 1;
+        // Measured at 86 of 86 cancelable, so this reliably stops the page doing anything of its
+        // own with the gesture.
+        event.preventDefault();
+      }
+
+      // Recorded, not acted on — see `wheelShape`.
+      wheelShape.modes.add(event.deltaMode);
+      const magnitude = Math.abs(event.deltaY);
+      if (magnitude > 0) {
+        wheelShape.smallestAbsDelta = Math.min(wheelShape.smallestAbsDelta, magnitude);
+        wheelShape.largestAbsDelta = Math.max(wheelShape.largestAbsDelta, magnitude);
+        if (!Number.isInteger(event.deltaY)) wheelShape.fractional += 1;
+      }
+      if (event.ctrlKey) wheelShape.withCtrl += 1;
+
+      setView(
+        zoomAbout(
+          view,
+          { x: event.clientX, y: event.clientY },
+          wheelFactor(event.deltaY, zoomStepPercent, wheelInverted),
+        ),
+      );
+      render();
+    },
+    // Explicitly non-passive: the root defaults to passive in Chrome and Firefox, where
+    // `preventDefault` is ignored and a warning logged instead.
+    { passive: false },
+  );
+
+  sheet.addEventListener("contextmenu", (event) => {
+    tally.contextMenu += 1;
+    event.preventDefault();
+    render();
+  });
+}
+
+window.addEventListener("resize", () => {
+  dirty = true;
+  render();
+});
+
+// ---------------------------------------------------------------------------------------------
+// Keys
+// ---------------------------------------------------------------------------------------------
+
+let anyPointerYet = false;
+document.addEventListener(
+  "pointerdown",
+  () => {
+    anyPointerYet = true;
+  },
+  true,
+);
+document.addEventListener(
+  "contextmenu",
+  () => {
+    anyPointerYet = true;
+  },
+  true,
+);
+
+/**
+ * Log the feel constants whenever they move.
+ *
+ * This is the probe's actual output. Whatever value the run settles on is the one the workspace
+ * gets built with, and a number that only ever existed on screen is one that has to be found again
+ * next session.
+ */
+function logStep(): void {
+  devLog(
+    "info",
+    `workspace probe (${variant}): zoom step now ${zoomStepPercent}% per notch` +
+      `${wheelInverted ? ", wheel INVERTED" : ""} — scale ${view.scale.toFixed(3)}`,
   );
 }
 
-/**
- * When the sheet went up, and the single origin for both the countdown and the dismissal timer.
- *
- * Set at module load and never reassigned — see the timer's own note further down for why that
- * matters more here than it would on a click-through overlay.
- */
-const opened = performance.now();
+window.addEventListener("keydown", (event) => {
+  noteEvent("key");
+  tally.keyDown += 1;
+  if (!anyPointerYet) tally.keysBeforeAnyPointer += 1;
+
+  // Logged the instant it arrives, because a modal torn down by Owlbear writes no closing summary
+  // and the first key is the evidence that the claim worked.
+  if (tally.keyDown === 1) {
+    devLog(
+      "info",
+      `workspace probe (${variant}): FIRST KEY "${event.key}" reached the modal ` +
+        `${anyPointerYet ? "after a click" : "with NO click"}, keyboard ` +
+        `${focusAttempt.held ? `claimed ${focusAttempt.claimedAtMs.toFixed(0)}ms in` : "NOT claimed"}`,
+    );
+  }
+
+  switch (event.key) {
+    case "Escape":
+      event.preventDefault();
+      dismiss("Escape pressed");
+      return;
+    case "f":
+      if (mapImage) {
+        setView(
+          fitToViewport(
+            { width: mapImage.naturalWidth, height: mapImage.naturalHeight },
+            viewportSize(),
+            24,
+          ),
+        );
+      }
+      break;
+    case "r":
+      if (openingView) setView(openingView);
+      break;
+    case "[":
+      zoomStepPercent = Math.max(MIN_ZOOM_STEP, zoomStepPercent - ZOOM_STEP_NUDGE);
+      logStep();
+      break;
+    case "]":
+      zoomStepPercent = Math.min(MAX_ZOOM_STEP, zoomStepPercent + ZOOM_STEP_NUDGE);
+      logStep();
+      break;
+    case "i":
+      wheelInverted = !wheelInverted;
+      logStep();
+      break;
+    case "m":
+      showMaskLayer = !showMaskLayer;
+      // Cleared, so the comparison is between two settled numbers rather than a blend of both.
+      frames.drawMs.length = 0;
+      frames.frameMs.length = 0;
+      dirty = true;
+      break;
+    case "h":
+      hud?.classList.toggle("hidden");
+      break;
+    default:
+      break;
+  }
+  render();
+});
+
+if (closeButton) {
+  closeButton.addEventListener("click", () => dismiss("close button clicked"));
+}
 
 // ---------------------------------------------------------------------------------------------
-// The run
+// The keyboard
 // ---------------------------------------------------------------------------------------------
+
+function claimTheKeyboard(): void {
+  if (stopped || focusAttempt.held) return;
+
+  // The last honest reading of the unasked state, taken once, before we interfere with it.
+  if (!focusAttempt.made) focusAttempt.before = document.hasFocus();
+
+  focusAttempt.tries += 1;
+  try {
+    // Both calls, because they succeed independently: `window.focus()` asks the embedder to give
+    // this frame the keyboard at all, and focusing an element decides where a key goes once it
+    // arrives. Measured in a room, they do come apart.
+    window.focus();
+    if (sheet instanceof HTMLElement) sheet.focus({ preventScroll: true });
+  } catch (error) {
+    devLog("warn", "workspace probe: asking for focus threw", describeError(error));
+  }
+  focusAttempt.made = true;
+
+  window.setTimeout(() => {
+    if (stopped) return;
+    const active = document.activeElement;
+    const activeName =
+      active instanceof HTMLElement && active.id
+        ? `#${active.id}`
+        : active
+          ? active.tagName.toLowerCase()
+          : "none";
+
+    if (document.hasFocus()) {
+      focusAttempt.held = true;
+      focusAttempt.claimedAtMs = performance.now() - opened;
+      focusAttempt.note = `claimed on try ${focusAttempt.tries} at ${focusAttempt.claimedAtMs.toFixed(0)}ms`;
+      devLog(
+        "info",
+        `workspace probe (${variant}): keyboard CLAIMED ${focusAttempt.claimedAtMs.toFixed(0)}ms ` +
+          `after load, on try ${focusAttempt.tries}, activeElement ${activeName}. ` +
+          "Anything typed before this went to Owlbear.",
+      );
+      render();
+      return;
+    }
+
+    if (performance.now() - opened < FOCUS_RETRY_LIMIT_MS) {
+      // Silent between attempts: thirty lines saying "still not ours" would bury the one that
+      // matters, which is the moment it becomes ours.
+      focusAttempt.note = `asking… ${focusAttempt.tries} tries`;
+      window.setTimeout(claimTheKeyboard, FOCUS_RETRY_MS);
+      return;
+    }
+
+    focusAttempt.note = `NEVER claimed — ${focusAttempt.tries} tries, activeElement ${activeName}`;
+    const alreadySaid = focusAttempt.gaveUp;
+    focusAttempt.gaveUp = true;
+    if (!alreadySaid) {
+      devLog(
+        "error",
+        `workspace probe (${variant}): keyboard NEVER claimed after ${focusAttempt.tries} tries ` +
+          `over ${FOCUS_RETRY_LIMIT_MS}ms — activeElement ${activeName}. Every key goes to Owlbear.`,
+      );
+    }
+    render();
+  }, FOCUS_SETTLE_MS);
+}
+
+/**
+ * Notice the keyboard going back to Owlbear.
+ *
+ * **It does not fight back.** Re-focusing on every blur would mean a page that will not let the GM
+ * alt-tab away from it, which is worse than a lost shortcut. The pointerdown handler takes it back
+ * on a deliberate press instead.
+ */
+window.addEventListener("blur", () => {
+  if (stopped || !focusAttempt.held) return;
+  focusAttempt.held = false;
+  focusAttempt.losses += 1;
+  focusAttempt.note = `LOST the keyboard (${focusAttempt.losses}x) — click to take it back`;
+  devLog("warn", `workspace probe (${variant}): LOST keyboard focus, ${focusAttempt.losses}x`);
+  render();
+});
+
+// ---------------------------------------------------------------------------------------------
+// Load, and the leak detector
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Load the map image for drawing.
+ *
+ * Written here rather than reusing the pipeline's loader because that one decodes to pixels and
+ * plans a raster budget — the expensive half, and none of it is wanted for drawing. There is no way
+ * for two copies of `new Image()` to disagree about anything.
+ *
+ * `crossOrigin` is set even though drawing alone would not need it: the pipeline proves the CDN
+ * sends the headers, and matching it means this probe cannot succeed where the real thing fails.
+ */
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("the map image failed to load"));
+    image.src = url;
+  });
+}
+
+/**
+ * A stand-in for stage one's mask, at the map's own resolution.
+ *
+ * Not a real mask and not pretending to be — what it has to share with one is its **size**, since
+ * the frame cost being measured is that of pushing two map-sized textures per frame. Sparse marks
+ * rather than a fill, so the map stays readable underneath and the layer is visibly present.
+ */
+function buildMaskStandIn(width: number, height: number): HTMLCanvasElement | null {
+  const layer = document.createElement("canvas");
+  layer.width = width;
+  layer.height = height;
+  const context = layer.getContext("2d");
+  if (!context) return null;
+
+  context.fillStyle = "rgba(255, 96, 160, 0.55)";
+  const step = 64;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      context.fillRect(x, y, 26, 26);
+    }
+  }
+  return layer;
+}
 
 async function run(): Promise<void> {
   try {
@@ -481,24 +745,78 @@ async function run(): Promise<void> {
 
   devLog("info", `workspace probe (${variant}): modal is alive and running its own script`);
 
-  [viewWidth, viewHeight] = await Promise.all([
+  const [viewWidth, viewHeight] = await Promise.all([
     OBR.viewport.getWidth(),
     OBR.viewport.getHeight(),
   ]);
 
   /*
-    Two fixed world points to watch.
+    Two fixed world points to watch for a leak.
 
-    Derived from screen corners at open rather than from the map's bounds, so the probe works in a
-    scene with no map nominated — it is testing the surface, not the pipeline. Two rather than one
-    because a zoom centred exactly on a single probe point leaves it fixed, and the whole gesture
-    would go unobserved; that is the same reasoning the ink overlay uses, and the same pair of
-    calls.
+    Derived from screen corners rather than from the map, so the detector works even in a scene with
+    nothing nominated. Two rather than one because a zoom centred exactly on a single probe point
+    leaves it fixed and the whole gesture goes unobserved.
   */
   const [worldA, worldB] = await Promise.all([
     OBR.viewport.inverseTransformPoint({ x: 0, y: 0 }),
     OBR.viewport.inverseTransformPoint({ x: viewWidth, y: viewHeight }),
   ]);
+
+  const map = await resolveTraceMap();
+  if (!map) {
+    mapNote = "none nominated — navigating empty ground";
+    devLog("warn", "workspace probe: no map nominated, so there is nothing to navigate");
+  } else {
+    try {
+      const image = await loadImage(map.image.url);
+      mapImage = image;
+      maskLayer = buildMaskStandIn(image.naturalWidth, image.naturalHeight);
+      mapNote = `${map.name || "map"} ${image.naturalWidth}x${image.naturalHeight}`;
+
+      /*
+        Open on exactly what Owlbear is showing.
+
+        Ask where the map's own world corners currently sit on screen and build the view from that
+        rectangle. Nothing appears to jump when the sheet goes up — and, the reason it is worth two
+        calls, the two navigations then start from the same framing, so comparing how they *feel* is
+        not confounded by comparing what they show.
+      */
+      const bounds = await OBR.scene.items.getItemBounds([map.id]);
+      const [cornerA, cornerB] = await Promise.all([
+        OBR.viewport.transformPoint({ x: bounds.min.x, y: bounds.min.y }),
+        OBR.viewport.transformPoint({ x: bounds.max.x, y: bounds.max.y }),
+      ]);
+      openingView = viewFromScreenRect(cornerA, cornerB, {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      });
+      setView(openingView);
+      devLog(
+        "info",
+        `workspace probe (${variant}): opened on Owlbear's own view — ` +
+          `scale ${openingView.scale.toFixed(4)} at (${openingView.x.toFixed(0)}, ` +
+          `${openingView.y.toFixed(0)}), map ${image.naturalWidth}x${image.naturalHeight}, ` +
+          `zoom step ${zoomStepPercent}% per notch`,
+      );
+    } catch (error) {
+      mapNote = "failed to load — see the console";
+      devLog("error", "workspace probe: could not load the map image", describeError(error));
+      console.error("Fog Nudger — workspace probe could not load the map image", error);
+    }
+  }
+
+  if (mapImage && !openingView) {
+    // The fallback when the view could not be inherited: fitted and centred, which is at least a
+    // framing rather than a guess.
+    setView(
+      fitToViewport(
+        { width: mapImage.naturalWidth, height: mapImage.naturalHeight },
+        viewportSize(),
+        24,
+      ),
+    );
+  }
+  render();
 
   let previous: { a: ScreenPoint; b: ScreenPoint } | null = null;
 
@@ -515,32 +833,15 @@ async function run(): Promise<void> {
 
     if (previous && (pointMoved(previous.a, a) || pointMoved(previous.b, b))) {
       if (selfTest.active) {
-        // The probe moved the view itself. Counted as proof the detector works, never as a leak.
         selfTest.movementsSeen += 1;
       } else {
-        // Blame the movement on whichever of our channels fired most recently before it.
-        // Attribution by timing is a guess, and it is the only one available from inside an opaque
-        // box.
         const channel = attributeMovement(started, lastEventAt);
         tally.blamed[channel] += 1;
-
-        /*
-          Written the moment it happens, not only in the closing summary.
-
-          Owlbear tears this modal down on Escape without our dismissal ever running, and two runs
-          in the last session ended that way — reporting nothing at all about leaks, because the
-          only line that carries the tally is the one that never got written. A movement is the
-          single most important thing this page can observe, so it should not depend on being able
-          to say goodbye.
-
-          Capped, because a real leak during a drag would produce one of these per poll and bury
-          everything else in the log. Past the cap they are still counted, just not narrated.
-        */
         if (tally.blamed[channel] <= MOVEMENTS_LOGGED_PER_CHANNEL) {
           devLog(
             "warn",
             `workspace probe (${variant}): Owlbear's view MOVED — blamed on ${channel} ` +
-              `(#${tally.blamed[channel]} for that channel). Input is reaching Owlbear underneath.`,
+              `(#${tally.blamed[channel]}). Our navigation is reaching Owlbear underneath.`,
           );
         }
       }
@@ -549,8 +850,7 @@ async function run(): Promise<void> {
     render();
   };
 
-  // A chain of timeouts rather than an interval, so a slow poll cannot overlap the next and turn a
-  // contended bus into a queue that never drains.
+  // A chain of timeouts rather than an interval, so a slow poll cannot overlap the next.
   const loop = (): void => {
     if (stopped) return;
     void poll()
@@ -563,169 +863,26 @@ async function run(): Promise<void> {
   };
   loop();
 
-  window.setTimeout(() => {
-    void runSelfTest();
-  }, SELF_TEST_AT_MS);
+  window.setTimeout(() => void runSelfTest(), SELF_TEST_AT_MS);
 }
-
-/**
- * Ask for the keyboard, and report honestly whether asking worked.
- *
- * Both calls are made because they can succeed independently: `window.focus()` asks the embedder to
- * hand this frame the keyboard at all, and focusing an element decides where a key goes once it
- * arrives. Either alone could leave the other half unsatisfied, and the failure would look the
- * same — nothing happening.
- *
- * The result is deliberately not trusted from `document.hasFocus()` alone. A frame can report focus
- * and still not be where keys land, so the honest confirmation is a keystroke actually arriving,
- * which the first-key line records with the attempt's state attached.
- */
-function claimTheKeyboard(): void {
-  if (stopped || focusAttempt.held) return;
-
-  // The last honest reading of the unasked state, taken once, immediately before we interfere with
-  // it. After the first attempt this would only be measuring our own effect.
-  if (!focusAttempt.made) {
-    focusAttempt.before = document.hasFocus();
-    hadFocusAtOpen = focusAttempt.before;
-  }
-
-  focusAttempt.tries += 1;
-  try {
-    // Both calls, because they can succeed independently: `window.focus()` asks the embedder to
-    // give this frame the keyboard at all, and focusing an element decides where a key goes once it
-    // arrives. Measured in a room, they do come apart — activeElement became the sheet on every
-    // attempt, while hasFocus only turned true inside Owlbear.
-    window.focus();
-    if (sheet instanceof HTMLElement) sheet.focus({ preventScroll: true });
-  } catch (error) {
-    devLog("warn", "workspace probe: asking for focus threw", describeError(error));
-  }
-  focusAttempt.made = true;
-
-  window.setTimeout(() => {
-    if (stopped) return;
-    focusAttempt.after = document.hasFocus();
-    const active = document.activeElement;
-    const activeName =
-      active instanceof HTMLElement && active.id
-        ? `#${active.id}`
-        : active
-          ? active.tagName.toLowerCase()
-          : "none";
-
-    if (focusAttempt.after) {
-      focusAttempt.held = true;
-      focusAttempt.claimedAtMs = performance.now() - opened;
-      // Both halves reported, never one verdict — focusing an element and the frame holding the
-      // keyboard fail separately.
-      focusAttempt.note =
-        `claimed after ${focusAttempt.tries} ` +
-        `${focusAttempt.tries === 1 ? "try" : "tries"} at ` +
-        `${focusAttempt.claimedAtMs.toFixed(0)}ms, activeElement ${activeName}`;
-      devLog(
-        "info",
-        `workspace probe (${variant}): keyboard CLAIMED ${focusAttempt.claimedAtMs.toFixed(0)}ms ` +
-          `after load, on try ${focusAttempt.tries}, activeElement ${activeName}. ` +
-          "Anything typed before this went to Owlbear.",
-      );
-      render();
-      return;
-    }
-
-    const elapsed = performance.now() - opened;
-    if (elapsed < FOCUS_RETRY_LIMIT_MS) {
-      // Silent between attempts on purpose: thirty log lines saying "still not ours" would bury the
-      // one line that matters, which is the moment it becomes ours.
-      focusAttempt.note = `asking… ${focusAttempt.tries} tries, activeElement ${activeName}`;
-      window.setTimeout(claimTheKeyboard, FOCUS_RETRY_MS);
-      return;
-    }
-
-    focusAttempt.note =
-      `NEVER claimed — ${focusAttempt.tries} tries over ` +
-      `${FOCUS_RETRY_LIMIT_MS}ms, activeElement ${activeName}`;
-    // Once per run. Every click after the give-up makes a fresh attempt and lands back here, so
-    // logging each would fill the log with one repeated sentence in precisely the session where
-    // something else is worth reading.
-    const alreadySaid = focusAttempt.gaveUp;
-    focusAttempt.gaveUp = true;
-    if (alreadySaid) {
-      render();
-      return;
-    }
-    devLog(
-      "error",
-      `workspace probe (${variant}): keyboard NEVER claimed after ${focusAttempt.tries} tries ` +
-        `over ${FOCUS_RETRY_LIMIT_MS}ms — activeElement ${activeName}. Every key is going to ` +
-        "Owlbear.",
-    );
-    render();
-  }, FOCUS_SETTLE_MS);
-}
-
-/**
- * Notice the keyboard going back to Owlbear.
- *
- * Losing focus is silent and looks exactly like a workspace whose shortcuts have stopped working
- * for no reason. It is the same failure as the gap before the claim, arriving later.
- *
- * **It does not fight back.** Re-focusing on every blur would mean a page that will not let the GM
- * alt-tab away from it, which is worse than a lost shortcut. A run that loses focus and never gets
- * it back is a result worth having rather than a bug to paper over.
- */
-window.addEventListener("blur", () => {
-  if (stopped || !focusAttempt.held) return;
-  focusAttempt.held = false;
-  focusAttempt.losses += 1;
-  focusAttempt.note = `LOST the keyboard (${focusAttempt.losses}x) — keys are Owlbear's again`;
-  devLog(
-    "warn",
-    `workspace probe (${variant}): LOST keyboard focus after holding it — ` +
-      `${focusAttempt.losses} time(s) this run. Keys go to Owlbear until it is clicked again.`,
-  );
-  render();
-});
-
-/**
- * Take it back when the GM clicks into the sheet.
- *
- * Not a fight — this only fires on a deliberate pointer press on our own surface, which is as clear
- * a statement of "I am working here" as the page can get.
- */
-window.addEventListener("pointerdown", () => {
-  if (stopped || focusAttempt.held) return;
-  claimTheKeyboard();
-});
-
 
 /**
  * Move the viewport deliberately, and find out whether the detector notices.
  *
- * The nudge is in the viewport's own position units and is put straight back, so the net effect on
- * the GM's camera is nothing. It happens behind an opaque sheet, so there is nothing to see either
- * way — which is precisely why the answer has to be a number.
- *
- * `viewport.setPosition` moves this client's camera only; it is not scene state and no other player
- * sees it.
+ * "Owlbear moved 0 times" and "the movement check is broken" produce identical output, and that
+ * zero was reported four runs before anything checked that it could report anything else. It
+ * matters more here than it did for the input probe: **a pan that also panned Owlbear is exactly
+ * the failure that would kill this surface**, and behind an opaque sheet it is invisible.
  */
 async function runSelfTest(): Promise<void> {
   if (stopped) return;
 
   try {
     const start = await OBR.viewport.getPosition();
-    devLog(
-      "info",
-      `workspace probe (${variant}): self-test — nudging the viewport ${SELF_TEST_NUDGE} from ` +
-        `(${start.x.toFixed(0)}, ${start.y.toFixed(0)}) and putting it back`,
-    );
-
     selfTest.active = true;
     selfTest.movementsSeen = 0;
 
     await OBR.viewport.setPosition({ x: start.x + SELF_TEST_NUDGE, y: start.y });
-    // Long enough for several polls at POLL_MS to see the moved state, since one poll landing in
-    // the gap would report a working detector as blind.
     await new Promise((resolve) => window.setTimeout(resolve, SELF_TEST_SETTLE_MS));
     await OBR.viewport.setPosition(start);
     await new Promise((resolve) => window.setTimeout(resolve, SELF_TEST_SETTLE_MS));
@@ -733,18 +890,15 @@ async function runSelfTest(): Promise<void> {
     selfTest.active = false;
     selfTest.ran = true;
 
-    // Two movements are expected — out and back. One is enough to prove the detector is not blind,
-    // which is the whole claim being tested; the count is reported so a partial answer is visible
-    // rather than rounded up to a pass.
     const working = selfTest.movementsSeen > 0;
     selfTest.note = working
-      ? `saw ${selfTest.movementsSeen} of an expected 2 — the detector works`
-      : `saw NOTHING — the detector is blind, so every "Owlbear moved 0 times" above means nothing`;
+      ? `works (saw ${selfTest.movementsSeen}/2)`
+      : "BLIND — every 'Owlbear still' above means nothing";
     devLog(working ? "info" : "error", `workspace probe (${variant}): self-test ${selfTest.note}`);
   } catch (error) {
     selfTest.active = false;
     selfTest.ran = true;
-    selfTest.note = "FAILED to run — the detector is unverified";
+    selfTest.note = "FAILED to run — unverified";
     devLog("error", "workspace probe: self-test failed", describeError(error));
   }
 
@@ -752,186 +906,33 @@ async function runSelfTest(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Input wiring — installed at module load, before the SDK is involved in anything
+// Start
 // ---------------------------------------------------------------------------------------------
 
 /*
-  These listeners are attached now rather than inside `run()` deliberately. If the SDK never becomes
-  ready, or `run()` throws on its first await, the page must still be able to demonstrate whether it
-  receives input at all — that is the question, and it does not depend on Owlbear answering.
-*/
+  The dismissal timer is armed at module load, before the SDK is consulted about anything, because
+  the way out of an opaque sheet must depend on as little as possible.
 
-/*
-  The keyboard is claimed here, at module load — as early as this page can run at all, and not
-  inside `run()`.
-
-  Focus is a browser fact with nothing to do with Owlbear being ready. Waiting on the SDK made an
-  earlier version of this measure "300ms after load" three seconds after load, and the delay that
-  replaced it cost a real keystroke: a GM typed 1 through 9 and the log holds eight digits, because
-  the "1" landed before the claim and went to Owlbear instead. Every millisecond between the sheet
-  appearing and the keyboard being ours is a millisecond in which a key does something invisible in
-  somebody else's application.
-
-  What remains is the iframe's own load — 2.4 seconds on a cold open — which is Owlbear's to own.
-  This page cannot start earlier than it starts.
-*/
-claimTheKeyboard();
-
-// Read straight off the URL, so the heading names the variant whether or not the SDK ever answers.
-// It sat inside `run()` and showed a bare placeholder on any page that never reached a room.
-say(variantLabel, `· ${variant}`);
-
-// The pad is the primary pointer test, so it is wired here with everything else rather than inside
-// `run()`. It sat there in the first draft and the consequence was immediate: outside a room
-// nothing reached it, because `OBR.onReady` never fires — the one surface whose whole purpose is
-// receiving drags was the one surface that could not receive them until Owlbear said so.
-if (pad instanceof HTMLCanvasElement) setUpPad(pad);
-
-if (sheet) {
-  sheet.addEventListener(
-    "wheel",
-    (event) => {
-      noteEvent("wheel");
-      tally.wheel += 1;
-      if (event.cancelable) {
-        tally.wheelCancelable += 1;
-        // Whether this actually stops Owlbear zooming is the measurement. A listener registered
-        // passively could not even try, which is why the option below is explicit.
-        event.preventDefault();
-      }
-      lastWheel = `deltaY ${event.deltaY.toFixed(0)}, ${
-        event.cancelable ? "cancelable" : "NOT cancelable"
-      }`;
-      render();
-    },
-    // Chrome and Firefox default wheel listeners on the root to passive, where `preventDefault` is
-    // ignored and a warning is logged. Saying so explicitly is the difference between owning the
-    // wheel and merely watching it go past.
-    { passive: false },
-  );
-
-  sheet.addEventListener("contextmenu", (event) => {
-    tally.contextMenu += 1;
-    // Suppressed because a workspace would want the right button for its own purposes. Whether
-    // Owlbear's own menu appears anyway is part of the answer.
-    event.preventDefault();
-    render();
-  });
-
-  // A pointerdown anywhere, not just on the pad, is what "the modal has been clicked" means for
-  // the keyboard-focus question.
-  sheet.addEventListener("pointerdown", () => {
-    if (lastEventAt.drag === null) noteEvent("drag");
-  });
-}
-
-/*
-  "Has this modal been clicked yet" is tracked on the document, in the capture phase, and
-  separately from every other counter.
-
-  The obvious version reads `tally.pointerDown`, and it is wrong in a way that would have been
-  believed: that counter only rises on the *pad*. Clicking the text box or the close button would
-  leave it at zero, so a key pressed afterwards would be filed as arriving "before any pointer" and
-  the readout would claim focus was ours on open — a confident answer to the exact question being
-  asked, produced by a click it did not notice. Capture phase because a handler that stops
-  propagation must not be able to hide the click from this.
-*/
-let anyPointerYet = false;
-document.addEventListener("pointerdown", () => { anyPointerYet = true; }, true);
-document.addEventListener("contextmenu", () => { anyPointerYet = true; }, true);
-
-window.addEventListener("keydown", (event) => {
-  noteEvent("key");
-  tally.keyDown += 1;
-  lastKey = event.key;
-  // "Before any pointer" is the proof that focus arrived without a click, so it is counted against
-  // whether anything has been pressed rather than against the focus flag — a flag samples one
-  // moment, and this is a fact about the whole session.
-  if (!anyPointerYet) tally.keysBeforeAnyPointer += 1;
-  else tally.keysAfterAPointer += 1;
-  if (!focusAttempt.made) tally.keysBeforeFocusAttempt += 1;
-
-  /*
-    The first key is logged the instant it arrives, rather than only in the closing summary.
-
-    Escape can end this modal two ways and they look identical from a chair: our handler below, or
-    Owlbear closing it over our heads without the key ever reaching this iframe. The summary cannot
-    tell them apart, because in the second case there is no summary — the page is gone. A line
-    written at the moment of the keystroke survives that, so an Escape pressed before any click
-    either leaves this line behind or proves the key never got here.
-  */
-  if (tally.keyDown === 1) {
-    devLog(
-      "info",
-      `workspace probe (${variant}): FIRST KEY "${event.key}" reached the modal ` +
-        `${anyPointerYet ? "after a click" : "with NO click"}, ` +
-        // Deliberately the same sentence the readout shows, from the same function, so the log and
-        // the screen cannot disagree about what was concluded from one keystroke.
-        describeKeyboardFocus({
-          hadFocusAtOpen,
-          keysBeforeAnyPointer: tally.keysBeforeAnyPointer,
-          keysAfterAPointer: tally.keysAfterAPointer,
-          focusWasAsked: focusAttempt.made,
-          keysBeforeFocusAttempt: tally.keysBeforeFocusAttempt,
-        }),
-    );
-  }
-
-  if (event.key === "Escape") {
-    event.preventDefault();
-    dismiss("Escape pressed — keyboard reaches us");
-  }
-  render();
-});
-
-if (closeButton) {
-  closeButton.addEventListener("click", () => {
-    dismiss("close button clicked — pointer input reaches us");
-  });
-}
-
-if (typing instanceof HTMLInputElement) {
-  // Not focused programmatically, on purpose. Calling `focus()` here would guarantee the answer to
-  // "does this surface get keyboard focus on its own", which is one of the things being asked.
-  typing.addEventListener("input", render);
-}
-
-// ---------------------------------------------------------------------------------------------
-// Ready
-// ---------------------------------------------------------------------------------------------
-
-/*
-  The dismissal timer is armed at module load, before the SDK is consulted about anything.
-
-  The overlay probe sets its own timer at the end of its run, after several awaits — survivable
-  there because that sheet is click-through and a GM can simply carry on. Here the sheet is opaque
-  and may, for all anyone yet knows, swallow every click aimed at the button, so the way out must
-  depend on as little as possible. Arming it inside `OBR.onReady` would make it depend on the SDK
-  becoming ready, which is a thing that can fail to happen; arming it here does not, and inside a
-  room `onReady` fires anyway so nothing is lost.
-
-  It also gives the countdown and the timer a single origin. Two clocks started at different
-  moments would drift, and a readout saying "closes in 3s" over a sheet that stays up is the sort
-  of small lie that gets a working mechanism mistrusted.
+  Everything else here that does not need Owlbear starts here too, and that placement was learned
+  three times over: the drag pad, both focus paths and the variant label were each written inside
+  `run()` first, and each was silently dead until the SDK answered.
 */
 window.setTimeout(() => dismiss("lifetime expired"), LIFETIME_MS);
-
-// Keep the countdown honest even when nothing is being touched; every other render is driven by an
-// event or a poll, and both stop if the SDK never answers.
 window.setInterval(() => {
   if (!stopped) render();
 }, 500);
 
+claimTheKeyboard();
+window.requestAnimationFrame(frameLoop);
 render();
 
 // `OBR.onReady` does not fire outside a room, so opening this page directly in a browser runs the
 // code and produces no Owlbear activity. That silence is correct behaviour rather than a failure —
-// and everything above this line still works, which is what makes the page's own input testable
-// without a room.
+// and the navigation above still works, on empty ground, which is what makes it testable here.
 OBR.onReady(() => {
   void run().catch((error: unknown) => {
     const detail = describeError(error);
-    say(readout, `Workspace probe failed: ${detail}`);
+    if (hud) hud.textContent = `Workspace probe failed: ${detail}`;
     devLog("error", "workspace probe: failed", detail);
   });
 });
