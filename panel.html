@@ -112,9 +112,8 @@
       .note em { font-style: normal; color: var(--text); }
 
       /*
-        Tabs. Two stages, and the numbering is load-bearing rather than decorative — the order is
-        forced, because reading the map recomputes every region and so discards anything edited in
-        the second stage.
+        Tabs. Three stages, and the numbering is load-bearing rather than decorative — destruction
+        cascades one way down them, so the order is forced rather than advisory.
       */
       .tabs {
         display: flex;
@@ -211,23 +210,30 @@
     <p id="status" data-state="pending">Connecting&hellip;</p>
 
     <!--
-      Two tabs, and the split is architectural rather than cosmetic.
+      Three tabs, and the ordering is architectural rather than cosmetic.
 
-      The binary mask determines the partition completely: labelling has one choice in it and that
-      choice is forced, and nothing downstream can split or join a region. So every control that
-      decides *what the rooms are* acts on the mask, and everything after it is a filter or a
-      finish. Reading the map recomputes everything and therefore discards hand edits by
-      construction; editing the regions is what cannot be derived from the image at all.
+      Reading the map decides what is ink. Deriving abstracts that ink into the regions that will
+      define walls. Adjusting is what the GM wants, which neither of the others can express.
 
-      The ordering is forced rather than advisory, which is why it is two tabs and not one long
-      column: stage one destroys stage two's work every time it runs.
+      **Destruction cascades one way, and that is the whole reason for the numbers.** Changing the
+      reading recomputes the mask, which re-partitions wholesale and discards everything after it.
+      Changing the derivation regenerates every polygon from the same mask, so it discards hand
+      edits but not the reading. Nothing in the third tab destroys anything.
+
+      Why the first two are separate: the mask determines the partition completely — labelling's one
+      choice is forced by the diagonal-leak paradox — so nothing in tab 2 can split or join a
+      region. What it *can* do is delete a region and, through the containment rule, absorb the
+      space it held into whatever encloses it. That is abstraction, not reading.
     -->
     <nav class="tabs" role="tablist">
       <button role="tab" id="tab-read" aria-selected="true" aria-controls="panel-read">
         1 · Read the map
       </button>
-      <button role="tab" id="tab-edit" aria-selected="false" aria-controls="panel-edit">
-        2 · Edit the regions
+      <button role="tab" id="tab-derive" aria-selected="false" aria-controls="panel-derive">
+        2 · Derive the regions
+      </button>
+      <button role="tab" id="tab-adjust" aria-selected="false" aria-controls="panel-adjust">
+        3 · Adjust &amp; accept
       </button>
     </nav>
 
@@ -243,23 +249,39 @@
         <p class="note">Waiting for a scene&hellip;</p>
       </div>
 
-      <p class="field">What counts as a wall</p>
-      <div class="settings" id="trace-settings"></div>
+      <p class="field">What counts as ink</p>
+      <div class="settings" id="read-settings"></div>
 
       <div class="actions">
         <button id="dry-run" disabled>Trace, emit nothing</button>
-        <button id="stage" disabled>Trace &amp; stage</button>
         <button id="probe" disabled>What is here?</button>
-        <button id="reset-trace" class="quiet" disabled>Defaults</button>
+        <button id="reset-read" class="quiet" disabled>Defaults</button>
       </div>
       <p class="note">
-        Changing anything here re-derives every region, so it discards edits made in tab 2.
-        <em>What is here?</em> reports what the last trace computed at the centre of your view —
-        region, ink, or discarded floor, with the luminance it read.
+        Changing anything here re-reads the image and re-partitions the map, so it discards
+        everything from tabs 2 and 3. <em>What is here?</em> reports what the last trace computed at
+        the centre of your view — region, ink, or discarded floor, with the luminance it read.
       </p>
     </section>
 
-    <section id="panel-edit" role="tabpanel" aria-labelledby="tab-edit" hidden>
+    <section id="panel-derive" role="tabpanel" aria-labelledby="tab-derive" hidden>
+      <p class="field">How ink becomes regions</p>
+      <div class="settings" id="derive-settings"></div>
+
+      <div class="actions">
+        <button id="stage" disabled>Derive &amp; stage</button>
+        <button id="reset-derive" class="quiet" disabled>Defaults</button>
+      </div>
+      <p class="note">
+        Neither control can split or join a region — the reading already decided which rooms exist.
+        The minimum deletes a region and lets whatever encloses it absorb the space; simplification
+        smooths every boundary, capped below the point where one could cross a wall. Both regenerate
+        every polygon, so both discard hand edits made in tab 3. The reading is left alone, so this
+        skips the slow half of a trace.
+      </p>
+    </section>
+
+    <section id="panel-adjust" role="tabpanel" aria-labelledby="tab-adjust" hidden>
       <div class="actions">
         <button id="accept" disabled>Accept staged</button>
         <button id="unaccept" disabled>Back to staging</button>
@@ -272,10 +294,10 @@
       </p>
 
       <p class="field">How proposals look while you judge them</p>
-      <div class="settings" id="review-settings"></div>
+      <div class="settings" id="adjust-settings"></div>
       <div class="actions">
         <button id="restyle" disabled>Apply to staged</button>
-        <button id="reset-review" class="quiet" disabled>Defaults</button>
+        <button id="reset-adjust" class="quiet" disabled>Defaults</button>
       </div>
       <p class="note">
         Neighbouring regions are drawn in different colours so the partition is what you see rather

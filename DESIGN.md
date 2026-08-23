@@ -410,13 +410,16 @@ need to find exactly our items and never the GM's, so every emitted item carries
 `io.github.captainchocolatedessert.fog-nudger`. That is already how the probe's removal avoids
 touching hand-drawn fog, and it is the same mechanism §10's re-run pitfall depends on.
 
-### Two stages, and why the split is architectural — settled 2026-08-22 (user)
+### Three stages, and why the ordering is architectural — revised 2026-08-23 (user)
+
+*Superseding the two-stage split of 2026-08-22. The reasoning below is that argument corrected, not
+a new one: what changed is where the boundary falls, not why there is one.*
 
 **The binary mask determines the partition completely.** Connected-component labelling has exactly
 one choice in it — the connectivity pairing — and that is forced by the diagonal-leak paradox, so it
 is a correctness requirement rather than a knob. Nothing downstream of the mask can split or join a
-region: the minimum-area filter only *deletes*, simplification is bounded below half an ink width
-precisely so it cannot change topology, and tracing and placement are exact.
+region: the minimum-area filter can only *remove* one, simplification is bounded below half an ink
+width precisely so it cannot change topology, and tracing and placement are exact.
 
 Counted rather than asserted: of the eight parameters in the pipeline, five decide what is ink and
 three act after it — a size filter, a smoothing tolerance, and a ceiling on that tolerance. **None of
@@ -426,23 +429,78 @@ Supporting evidence from the same week: the hole rule used to carry a threshold,
 with containment **removed the parameter entirely** and made the result strictly better. Downstream
 parameters kept turning out to be the wrong lever because downstream is not where the decisions are.
 
-**So the GM's work divides in two, and the division is forced rather than stylistic:**
+**But "downstream" is two things, not one, and the first version filed them together.** The
+minimum-area filter is not a pure delete. A hole is kept only when it encloses a surviving region
+and **filled in when it encloses nothing**, so dropping a sliver also dilates whatever surrounds it
+into the space the sliver held. Measured on *Lair Of The Lamb*, mask unchanged — the ink share is
+6.5% in both runs, which is the basis for saying only the minimum moved:
 
-1. **Reading the map** — what is a wall. Every control here acts on the mask, so changing any of
-   them recomputes the partition wholesale and **discards anything edited in stage two, by
-   construction**.
-2. **Editing the regions** — what the GM wants, which no amount of mask work can express: merge
-   these two because they are one room to me; do not fog that at all; show me the proposals
-   differently while I judge them.
+| smallest room | regions | discarded | **holes kept** | bare floor |
+| --- | --- | --- | --- | --- |
+| 0.1 squares | 211 | 169 | **15** | 0.99 squares |
+| 0.0074 squares | 277 | 103 | **51** | 0.16 squares |
+
+Fifteen holes to fifty-one from one slider. Every one of those is a change to the *polygon of a
+surviving region*. That is abstracting ink into regions, not reading ink — so the size filter and
+the smoothing tolerance belong with the regions, and the earlier split put them with the threshold
+on the strength of their *destructiveness* rather than their subject.
+
+**So the GM's work divides in three, and the ordering is forced rather than stylistic:**
+
+1. **Reading the map** — what is ink. Every control acts on the mask, so changing one re-partitions
+   wholesale and **discards both later stages, by construction**.
+2. **Deriving the regions** — abstracting that ink into the shapes that will define walls. Neither
+   control can split or join a region; both regenerate every polygon, so both **discard hand edits**
+   and neither touches the reading.
+3. **Adjusting** — what the GM wants, which no amount of the first two can express: merge these
+   because they are one room to me; do not fog that at all; show me the proposals differently while
+   I judge them. **Destroys nothing.**
+
+**Destruction cascades one way**, and that cascade is the numbering. The two-stage version bought a
+tidier claim — "stage one destroys stage two, full stop" — at the price of being wrong about what
+stage one *was*. Three stages is the honest shape: the ordering was always three-deep and the binary
+hid the middle rung.
+
+**Each stage is now exactly what one representation can show**, which is the second payoff and was
+the argument that decided it. A pixel overlay explains all of stage one and nothing else; the
+coloured region view explains all of stage two. Under the two-tab split, neither view covered its
+own tab — the overlay explained three of stage one's five controls, and the region view explained
+none of them. The tab boundary and the representation boundary are now the same line.
 
 **This answers a question the roadmap has been carrying.** Step 9 has always said "a re-run destroys
 hand edits, so it must be deliberate and warned" without saying what to *do* about it. The answer is
 not to engineer around it: the stages are inherently ordered, and the honest tool makes that
-ordering visible instead of pretending edits are durable. Hence two tabs, numbered.
+ordering visible instead of pretending edits are durable. Hence three tabs, numbered.
+
+### The cache boundary, and what it is not — 2026-08-23
+
+Binarisation is the expensive half — **690ms of a 1.4s run**, against 360ms to label, 320ms to trace
+and 10ms to simplify — and it depends on no stage-two parameter. So a mask is kept and reused when
+the map and the reading are unchanged, and a stage-two sweep costs roughly half what it did.
+
+**It is not a second implementation, and that distinction is load-bearing.** The chain stays one
+linear function; the only thing that changes is whether the mask was computed just now or a moment
+ago. A second copy of the chain re-opens the sibling's worst diagnostic failure, where a harness and
+a real room disagreed *in direction* because the harness never ran world placement — 700ms is not
+worth that.
+
+**The decision is made from a fingerprint, never from which button the GM pressed.** Correctness
+therefore never depends on them working the tabs in order; the numbering is about *their* work being
+discarded, not about the code's sequencing.
+
+**The fingerprint is deliberately over-broad.** It covers the map's identity and geometry, the
+scene's grid — which sets pixels-per-square and therefore the Sauvola radius, so a regridded scene
+needs a fresh reading even though the image has not changed — and the reading parameters. A wrong
+reuse would derive regions from a stale mask and report them as current, which is §8's warning in
+its most expensive form. Recomputing needlessly costs 690ms; reusing wrongly costs a diagnostic that
+lies.
+
+**Which half ran is logged on every run**, and a reused mask restates the few figures the rest of
+the run is built on. A run that reused and a run that recomputed must not produce the same log.
 
 **Where the dividing line actually falls** is "what does the map say" against "what do I want" — and
 one operation moves across it on inspection. *Splitting a region because of something not on the
-map* reads like a stage-two edit and belongs in stage one, as **GM-drawn ink**: draw the wall, and
+map* reads like a stage-three edit and belongs in stage one, as **GM-drawn ink**: draw the wall, and
 the next trace splits the region. That survives re-runs because it is an *input* rather than an
 output; it re-derives both halves with correct boundaries, where splitting a polygon by hand leaves
 a join that Dynamic Fog turns into a wall across a room; and it uses tools the GM already has, which
@@ -451,8 +509,20 @@ not.
 
 ### The controls
 
-Five for stage one — ink threshold, texture blur, detail window, smallest room, edge simplification
-— and two for stage two, both about how a proposal is drawn while it is being judged.
+Three for stage one — ink threshold, texture blur, detail window. Two for stage two — smallest room,
+edge simplification. Two for stage three, both about how a proposal is drawn while it is being
+judged.
+
+- **One declaration decides which stage owns which parameter**, and both the panel's tabs and the
+  pipeline's cache invalidation read it. Two lists would be two places to disagree about what a knob
+  invalidates, and the disagreement would be silent in the direction that matters — a stage-two
+  tweak reusing a mask it should have thrown away. A test asserts the mapping is total and that the
+  three stages partition the parameters exactly.
+- **The stored shape was deliberately not renested to match.** Storage keeps its two groups and the
+  stage mapping carries the semantics. Renesting would mean either a migration or a normaliser
+  falling back to defaults for every field of a GM's existing tuning — and silently rewriting a
+  stored setting merely because the panel opened is the worst failure a control can have, which is
+  the same property the round-tripping tests exist to protect.
 
 - **They live in scene metadata**, like the map nomination and for the same reason: the panel is a
   fresh iframe every time it opens and `localStorage` is partitioned in a third-party iframe. Tuning

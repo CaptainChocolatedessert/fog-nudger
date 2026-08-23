@@ -130,6 +130,111 @@ export const SETTING_LIMITS = {
 
 export type SettingName = keyof typeof SETTING_LIMITS;
 
+/**
+ * The three ordered stages, and what each one destroys.
+ *
+ * `read` decides what is ink. `derive` abstracts that ink into the regions that will define walls.
+ * `adjust` is what the GM wants, which no amount of the first two can express.
+ *
+ * **Destruction cascades one way.** Changing anything in `read` recomputes the mask, which
+ * re-partitions wholesale and discards both later stages. Changing anything in `derive` regenerates
+ * every polygon from the same mask, so it discards hand edits but not the reading. Nothing in
+ * `adjust` destroys anything.
+ *
+ * The split between the first two is not stylistic. The mask determines the partition completely —
+ * labelling's one choice is forced by the diagonal-leak paradox — so nothing in `derive` can split
+ * or join a region. What it *can* do is delete a region and, through the containment rule, absorb
+ * the space it held into whatever encloses it. That is abstraction, not reading, which is why the
+ * minimum-area filter and the simplification tolerance sit here rather than beside the threshold.
+ */
+export type Stage = "read" | "derive" | "adjust";
+
+/** In order. The order is the cascade, and every part of the UI depends on it being this way round. */
+export const STAGES = ["read", "derive", "adjust"] as const;
+
+/**
+ * The single declaration of which stage owns which parameter.
+ *
+ * Both the panel's tabs and the pipeline's cache invalidation read this, so they cannot disagree
+ * about what a change to a given knob invalidates — which is the failure that would let a stage-two
+ * tweak silently reuse a stale mask. A test asserts the mapping is total.
+ */
+export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
+  sauvolaK: "read",
+  blurSigma: "read",
+  sauvolaRadiusSquares: "read",
+  minRoomSquares: "derive",
+  simplifyInkWidths: "derive",
+  fillOpacity: "adjust",
+  strokeSquares: "adjust",
+};
+
+/** Every parameter belonging to one stage, in declaration order. */
+export function stageParameters(stage: Stage): readonly SettingName[] {
+  return (Object.keys(SETTING_LIMITS) as SettingName[]).filter(
+    (name) => PARAMETER_STAGE[name] === stage,
+  );
+}
+
+/**
+ * Which sub-object of `Settings` holds a parameter.
+ *
+ * The stored shape is deliberately **not** renested to match the three stages. Renesting would mean
+ * either a migration or a normaliser that falls back to defaults for every field of a GM's existing
+ * tuning — and silently rewriting a stored setting merely because the panel opened is the worst
+ * failure a control can have. So storage keeps its two groups and the stage mapping above is what
+ * carries the semantics.
+ */
+function groupOf(name: SettingName): "trace" | "review" {
+  return name in DEFAULT_SETTINGS.review ? "review" : "trace";
+}
+
+/** Read one parameter by name, whichever group it is stored in. */
+export function readParameter(settings: Settings, name: SettingName): number {
+  const group = groupOf(name);
+  return (settings[group] as unknown as Record<string, number>)[name]!;
+}
+
+/** A copy of `settings` with one parameter replaced. */
+export function writeParameter(
+  settings: Settings,
+  name: SettingName,
+  value: number,
+): Settings {
+  const group = groupOf(name);
+  return { ...settings, [group]: { ...settings[group], [name]: value } };
+}
+
+/**
+ * The identity of the mask a set of settings would produce.
+ *
+ * Only the `read` stage contributes, which is the whole point: two settings differing anywhere else
+ * describe the same mask, so the expensive half of the pipeline can be reused between them. The
+ * pipeline combines this with the map's own identity before trusting a cached mask.
+ */
+export function maskFingerprint(settings: Settings): string {
+  return stageParameters("read")
+    .map((name) => `${name}=${readParameter(settings, name)}`)
+    .join(",");
+}
+
+/** Whether one stage's parameters are all at their defaults, ignoring the other stages. */
+export function isStageDefault(settings: Settings, stage: Stage): boolean {
+  const normalised = normaliseSettings(settings);
+  return stageParameters(stage).every(
+    (name) => readParameter(normalised, name) === readParameter(DEFAULT_SETTINGS, name),
+  );
+}
+
+/** A copy of `settings` with one stage's parameters back to their defaults, leaving the rest alone. */
+export function resetStage(settings: Settings, stage: Stage): Settings {
+  return stageParameters(stage).reduce(
+    (accumulated, name) =>
+      writeParameter(accumulated, name, readParameter(DEFAULT_SETTINGS, name)),
+    settings,
+  );
+}
+
 function clamp(value: unknown, name: SettingName, fallback: number): number {
   const limits = SETTING_LIMITS[name];
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;

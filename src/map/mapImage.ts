@@ -220,6 +220,18 @@ export async function resolveTraceMap(): Promise<ImageItem | null> {
  * @returns `null` if the image cannot be loaded or its pixels cannot be read. Both are reported,
  * since either would otherwise surface as a dry run that simply never says anything.
  */
+/**
+ * The scene's grid size in world units.
+ *
+ * Exposed separately from `loadMapRaster` because the trace cache needs it *before* deciding
+ * whether to load anything: the grid sets pixels-per-square, which sets the Sauvola radius, so a
+ * changed grid invalidates a cached mask. Reading it costs one SDK call; loading the raster costs
+ * a fetch and a full-image `getImageData`.
+ */
+export async function readGridDpi(): Promise<number> {
+  return await OBR.scene.grid.getDpi();
+}
+
 export async function loadMapRaster(map: ImageItem): Promise<MapRaster | null> {
   const [bounds, dpi] = await Promise.all([
     OBR.scene.items.getItemBounds([map.id]),

@@ -36,10 +36,11 @@
  */
 
 import { devLog } from "./devlog";
-import { describeSettings } from "./settings";
+import { describeSettings, maskFingerprint, type Settings } from "./settings";
 import { readSettings } from "./settingsStore";
-import { loadMapRaster, resolveTraceMap } from "./map/mapImage";
-import { megapixels } from "./map/rasterPlan";
+import { loadMapRaster, readGridDpi, resolveTraceMap } from "./map/mapImage";
+import type { Image as ImageItem } from "@owlbear-rodeo/sdk";
+import { megapixels, type RasterPlan } from "./map/rasterPlan";
 import {
   absorbedDrift,
   aspectMismatch,
@@ -62,9 +63,9 @@ import {
 import { blur, luminanceField, type ScalarField } from "./trace/field";
 import type { BinaryMask } from "./trace/binarize";
 import type { LabelledSpace } from "./trace/label";
-import type { RasterPlacement } from "./map/placement";
+import type { RasterPlacement, WorldBounds } from "./map/placement";
 import { describePoint, readPoint } from "./trace/probePoint";
-import { detectPolarity } from "./trace/polarity";
+import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { labelSpace } from "./trace/label";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
@@ -122,6 +123,66 @@ const BLOB_INK_WIDTHS = 3;
  * log rather than trusted to be the exterior.
  */
 const MAX_SIMPLIFY_INK_WIDTHS = 8;
+
+/**
+ * Everything the reading stage produces, which is everything the deriving stage needs.
+ *
+ * This is the cache boundary between stage one and stage two. Binarisation is the expensive half of
+ * the chain — about 690ms of a 1.4s run on this project's test map — and none of it depends on the
+ * deriving parameters, so a GM sweeping the smallest-room control should not pay for it on every
+ * release of the slider.
+ *
+ * **What this is not: a second implementation.** The chain is still one linear function and the log
+ * still reports every stage in the same order. The only thing that changes is whether the mask was
+ * computed just now or a moment ago, and that is stated in the log on every run.
+ */
+interface MaskStage {
+  /** Identity of the map and the reading settings that produced this. See `maskIdentity`. */
+  readonly fingerprint: string;
+  readonly mapId: string;
+  readonly name: string;
+  readonly plan: RasterPlan;
+  readonly bounds: WorldBounds;
+  readonly dpi: number;
+  readonly placement: RasterPlacement;
+  readonly pxPerSquare: number;
+  /** Unblurred, for the point probe. */
+  readonly rawField: ScalarField;
+  /** Carries the chosen mask, the polarity evidence and the measured ink width. */
+  readonly reading: PolarityReading;
+  readonly chosenCoverage: number;
+}
+
+let cachedMask: MaskStage | null = null;
+
+/**
+ * What a cached mask is only valid for.
+ *
+ * Conservative on purpose, and deliberately more so than it needs to be. A wrong reuse would derive
+ * regions from a stale reading and report them as current — which is exactly the failure this
+ * project has already paid for once, when a clean-looking coverage figure was believed twice and
+ * used to reject the correct answer. Recomputing needlessly costs 690ms; reusing wrongly costs a
+ * diagnostic that lies.
+ *
+ * So this covers every input to the mask: the map's identity and geometry, the scene's grid (which
+ * sets pixels-per-square and therefore the Sauvola radius), and the reading parameters. Owlbear's
+ * own `lastModified` would very likely cover the geometry on its own, but it is undocumented
+ * bookkeeping and the explicit fields cost nothing but a string concatenation.
+ */
+function maskIdentity(map: ImageItem, dpi: number, settings: Settings): string {
+  return [
+    map.id,
+    map.lastModified,
+    map.image.url,
+    `${map.image.width}x${map.image.height}`,
+    `pos:${map.position.x},${map.position.y}`,
+    `scale:${map.scale.x},${map.scale.y}`,
+    `rot:${map.rotation}`,
+    `grid:${map.grid.dpi},${map.grid.offset.x},${map.grid.offset.y}`,
+    `dpi:${dpi}`,
+    maskFingerprint(settings),
+  ].join("|");
+}
 
 /**
  * The last run's intermediates, so a point can be asked about without tracing again.
@@ -207,39 +268,24 @@ export type TraceOutcome =
   | { readonly ok: true; readonly run: TraceRun };
 
 /**
- * Trace the scene's map through every stage the pipeline has, and report each one.
+ * Stage one — read the map. Everything from the image to the binary mask, and nothing after it.
  *
- * Writes nothing. Reports everything, including the boring values — a diagnostic that only speaks
- * when something is wrong cannot tell "fine" from "never ran".
+ * Split out for one reason: it is the expensive half and it depends on none of the deriving
+ * parameters, so `runTrace` can skip it when the map and the reading settings are unchanged. It is
+ * not a separate mode and has no caller but `runTrace` — the chain stays one implementation.
+ *
+ * Returns `null` on the two failures a GM can act on, having already logged which one it was.
  */
-export async function runTrace(): Promise<TraceOutcome> {
-  const started = performance.now();
-
-  // Read before anything else, and log them beside the run they produced. A set of numbers with no
-  // record of the settings that made them cannot be compared against the next set, which is the
-  // whole claim this project makes for its diagnostics (DESIGN.md §8).
-  const settings = await readSettings();
-  devLog("info", `trace: settings — ${describeSettings(settings)}`);
-
-  const map = await resolveTraceMap();
-  if (!map) {
-    // The resolver has already logged which case this was and named the candidates, so repeating
-    // that here would only make the panel's one line unreadable.
-    return {
-      ok: false,
-      message: "No map to trace — see dev.log for which case this was, or pick one above.",
-    };
-  }
-
+async function computeMask(
+  map: ImageItem,
+  dpi: number,
+  settings: Settings,
+  fingerprint: string,
+): Promise<MaskStage | null> {
   const raster = await loadMapRaster(map);
-  if (!raster) {
-    return {
-      ok: false,
-      message: `Could not read pixels from "${map.name || "map"}" — see the console.`,
-    };
-  }
+  if (!raster) return null;
 
-  const { pixels, plan, bounds, dpi } = raster;
+  const { pixels, plan, bounds } = raster;
 
   // ## Resolution
   //
@@ -458,6 +504,105 @@ export async function runTrace(): Promise<TraceOutcome> {
       `${describeInkBlobs(blobs, plan.width, plan.height)}`,
   );
 
+  return {
+    fingerprint,
+    mapId: raster.mapId,
+    name: raster.name,
+    plan,
+    bounds,
+    dpi,
+    placement,
+    pxPerSquare,
+    rawField,
+    reading,
+    chosenCoverage,
+  };
+}
+
+/**
+ * Trace the scene's map through every stage the pipeline has, and report each one.
+ *
+ * Writes nothing. Reports everything, including the boring values — a diagnostic that only speaks
+ * when something is wrong cannot tell "fine" from "never ran".
+ *
+ * ## Which half actually ran, and why the log always says
+ *
+ * When the map and the reading parameters are unchanged, the mask from the previous run is reused
+ * and the whole of stage one is skipped — about half the elapsed time. That is an optimisation and
+ * nothing more: the decision is made from a fingerprint, never from which button the GM pressed, so
+ * correctness never depends on them working the tabs in order.
+ *
+ * It is stated on every run regardless, because a run that reused a mask and a run that recomputed
+ * one must not produce the same log. The first is the one that can be wrong about the map.
+ */
+export async function runTrace(): Promise<TraceOutcome> {
+  const started = performance.now();
+
+  // Read before anything else, and log them beside the run they produced. A set of numbers with no
+  // record of the settings that made them cannot be compared against the next set, which is the
+  // whole claim this project makes for its diagnostics (DESIGN.md §8).
+  const settings = await readSettings();
+  devLog("info", `trace: settings — ${describeSettings(settings)}`);
+
+  const map = await resolveTraceMap();
+  if (!map) {
+    // The resolver has already logged which case this was and named the candidates, so repeating
+    // that here would only make the panel's one line unreadable.
+    return {
+      ok: false,
+      message: "No map to trace — see dev.log for which case this was, or pick one above.",
+    };
+  }
+
+  // One SDK call, made before deciding anything, because the grid sets pixels-per-square and
+  // therefore the Sauvola radius — a regridded scene needs a fresh mask even though the map image
+  // has not changed.
+  const dpi = await readGridDpi();
+  const fingerprint = maskIdentity(map, dpi, settings);
+
+  let mask: MaskStage;
+  if (cachedMask && cachedMask.fingerprint === fingerprint) {
+    mask = cachedMask;
+    // The mask-level diagnostics above — resolution, placement, luminance, polarity, ink width,
+    // ink shapes — belong to the run that computed it and are not repeated. So restate the few
+    // figures the rest of this run is built on, or a reader of the log has numbers below with
+    // nothing above them.
+    devLog(
+      "info",
+      `trace: reused the cached mask for "${mask.name}" — reading settings and map unchanged, ` +
+        `so stage one was skipped. ${mask.plan.width}x${mask.plan.height}, ${mask.reading.polarity}` +
+        `${mask.reading.confident ? "" : " (NOT CONFIDENT)"}, ` +
+        `${(mask.chosenCoverage * 100).toFixed(1)}% ink` +
+        (mask.reading.inkWidth === null ? "" : ` ~${mask.reading.inkWidth.toFixed(1)}px wide`) +
+        `, ${mask.pxPerSquare.toFixed(1)} px/square. Full detail is against the run that read it.`,
+    );
+  } else {
+    const computed = await computeMask(map, dpi, settings, fingerprint);
+    if (!computed) {
+      // A failed read must not leave the previous map's mask sitting where the next run can find
+      // it. Cheaper to throw it away than to reason about whether it is still the right one.
+      cachedMask = null;
+      return {
+        ok: false,
+        message: `Could not read pixels from "${map.name || "map"}" — see the console.`,
+      };
+    }
+    mask = computed;
+    cachedMask = mask;
+  }
+
+  const {
+    plan,
+    bounds,
+    placement,
+    pxPerSquare,
+    rawField,
+    reading,
+    chosenCoverage,
+    name: mapName,
+    mapId,
+  } = mask;
+
   // ## Fill and label
   //
   // The space, not the ink, and 4-connected so the ink is 8-connected — the pairing that stops two
@@ -467,10 +612,10 @@ export async function runTrace(): Promise<TraceOutcome> {
   const minArea = Math.max(1, Math.round(settings.trace.minRoomSquares * pxPerSquare ** 2));
   const labelled = labelSpace(reading.mask, { minArea });
 
-  // Held for the point probe. Everything above is thrown away when this function returns, and
-  // re-deriving it costs a second and a half — which is fine once, and not fine for a control whose
-  // whole value is being able to ask about one spot and then another.
-  lastRun = { rawField, mask: reading.mask, labelled, placement, pxPerSquare, name: raster.name };
+  // Held for the point probe, which needs the labelling as well as the mask and therefore cannot be
+  // served by the mask cache alone. Re-deriving it costs the better part of a second, which is fine
+  // once and not fine for a control whose whole value is asking about one spot and then another.
+  lastRun = { rawField, mask: reading.mask, labelled, placement, pxPerSquare, name: mapName };
   const labelMs = Math.round(performance.now() - labelStarted);
 
   const stats = censusStats(labelled, { pxPerSquare });
@@ -737,7 +882,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   }));
 
   const summary =
-    `"${raster.name}" ${plan.width}x${plan.height}` +
+    `"${mapName}" ${plan.width}x${plan.height}` +
     (plan.capped ? ` (reduced ${plan.factor}x)` : " (native)") +
     `, ${reading.polarity}${reading.confident ? "" : "?"}` +
     `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
@@ -749,7 +894,7 @@ export async function runTrace(): Promise<TraceOutcome> {
 
   return {
     ok: true,
-    run: { mapId: raster.mapId, mapName: raster.name, dpi, regions, summary },
+    run: { mapId, mapName, dpi, regions, summary },
   };
 }
 

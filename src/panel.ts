@@ -19,10 +19,16 @@ import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 import { dryRun, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
 import {
   DEFAULT_SETTINGS,
-  isDefault,
+  isStageDefault,
+  PARAMETER_STAGE,
+  readParameter,
+  resetStage,
   SETTING_LIMITS,
+  STAGES,
+  writeParameter,
   type SettingName,
   type Settings,
+  type Stage,
 } from "./settings";
 import { readSettings, writeSettings } from "./settingsStore";
 import {
@@ -272,14 +278,23 @@ function applyTheme(theme: unknown): void {
  * most people. A control whose direction you have to discover by experiment is a control that gets
  * turned once and left alone.
  */
-const TRACE_CONTROLS: readonly {
-  readonly name: TraceName;
+interface Control {
+  readonly name: SettingName;
   readonly label: string;
   readonly hint: string;
   readonly scale?: Scale;
   /** Renders the value in a unit the GM can feel, given the last run's pixels per grid square. */
   readonly derive?: (value: number, pxPerSquare: number) => string;
-}[] = [
+}
+
+/**
+ * Every control, in stage order.
+ *
+ * One list rather than one per tab: which tab a control appears on is read from the stage
+ * declaration in `settings.ts`, which is the same declaration the pipeline's cache invalidation
+ * uses. Two lists would be two places to disagree about what a knob invalidates.
+ */
+const CONTROLS: readonly Control[] = [
   {
     name: "sauvolaK",
     label: "Ink threshold",
@@ -312,15 +327,6 @@ const TRACE_CONTROLS: readonly {
     label: "Edge simplification",
     hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",
   },
-];
-
-const REVIEW_CONTROLS: readonly {
-  readonly name: ReviewName;
-  readonly label: string;
-  readonly hint: string;
-  readonly scale?: Scale;
-  readonly derive?: (value: number, pxPerSquare: number) => string;
-}[] = [
   {
     name: "fillOpacity",
     label: "Proposal fill",
@@ -332,9 +338,6 @@ const REVIEW_CONTROLS: readonly {
     hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
   },
 ];
-
-type TraceName = keyof Settings["trace"];
-type ReviewName = keyof Settings["review"];
 
 let settings: Settings = DEFAULT_SETTINGS;
 
@@ -396,63 +399,40 @@ function settingRow(
   return row;
 }
 
-/** Repaint both control groups from the current settings, and refresh the derived figures. */
+/** Repaint every stage's controls from the current settings, and refresh the derived figures. */
 function renderSettings(): void {
-  const paint = (
-    container: HTMLElement | null,
-    controls: readonly {
-      name: string;
-      label: string;
-      hint: string;
-      scale?: Scale;
-      derive?: (v: number, p: number) => string;
-    }[],
-    read: (name: string) => number,
-    write: (name: string, value: number) => void,
-  ): void => {
-    if (!container) return;
-    container.replaceChildren();
-    for (const control of controls) {
-      container.append(
-        settingRow(
-          control.name as SettingName,
-          control.label,
-          control.hint,
-          control.scale ?? "linear",
-          control.derive,
-          read(control.name),
-          (next) => write(control.name, next),
-        ),
-      );
+  for (const stage of STAGES) {
+    const container = document.getElementById(`${stage}-settings`);
+    if (container) {
+      container.replaceChildren();
+      for (const control of CONTROLS) {
+        if (PARAMETER_STAGE[control.name] !== stage) continue;
+        container.append(
+          settingRow(
+            control.name,
+            control.label,
+            control.hint,
+            control.scale ?? "linear",
+            control.derive,
+            readParameter(settings, control.name),
+            (next) => {
+              void save(writeParameter(settings, control.name, next), stage);
+            },
+          ),
+        );
+      }
     }
-  };
 
-  paint(
-    document.getElementById("trace-settings"),
-    TRACE_CONTROLS,
-    (name) => settings.trace[name as TraceName],
-    (name, value) => {
-      void save({ ...settings, trace: { ...settings.trace, [name]: value } });
-    },
-  );
-  paint(
-    document.getElementById("review-settings"),
-    REVIEW_CONTROLS,
-    (name) => settings.review[name as ReviewName],
-    (name, value) => {
-      void save({ ...settings, review: { ...settings.review, [name]: value } });
-    },
-  );
+    // Each stage's reset is scoped to that stage. Judging it against the whole settings object —
+    // which is what the two-tab version did — left a stage's button live while its own parameters
+    // were already at their defaults, so pressing it did nothing and said "back to defaults".
+    const reset = document.getElementById(`reset-${stage}`);
+    if (reset instanceof HTMLButtonElement) {
+      reset.disabled = !sceneReady || isStageDefault(settings, stage);
+    }
+  }
 
   setSettingsEnabled(sceneReady);
-  const traceReset = document.getElementById("reset-trace");
-  const reviewReset = document.getElementById("reset-review");
-  if (traceReset instanceof HTMLButtonElement) {
-    traceReset.disabled = !sceneReady || isDefault(settings);
-  }
-  if (reviewReset instanceof HTMLButtonElement) {
-    reviewReset.disabled = !sceneReady || isDefault(settings);
-  }
 }
 
 /**
@@ -462,7 +442,7 @@ function renderSettings(): void {
  * the clamped figure immediately. A control that silently keeps displaying a number the pipeline is
  * not using is worse than one that snaps.
  */
-async function save(next: Settings): Promise<void> {
+async function save(next: Settings, stage?: Stage): Promise<void> {
   try {
     settings = await writeSettings(next);
   } catch (error) {
@@ -472,7 +452,17 @@ async function save(next: Settings): Promise<void> {
     return;
   }
   renderSettings();
-  reportResult("Saved. Trace again to see it.", "ok");
+  // Named per stage, because what a GM has to do next differs and so does what it will cost them.
+  // A reading change means the image is read again and everything downstream is discarded; a
+  // deriving change reuses the reading and only regenerates the polygons.
+  reportResult(
+    stage === "read"
+      ? "Saved. Trace again — this re-reads the map and discards work in tabs 2 and 3."
+      : stage === "derive"
+        ? "Saved. Derive again — this reuses the reading and discards hand edits."
+        : "Saved.",
+    "ok",
+  );
 }
 
 function setSettingsEnabled(enabled: boolean): void {
@@ -481,21 +471,23 @@ function setSettingsEnabled(enabled: boolean): void {
   }
 }
 
-/** Put one group back to its defaults, leaving the other alone. */
-async function resetGroup(which: "trace" | "review"): Promise<string> {
-  await save({ ...settings, [which]: DEFAULT_SETTINGS[which] });
-  return which === "trace"
-    ? "Reading settings back to defaults. Trace again to see it."
-    : "Appearance back to defaults.";
+/** Put one stage's parameters back to their defaults, leaving the other stages alone. */
+async function resetStageSettings(stage: Stage): Promise<string> {
+  await save(resetStage(settings, stage), stage);
+  return stage === "read"
+    ? "Reading back to defaults. Trace again to see it."
+    : stage === "derive"
+      ? "Region derivation back to defaults. Derive again to see it."
+      : "Appearance back to defaults.";
 }
 
-/** Show one tab. Kept plain: two buttons, two panels, one selected. */
-function selectTab(which: "read" | "edit"): void {
-  for (const name of ["read", "edit"] as const) {
-    const tab = document.getElementById(`tab-${name}`);
-    const panel = document.getElementById(`panel-${name}`);
-    tab?.setAttribute("aria-selected", String(name === which));
-    if (panel) panel.hidden = name !== which;
+/** Show one tab. Kept plain: one button and one panel per stage, one selected. */
+function selectTab(which: Stage): void {
+  for (const stage of STAGES) {
+    const tab = document.getElementById(`tab-${stage}`);
+    const panel = document.getElementById(`panel-${stage}`);
+    tab?.setAttribute("aria-selected", String(stage === which));
+    if (panel) panel.hidden = stage !== which;
   }
 }
 
@@ -508,8 +500,8 @@ renderSettings();
 // Wired at load rather than inside `onReady`: switching tabs is pure UI and has no business waiting
 // on the SDK. It *was* inside, and outside a room the tabs were simply dead — which is also how it
 // was caught, since the SDK is inert there by design.
-for (const which of ["read", "edit"] as const) {
-  document.getElementById(`tab-${which}`)?.addEventListener("click", () => selectTab(which));
+for (const stage of STAGES) {
+  document.getElementById(`tab-${stage}`)?.addEventListener("click", () => selectTab(stage));
 }
 selectTab("read");
 
@@ -547,8 +539,7 @@ OBR.onReady(async () => {
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
     wireButton("restyle", restyleStaged),
-    wireButton("reset-trace", () => resetGroup("trace")),
-    wireButton("reset-review", () => resetGroup("review")),
+    ...STAGES.map((stage) => wireButton(`reset-${stage}`, () => resetStageSettings(stage))),
   ];
 
   const mapSelect = wireMapPicker();
