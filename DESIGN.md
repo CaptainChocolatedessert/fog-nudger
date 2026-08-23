@@ -1584,6 +1584,43 @@ only because it is GM-invoked rather than automatic. Recompute the skeleton from
 demand rather than persisting it; pixel access is verified to work, and a stored skeleton goes stale
 the moment the map changes.
 
+### The overlay colour controls want a second look — logged 2026-08-23 (user)
+
+Built as seven preset swatches plus a native `<input type="color">`, with the swatches as the floor
+because a native colour dialog inside a sandboxed third-party iframe is the rendering path that
+already made the map dropdown paint white-on-white and look empty. **The native picker works** —
+confirmed in a room — so the hedge turned out to be unnecessary.
+
+The swatches stay anyway (user), because one click to cycle contrast on a difficult map is worth
+having and the picker is several. But *how the two sit together* was never designed: a row of
+squares and a system colour well side by side is what you get from adding the second control to the
+first, not from deciding what the pair should look like. Revisit both the arrangement and whether
+seven is the right number, alongside whatever other display controls the overlay grows.
+
+Not urgent. Nothing here is wrong, it is merely unconsidered, and it will be easier to judge once
+there is more than one thing being drawn on the overlay.
+
+### Erosion and a minimum line width are different tools — clarified 2026-08-23 (user)
+
+Worth writing down because the record's own shorthand invites the confusion, and this session made
+it: naming a filter by its *effect* rather than its *operation*.
+
+- **Erosion** shrinks every ink region by `k`. Thin marks vanish; thick marks survive **thinner**.
+- **An opening** — erode by `k`, dilate by `k` — deletes marks narrower than `2k` and returns
+  everything else to its original width. This is what "minimum line width" means.
+
+The difference is not academic, because **regions are bounded by ink, so thinning ink grows every
+region**. Erosion alone therefore pushes every fog boundary outward by `k`, which makes it not a
+crude minimum-width filter but *the global outward offset* — already considered and left out above,
+since one radius against variable ink width under-covers heavy walls and over-covers light ones on
+the same map.
+
+**The two were rejected for different reasons, and only one has expired.** The offset's problem is
+*accuracy*: it is wrong in both directions at once and no single value fixes both, which seeing it
+does not help with. The minimum width's problem was *visibility* — it can sever a thin wall
+anywhere, and nothing would say so — and the stage-one overlay is exactly visibility. That is the
+one worth reopening, and §9 carries it.
+
 ### Doors
 
 Wanted as soon as the fog works well. Dynamic Fog's door reactor filters on the same condition as
