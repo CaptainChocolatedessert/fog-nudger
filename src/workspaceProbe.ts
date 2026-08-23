@@ -86,6 +86,26 @@ const POLL_MS = 150;
  */
 const FOCUS_SAMPLE_MS = 300;
 
+/**
+ * When the leak detector's control experiment runs.
+ *
+ * Late enough that the poll loop has a previous reading to compare against, early enough that a
+ * short run still gets the answer — a probe closed after five seconds should not be one whose only
+ * safety check never happened.
+ */
+const SELF_TEST_AT_MS = 2_000;
+
+/**
+ * How far the viewport is deliberately moved, in its own position units.
+ *
+ * Far enough to clear the one-pixel stillness threshold at any sane zoom, small enough that if the
+ * restore ever failed the GM's camera is a nudge off rather than somewhere else entirely.
+ */
+const SELF_TEST_NUDGE = 60;
+
+/** How long to hold each end of the nudge, comfortably more than one poll interval. */
+const SELF_TEST_SETTLE_MS = 500;
+
 const sheet = document.getElementById("sheet");
 const pad = document.getElementById("pad");
 const typing = document.getElementById("typing");
@@ -129,6 +149,27 @@ const lastEventAt: Record<InputChannel, number | null> = {
   other: null,
 };
 
+/**
+ * The leak detector's own control experiment.
+ *
+ * "Owlbear moved 0 times" and "the movement check is broken" produce identical output, and the
+ * first three runs of this probe reported that zero and had a conclusion drawn from it. The
+ * project's own rule is to treat a clean diagnostic as evidence about the diagnostic until it has
+ * failed at least once — so the probe moves the viewport itself, on purpose, and reports whether it
+ * noticed.
+ *
+ * Movements during the self-test are counted **here** and deliberately not blamed on an input
+ * channel: the probe caused them, and letting them fall through the ordinary attribution would have
+ * the control experiment report itself as a leak.
+ */
+const selfTest = {
+  /** True only while the deliberate movement is in flight. */
+  active: false,
+  ran: false,
+  movementsSeen: 0,
+  note: "not run yet",
+};
+
 let hadFocusAtOpen = false;
 let lastPointer = "—";
 let lastWheel = "—";
@@ -162,6 +203,9 @@ function dismiss(why: string): void {
       `Owlbear moved ${tally.blamed.drag + tally.blamed.wheel + tally.blamed.key + tally.blamed.other} ` +
       `times: drag ${tally.blamed.drag}, wheel ${tally.blamed.wheel}, key ${tally.blamed.key}, ` +
       `unattributed ${tally.blamed.other}. ` +
+      // Reported beside the zero it qualifies, because a zero whose detector was never checked is
+      // not the same fact as a zero whose detector demonstrably fires.
+      `Detector self-test: ${selfTest.note}. ` +
       `Poll ${mean.toFixed(0)}ms mean, ${tally.worstPollMs.toFixed(0)}ms worst over ${tally.polls}. ` +
       `iframe ${window.innerWidth}x${window.innerHeight} against viewport ${viewWidth}x${viewHeight}.`,
   );
@@ -345,6 +389,11 @@ function render(): void {
       `Owlbear moved underneath: drag ${tally.blamed.drag} · wheel ${tally.blamed.wheel} · ` +
       `key ${tally.blamed.key} · unattributed ${tally.blamed.other}\n` +
       `  (unattributed is not a leak — another player panning looks like this)\n` +
+      `detector  ${
+        selfTest.ran && selfTest.movementsSeen === 0
+          ? `<span class="bad">${selfTest.note}</span>`
+          : selfTest.note
+      }\n` +
       `poll      ${meanPoll.toFixed(0)}ms mean, ${tally.worstPollMs.toFixed(0)}ms worst over ${tally.polls}\n` +
       `\n` +
       `iframe    ${window.innerWidth}x${window.innerHeight} · Owlbear viewport ` +
@@ -415,10 +464,16 @@ async function run(): Promise<void> {
     tally.worstPollMs = Math.max(tally.worstPollMs, cost);
 
     if (previous && (pointMoved(previous.a, a) || pointMoved(previous.b, b))) {
-      // Blame the movement on whichever of our channels fired most recently before it. Attribution
-      // by timing is a guess, and it is the only one available from inside an opaque box.
-      const channel = attributeMovement(started, lastEventAt);
-      tally.blamed[channel] += 1;
+      if (selfTest.active) {
+        // The probe moved the view itself. Counted as proof the detector works, never as a leak.
+        selfTest.movementsSeen += 1;
+      } else {
+        // Blame the movement on whichever of our channels fired most recently before it.
+        // Attribution by timing is a guess, and it is the only one available from inside an opaque
+        // box.
+        const channel = attributeMovement(started, lastEventAt);
+        tally.blamed[channel] += 1;
+      }
     }
     previous = { a, b };
     render();
@@ -447,6 +502,62 @@ async function run(): Promise<void> {
     );
     render();
   }, FOCUS_SAMPLE_MS);
+
+  window.setTimeout(() => {
+    void runSelfTest();
+  }, SELF_TEST_AT_MS);
+}
+
+/**
+ * Move the viewport deliberately, and find out whether the detector notices.
+ *
+ * The nudge is in the viewport's own position units and is put straight back, so the net effect on
+ * the GM's camera is nothing. It happens behind an opaque sheet, so there is nothing to see either
+ * way — which is precisely why the answer has to be a number.
+ *
+ * `viewport.setPosition` moves this client's camera only; it is not scene state and no other player
+ * sees it.
+ */
+async function runSelfTest(): Promise<void> {
+  if (stopped) return;
+
+  try {
+    const start = await OBR.viewport.getPosition();
+    devLog(
+      "info",
+      `workspace probe (${variant}): self-test — nudging the viewport ${SELF_TEST_NUDGE} from ` +
+        `(${start.x.toFixed(0)}, ${start.y.toFixed(0)}) and putting it back`,
+    );
+
+    selfTest.active = true;
+    selfTest.movementsSeen = 0;
+
+    await OBR.viewport.setPosition({ x: start.x + SELF_TEST_NUDGE, y: start.y });
+    // Long enough for several polls at POLL_MS to see the moved state, since one poll landing in
+    // the gap would report a working detector as blind.
+    await new Promise((resolve) => window.setTimeout(resolve, SELF_TEST_SETTLE_MS));
+    await OBR.viewport.setPosition(start);
+    await new Promise((resolve) => window.setTimeout(resolve, SELF_TEST_SETTLE_MS));
+
+    selfTest.active = false;
+    selfTest.ran = true;
+
+    // Two movements are expected — out and back. One is enough to prove the detector is not blind,
+    // which is the whole claim being tested; the count is reported so a partial answer is visible
+    // rather than rounded up to a pass.
+    const working = selfTest.movementsSeen > 0;
+    selfTest.note = working
+      ? `saw ${selfTest.movementsSeen} of an expected 2 — the detector works`
+      : `saw NOTHING — the detector is blind, so every "Owlbear moved 0 times" above means nothing`;
+    devLog(working ? "info" : "error", `workspace probe (${variant}): self-test ${selfTest.note}`);
+  } catch (error) {
+    selfTest.active = false;
+    selfTest.ran = true;
+    selfTest.note = "FAILED to run — the detector is unverified";
+    devLog("error", "workspace probe: self-test failed", describeError(error));
+  }
+
+  render();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -527,6 +638,23 @@ window.addEventListener("keydown", (event) => {
   // moment, and this is a fact about the whole session.
   if (!anyPointerYet) tally.keysBeforeAnyPointer += 1;
   else tally.keysAfterAPointer += 1;
+
+  /*
+    The first key is logged the instant it arrives, rather than only in the closing summary.
+
+    Escape can end this modal two ways and they look identical from a chair: our handler below, or
+    Owlbear closing it over our heads without the key ever reaching this iframe. The summary cannot
+    tell them apart, because in the second case there is no summary — the page is gone. A line
+    written at the moment of the keystroke survives that, so an Escape pressed before any click
+    either leaves this line behind or proves the key never got here.
+  */
+  if (tally.keyDown === 1) {
+    devLog(
+      "info",
+      `workspace probe (${variant}): FIRST KEY "${event.key}" reached the modal ` +
+        `${anyPointerYet ? "after a click" : "with no click first — focus was ours on open"}`,
+    );
+  }
 
   if (event.key === "Escape") {
     event.preventDefault();
