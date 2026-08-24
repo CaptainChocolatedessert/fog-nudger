@@ -2327,17 +2327,19 @@ empty ring — a state that is visibly different from a repair without needing a
 painter takes `null` for that state rather than a colour, so it cannot be drawn as though ink had
 been added where none was. The state line names the count separately.
 
-##### On by default, and it does invent ink
+##### Off by default — user, 2026-08-23
 
-The asymmetry that justified defaulting the fill off — looking costs nothing, writing does — has no
-place to live once there is one control. Three things put the balance on "on":
+**This is the only control in stage one that invents ink** rather than deciding what to make of ink
+the map already has, and nothing should write into a map's linework before a GM has asked it to. It
+was briefly on at 12px, on the argument that a break merges two rooms and the GM who never reaches
+for the control is the one who needs it. That argument is about *warning*, and warning is no longer
+what this control does — it repairs.
 
-- A break in a wall merges two rooms, which is this project's worst outcome, and the GM who never
-  reaches for this control is the one it exists for.
-- It **cannot act unseen**: every invented pixel is painted in its own colour, at full alpha on its
-  own layer, with a screen-space ring round it. That is §8's test, met.
-- Every other stage-one default already invents a partition, which the GM reviews on the workspace
-  and then stages explicitly. This is one more default in that chain, not a new kind of thing.
+**The cost is real and worth naming: a break now goes unreported until the control is reached for.**
+The separate always-on marking that covered that went with the two-slider split, so there is nothing
+between a GM and a merged room except the second-largest-region alarm in the log — which §8 says
+nobody reads. If that turns out to matter in a room, the answer is a warning that costs nothing and
+writes nothing, not a repair that runs unasked.
 
 ##### The ink is composed from layers now — the user's framing, 2026-08-23
 

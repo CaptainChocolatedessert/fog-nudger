@@ -235,12 +235,12 @@ export const DEFAULT_SETTINGS: Settings = {
     sauvolaRadiusPx: 13,
     minStrokeInkWidths: 0,
     minIslandPx: 0,
-    // On by default, and it does invent ink. Three things make that the right side of the trade: a
-    // break in a wall merges two rooms, which is this project's worst outcome; the repair cannot
-    // act unseen, since every pixel of it is painted in its own colour and ringed on the workspace;
-    // and every other stage-one default already invents a partition the GM reviews before staging.
-    // A GM who never reaches for this control is the one it exists for.
-    gapFillPx: 12,
+    // **Off by default** (user, 2026-08-23). This is the only control in stage one that invents
+    // ink rather than deciding what to make of ink the map already has, and nothing should write
+    // into a map's linework before a GM has asked it to. The cost is that a break goes unreported
+    // until the control is reached for; the marks were briefly a separate always-on warning that
+    // would have covered that, and they went when the two-slider split did.
+    gapFillPx: 0,
     gapTravelPx: 40,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
