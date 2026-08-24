@@ -2109,7 +2109,12 @@ the surface owes a trackpad user an unrestricted pan on a binding other than a p
 (**Ctrl held while dragging, and a dedicated hand tool** — both, user 2026-08-23) once that drag
 becomes the brush. The hand tool exists as a button today with nothing to switch to.
 
-#### 2. Gap marks — BUILT 2026-08-23
+#### 2. Gap marks — BUILT 2026-08-23, and merged into item 3
+
+**These two items are one feature.** Marking and repairing were built as separate controls and
+collapsed into one the same day — the reasoning is under item 3, and it is a fact about maps rather
+than a change of mind about the UI. Everything below about *what counts as a gap* and how it is
+detected survived that unchanged; only the controls and the drawing did not.
 
 **Highlight small breaks in the ink.** A wall with a thin section eroded away — by the minimum
 stroke width, or simply drawn faintly — leaves a break, and a break merges two rooms into one
@@ -2185,9 +2190,10 @@ evidence behind it.
 ##### What it draws
 
 **Breaks are painted in their own colour, on their own layer, at full alpha** — so tinting the ink
-down to look at the map underneath does not also turn the warning down. That layer is also §8's
-rule about the bridging control satisfied **before** the control that needs it exists: invented
-pixels and read pixels must never be indistinguishable.
+down to look at the map underneath does not also turn the warning down. That layer was built here to
+satisfy §8's rule for the bridging control **before** the control that needed it existed; item 3
+then arrived and the two became one feature, so it now carries the repaired pixels themselves.
+Invented pixels and read pixels must never be indistinguishable.
 
 **A ring in screen space at each break**, dark stroke then bright over one path so it reads against
 pale paper and dark stonework alike. Screen space is the point: a break is a handful of raster
@@ -2204,23 +2210,18 @@ adjustable — no colour is readable on every map — applies here too, and this
 ring is what carries the identification when the colour collides. A picker is the fix if a room
 reports the marks disappearing into the paper.
 
-##### The kind axis gained a third value
+##### Superseded within a day: a third value on the kind axis
 
-`PARAMETER_KIND` was `pipeline | display`; it is now `pipeline | gaps | display`. The gap settings
-are derived *from* the mask and change nothing *about* it, so filing them as pipeline parameters
-would re-binarise 690ms on every nudge — the exact trap that axis exists to prevent. But they are
-not display parameters either: unlike a colour they cost real work, so a surface treating them as
-free would run half a second of morphology on every frame of a drag.
+`PARAMETER_KIND` gained `gaps` here and lost it again under item 3. The reasoning while the marks
+only *highlighted* was sound — derived from the mask so not `pipeline`, but costly enough that
+treating them as `display` would have run half a second of morphology on every frame of a drag. Once
+the repair became real every gap parameter fed the mask, the third value had no members, and a kind
+with no members is a filter that silently matches nothing. The cost it was avoiding is answered by
+caching the reading separately instead; item 3 has the account.
 
-So the axis keeps its single question — **what does changing this recompute?** — and the cascade
-runs the way the names do: `pipeline` invalidates the mask and therefore the marks, `gaps`
-invalidates only the marks, `display` invalidates nothing but the next repaint. The mask fingerprint
-still reads `pipeline` alone, and a test pins that a `gaps` change cannot move it — plus one that no
-kind is empty, since every test in that block is a filter and a filter matching nothing passes.
-
-The workspace's row builder now switches on the kind rather than on which heading a control is drawn
-under, which is a conflation it had before: a control moved between headings for tidiness would have
-silently changed what it recomputed.
+**What survived it, and is the durable part:** the workspace's row builder switches on the kind
+rather than on which heading a control is drawn under. That was a live conflation — a control moved
+between headings for tidiness would have silently changed what it recomputed.
 
 ##### Measured — the morphology inner loop, 2026-08-23
 
@@ -2242,7 +2243,7 @@ So a gap search costs roughly one closing plus a linear scan plus some bounded l
 it the same order as a stage-1b filter, against 690ms for a reading. That is the whole reason the
 search runs off the mask rather than off the map.
 
-#### 3. Bridging small gaps — BUILT 2026-08-23
+#### 3. Bridging small gaps — BUILT 2026-08-23, and it absorbed item 2
 
 **One slider** (user, 2026-08-23, after two were tried and abandoned — see below). It sets the widest
 break to find, and everything it finds is repaired.
@@ -2335,11 +2336,25 @@ was briefly on at 12px, on the argument that a break merges two rooms and the GM
 for the control is the one who needs it. That argument is about *warning*, and warning is no longer
 what this control does — it repairs.
 
-**The cost is real and worth naming: a break now goes unreported until the control is reached for.**
-The separate always-on marking that covered that went with the two-slider split, so there is nothing
-between a GM and a merged room except the second-largest-region alarm in the log — which §8 says
-nobody reads. If that turns out to matter in a room, the answer is a warning that costs nothing and
-writes nothing, not a repair that runs unasked.
+**The cost, named: a break goes unreported until the control is reached for.** The separate
+always-on marking that covered that went with the two-slider split, so nothing between a GM and a
+merged room announces itself except the second-largest-region alarm in the log — which §8 says
+nobody reads.
+
+**Accepted, and the reason is that the failure announces itself downstream** (user, 2026-08-23): a
+break usually makes the *regions* visibly wrong, and a GM looking at a partition that has merged two
+rooms comes back here to find out why. So the control is where you go once you have seen the
+symptom, rather than a warning that fires before you have.
+
+That is a real argument rather than a concession, and it is worth separating from the §8 rule it
+looks like it contradicts. §8 forbids a **silent** failure — one with no channel at all. This one has
+a channel: the proposals themselves, which the GM is already obliged to review before staging. What
+§8 rules out is a control that can be wrong with nothing to look at, and stage two's output is the
+something to look at.
+
+If a room shows the symptom is *not* obvious enough — two rooms merging in a corner nobody was
+studying — the answer is a warning that costs nothing and writes nothing, not a repair that runs
+unasked.
 
 ##### The ink is composed from layers now — the user's framing, 2026-08-23
 
