@@ -1,26 +1,26 @@
 /**
- * Step: breaks in the linework.
+ * The breaks layer: what the repair invented, and a ring round every break it found.
  *
- * A break merges two rooms, which is the worst outcome this project has. The controls find and
- * repair them; this step draws what was repaired, in a colour the map does not contain, with a ring
- * round each one.
+ * A break merges two rooms, which is the worst outcome this project has. The controls that find and
+ * repair them sit in the ink step; this draws the result, in a colour the map does not contain.
  *
  * **The search itself is not here.** It moved into the pipeline the moment the fill became real: the
  * fill invents ink that the regions are derived from, so the search and the repair have to be the
  * same computation that produces the mask, not a second copy of it living on a surface. This side
  * only draws what it was handed.
  *
- * This becomes step 4, "edit walls", where a drag paints rather than pans — and where the repair is
- * likely to be retired in favour of one that works on the wall graph rather than on pixels.
+ * **Both stage-one steps ask for this layer**, ink and walls alike. The walls step is where the
+ * minimum stroke width can sever a wall, and a severed wall is a break — so it is the likeliest
+ * manufacturer of the very thing these rings warn about, and hiding them there would take the
+ * warning away from the place it is earned.
  */
 
 import { devLog } from "../../devlog";
 import { paintGaps, parseColour } from "../../overlay/maskImage";
 import type { GapFinding, GapMark } from "../../trace/gaps";
-import { layerFrom, type Layer } from "../layer";
-import { maskShowing } from "../reading";
-import type { Painter } from "../shell";
-import type { Step } from "../step";
+import { bitmapFrom, type Bitmap } from "../bitmap";
+import { maskShowing, onReading } from "../reading";
+import { addPainter, type Painter } from "../shell";
 
 /**
  * The colour a repaired break is drawn in — and it is the only ink on this surface the map does not
@@ -69,7 +69,7 @@ const RING_PADDING = 6;
  * The cost is a second full-resolution RGBA buffer, about 34MB on this project's test map. It is
  * allocated only when there is something to draw in it.
  */
-let painted: Layer | null = null;
+let painted: Bitmap | null = null;
 let marks: readonly GapMark[] = [];
 
 /**
@@ -92,13 +92,13 @@ function paintBreaks(gaps: GapFinding): void {
 
   // Both states get the same colour: an unrepaired break has no pixels to paint, only a ring.
   const buffer = paintGaps(gaps.labels, colour, colour, painted?.buffer);
-  const layer = layerFrom(buffer, gaps.labels.width, gaps.labels.height, painted);
-  if (!layer) {
+  const bitmap = bitmapFrom(buffer, gaps.labels.width, gaps.labels.height, painted);
+  if (!bitmap) {
     painted = null;
     devLog("error", "workspace: could not allocate the break overlay");
     return;
   }
-  painted = layer;
+  painted = bitmap;
 }
 
 /**
@@ -136,10 +136,10 @@ const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight })
   }
 };
 
-export const gapsStep: Step = {
-  id: "gaps",
-  paint,
-  onReading: (result) => {
+/** Wire the layer up. Registered after the ink, which is what puts invented pixels over read ones. */
+export function registerBreaksLayer(): void {
+  addPainter("breaks", paint);
+  onReading((result) => {
     paintBreaks(result.gaps);
-  },
-};
+  });
+}

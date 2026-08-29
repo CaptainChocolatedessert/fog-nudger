@@ -731,9 +731,13 @@ conflated.
 
 1. **Map** — pick the image. The workspace opens with no map and draws nothing until one is chosen,
    which handles the chicken-and-egg of a surface that needs a map to draw.
-2. **Ink** — threshold, blur, detail window. (Was 1a.)
+2. **Ink** — threshold, blur, detail window, and the break repair under its own sub-heading. (Was 1a
+   plus the breaks.) The repair rides here rather than in a step of its own because it **invents
+   ink**, and because it is provisional: step F retires it, so nothing is arranged around it.
 3. **Walls** — minimum stroke width, smallest ink island; spur pruning joins them. (Was 1b.)
-4. **Edit walls** — gap repair now; suppression, ink painting and line editing next.
+4. **Edit walls** — suppression, ink painting and line editing. **Not built, and deliberately not
+   created early to hold the gap repair**: this is the first step where a drag paints, and there is
+   nothing to paint with yet.
 5. **Regions** — smallest room, edge simplification, the partition drawn in the six-colour cycle. Ends
    with "stage these". Deliberately **thin and late**: it is the export, not the main event.
 6. **Doors** — a stub, and probably permanently (§3).
@@ -743,10 +747,21 @@ outline. The argument is the one already made for putting overlay opacity beside
 navigating away from the thing you are tuning in order to recolour it is absurd, so view controls must
 never be somewhere you go.
 
-**Tabs rather than collapsing sections, and the reason is not tidiness.** Each step paints something
-different on the canvas *and* gives a drag a different meaning — pan in 1, 2, 3 and 5; a brush in 4.
-Collapsing sections imply two can be open at once, which would be a lie: you cannot paint suppression
-and place a door with the same gesture.
+**An exclusive accordion — revised 2026-08-29 (user), from tabs.** Each step paints something
+different on the canvas *and* gives a drag a different meaning — pan in 1, 2, 3 and 5; a brush in 4 —
+so two open at once would be a lie: you cannot paint suppression and place a door with the same
+gesture. That was the case *against* collapsing sections, and it is an objection to the **implication**
+rather than to the shape. Enforce exactly one open and the implication is gone, and two advantages
+arrive with it:
+
+- **The ordering stays legible.** Every header is on screen in sequence, so where a step sits in the
+  cascade is a shape rather than something to remember. A tab strip flattens the order into a row.
+- **The controls column is tall and narrow**, which is what vertical stacking suits. Six tabs in a
+  22rem column would wrap, or shrink to abbreviations.
+
+**The cost, stated rather than argued away:** an accordion header is a weaker "you are here" than a
+selected tab, and a mis-click collapses what you were working in. The open header is marked in the
+accent colour and down its edge; nothing answers the second except that reopening is one click.
 
 **This dissolves a problem already on the books.** The workspace was recorded as owing a trackpad user a
 modifier-drag and a hand tool because "a left-drag becomes the brush". Under steps, a left-drag is only
@@ -758,8 +773,19 @@ with "nothing may switch on it", because a control moved between headings for ti
 change what it recomputes. The step now *does* carry behaviour — which layer is painted, what a drag
 means — so the rule is replaced rather than kept: **the step owns paint and tool binding and nothing
 else.** What a change destroys, what it recomputes, and which half of the reading cache it touches stay
-independently declared, with a test pinning that none is derived from another. Cache logic is untouched
+independently declared, with a test pinning what can honestly be pinned. Cache logic is untouched
 by this rework, which is most of what makes it low-risk.
+
+**What that test can and cannot assert — built 2026-08-29.** It pins independence where the
+declarations genuinely disagree: the View group holds a reading-stage control (overlay opacity) beside
+two adjusting ones (proposal fill and outline), and the reading stage is spread across three steps, so
+neither of step and stage can be recovered from the other. It deliberately does **not** demand the same
+of the kind or the post-reading boundary. Every parameter in the ink step happens to be a pipeline
+parameter and every walls parameter happens to be post-reading — facts about today's twelve parameters,
+not rules — and a test demanding they diverge would fail the day a step legitimately holds one of each,
+which is the freedom the separation exists to give. What is pinned for those is that each declaration is
+**total on its own**, since the only way to classify a parameter with no entry is to guess from a
+neighbouring axis, and every such guess is silent.
 
 **What stays in the panel:** the button that opens the workspace (an Owlbear action needs a popover,
 there is no skipping it); accept, back-to-staging and remove, because they act on scene items and the
@@ -810,7 +836,26 @@ refactor gets harder every session it is deferred.
    loop sizes the canvas to the viewport. The reading path itself needs the SDK and therefore a room.
 2. **Promote `section` to a first-class step declaration** carrying paint layer and tool binding, with
    a test pinning that the step, the stage, the kind and the post-reading boundary are declared
-   independently and none is derived from another.
+   independently — **DONE 2026-08-29**, and it brought the accordion with it, because a declaration
+   nothing reads is a declaration that drifts.
+
+   - **`steps.ts` is the fourth axis**: the ordered steps, each with a title, a blurb, the **layers**
+     it shows and what a **drag** means in it, plus the total parameter-to-step map. `section` is gone
+     from the control declaration entirely.
+   - **A layer is drawn because the open step asks for it**, not because it exists. The shell keeps
+     painters keyed by layer and runs the ones the open step names, in registration order. That is
+     the user's convention: each step has its own display style — ink over the map here, linework and
+     coloured faces there.
+   - **One deliberate exception, and it is argued rather than incidental:** the walls step shows the
+     breaks as well as the ink, because the minimum stroke width is the one control that can *sever a
+     wall* — so it is the likeliest manufacturer of the thing the rings warn about, and hiding them
+     there would take the warning away from the place it is earned.
+   - **The hand tool button is gone.** A step owns the drag binding now, so a button that sets what is
+     already set was a control with nothing to do. Ctrl still pans whatever the step says.
+   - **A step still drawn by the panel is marked `pending`** and left out of the accordion, rather than
+     appearing as an empty section a GM can open and find nothing in. An explicit flag rather than
+     "skip a step that renders empty", because the derived version would silently hide a step that
+     legitimately has neither controls nor layers — picking the map is exactly that. It dies at A.5.
 3. **Sweep what is already dead** — the overlay-probe buttons in the panel drive a surface that was
    deleted.
 4. **Move the map picker in** as step 1; the panel loses it.

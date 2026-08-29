@@ -7,14 +7,15 @@
  * because the rendering is identical; what makes it different is that it is never *entered*.
  *
  * Nothing here changes a single pixel of what the pipeline computed, which is why every control in
- * it is declared `display` and none of them touch the mask cache.
+ * it is declared `display` and none of them touch the mask cache. The swatches are the one piece of
+ * the group that is not a slider: the ink colour is the only setting that is not a number, so it
+ * sits outside the parameter machinery entirely and needs its own row of buttons.
  */
 
-import { DEFAULT_SETTINGS, normaliseColour } from "../../settings";
-import { controlsLive } from "../settingRows";
-import { currentSettings, persistSettings, setSettings } from "../settingsState";
-import type { Step } from "../step";
-import { recolourInk } from "./ink";
+import { DEFAULT_SETTINGS, normaliseColour } from "../settings";
+import { recolourInk } from "./layers/ink";
+import { controlsLive } from "./settingRows";
+import { currentSettings, persistSettings, setSettings } from "./settingsState";
 
 /**
  * Preset overlay colours.
@@ -40,7 +41,7 @@ function setInkColour(colour: string): void {
   recolourInk();
 }
 
-function renderSwatches(): void {
+export function renderSwatches(): void {
   const container = document.getElementById("swatches");
   if (!container) return;
   container.replaceChildren();
@@ -68,9 +69,3 @@ function renderSwatches(): void {
   picker.addEventListener("change", () => void persistSettings());
   container.append(picker);
 }
-
-/** Its id is the control section it draws, which is `display` — the kind these controls all are. */
-export const viewStep: Step = {
-  id: "display",
-  mount: renderSwatches,
-};

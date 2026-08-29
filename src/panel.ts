@@ -20,6 +20,7 @@ import { closeOverlayProbe, openOverlayProbe } from "./probe/overlayProbeControl
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
 import { dryRun, lastInkWidth, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
 import { CONTROLS, type Control, type Measured } from "./controls";
+import { PARAMETER_STEP } from "./steps";
 import { openWorkspace } from "./workspace/workspaceControl";
 import {
   DEFAULT_SETTINGS,
@@ -345,19 +346,18 @@ function renderSettings(): void {
     // Cleared up front, because a section's container must end up empty rather than stale when no
     // control lands in it — a leftover row from a previous paint would be a control that still
     // writes settings while claiming to belong somewhere it does not.
-    const sections = new Set(
+    const steps = new Set(
       CONTROLS.filter((control) => PARAMETER_STAGE[control.name] === stage).map(
-        (control) => control.section,
+        (control) => PARAMETER_STEP[control.name],
       ),
     );
-    const containerFor = (section: string): HTMLElement | null =>
-      document.getElementById(`${stage}-${section}`) ??
-      document.getElementById(`${stage}-settings`);
-    for (const section of sections) containerFor(section)?.replaceChildren();
+    const containerFor = (step: string): HTMLElement | null =>
+      document.getElementById(`${stage}-${step}`) ?? document.getElementById(`${stage}-settings`);
+    for (const step of steps) containerFor(step)?.replaceChildren();
 
     for (const control of CONTROLS) {
       if (PARAMETER_STAGE[control.name] !== stage) continue;
-      const container = containerFor(control.section);
+      const container = containerFor(PARAMETER_STEP[control.name]);
       if (container) {
         container.append(
           settingRow(

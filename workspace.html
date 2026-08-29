@@ -165,6 +165,62 @@
       }
 
       /* ----------------------------------------------------------------------------------------
+         The steps, as an exclusive accordion.
+
+         Every header stays on screen in order, so the cascade is a shape rather than something to
+         remember, and exactly one body is open — which is what makes "one step, one set of layers,
+         one meaning for a drag" true rather than merely intended.
+         ---------------------------------------------------------------------------------------- */
+      .step {
+        border-top: 1px solid rgba(187, 153, 255, 0.18);
+      }
+      .step:last-of-type {
+        border-bottom: 1px solid rgba(187, 153, 255, 0.18);
+      }
+      .step-header {
+        display: block;
+        width: 100%;
+        padding: 0.6rem 0.1rem;
+        border: 0;
+        background: transparent;
+        color: #9aa0c8;
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        text-align: left;
+        cursor: pointer;
+      }
+      .step-header:hover {
+        color: #e8e9f5;
+      }
+      /* The open step is named in the accent colour and marked down the edge, because an accordion
+         header is a weaker "you are here" than a selected tab and needs the help. */
+      .step.open > .step-header {
+        color: #bb99ff;
+        box-shadow: inset 2px 0 0 #bb99ff;
+        padding-left: 0.6rem;
+      }
+      .step:not(.open) > .step-body {
+        display: none;
+      }
+      .step-body {
+        padding: 0 0 0.4rem 0.6rem;
+      }
+      .step-body h3 {
+        margin: 1rem 0 0.35rem;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #9aa0c8;
+      }
+
+      #view-group {
+        margin-top: 0.4rem;
+      }
+
+      /* ----------------------------------------------------------------------------------------
          The bar. Deliberately outside the panel, so hiding the controls to see the whole map does
          not also hide the way out.
          ---------------------------------------------------------------------------------------- */
@@ -247,29 +303,17 @@
         <h1>Reading the map</h1>
         <p class="sub" id="map-name">Loading…</p>
 
-        <h2>1a &middot; What counts as ink</h2>
-        <p class="sub">Separating marks from paper, shading and background.</p>
-        <div id="section-ink"></div>
-
-        <h2>1b &middot; Which ink counts as walls</h2>
-        <p class="sub">Filtering those marks down to linework.</p>
-        <div id="section-walls"></div>
-
-        <h2>Breaks in the linework</h2>
-        <p class="sub">
-          A wall with a section missing merges two rooms, which is the worst this can get wrong.
-          Breaks up to the width below are filled in <b class="gap-key">purple</b> and ringed. Purple
-          is ink that is not on the map.
-        </p>
-        <div id="section-gaps"></div>
-
-        <h2>Overlay</h2>
-        <div class="swatches" id="swatches"></div>
-        <div id="section-display"></div>
+        <!--
+          The steps and the persistent View group, both built from the declaration in `steps.ts`
+          rather than written out here. Two headings in the markup and a third in the code was how
+          the sections drifted apart in the first place, and a step now decides what the canvas
+          paints, so it cannot be described in a place the canvas cannot read.
+        -->
+        <div id="steps"></div>
+        <div id="view-group"></div>
       </div>
 
       <div id="bar">
-        <button class="chip" id="tool-hand" aria-pressed="true" title="Pan the map (hold Ctrl to pan with any tool)">Hand</button>
         <button class="chip" id="fit" title="Fit the whole map">Fit</button>
         <button class="chip" id="toggle-panel" title="Hide the controls">Controls</button>
         <button class="chip" id="close">Close (Esc)</button>

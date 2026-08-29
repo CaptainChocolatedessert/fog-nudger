@@ -46,19 +46,19 @@ export interface Measured {
  * most people. A control whose direction you have to discover by experiment is a control that gets
  * turned once and left alone.
  */
+/*
+  What a control says, and nothing about where it lives.
+
+  It carried a `section` string until the steps became real. That was declared presentation-only,
+  with "nothing may switch on it", because a control moved between headings for tidiness must not
+  change what it recomputes — and a step now decides which layers are painted and what a drag means,
+  so it is not presentation-only any more. Which step owns a parameter is declared in `steps.ts`,
+  beside the stage and the kind and separately from both.
+*/
 export interface Control {
   readonly name: SettingName;
   readonly label: string;
   readonly hint: string;
-  /**
-   * Which container the control is drawn in, on whichever surface draws it.
-   *
-   * **Presentation only, and deliberately separate from `PARAMETER_KIND`.** The kind decides what a
-   * change *invalidates* and is read by the mask fingerprint; this decides only where the control
-   * appears. Stage one is two things in series — what is a mark, then which marks are walls — and
-   * both halves are reading-stage pipeline controls, so the division must not touch the cascade.
-   */
-  readonly section: string;
   readonly scale?: Scale;
   /**
    * Renders the value in a unit the GM can feel.
@@ -84,27 +84,23 @@ export interface Control {
 export const CONTROLS: readonly Control[] = [
   {
     name: "sauvolaK",
-    section: "ink",
     label: "Ink threshold",
     hint: "Higher finds <b>less</b> ink — only decisively dark pixels. Lower catches faint linework, and eventually the paper.",
   },
   {
     name: "blurSigma",
-    section: "ink",
     label: "Texture blur",
     hint: "Fades the finest marks below the threshold. The blunt lever against speckle and a printed floor grid — blunt because it works on contrast, so it takes faint walls too.",
     derive: (value) => `${value.toFixed(2)} px`,
   },
   {
     name: "sauvolaRadiusPx",
-    section: "ink",
     label: "Detail window",
     hint: "How local the threshold is, as a radius in pixels. Wants to stay comfortably wider than the linework is thick, or a bold stroke becomes its own background and stops counting as ink.",
     derive: (value) => `${Math.round(value) * 2 + 1} px across`,
   },
   {
     name: "minStrokeInkWidths",
-    section: "walls",
     label: "Minimum stroke width",
     hint: "Removes marks narrower than this, keeping thicker ones at full width. As a share of the measured ink width; <b>zero is off</b>. Works on width, not contrast, so it reaches a floor grid the blur cannot.",
     derive: (value, { inkWidth }) => {
@@ -119,14 +115,12 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "minIslandPx",
-    section: "walls",
     label: "Smallest ink island",
     hint: "Removes isolated marks shorter than this on <b>both</b> sides — decoration that survived the filter above. Walls join into one network, so they are not islands. In pixels; <b>zero is off</b>.",
     derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
   },
   {
     name: "gapFillPx",
-    section: "gaps",
     label: "Largest break to repair",
     hint: "Finds narrow breaks in the linework — what merge two rooms into one — and fills them, in <b class='gap-key'>purple</b>. In pixels; <b>zero is off</b>. Past a doorway's width it starts sealing doorways, and no measurement can tell those apart.",
     derive: (value, { pxPerSquare }) => {
@@ -137,7 +131,6 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "gapTravelPx",
-    section: "gaps",
     label: "Same-wall distance",
     hint: "How far apart two edges of a break can be <b>along the ink</b> and still count as one piece of wall. Low repairs more: a crack beside a corner starts counting. High treats distant linework as connected and goes quiet.",
     derive: (value) =>
@@ -145,7 +138,6 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "minRoomSquares",
-    section: "settings",
     // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a
     // linear track the default sits 1.6% along and the rest of the slider chooses between absurd
     // values.
@@ -159,7 +151,6 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "simplifyInkWidths",
-    section: "settings",
     label: "Edge simplification",
     hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",
     derive: (value, { inkWidth }) =>
@@ -169,25 +160,17 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "fillOpacity",
-    section: "settings",
     label: "Proposal fill",
     hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
   },
   {
     name: "strokeSquares",
-    section: "settings",
     label: "Proposal outline",
     hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
   },
   {
     name: "inkOpacity",
-    section: "display",
     label: "Overlay opacity",
     hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
   },
 ];
-
-/** The controls belonging to one section, in declaration order. */
-export function sectionControls(section: string): readonly Control[] {
-  return CONTROLS.filter((control) => control.section === section);
-}

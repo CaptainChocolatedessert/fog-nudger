@@ -38,6 +38,7 @@ import {
   zoomAbout,
   type View,
 } from "../probe/viewTransform";
+import type { Drag, LayerId } from "../steps";
 import { WORKSPACE_ID } from "./workspaceControl";
 
 /**
@@ -79,7 +80,16 @@ export interface Frame {
 /** Something drawn over the map, under the map's own transform. */
 export type Painter = (frame: Frame) => void;
 
-const painters: Painter[] = [];
+/**
+ * Every layer that has registered, and the ones the open step asks for.
+ *
+ * A layer is drawn because **the step the GM is in is about it**, not because it exists: the ink
+ * steps paint the mask, and the wall and region steps to come paint linework and coloured faces over
+ * a map with no mask on it at all. Registration order is draw order, so what varies with the step is
+ * which of them run rather than the order they run in.
+ */
+const painters: { readonly layer: LayerId; readonly paint: Painter }[] = [];
+let activeLayers: readonly LayerId[] = [];
 
 let view: View = { scale: 1, x: 0, y: 0 };
 let mapImage: HTMLImageElement | null = null;
@@ -97,16 +107,17 @@ let closing = false;
 let pendingEdit = false;
 
 /**
- * Which tool has the plain drag.
+ * What a plain left-drag does, which the **open step** decides.
  *
- * Only one exists today and it pans, so this looks like ceremony — it is not. Painting is the next
- * thing built here, and when it arrives it takes the plain drag; the hand tool and **Ctrl** are how
- * a GM pans once that has happened. Ctrl matters more on a trackpad than it looks: Firefox
- * axis-locks a two-finger scroll begun along an axis and Owlbear has the same limit, so the wheel
- * gesture alone cannot pan freely and a drag is the only unrestricted pan there is.
+ * Every step pans today, so this looks like ceremony — it is not. Painting is the next thing built
+ * here, and when it arrives the steps that paint take the plain drag while the rest keep pan. That
+ * is the whole reason a step is a mode rather than a heading, and it is what dissolves the problem
+ * this surface was recorded as owing a trackpad user: **Ctrl** pans whatever the step says, and it
+ * matters more on a trackpad than it looks — Firefox axis-locks a two-finger scroll begun along an
+ * axis and Owlbear has the same limit, so the wheel gesture alone cannot pan freely and a drag is
+ * the only unrestricted pan there is.
  */
-export type Tool = "hand";
-let tool: Tool = "hand";
+let drag: Drag = "pan";
 
 // ---------------------------------------------------------------------------------------------
 // Drawing
@@ -116,9 +127,15 @@ export function viewportSize(): { width: number; height: number } {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-/** Register something to be drawn over the map. Draw order is registration order. */
-export function addPainter(painter: Painter): void {
-  painters.push(painter);
+/** Register a layer's painter. Draw order is registration order; whether it runs is the step's call. */
+export function addPainter(layer: LayerId, paint: Painter): void {
+  painters.push({ layer, paint });
+}
+
+/** Show exactly these layers, which is what opening a step does. */
+export function setActiveLayers(layers: readonly LayerId[]): void {
+  activeLayers = layers;
+  dirty = true;
 }
 
 /** Ask for a repaint on the next frame. Cheap and idempotent — the frame loop coalesces. */
@@ -175,7 +192,9 @@ function draw(): void {
   // Everything else, in the same call shape and therefore in the same place. This is the
   // registration argument in one line: there is no second transform to get wrong.
   const frame: Frame = { context, view, width, height, drawWidth, drawHeight };
-  for (const paint of painters) paint(frame);
+  for (const painter of painters) {
+    if (activeLayers.includes(painter.layer)) painter.paint(frame);
+  }
 }
 
 function frameLoop(): void {
@@ -271,8 +290,9 @@ export async function openOnOwlbearsView(bounds: {
 // Navigation
 // ---------------------------------------------------------------------------------------------
 
-export function setTool(next: Tool): void {
-  tool = next;
+/** What a plain drag means from here on. Set by opening a step, and by nothing else. */
+export function setDrag(next: Drag): void {
+  drag = next;
 }
 
 /*
@@ -293,8 +313,8 @@ if (canvas instanceof HTMLCanvasElement) {
   let last: { x: number; y: number } | null = null;
 
   canvas.addEventListener("pointerdown", (event) => {
-    // Ctrl pans with any tool, which is what keeps a pan available once the plain drag is a brush.
-    if (tool !== "hand" && !event.ctrlKey) return;
+    // Ctrl pans in any step, which is what keeps a pan available once the plain drag is a brush.
+    if (drag !== "pan" && !event.ctrlKey) return;
     panning = true;
     last = { x: event.clientX, y: event.clientY };
     canvas.classList.add("dragging");
@@ -368,10 +388,6 @@ document.getElementById("toggle-panel")?.addEventListener("click", (event) => {
   }
   dirty = true;
 });
-document.getElementById("tool-hand")?.addEventListener("click", () => {
-  tool = "hand";
-});
-
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();

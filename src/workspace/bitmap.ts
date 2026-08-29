@@ -1,5 +1,10 @@
 /**
- * A map-space layer: pixels rasterised once, drawn every frame by a `drawImage`.
+ * A map-space bitmap: pixels rasterised once, drawn every frame by a `drawImage`.
+ *
+ * Named a bitmap rather than a layer on purpose. A **layer** is a thing the canvas stack draws and a
+ * step asks for by name — ink, breaks, and the linework and faces to come. This is the pixels one of
+ * them happens to be made of, and conflating the two would make "which layers does this step show"
+ * read as a question about allocation.
  *
  * Every painter that draws something the size of the map wants the same thing — an offscreen canvas
  * at the map's own resolution, holding an RGBA buffer it can rewrite in place. Rasterising once and
@@ -11,7 +16,7 @@
  */
 
 /** A mask rasterised into RGBA once, so a view change is a `drawImage` rather than a repaint. */
-export interface Layer {
+export interface Bitmap {
   readonly canvas: HTMLCanvasElement;
   readonly buffer: Uint8ClampedArray<ArrayBuffer>;
 }
@@ -23,12 +28,12 @@ export interface Layer {
  * allocation failed. The caller decides what to say about it — a painter that silently drew nothing
  * would be a blank surface with no explanation, which is the one thing this surface must never be.
  */
-export function layerFrom(
+export function bitmapFrom(
   buffer: Uint8ClampedArray<ArrayBuffer>,
   width: number,
   height: number,
-  reusing: Layer | null,
-): Layer | null {
+  reusing: Bitmap | null,
+): Bitmap | null {
   const target = reusing?.canvas ?? document.createElement("canvas");
   target.width = width;
   target.height = height;

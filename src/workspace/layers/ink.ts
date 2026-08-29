@@ -1,26 +1,22 @@
 /**
- * Step: what counts as ink.
+ * The ink layer: the binary mask, painted over the map in a colour the GM chose.
  *
- * The controls that decide the reading, and the layer that shows what they decided. **The mask here
- * is binary — ink or not ink, and nothing else.** Not a tri-state including discarded floor: that is
+ * **Binary — ink or not ink, and nothing else.** Not a tri-state including discarded floor: that is
  * a *smallest-room* verdict, which the three-stage split put in stage two, and drawing it here would
  * put a stage-two outcome on a stage-one surface.
  *
- * The ink layer belongs to this step because this step is what the GM is judging when they look at
- * it — but it is drawn on every frame regardless of which step is in front, and it will go on being
- * drawn under the walls and the regions. Which steps paint which layers is a question for the step
- * declaration, not for this file.
+ * Which steps show it is the steps' business, not this file's — it is declared in `steps.ts`, and
+ * today the ink and walls steps both ask for it because both are judged by looking at it.
  */
 
 import { DEFAULT_SETTINGS } from "../../settings";
 import { paintMask, parseColour } from "../../overlay/maskImage";
-import { layerFrom, type Layer } from "../layer";
-import { maskShowing } from "../reading";
+import { bitmapFrom, type Bitmap } from "../bitmap";
+import { maskShowing, onReading } from "../reading";
 import { currentSettings } from "../settingsState";
-import { invalidate, say, type Painter } from "../shell";
-import type { Step } from "../step";
+import { addPainter, invalidate, say, type Painter } from "../shell";
 
-let painted: Layer | null = null;
+let painted: Bitmap | null = null;
 
 /** The last mask painted, kept so a colour change can rewrite it without asking the pipeline. */
 let lastMask: Parameters<typeof paintMask>[0] | null = null;
@@ -34,13 +30,13 @@ let lastMask: Parameters<typeof paintMask>[0] | null = null;
 function rasterise(
   mask: Parameters<typeof paintMask>[0],
   colour: string,
-  reusing: Layer | null,
-): Layer | null {
+  reusing: Bitmap | null,
+): Bitmap | null {
   const rgb = parseColour(colour) ?? parseColour(DEFAULT_SETTINGS.overlay.inkColour);
   if (!rgb) return null;
 
   const buffer = paintMask(mask, rgb, reusing?.buffer);
-  return layerFrom(buffer, mask.width, mask.height, reusing);
+  return bitmapFrom(buffer, mask.width, mask.height, reusing);
 }
 
 /**
@@ -51,9 +47,9 @@ function rasterise(
  */
 export function recolourInk(): void {
   if (!lastMask) return;
-  const layer = rasterise(lastMask, currentSettings().overlay.inkColour, painted);
-  if (!layer) return;
-  painted = layer;
+  const bitmap = rasterise(lastMask, currentSettings().overlay.inkColour, painted);
+  if (!bitmap) return;
+  painted = bitmap;
   invalidate();
 }
 
@@ -64,19 +60,19 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   context.globalAlpha = 1;
 };
 
-export const inkStep: Step = {
-  id: "ink",
-  paint,
-  onReading: (result) => {
+/** Wire the layer up. Called in draw order, which is what puts the ink under the breaks. */
+export function registerInkLayer(): void {
+  addPainter("ink", paint);
+  onReading((result) => {
     // Kept before rasterising, so a later colour change repaints *this* mask rather than whichever
     // one happened to be current when the workspace opened.
     lastMask = result.mask;
-    const layer = rasterise(result.mask, currentSettings().overlay.inkColour, painted);
-    if (!layer) {
+    const bitmap = rasterise(result.mask, currentSettings().overlay.inkColour, painted);
+    if (!bitmap) {
       say("could not allocate the mask image", "bad");
       return false;
     }
-    painted = layer;
+    painted = bitmap;
     return true;
-  },
-};
+  });
+}

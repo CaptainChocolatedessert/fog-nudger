@@ -3,9 +3,9 @@
  *
  * ## What this file is
  *
- * The composition root, and nothing else. It names the steps, hands them to the shell, and runs the
- * start-up sequence. The surface itself is `workspace/shell.ts`; each step is a module under
- * `workspace/steps/`.
+ * The composition root, and nothing else. It builds the canvas stack, draws the panel, and runs the
+ * start-up sequence. The surface itself is `workspace/shell.ts`; what the steps *are* is declared in
+ * `steps.ts`, and each canvas layer is a module under `workspace/layers/`.
  *
  * ## What this replaces, and why it is smaller than what it replaces
  *
@@ -39,37 +39,35 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 import { resolveTraceMap } from "./map/mapImage";
+import { renderPanel } from "./workspace/accordion";
+import { registerBreaksLayer } from "./workspace/layers/breaks";
+import { registerInkLayer } from "./workspace/layers/ink";
 import { adoptOpeningReading, onReading, readOnOpen } from "./workspace/reading";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { loadSettings } from "./workspace/settingsState";
-import { renderSteps, wireSteps, type Step } from "./workspace/step";
 import { openOnOwlbearsView, say, setMapImage, setMapName, start } from "./workspace/shell";
-import { gapsStep } from "./workspace/steps/gaps";
-import { inkStep } from "./workspace/steps/ink";
-import { viewStep } from "./workspace/steps/view";
-import { wallsStep } from "./workspace/steps/walls";
 
 installDevLog("workspace");
 
-/**
- * The steps, in the order they are met — and, for the painters, the order they are drawn.
- *
- * The ink goes down before the breaks, which is what puts invented pixels over read ones rather
- * than under them. View is last because it is not a step at all: it is the persistent group that
- * decides how everything above it is drawn.
- */
-const STEPS: readonly Step[] = [inkStep, wallsStep, gapsStep, viewStep];
+/*
+  The canvas stack, in draw order.
 
-wireSteps(STEPS);
+  Ink first, breaks over it: invented pixels sit on top of read ones rather than under them. Which of
+  them is on screen at any moment is the open step's call, declared in `steps.ts` — this only says
+  what exists and in what order.
+*/
+registerInkLayer();
+registerBreaksLayer();
+
 // The measurements a readout reports against only exist once a reading has landed. Registered after
-// the steps, so a step that could not take a reading stops this too.
+// the layers, so a layer that could not take a reading stops this too.
 onReading(() => {
   refreshHints();
 });
 
 start();
 // Drawn now, disabled, from the defaults — see `controlsLive`.
-renderSteps(STEPS);
+renderPanel();
 say("waiting for Owlbear…", "working");
 
 async function run(): Promise<void> {
@@ -84,7 +82,7 @@ async function run(): Promise<void> {
   setControlsLive(true);
   // Repainted wholesale rather than patched, so there is no path by which a row keeps a value from
   // the defaults it was first drawn with.
-  renderSteps(STEPS);
+  renderPanel();
 
   const result = await readOnOpen();
   if (!result) {
