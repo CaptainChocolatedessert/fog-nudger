@@ -22,37 +22,22 @@ import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 // answering a harder question. `overlayProbeControl.ts` and its page stay as the record of how the
 // answer was got; re-import `openOverlayProbe` here and re-add the markup to bring it back.
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
-import { dryRun, lastInkWidth, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
-import { CONTROLS, type Control, type Measured } from "./controls";
-import { PARAMETER_STEP } from "./steps";
+import { dryRun, probeWorldPoint } from "./pipeline";
 import { openWorkspace } from "./workspace/workspaceControl";
 import {
   DEFAULT_SETTINGS,
   isStageDefault,
-  PARAMETER_STAGE,
-  readParameter,
   resetStage,
-  SETTING_LIMITS,
   STAGES,
-  writeParameter,
-  type SettingName,
   type Settings,
   type Stage,
 } from "./settings";
 import { readSettings, writeSettings } from "./settingsStore";
 import {
-  formatValue,
-  fromSlider,
-  SLIDER_STEPS,
-  toSlider,
-  type Scale,
-} from "./sliderScale";
-import {
   acceptStaged,
   removeOurs,
   restyleStaged,
   returnToStaging,
-  stageRegions,
 } from "./emit/emitRegions";
 
 
@@ -140,123 +125,27 @@ function applyTheme(theme: unknown): void {
 
 let settings: Settings = DEFAULT_SETTINGS;
 
-/** Build one row. Number inputs rather than sliders: these are values worth reading exactly. */
-function settingRow(
-  name: SettingName,
-  label: string,
-  hint: string,
-  scale: Scale,
-  derive: Control["derive"],
-  value: number,
-  onChange: (value: number) => void,
-): HTMLElement {
-  const limits = SETTING_LIMITS[name];
-  const row = document.createElement("div");
-  row.className = "setting";
-
-  const text = document.createElement("label");
-  text.textContent = label;
-  text.htmlFor = `set-${name}`;
-
-  const readout = document.createElement("output");
-  readout.className = "value";
-  readout.htmlFor = `set-${name}`;
-  readout.textContent = formatValue(value, limits, scale);
-
-  const input = document.createElement("input");
-  input.type = "range";
-  input.id = `set-${name}`;
-  input.min = "0";
-  input.max = String(SLIDER_STEPS);
-  input.step = "1";
-  input.value = String(toSlider(value, limits, scale));
-
-  const note = document.createElement("p");
-  note.className = "hint";
-
-  // Read once per paint rather than per drag frame: both are figures from the last completed run,
-  // and neither can change while a slider is being moved.
-  const measured: Measured = { pxPerSquare: lastPixelsPerSquare(), inkWidth: lastInkWidth() };
-  const paintHint = (current: number): void => {
-    const derived = derive ? derive(current, measured) : "";
-    note.innerHTML = derived ? `${hint} <b>${derived}</b>` : hint;
-  };
-  paintHint(value);
-
-  // Two events, and the split is the point of using a slider at all. `input` fires continuously
-  // while dragging, so it drives the readout and the derived figure — that live feedback is the
-  // whole reason a slider beats a number box here. `change` fires once on release, and only that
-  // writes: committing mid-drag would put a hundred values through scene metadata to reach one.
-  input.addEventListener("input", () => {
-    const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = formatValue(current, limits, scale);
-    paintHint(current);
-  });
-  input.addEventListener("change", () => {
-    onChange(fromSlider(Number(input.value), limits, scale));
-  });
-
-  row.append(text, readout, input, note);
-  return row;
-}
-
-/** Repaint every stage's controls from the current settings, and refresh the derived figures. */
+/**
+ * Keep the reset buttons honest.
+ *
+ * All that is left of what was a settings panel. Every control a GM can turn is on the workspace
+ * now — the reading's, the deriving stage's, and the two that decide how proposals are drawn, which
+ * followed the partition across when the workspace started drawing it. What stays here is what acts
+ * on the *scene*, and a scene is the one thing a full-screen sheet over the map cannot show you.
+ *
+ * The buttons are still worth having on this side: a reset is an action rather than a control, and
+ * it is disabled when the stage it would reset is already at its defaults, which is the only reason
+ * this function survives.
+ */
 function renderSettings(): void {
   for (const stage of STAGES) {
-    // Pipeline controls and display controls are painted into separate containers, because a
-    // display control belongs beside the thing it displays rather than beside the knobs that share
-    // its stage. A stage with no display container simply has all its controls in the one place.
-    // Cleared up front, because a section's container must end up empty rather than stale when no
-    // control lands in it — a leftover row from a previous paint would be a control that still
-    // writes settings while claiming to belong somewhere it does not.
-    const steps = new Set(
-      CONTROLS.filter((control) => PARAMETER_STAGE[control.name] === stage).map(
-        (control) => PARAMETER_STEP[control.name],
-      ),
-    );
-    const containerFor = (step: string): HTMLElement | null =>
-      document.getElementById(`${stage}-${step}`) ?? document.getElementById(`${stage}-settings`);
-    for (const step of steps) containerFor(step)?.replaceChildren();
-
-    for (const control of CONTROLS) {
-      if (PARAMETER_STAGE[control.name] !== stage) continue;
-      const container = containerFor(PARAMETER_STEP[control.name]);
-      if (container) {
-        container.append(
-          settingRow(
-            control.name,
-            control.label,
-            control.hint,
-            control.scale ?? "linear",
-            control.derive,
-            readParameter(settings, control.name),
-            (next) => {
-              void save(writeParameter(settings, control.name, next), stage);
-            },
-          ),
-        );
-      }
-    }
-
-    // Each stage's reset is scoped to that stage. Judging it against the whole settings object —
-    // which is what the two-tab version did — left a stage's button live while its own parameters
-    // were already at their defaults, so pressing it did nothing and said "back to defaults".
     const reset = document.getElementById(`reset-${stage}`);
     if (reset instanceof HTMLButtonElement) {
       reset.disabled = !sceneReady || isStageDefault(settings, stage);
     }
   }
-
-  setSettingsEnabled(sceneReady);
 }
 
-/**
- * Persist and repaint.
- *
- * Repaints from what came *back* rather than from what was sent, so a value the store clamped shows
- * the clamped figure immediately. A control that silently keeps displaying a number the pipeline is
- * not using is worse than one that snaps.
- */
 async function save(next: Settings, stage?: Stage): Promise<void> {
   try {
     settings = await writeSettings(next);
@@ -278,12 +167,6 @@ async function save(next: Settings, stage?: Stage): Promise<void> {
         : "Saved.",
     "ok",
   );
-}
-
-function setSettingsEnabled(enabled: boolean): void {
-  for (const input of document.querySelectorAll<HTMLInputElement>(".setting input")) {
-    input.disabled = !enabled;
-  }
 }
 
 /** Put one stage's parameters back to their defaults, leaving the other stages alone. */
@@ -348,7 +231,6 @@ OBR.onReady(async () => {
     wireButton("dry-run", dryRun),
     wireButton("probe", probeViewportCentre),
     wireButton("open-workspace", openWorkspace),
-    wireButton("stage", stageRegions),
     wireButton("accept", acceptStaged),
     wireButton("unaccept", returnToStaging),
     wireButton("remove", removeOurs),

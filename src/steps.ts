@@ -48,7 +48,7 @@ export type StepId = "map" | "ink" | "walls" | "regions" | "view";
  * map with no mask on it at all. Nothing is drawn "because it exists" — a layer is on screen because
  * the step the GM is in is about it.
  */
-export const LAYERS = ["ink", "breaks"] as const;
+export const LAYERS = ["ink", "breaks", "regions"] as const;
 
 export type LayerId = (typeof LAYERS)[number];
 
@@ -161,18 +161,24 @@ export const STEPS: readonly Step[] = [
   {
     id: "regions",
     title: "Regions",
-    blurb: "Abstracting the ink into the areas that will become fog.",
-    // Declared because its parameters need a home and because it is the design's step 5, but the
-    // panel still draws them — so it is `pending` and the accordion leaves it out. Its layers are
-    // empty for the same reason: there is nothing to paint until the partition moves across.
-    layers: [],
+    blurb:
+      "Every enclosed area, in six colours so neighbours differ. This is what would be staged. " +
+      "Neither control can split or join a region — the reading already decided which rooms exist.",
+    /*
+      The partition alone, with no ink under it.
+
+      Deliberate, and the clearest case yet for the convention that a step shows its own thing: the
+      question here is whether these areas are the rooms a GM would have drawn, and ink drawn under
+      them would answer the previous question over the top of this one. The map is still there to
+      judge against, which is the comparison that matters at this point.
+    */
+    layers: ["regions"],
     drag: "pan",
-    pending: true,
   },
   {
     id: "view",
     title: "View",
-    blurb: "How the overlay is drawn. Changes nothing the pipeline computes.",
+    blurb: "How the ink and the proposals are drawn. Changes nothing the pipeline computes.",
     layers: [],
     drag: "pan",
     persistent: true,

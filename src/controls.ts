@@ -159,6 +159,11 @@ export const CONTROLS: readonly Control[] = [
         : `${(value * inkWidth).toFixed(1)}px of a ${inkWidth.toFixed(1)}px ink width`,
   },
   {
+    name: "inkOpacity",
+    label: "Overlay opacity",
+    hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
+  },
+  {
     name: "fillOpacity",
     label: "Proposal fill",
     hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
@@ -167,10 +172,5 @@ export const CONTROLS: readonly Control[] = [
     name: "strokeSquares",
     label: "Proposal outline",
     hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
-  },
-  {
-    name: "inkOpacity",
-    label: "Overlay opacity",
-    hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
   },
 ];

@@ -35,7 +35,6 @@ import {
   type Step,
   type StepId,
 } from "../steps";
-import { PARAMETER_STAGE } from "../settings";
 import { resetHints, settingRow } from "./settingRows";
 import { invalidate, setActiveLayers, setDrag } from "./shell";
 import { renderSwatches } from "./view";
@@ -76,9 +75,11 @@ export function advanceTo(id: StepId): void {
 /**
  * A step's rows, in declaration order, with its groups after them under their own headings.
  *
- * Stage two and three's controls stay in the popover for now: this surface is stage one, and
- * `PARAMETER_STAGE` is the same declaration the cache invalidation reads, so the two cannot drift
- * apart. It is why the regions step has a declaration here but no section on screen yet.
+ * **Every stage is drawn here now.** It was stage one only while the panel still owned deriving; the
+ * Regions step ended that, and the two appearance controls came with it because the partition they
+ * describe is now drawn on this canvas rather than only in the scene. Which stage a control belongs
+ * to still decides what changing it destroys — that is the cascade, and `settingRows` reads it — but
+ * it no longer decides which surface draws it.
  */
 function stepBody(step: Step): HTMLElement {
   const body = document.createElement("div");
@@ -92,7 +93,6 @@ function stepBody(step: Step): HTMLElement {
   content.get(step.id)?.(body);
 
   for (const control of ungroupedControls(step)) {
-    if (PARAMETER_STAGE[control.name] !== "read") continue;
     body.append(settingRow(control));
   }
 
@@ -104,12 +104,24 @@ function stepBody(step: Step): HTMLElement {
     note.innerHTML = group.blurb;
     body.append(heading, note);
     for (const control of groupControls(group)) {
-      if (PARAMETER_STAGE[control.name] !== "read") continue;
       body.append(settingRow(control));
     }
   }
 
   return body;
+}
+
+/**
+ * Told whenever the open step changes, with whether it is now the open one.
+ *
+ * For work a step should only pay for while it is being looked at. Deriving the partition is the
+ * case: it costs the better part of a second and is visible in exactly one step, so it runs on entry
+ * rather than on every change everywhere.
+ */
+const openListeners: { readonly id: StepId; readonly changed: (open: boolean) => void }[] = [];
+
+export function onStepOpen(id: StepId, changed: (open: boolean) => void): void {
+  openListeners.push({ id, changed });
 }
 
 /** Tell the canvas what the open step wants. The one place a step's declaration becomes behaviour. */
@@ -118,6 +130,7 @@ function applyOpenStep(): void {
   if (!step) return;
   setActiveLayers(step.layers);
   setDrag(step.drag);
+  for (const listener of openListeners) listener.changed(listener.id === open);
   invalidate();
 }
 
@@ -178,7 +191,6 @@ export function renderPanel(): void {
     renderSwatches();
 
     for (const control of ungroupedControls(persistent)) {
-      if (PARAMETER_STAGE[control.name] !== "read") continue;
       view.append(settingRow(control));
     }
   }

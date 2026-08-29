@@ -738,8 +738,9 @@ conflated.
 4. **Edit walls** — suppression, ink painting and line editing. **Not built, and deliberately not
    created early to hold the gap repair**: this is the first step where a drag paints, and there is
    nothing to paint with yet.
-5. **Regions** — smallest room, edge simplification, the partition drawn in the six-colour cycle. Ends
-   with "stage these". Deliberately **thin and late**: it is the export, not the main event.
+5. **Regions** — smallest room, edge simplification, the partition drawn in the six-colour cycle.
+   **Built 2026-08-29.** Ends with "stage these". Deliberately **thin and late**: it is the export,
+   not the main event.
 6. **Doors** — a stub, and probably permanently (§3).
 
 Plus a **View** group that is persistent rather than a step — ink colour and opacity, proposal fill and
@@ -922,8 +923,35 @@ refactor gets harder every session it is deferred.
      and the message landed on the state line where the map's name belongs. Same rule as the
      disabled sliders, sharper failure — the surface is built at module load, but anything that asks
      the *scene* a question waits.
-5. **Move region derivation in** as step 5, drawing the partition. The largest piece, and the one that
-   makes OQ6 answerable at last.
+5. **Move region derivation in as step 5, drawing the partition — DONE 2026-08-29.** The largest
+   piece, and the one that makes OQ6 answerable at last: judging a partition used to cost a scene
+   write, since staging it was the only way to see it. It now costs opening a step.
+
+   - **The partition is drawn as vectors**, not rasterised, in the emit path's own six colours cycled
+     the same way — so the preview and the staged shapes are the same picture. Holes are cut with the
+     even-odd rule, because a region with a courtyard must not be filled across the courtyard here
+     and hollow once it is in the scene.
+   - **The regions step shows no ink**, which is the clearest case yet for the convention that a step
+     shows its own thing: the question is whether these areas are the rooms a GM would have drawn,
+     and ink under them answers the previous question over the top of this one.
+   - **Deriving is lazy, and that is the cascade being spent rather than described.** A reading
+     invalidates the partition, but rebuilding it costs the better part of a second on top of a
+     cached mask and it is visible in exactly one step — so a change elsewhere only marks it stale,
+     and entering the step is what pays. The accordion tells the step when it opens.
+   - **`runTrace` takes a settings override**, the same one `maskForOverlay` already took and for the
+     same reason: the preview shows a value the GM released a moment ago, while the write to scene
+     metadata is still in flight.
+   - **It returns the raster rings beside the placed ones**, and states the raster they are in. The
+     alternative was measuring the extent of the rings to recover the scale, which works only because
+     the outside region covers the map — a guess dressed as arithmetic.
+   - **"Stage these" ends the step** and re-runs the trace rather than emitting the preview, because
+     the emit path owns the command cap, the batching and the provenance, and a second route into the
+     scene would be a second implementation of all three. The settings are persisted and *awaited*
+     first, closing the window where staging could use the value before the one just released.
+   - **The panel gave up every slider**, deriving and appearance alike — the appearance pair followed
+     the partition across, since it is drawn on this canvas now — along with the button that staged
+     them. What is left there is what acts on the *scene*, which is the one thing a full-screen sheet
+     over the map cannot show you.
 6. **Reduce the panel** to open-workspace, accept / back / remove, and diagnostics.
 
 **Do not renest the stored settings to match the six steps.** This was refused once already for the

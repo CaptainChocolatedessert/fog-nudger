@@ -74,7 +74,7 @@ import { labelSpace } from "./trace/label";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
 import { contourStats, describeContours, traceRegions } from "./trace/contours";
-import { doubleSignedArea } from "./geometry/ring";
+import { doubleSignedArea, type Ring } from "./geometry/ring";
 import {
   describeSimplification,
   simplifyRegions,
@@ -313,6 +313,16 @@ export function lastInkWidth(): number | null {
 export interface TracedRegion {
   readonly id: number;
   readonly placed: PlacedRegion;
+  /**
+   * The same rings before placement, in **raster pixels**.
+   *
+   * Carried so the workspace can draw the partition over the map it was read from without a second
+   * chain to produce it, and without undoing the world transform to get back to where it started.
+   * The placed rings are what an emitted item needs; these are what a picture of the map needs, and
+   * they are the same geometry either way — which is the point of returning both from one run
+   * rather than tracing twice.
+   */
+  readonly rings: readonly Ring[];
   /** The region's true area in grid squares — its pixel count, not its bounding box. */
   readonly squares: number;
   readonly commands: number;
@@ -325,6 +335,15 @@ export interface TraceRun {
   readonly mapId: string;
   readonly mapName: string;
   readonly dpi: number;
+  /**
+   * The raster the region rings are expressed in, in pixels.
+   *
+   * The map's own pixels unless §5's memory cap reduced them, in which case every ring is in the
+   * reduced raster together. Stated rather than left to be inferred: anything drawing these rings
+   * over the map needs the scale, and measuring it from the rings themselves would be a guess that
+   * happens to work because the outside region covers the map.
+   */
+  readonly raster: { readonly width: number; readonly height: number };
   readonly regions: readonly TracedRegion[];
   /** One line for the panel. Detail is already in the dev log by the time this is returned. */
   readonly summary: string;
@@ -867,13 +886,24 @@ export async function maskForOverlay(
  * It is stated on every run regardless, because a run that reused a mask and a run that recomputed
  * one must not produce the same log. The first is the one that can be wrong about the map.
  */
-export async function runTrace(): Promise<TraceOutcome> {
+export async function runTrace(
+  /*
+    The settings to trace with, or scene metadata's if omitted.
+
+    Same reason as `maskForOverlay`: the workspace previews a value the GM has only just released,
+    and a write to scene metadata is in flight rather than landed at that moment. Passing the
+    settings in removes the race entirely rather than making the preview wait on a round trip — and
+    the fingerprints work unchanged either way, since they are computed from whatever settings
+    arrive rather than from where they came from.
+  */
+  override?: Settings,
+): Promise<TraceOutcome> {
   const started = performance.now();
 
   // Read before anything else, and log them beside the run they produced. A set of numbers with no
   // record of the settings that made them cannot be compared against the next set, which is the
   // whole claim this project makes for its diagnostics (DESIGN.md §8).
-  const settings = await readSettings();
+  const settings = override ?? (await readSettings());
   devLog("info", `trace: settings — ${describeSettings(settings)}`);
 
   const map = await resolveTraceMap();
@@ -1202,6 +1232,7 @@ export async function runTrace(): Promise<TraceOutcome> {
   const regions: TracedRegion[] = simplified.map((region, index) => ({
     id: region.id,
     placed: placed[index]!,
+    rings: region.rings,
     squares: squaresById.get(region.id) ?? 0,
     commands: region.commands,
     tolerance: region.tolerance,
@@ -1221,7 +1252,14 @@ export async function runTrace(): Promise<TraceOutcome> {
 
   return {
     ok: true,
-    run: { mapId, mapName, dpi, regions, summary },
+    run: {
+      mapId,
+      mapName,
+      dpi,
+      raster: { width: plan.width, height: plan.height },
+      regions,
+      summary,
+    },
   };
 }
 

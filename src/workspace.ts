@@ -38,12 +38,15 @@ import OBR from "@owlbear-rodeo/sdk";
 
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
-import { registerStepContent, renderPanel } from "./workspace/accordion";
+import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
 import { registerBreaksLayer } from "./workspace/layers/breaks";
 import { registerInkLayer } from "./workspace/layers/ink";
+import { registerRegionsLayer } from "./workspace/layers/regions";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { onReading } from "./workspace/reading";
+import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
+import { renderStageAction } from "./workspace/stageAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { loadSettings } from "./workspace/settingsState";
 import { say, start } from "./workspace/shell";
@@ -59,10 +62,21 @@ installDevLog("workspace");
 */
 registerInkLayer();
 registerBreaksLayer();
+registerRegionsLayer();
+
+// A new reading is a new partition. Registered before the hint refresher below for no reason beyond
+// order of appearance; both are listeners and neither depends on the other.
+registerRegionInvalidation();
+// Deriving costs the better part of a second and is visible in one step, so entering it is what pays
+// for it.
+onStepOpen("regions", watchRegions);
 
 // The one step whose body is not built from parameters: choosing a map is a list of what the scene
 // holds, not a number to turn.
 registerStepContent("map", renderMapPicker);
+// The one action on this surface that writes to the scene, at the end of the step that judges what
+// would be written.
+registerStepContent("regions", renderStageAction);
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after
 // the layers, so a layer that could not take a reading stops this too.

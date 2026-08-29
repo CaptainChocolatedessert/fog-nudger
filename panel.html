@@ -296,18 +296,14 @@
 
     <section id="panel-derive" role="tabpanel" aria-labelledby="tab-derive" hidden>
       <p class="field">How ink becomes regions</p>
-      <div class="settings" id="derive-settings"></div>
-
       <div class="actions">
-        <button id="stage" disabled>Derive &amp; stage</button>
         <button id="reset-derive" class="quiet" disabled>Defaults</button>
       </div>
       <p class="note">
-        Neither control can split or join a region — the reading already decided which rooms exist.
-        The minimum deletes a region and lets whatever encloses it absorb the space; simplification
-        smooths every boundary, capped below the point where one could cross a wall. Both regenerate
-        every polygon, so both discard hand edits made in tab 3. The reading is left alone, so this
-        skips the slow half of a trace.
+        The two controls and the button that stages them are in the workspace now, under
+        <em>Regions</em>, where the partition itself is drawn. Neither control can split or join a
+        region — the reading already decided which rooms exist. Both regenerate every polygon, so
+        both discard hand edits made in tab 3, and both leave the reading alone.
       </p>
     </section>
 
@@ -324,7 +320,6 @@
       </p>
 
       <p class="field">How proposals look while you judge them</p>
-      <div class="settings" id="adjust-settings"></div>
       <div class="actions">
         <button id="restyle" disabled>Apply to staged</button>
         <button id="reset-adjust" class="quiet" disabled>Defaults</button>

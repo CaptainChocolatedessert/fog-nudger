@@ -11,9 +11,16 @@
 
 import { type Control, type Measured } from "../controls";
 import { lastInkWidth, lastPixelsPerSquare } from "../pipeline";
-import { PARAMETER_KIND, readParameter, SETTING_LIMITS, writeParameter } from "../settings";
+import {
+  PARAMETER_KIND,
+  PARAMETER_STAGE,
+  readParameter,
+  SETTING_LIMITS,
+  writeParameter,
+} from "../settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
 import { requestReread } from "./reading";
+import { invalidateRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 
@@ -83,8 +90,16 @@ export function setControlsLive(next: boolean): void {
  * decided by which *section* the control was drawn in, which conflated presentation with cost: a
  * control moved between headings for tidiness would have silently changed what it recomputed.
  *
- * - **pipeline** — re-reads the map, about 690ms. Blanks the sheet on release.
+ * - **pipeline** — recomputes something. Blanks what it invalidates, on release.
  * - **display** — free, so it applies live on `input` and blanks nothing.
+ *
+ * ## And *what* it recomputes is the stage, which is the cascade
+ *
+ * A reading parameter re-reads the map, about 690ms, and that invalidates the partition with
+ * it. A deriving parameter leaves the mask alone and rebuilds the partition from it. Both facts
+ * are already declared — the stage *is* the cascade, and the same declaration decides what a
+ * cached mask may be reused for — so this reads them rather than keeping a third list of which
+ * slider does what.
  */
 export function settingRow(control: Control): HTMLElement {
   const limits = SETTING_LIMITS[control.name];
@@ -170,7 +185,10 @@ export function settingRow(control: Control): HTMLElement {
     setSettings(writeParameter(currentSettings(), control.name, current));
     setPendingEdit(false);
 
-    if (kind === "pipeline") requestReread();
+    if (kind === "pipeline") {
+      if (PARAMETER_STAGE[control.name] === "read") requestReread();
+      else invalidateRegions();
+    }
     void persistSettings();
   });
 
