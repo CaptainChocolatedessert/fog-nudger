@@ -1,0 +1,145 @@
+/**
+ * Step: breaks in the linework.
+ *
+ * A break merges two rooms, which is the worst outcome this project has. The controls find and
+ * repair them; this step draws what was repaired, in a colour the map does not contain, with a ring
+ * round each one.
+ *
+ * **The search itself is not here.** It moved into the pipeline the moment the fill became real: the
+ * fill invents ink that the regions are derived from, so the search and the repair have to be the
+ * same computation that produces the mask, not a second copy of it living on a surface. This side
+ * only draws what it was handed.
+ *
+ * This becomes step 4, "edit walls", where a drag paints rather than pans — and where the repair is
+ * likely to be retired in favour of one that works on the wall graph rather than on pixels.
+ */
+
+import { devLog } from "../../devlog";
+import { paintGaps, parseColour } from "../../overlay/maskImage";
+import type { GapFinding, GapMark } from "../../trace/gaps";
+import { layerFrom, type Layer } from "../layer";
+import { maskShowing } from "../reading";
+import type { Painter } from "../shell";
+import type { Step } from "../step";
+
+/**
+ * The colour a repaired break is drawn in — and it is the only ink on this surface the map does not
+ * contain.
+ *
+ * `DESIGN.md` §8 requires that invented ink never be indistinguishable from read ink, and this is
+ * that rule met: a different colour from the ink, drawn at full alpha on its own layer, with a ring
+ * round it. A GM who has tinted the ink down to look at the linework underneath has not also turned
+ * the repair down.
+ *
+ * There were briefly two colours — purple for a break found, green for one repaired — when finding
+ * and repairing were separate controls. With one control everything found is repaired, so there is
+ * one state and one colour. The **second** colour survives only for the one case that is genuinely
+ * different: a break the search could not finish examining is ringed and *not* filled, so it shows
+ * as an empty ring. Marking on a guess is a warning; inventing ink on a guess is not.
+ *
+ * **Fixed rather than a swatch row**, unlike the ink colour, and the reason the ink colour is
+ * adjustable applies here too: no colour is readable on every map. The ring is what carries the
+ * identification when a colour collides — drawn dark-then-bright over the same path, so it reads
+ * against anything underneath, and it is a shape nothing on a map looks like. If a room reports the
+ * marks vanishing into the paper anyway, a picker is the answer.
+ *
+ * Kept in step with the `.gap-key` colour in the page's own stylesheet by hand.
+ */
+const GAP_COLOUR = "#a855f7";
+
+/**
+ * The ring is drawn in **screen** pixels, which is the whole point of it.
+ *
+ * A break is a handful of raster pixels. With a whole map on screen those pixels are smaller than
+ * one screen pixel, so a mark that scaled with the view would be invisible in exactly the situation
+ * it exists for — a GM scanning the map for something they do not already know about. It grows to
+ * enclose the break once the view is zoomed in past the ring's own size.
+ */
+const RING_MIN_RADIUS = 11;
+const RING_PADDING = 6;
+
+/**
+ * The breaks, on their own layer.
+ *
+ * Separate from the ink rather than mixed into it, for two reasons. It is drawn at full alpha
+ * whatever the ink opacity is set to, so a GM who has tinted the ink down to look at the linework
+ * underneath has not also turned the warning down. And invented pixels must never be
+ * indistinguishable from read ones.
+ *
+ * The cost is a second full-resolution RGBA buffer, about 34MB on this project's test map. It is
+ * allocated only when there is something to draw in it.
+ */
+let painted: Layer | null = null;
+let marks: readonly GapMark[] = [];
+
+/**
+ * Paint the breaks that arrived with the mask.
+ *
+ * The layer is allocated lazily. A map with no breaks does not pay for a second full-resolution
+ * RGBA buffer.
+ */
+function paintBreaks(gaps: GapFinding): void {
+  marks = gaps.marks;
+  if (gaps.marks.length === 0) {
+    // Cleared rather than left stale. A repaint that kept the previous reading's layer would draw
+    // breaks the current settings do not have, which is the blanking rule one derivation down.
+    painted = null;
+    return;
+  }
+
+  const colour = parseColour(GAP_COLOUR);
+  if (!colour) return;
+
+  // Both states get the same colour: an unrepaired break has no pixels to paint, only a ring.
+  const buffer = paintGaps(gaps.labels, colour, colour, painted?.buffer);
+  const layer = layerFrom(buffer, gaps.labels.width, gaps.labels.height, painted);
+  if (!layer) {
+    painted = null;
+    devLog("error", "workspace: could not allocate the break overlay");
+    return;
+  }
+  painted = layer;
+}
+
+/**
+ * A ring round each break, in screen space.
+ *
+ * Two strokes over one path — a dark halo, then the gap colour inside it — so the ring reads
+ * against pale paper and dark stonework alike without anyone choosing a colour for the map in hand.
+ *
+ * Culled against the viewport, which is what keeps this cheap when zoomed in. Zoomed out every ring
+ * is on screen at once, and a map with hundreds of breaks pays for all of them every frame; that is
+ * the case to watch if the surface ever feels heavy, and it is also a map telling the GM something.
+ */
+const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight }) => {
+  // Over the ink and at full alpha. The breaks come from the same reading as the ink, so the mask's
+  // own freshness gate covers them.
+  if (!painted || !maskShowing()) return;
+  context.drawImage(painted.canvas, view.x, view.y, drawWidth, drawHeight);
+
+  for (const mark of marks) {
+    const cx = view.x + mark.x * view.scale;
+    const cy = view.y + mark.y * view.scale;
+    const radius = Math.max(RING_MIN_RADIUS, (mark.span * view.scale) / 2 + RING_PADDING);
+    if (cx + radius < 0 || cy + radius < 0 || cx - radius > width || cy - radius > height) {
+      continue;
+    }
+
+    context.beginPath();
+    context.arc(cx, cy, radius, 0, Math.PI * 2);
+    context.lineWidth = 4;
+    context.strokeStyle = "rgba(6, 4, 12, 0.7)";
+    context.stroke();
+    context.lineWidth = 2;
+    context.strokeStyle = GAP_COLOUR;
+    context.stroke();
+  }
+};
+
+export const gapsStep: Step = {
+  id: "gaps",
+  paint,
+  onReading: (result) => {
+    paintBreaks(result.gaps);
+  },
+};

@@ -782,9 +782,32 @@ The workspace is already a thousand lines and would absorb the panel's settings 
 stage, partition drawing, painting and eventually doors. **Split it first, then add steps** — the same
 refactor gets harder every session it is deferred.
 
-1. **Split the workspace into a shell plus per-step modules, with no behaviour change.** The shell owns
-   the transform, input handling and the canvas stack; a step owns its controls, what it paints, and
-   what a drag means.
+1. **Split the workspace into a shell plus per-step modules, with no behaviour change — DONE
+   2026-08-29.** The shell owns the transform, input handling and the canvas stack; a step owns its
+   controls, what it paints, and what a drag means.
+
+   What came out of the thousand-line file, and why each piece is where it is:
+
+   - **The shell** draws the map and then hands the frame to a list of **painters** in registration
+     order. That list *is* the canvas stack, and it is the registration argument as code: every layer
+     is drawn into the map's own rectangle, computed once and passed down, so no two painters can
+     derive it differently.
+   - **The reading** — asking the pipeline for a mask and deciding whether the answer is still wanted
+     — is its own module rather than a step's, because *three* steps change the reading and all three
+     want the same mask back. Steps subscribe. A listener that cannot take a reading returns false and
+     the generation is marked failed, so a step that fails to allocate cannot leave a half-updated
+     surface looking current.
+   - **A settings holder**, because the steps share one settings object and the alternative is each
+     keeping a copy and reconciling them.
+   - **The slider row** is shared, since what a row does on release is a property of the parameter
+     rather than of the step drawing it.
+   - **Four steps today** — ink, walls, breaks, and the persistent View group. Walls has no painter and
+     is fifteen lines; it is the obvious home for spur pruning.
+
+   **Verified as far as it can be without a room:** types, the whole suite, a production build, and
+   the page loaded outside Owlbear — where the rows render disabled from the defaults with their
+   derived readouts, the swatches are there, the pointer and wheel handlers are live, and the frame
+   loop sizes the canvas to the viewport. The reading path itself needs the SDK and therefore a room.
 2. **Promote `section` to a first-class step declaration** carrying paint layer and tool binding, with
    a test pinning that the step, the stage, the kind and the post-reading boundary are declared
    independently and none is derived from another.
@@ -2480,7 +2503,10 @@ falls out with no parameter.
 vertex ids in metadata, exact matching on read-back.
 
 **F. The gap repair moves onto the graph** — endpoint pairing and graph distance replacing the closing,
-the bank grouping, the bounded flood and the guessed-break state.
+the bank grouping, the bounded flood and the guessed-break state. It **retires** the pixel repair
+rather than joining it: that one is confirmed working in a room (2026-08-29) and is expected to be
+deprecated the moment this lands, so it stays with the reading controls in the meantime and gets no
+further investment.
 
 **G. Vector editing.** Additions and deletions as durable inputs; a move implies the freeze point (§4).
 
@@ -2674,6 +2700,17 @@ search runs off the mask rather than off the map.
 
 **One slider** (user, 2026-08-23, after two were tried and abandoned — see below). It sets the widest
 break to find, and everything it finds is repaired.
+
+**Confirmed in a room — user, 2026-08-29. It works.** The one-slider shape and the ring-plus-fill
+drawing both do what they were built to do on a real map, which closes the last thing this feature
+was waiting on.
+
+**And it is provisional.** Step F moves the repair onto the wall graph — endpoint pairing and graph
+distance in place of the closing, the bank grouping and the bounded flood — and this version is
+expected to be **retired** rather than kept alongside it. Until then it stays where it is, with the
+reading controls (user, 2026-08-29). Two consequences worth stating rather than discovering: it is
+not a candidate for further investment, and the six-step layout should not be arranged around it,
+since the step that would exist to hold it is the one thing here with a known end date.
 
 **Repaired pixels are drawn purple, at full alpha on their own layer, with a screen-space ring round
 each break.** Purple is the only ink on the surface that the map does not contain.
