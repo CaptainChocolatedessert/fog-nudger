@@ -802,6 +802,36 @@ than of our care. Its *other* justification, native editing, is genuinely weaken
 region is editing the output, where editing a line is editing the input. Revisit once painting exists
 and it is clear how often a hand edit is still wanted.
 
+#### Choosing the map — settled 2026-08-29 (user)
+
+**Everything on the map layer is offered, and the largest is the default.** Four rules, and three of
+them are reversals worth keeping the reasoning for:
+
+- **No filter, no mark.** An area heuristic used to flag anything under a quarter of the largest as
+  "too small?". The sizes are on screen and the GM can see the picture, so the mark was an opinion
+  offered where the evidence was already in view.
+- **No *Auto* row.** It named a policy that decided later, which is a thing a GM cannot check. Every
+  row is a real image, and the one that would be traced is simply the one that starts selected — the
+  list states the outcome rather than the rule.
+- **No refusal.** Two comparable images and no choice used to produce *nothing at all*, on the
+  grounds that the wrong one might be a GM overlay whose linework would shape what players can see.
+  That was written when a wrong guess was **invisible**, from a popover with no picture anywhere. The
+  workspace inverts it: the chosen map is drawn full-screen with its name above the picker, so a
+  wrong guess is evident in the thing the GM is looking at and one click from being fixed — which is
+  §8's own standard for when a guess is allowed to be a guess.
+- **Pixel sizes, in z-order.** The size shown is the image's own resolution, which is the figure a GM
+  can match against the file they imported and the resolution the trace actually reads. It replaces
+  grid squares, which replaced world units; world units were misleading because a map reading
+  "10308x7965" beside its name is read as an image resolution by anyone who has seen one. The order
+  is the stack, bottom upward, so the base map comes before whatever was laid on top of it — and so
+  that scaling an image does not make rows move under the cursor.
+
+**The ranking is still world area, not pixel count**, because "the map" means the thing covering the
+most ground: a small image blown up to fill the table is the map, and a crisp 4000px inset of one
+room is not. **One function decides it, read by both the picker and the resolver**, since a picker
+showing one image selected while the trace read another would be two functions agreeing separately
+and lying together.
+
 #### The order within step A — split before growing
 
 The workspace is already a thousand lines and would absorb the panel's settings rendering, the derive
@@ -882,6 +912,11 @@ refactor gets harder every session it is deferred.
      case, and where they were going anyway. It never moves them after a deliberate click on a
      header, and never at all when there is no map, which leaves them in the one step that can fix
      that.
+   - **The rules changed with the move — user, 2026-08-29.** Every `MAP`-layer image is listed,
+     unfiltered, in the layer's own **z-order** with its **pixel size** beside its name. There is no
+     *Auto* row and no plausibility mark, and the resolver no longer refuses an ambiguous scene: with
+     nothing nominated, the **largest by world area** is traced, and its row is simply the one that
+     starts selected. See "Choosing the map" below.
    - **The picker had to be gated on `onReady`**, found by loading the page outside a room: asking
      Owlbear for the scene's items before it is ready does not return an empty list, it **throws**,
      and the message landed on the state line where the map's name belongs. Same rule as the
@@ -1884,13 +1919,12 @@ regions do not exist until steps 4 and 5. What is built is the rig around the ho
 map selection, pixels, transform, luminance — and calling that a census would let a smaller set of
 numbers wear a name it has not earned. Delivered:
 
-- **Map selection**, closing §10's "which map". Candidates ranked by world area with anything far
-  smaller than the largest discarded as a token stranded on the map layer; two comparable images
-  means **refuse and name them**, since one may be a GM overlay. A panel picker carries the
-  nomination because a scene map is normally locked and so cannot be nominated by clicking it, which
-  is how the sibling's selection-based flow became unreachable in exactly the scene that needed it.
-  The choice lives in scene metadata — local storage is partitioned in a third-party iframe and can
-  vanish.
+- **Map selection**, closing §10's "which map". **Revised 2026-08-29 (user) — the largest wins, and
+  nothing is filtered or refused.** A picker carries the nomination because a scene map is normally
+  locked and so cannot be nominated by clicking it, which is how the sibling's selection-based flow
+  became unreachable in exactly the scene that needed it. The choice lives in scene metadata — local
+  storage is partitioned in a third-party iframe and can vanish. See "Choosing the map" in §4 for the
+  rules as they now stand.
 - **Pixels** at native resolution, per §5. `crossOrigin = "anonymous"` is mandatory regardless of
   what the CDN sends, or the canvas is tainted; that failure reports through `console.error` rather
   than the dev log, since the dev log compiles away in a production build and this is the one

@@ -20,7 +20,6 @@ import OBR, { isImage, type Image as ImageItem, type Item } from "@owlbear-rodeo
 
 import { devLog } from "../devlog";
 import { key } from "../namespace";
-import { selectMapCandidates } from "./mapCandidates";
 import { planRaster, type RasterPlan } from "./rasterPlan";
 import type { PixelImage } from "../trace/field";
 import type { WorldBounds } from "./placement";
@@ -52,37 +51,66 @@ export interface MapImageSummary {
   readonly id: string;
   readonly name: string;
   /**
-   * Size in **grid squares**, not pixels and not world units.
+   * The image's own size in pixels — the number on the file, not what it covers on the table.
    *
-   * World units were shown first and were actively misleading: a map reading "10308×7965" next to
-   * its name is read as an image resolution by anyone who has ever seen one, and this map's image
-   * is in fact 3300×2550. Grid squares are the only one of the three a GM can check against the map
-   * in front of them, and they still do the job the number is here for — telling a real map apart
-   * from a token stranded on the map layer.
+   * World units were shown first and were actively misleading: a map reading "10308x7965" beside
+   * its name is read as an image resolution by anyone who has ever seen one, and this map's image is
+   * in fact 3300x2550. Grid squares replaced them and were replaced in turn (user, 2026-08-29),
+   * because the pixel size is the one figure a GM can match against the picture they imported - and
+   * because it is the resolution the trace actually reads, which squares only imply.
    */
-  readonly width: number;
-  readonly height: number;
+  readonly pixelWidth: number;
+  readonly pixelHeight: number;
   readonly locked: boolean;
   readonly visible: boolean;
-  /** Whether the area filter would keep this as a plausible map. */
-  readonly plausible: boolean;
+  /** Whether this is the one a scene with no nomination would trace. */
+  readonly isDefault: boolean;
 }
 
 /**
- * Every `MAP`-layer image in the scene, largest first, for the GM to choose from.
+ * The map to trace when the GM has not said: the **largest by world area**.
  *
- * Deliberately not the same thing as `resolveTraceMap`, and the difference is the point of having a
- * picker at all. The resolver refuses an ambiguous scene, because guessing risks tracing a GM
- * overlay. This lists everything and lets a human decide, which is safe precisely because a human
- * is reading the names.
+ * One rule, two callers - the resolver and the picker - because a picker showing one image selected
+ * while the trace read a different one would be a lie told by two functions agreeing separately.
  *
- * `locked` is reported but blocks nothing. A scene map is normally locked and therefore cannot be
- * clicked, which is how the sibling's selection-based nomination became unreachable in exactly the
- * scene that needed it. A list in a panel needs no selection.
+ * World area rather than pixel count, because "the map" means the thing covering the most ground. A
+ * small image blown up to fill the table is the map; a crisp 4000px inset of one room is not.
  *
- * `plausible` carries the area filter's verdict as information rather than as a rule — a stray
- * token on the map layer is shown, marked, and still choosable, because the filter is a heuristic
- * and the GM is not.
+ * **It no longer refuses an ambiguous scene** (user, 2026-08-29). It used to: two images within 4x
+ * of each other and no choice made produced nothing at all, on the argument that the wrong one might
+ * be a GM overlay whose linework would shape what players can see. That argument was written when a
+ * wrong guess was *invisible* - a trace started from a popover with no picture anywhere. The
+ * workspace inverts it: the chosen map is drawn full-screen with its name above the picker, so
+ * picking wrong is evident in the thing the GM is looking at and is one click from being fixed,
+ * which is this project's own standard for when a guess may be a guess.
+ */
+export function largestByArea<T extends { readonly area: number }>(maps: readonly T[]): T | null {
+  let best: T | null = null;
+  // Zero and negative areas are skipped: a degenerate item cannot be a map, and letting one win on
+  // an empty scene would trace nothing while claiming to have chosen.
+  for (const map of maps) {
+    if (map.area <= 0) continue;
+    if (!best || map.area > best.area) best = map;
+  }
+  return best;
+}
+
+/**
+ * Every `MAP`-layer image in the scene, in the layer's own **z-order**, for the GM to choose from.
+ *
+ * Everything is listed and nothing is filtered (user, 2026-08-29). Locked images are here - a scene
+ * map is normally locked and therefore cannot be clicked, which is how the sibling's
+ * selection-based nomination became unreachable in exactly the scene that needed it - and so are
+ * hidden ones and tiny ones. A list needs no selection and no permission.
+ *
+ * **No plausibility mark.** An area filter used to flag anything under a quarter of the largest as
+ * "too small?"; the sizes are on screen and the GM can see the picture, so the mark was a heuristic
+ * offering an opinion where the evidence was already in view.
+ *
+ * **Z-order rather than largest-first**, bottom of the stack upward: that is the order the images
+ * were laid down, so the base map comes before whatever was put on top of it. Ranking still happens
+ * - the largest is marked as the default - but it no longer decides the order, because a list that
+ * reorders itself as a GM scales an image is a list whose rows move under the cursor.
  */
 export async function listMapImages(): Promise<MapImageSummary[]> {
   const maps = await OBR.scene.items.getItems<ImageItem>(
@@ -90,30 +118,33 @@ export async function listMapImages(): Promise<MapImageSummary[]> {
   );
   if (maps.length === 0) return [];
 
-  const [measured, dpi] = await Promise.all([measure(maps), OBR.scene.grid.getDpi()]);
-  const kept = selectMapCandidates(
-    measured.map(({ map, bounds }) => ({
-      id: map.id,
-      name: map.name || "unnamed",
-      area: Math.max(0, bounds.width) * Math.max(0, bounds.height),
-    })),
+  const measured = await measure(maps);
+  const areas = new Map(
+    measured.map(({ map, bounds }) => [
+      map.id,
+      Math.max(0, bounds.width) * Math.max(0, bounds.height),
+    ]),
+  );
+  const fallback = largestByArea(
+    [...areas].map(([id, area]) => ({ id, area })),
   );
 
-  // Ranking still happens on world area. Only the *displayed* figure is converted, so a dpi of
-  // zero degrades to showing zeroes rather than silently reordering the list.
-  const squares = (units: number): number => (dpi > 0 ? Math.round(units / dpi) : 0);
-
   return measured
-    .map(({ map, bounds }) => ({
+    .map(({ map }) => ({
       id: map.id,
       name: map.name || "unnamed",
-      width: squares(bounds.width),
-      height: squares(bounds.height),
+      pixelWidth: map.image.width,
+      pixelHeight: map.image.height,
       locked: map.locked,
       visible: map.visible,
-      plausible: kept.some((candidate) => candidate.id === map.id),
+      isDefault: map.id === fallback?.id,
     }))
-    .sort((a, b) => b.width * b.height - a.width * a.height);
+    .sort((a, b) => zIndexOf(maps, a.id) - zIndexOf(maps, b.id));
+}
+
+/** An item's stacking position, or zero if it has vanished between the query and the sort. */
+function zIndexOf(maps: readonly ImageItem[], id: string): number {
+  return maps.find((map) => map.id === id)?.zIndex ?? 0;
 }
 
 /**
@@ -138,18 +169,23 @@ export async function readNominatedMapId(): Promise<string | null> {
   return typeof chosen === "string" && chosen.length > 0 ? chosen : null;
 }
 
-/** Nominate a map, or pass `null` to go back to letting the resolver decide. */
+/**
+ * Nominate a map.
+ *
+ * `null` clears the choice, which puts the scene back on the largest image. No control does that
+ * today — every row in the picker names a real image — but the stored shape has to mean something
+ * for a scene that has never been nominated at all, and this is that meaning written down.
+ */
 export async function nominateMap(id: string | null): Promise<void> {
   await OBR.scene.setMetadata({ [MAP_CHOICE_KEY]: id ?? undefined });
-  devLog("info", `map: nomination set to ${id ?? "auto"}`);
+  devLog("info", `map: nomination set to ${id ?? "none (largest wins)"}`);
 }
 
 /**
- * The map image to trace, or `null` when that cannot be decided safely.
+ * The map image to trace: the GM's nomination, or the largest image in the scene.
  *
- * Refusing is the right outcome for an ambiguous scene. No output plus a log line naming the
- * candidates is recoverable in one click of the picker; tracing the wrong image is not, because the
- * wrong image may be a GM overlay whose linework would end up shaping what players can see.
+ * `null` only when the scene holds no `MAP`-layer image at all, which is an ordinary state rather
+ * than a refusal - see `largestByArea` for why the refusal went.
  */
 export async function resolveTraceMap(): Promise<ImageItem | null> {
   const maps = await OBR.scene.items.getItems<ImageItem>(
@@ -165,50 +201,32 @@ export async function resolveTraceMap(): Promise<ImageItem | null> {
   if (chosenId) {
     const chosen = maps.find((map) => map.id === chosenId);
     if (chosen) return chosen;
-    // The nominated image is gone — deleted, or the choice was made in another scene. Fall through
-    // to the single-map rule rather than tracing something nobody picked.
+    // The nominated image is gone - deleted, or the choice was made in another scene. Fall through
+    // to the largest rather than tracing nothing.
     devLog("warn", `map: the nominated map ${chosenId.slice(0, 8)} is not in this scene`);
   }
 
   if (maps.length === 1) return maps[0]!;
 
   const measured = await measure(maps);
-  const candidates = selectMapCandidates(
+  const largest = largestByArea(
     measured.map(({ map, bounds }) => ({
-      id: map.id,
-      name: map.name || "unnamed",
+      map,
       area: Math.max(0, bounds.width) * Math.max(0, bounds.height),
     })),
   );
-
-  if (candidates.length === 1) {
-    const only = maps.find((map) => map.id === candidates[0]!.id);
-    if (only) {
-      devLog(
-        "info",
-        `map: tracing "${only.name || "map"}" — the other ${maps.length - 1} MAP ` +
-          `image${maps.length === 2 ? " is" : "s are"} too small to be a map`,
-      );
-      return only;
-    }
+  if (!largest) {
+    devLog("warn", `map: ${maps.length} MAP images and none with any area, so nothing is traced`);
+    return null;
   }
 
   devLog(
-    "warn",
-    `map: ${candidates.length} comparable MAP images and no choice made, so nothing is traced — ` +
-      `one may be a GM overlay. Pick one in the panel. Candidates: ` +
-      measured
-        .filter(({ map }) => candidates.some((candidate) => candidate.id === map.id))
-        .map(
-          ({ map, bounds }) =>
-            `${map.name || "unnamed"} (${map.id.slice(0, 8)}, ` +
-            `${Math.round(bounds.width)}x${Math.round(bounds.height)}, ` +
-            `${map.locked ? "locked" : "unlocked"}, ` +
-            `${map.visible ? "visible" : "hidden"})`,
-        )
-        .join("; "),
+    "info",
+    `map: no choice made, tracing the largest of ${maps.length} - ` +
+      `"${largest.map.name || "unnamed"}" (${largest.map.id.slice(0, 8)}, ` +
+      `${largest.map.image.width}x${largest.map.image.height} px)`,
   );
-  return null;
+  return largest.map;
 }
 
 /**

@@ -8,13 +8,12 @@
  * ## The picker exists because "the map" is not obvious to a program
  *
  * A scene can hold more than one `MAP`-layer image and one of them may be a GM overlay, and a scene
- * map is normally locked, so it cannot be nominated by clicking it. **Auto** leaves the resolver to
- * decide, which it refuses to do when the scene is genuinely ambiguous.
+ * map is normally locked, so it cannot be nominated by clicking it.
  *
- * The area filter's verdict is **shown rather than enforced**: a stray token on the map layer is
- * listed, marked, and still choosable, because the filter is a heuristic and the GM is not. Sizes
- * are shown because on a scene with two plausible maps the size is often the only thing telling the
- * real one from an overlay.
+ * **Every map-layer image is listed, unfiltered and unmarked** (user, 2026-08-29), in the layer's
+ * own z-order with its pixel size beside its name. There is no *Auto* row: with nothing nominated
+ * the largest image is what gets traced, so the row for that image is simply the one that starts
+ * selected — the list says what will happen rather than naming a policy that decides later.
  */
 
 import OBR from "@owlbear-rodeo/sdk";
@@ -81,6 +80,7 @@ async function refreshMaps(): Promise<void> {
     const previous = checked?.value ?? "";
 
     container.replaceChildren();
+    let selected = "";
 
     if (maps.length === 0) {
       const empty = document.createElement("p");
@@ -88,20 +88,26 @@ async function refreshMaps(): Promise<void> {
       empty.className = "sub";
       container.append(empty);
     } else {
-      // A nomination naming an id this scene does not contain selects nothing rather than adding a
-      // phantom row, which matches what the resolver does with it: warn, and fall through.
-      const wanted = previous || nominated || "";
-      const known = maps.some((map) => map.id === wanted);
+      /*
+        What the row shows selected is what the trace would actually read.
 
-      container.append(mapRow("", "Auto", known ? "" : "refuses if two look alike", !known));
+        A nomination naming an id this scene does not contain selects nothing of its own — which
+        matches what the resolver does with it: warn, and fall through to the largest. So the
+        fallback is the marked row rather than a policy named in a row of its own, and the list
+        cannot show a selection the pipeline would disagree with.
+      */
+      const wanted = previous || nominated || "";
+      selected = maps.some((map) => map.id === wanted)
+        ? wanted
+        : (maps.find((map) => map.isDefault)?.id ?? "");
+
       for (const map of maps) {
         const notes = [
-          `${map.width}×${map.height} squares`,
-          map.plausible ? "" : "too small?",
+          `${map.pixelWidth}x${map.pixelHeight} px`,
           map.locked ? "locked" : "",
           map.visible ? "" : "hidden",
         ].filter(Boolean);
-        container.append(mapRow(map.id, map.name, notes.join(", "), map.id === wanted));
+        container.append(mapRow(map.id, map.name, notes.join(", "), map.id === selected));
       }
     }
 
@@ -111,9 +117,10 @@ async function refreshMaps(): Promise<void> {
       "info",
       `workspace: map picker listed ${maps.length} map image${maps.length === 1 ? "" : "s"}` +
         (maps.length > 0
-          ? ` — ${maps.map((map) => `${map.name} ${map.width}x${map.height}${map.plausible ? "" : " (small)"}`).join("; ")}`
+          ? ` — ${maps.map((map) => `${map.name} ${map.pixelWidth}x${map.pixelHeight}px`).join("; ")}`
           : "") +
-        `; nomination ${nominated ?? "auto"}, rows ${container.querySelectorAll("input").length}`,
+        `; nomination ${nominated ?? "none"}, showing ${selected.slice(0, 8) || "nothing"} selected, ` +
+        `rows ${container.querySelectorAll("input").length}`,
     );
   } catch (error) {
     const detail = describeError(error);
@@ -140,7 +147,7 @@ export function renderMapPicker(body: HTMLElement): void {
     if (!(input instanceof HTMLInputElement) || !input.checked) return;
 
     say("changing the map…", "working");
-    void nominateMap(input.value || null)
+    void nominateMap(input.value)
       // A different map is a different everything: a different image to draw, a different reading,
       // and a different place in the world to sit. The mask cache is keyed on map identity, so this
       // gets a fresh reading rather than the previous map's.
