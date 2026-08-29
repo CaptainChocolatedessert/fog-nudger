@@ -38,7 +38,7 @@ import { CONTROLS, type Control } from "./controls";
 import type { SettingName } from "./settings";
 
 /** Every step that exists today. Six are designed; the rest arrive with the code that needs them. */
-export type StepId = "ink" | "walls" | "regions" | "view";
+export type StepId = "map" | "ink" | "walls" | "regions" | "view";
 
 /**
  * What the canvas can draw over the map.
@@ -107,6 +107,21 @@ export interface Step {
  * one meaning for a drag.
  */
 export const STEPS: readonly Step[] = [
+  {
+    id: "map",
+    title: "Map",
+    blurb: "Which image the trace reads. Everything below is about this one picture.",
+    /*
+      Nothing over the map, deliberately.
+
+      This step's question is *which image*, and the answer is the image itself — an ink mask drawn
+      on top would be answering the next question over the top of this one. It is also what resolves
+      the chicken-and-egg of a surface that needs a map to draw: with no map chosen there is nothing
+      here but the picker, and that is a complete and honest state rather than an empty canvas.
+    */
+    layers: [],
+    drag: "pan",
+  },
   {
     id: "ink",
     title: "Ink",

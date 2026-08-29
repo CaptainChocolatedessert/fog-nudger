@@ -158,7 +158,7 @@ async function refreshMask(): Promise<void> {
     if (isClosing()) return;
 
     if (!result) {
-      if (requests.fail(generation)) say("no map nominated — choose one in the panel", "bad");
+      if (requests.fail(generation)) say("no map chosen — pick one under Map", "bad");
       return;
     }
 
@@ -193,23 +193,23 @@ async function refreshMask(): Promise<void> {
   }
 }
 
-/** The reading the workspace opens on. Returns it, because the map name and bounds come with it. */
-export async function readOnOpen(): Promise<MaskForOverlay | null> {
+/** Read the nominated map now. Returns the result, because the map name and bounds come with it. */
+export async function takeReading(): Promise<MaskForOverlay | null> {
   return maskForOverlay(currentSettings());
 }
 
 /**
- * Adopt the reading the workspace opened on.
+ * Adopt a reading as the one on screen.
  *
- * Separated from `readOnOpen` so the caller can load the map image in between: the surface has
- * nothing to draw the mask *over* until the image lands, and the reading is what names the map.
+ * Separated from `takeReading` so the caller can start loading the map image in between: the surface
+ * has nothing to draw the mask *over* until the image lands, and the reading is what names the map.
  */
-export function adoptOpeningReading(result: MaskForOverlay): void {
+export function adoptReading(result: MaskForOverlay): void {
   const generation = requests.request();
   if (requests.fulfil(generation) && publish(result, generation)) {
     devLog(
       "info",
-      `workspace: opened on "${result.mapName}" — mask ${result.mask.width}x${result.mask.height}, ` +
+      `workspace: showing "${result.mapName}" — mask ${result.mask.width}x${result.mask.height}, ` +
         `ink ${((lastInkShare ?? 0) * 100).toFixed(1)}%, ${gapTotal} breaks of which ${gapFilled} repaired, ` +
         `${result.reused ? "reused from cache" : "recomputed"}`,
     );

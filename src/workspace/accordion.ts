@@ -43,8 +43,35 @@ import { renderSwatches } from "./view";
 /**
  * Which step is open. Not stored in the scene: it is where the GM is looking, not a setting, and a
  * workspace that reopened in the step you left last session would be guessing.
+ *
+ * It starts at the first step — Map — because that is the only honest place to be before anything is
+ * known about the scene, and the one step that can do something about there being no map.
  */
 let open: StepId = workspaceSteps()[0]?.id ?? "ink";
+
+/**
+ * Whether the GM has opened a step themselves.
+ *
+ * Start-up may move them on once, from Map to Ink, when the scene turns out to already have a map
+ * chosen — which is the common case, and where they were going anyway. After a deliberate click it
+ * must never move again: a surface that relocates the GM because something finished loading is a
+ * surface that takes the page away mid-sentence.
+ */
+let touched = false;
+
+/** Anything a step draws in its body beyond the rows built from its parameters. */
+const content = new Map<StepId, (body: HTMLElement) => void>();
+
+export function registerStepContent(id: StepId, render: (body: HTMLElement) => void): void {
+  content.set(id, render);
+}
+
+/** Move to a step, unless the GM has already chosen one. */
+export function advanceTo(id: StepId): void {
+  if (touched || open === id) return;
+  open = id;
+  renderPanel();
+}
 
 /**
  * A step's rows, in declaration order, with its groups after them under their own headings.
@@ -61,6 +88,8 @@ function stepBody(step: Step): HTMLElement {
   blurb.className = "sub";
   blurb.innerHTML = step.blurb;
   body.append(blurb);
+
+  content.get(step.id)?.(body);
 
   for (const control of ungroupedControls(step)) {
     if (PARAMETER_STAGE[control.name] !== "read") continue;
@@ -120,6 +149,7 @@ export function renderPanel(): void {
       header.setAttribute("aria-expanded", String(step.id === open));
       header.addEventListener("click", () => {
         open = step.id;
+        touched = true;
         renderPanel();
       });
 

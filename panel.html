@@ -90,20 +90,6 @@
         them is a *comparison* — name, size, whether one is hidden. A dropdown hides exactly the
         information the GM needs to choose with.
       */
-      .maps { margin-bottom: 0.6rem; }
-      .maps label {
-        display: flex;
-        align-items: baseline;
-        gap: 0.4rem;
-        padding: 0.25rem 0.4rem;
-        border-radius: 0.35rem;
-        cursor: pointer;
-      }
-      .maps label:hover { background: var(--line); }
-      .maps input { margin: 0; accent-color: var(--accent); }
-      .maps .note { color: var(--dim); font-size: 0.8em; }
-      .maps[aria-disabled="true"] { opacity: 0.5; }
-      .maps[aria-disabled="true"] label { cursor: default; }
       /*
         Also used outside the picker, for standing explanation. Kept dim and small: it must not
         compete with #result, which is where the answer to the last thing the GM clicked appears.
@@ -276,17 +262,6 @@
     </nav>
 
     <section id="panel-read" role="tabpanel" aria-labelledby="tab-read">
-      <!--
-        The picker exists because a scene can hold more than one MAP-layer image and one of them may
-        be a GM overlay — and because a scene map is normally locked, so it cannot be nominated by
-        clicking it. "Auto" leaves the resolver to decide, which it refuses to do when the scene is
-        genuinely ambiguous.
-      -->
-      <p class="field">Map</p>
-      <div class="maps" id="maps" aria-disabled="true">
-        <p class="note">Waiting for a scene&hellip;</p>
-      </div>
-
       <!--
         The reading's own controls are not here: they are steps on the workspace, declared in
         `steps.ts` along with what each one paints and what a drag does in it. What stays on this

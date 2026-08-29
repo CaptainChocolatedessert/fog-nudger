@@ -242,7 +242,8 @@ export function setMapName(text: string): void {
 // The map
 // ---------------------------------------------------------------------------------------------
 
-export function setMapImage(image: HTMLImageElement): void {
+/** The map to draw, or `null` for none — which is a real state, not a failure: see the Map step. */
+export function setMapImage(image: HTMLImageElement | null): void {
   mapImage = image;
   dirty = true;
 }

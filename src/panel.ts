@@ -54,12 +54,7 @@ import {
   returnToStaging,
   stageRegions,
 } from "./emit/emitRegions";
-import {
-  listMapImages,
-  mapSignature,
-  nominateMap,
-  readNominatedMapId,
-} from "./map/mapImage";
+
 
 installDevLog("ui");
 
@@ -126,142 +121,6 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
       });
   });
   return button;
-}
-
-/**
- * The map nomination control.
- *
- * Writes the choice to scene metadata as soon as it changes, rather than holding it until the dry
- * run reads it. The popover is dismissed by clicking anywhere outside it, so a choice held in the
- * page would be lost by the most ordinary gesture there is.
- */
-function wireMapPicker(): HTMLElement | null {
-  const container = document.getElementById("maps");
-  if (!container) return null;
-
-  // Delegated, so the rows can be rebuilt whenever the scene's maps change without rebinding —
-  // and so a rebuild that lands between the click and the handler cannot drop the event.
-  container.addEventListener("change", (event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement) || !input.checked) return;
-
-    void nominateMap(input.value || null).catch((error: unknown) => {
-      const detail = describeError(error);
-      reportResult(`Could not save the map choice: ${detail}`, "bad");
-      console.error(`Fog Nudger — nominating a map failed: ${detail}`);
-    });
-  });
-  return container;
-}
-
-/** Enable or disable the picker as a whole. Radios carry no group-level disabled state of their own. */
-function setPickerEnabled(container: HTMLElement | null, enabled: boolean): void {
-  if (!container) return;
-  container.setAttribute("aria-disabled", String(!enabled));
-  for (const input of container.querySelectorAll("input")) input.disabled = !enabled;
-}
-
-/**
- * Fill the picker from the scene, marking anything the area filter thinks is too small to be a map.
- *
- * The filter's verdict is shown rather than enforced — a stray token on the map layer is listed,
- * marked, and still choosable, because the filter is a heuristic and the GM is not. Sizes are shown
- * because on a scene with two plausible maps the size is often the only thing distinguishing the
- * real one from a GM overlay.
- */
-async function refreshMaps(container: HTMLElement | null): Promise<void> {
-  if (!container) {
-    // Said out loud because the alternative is a picker that is empty for one reason and looks
-    // exactly like a picker that is empty for a completely different one.
-    devLog("warn", "panel: no map picker element — the markup and the wiring disagree");
-    return;
-  }
-
-  try {
-    const [maps, nominated] = await Promise.all([
-      listMapImages(),
-      readNominatedMapId(),
-    ]);
-
-    // Preserved across the rebuild, since this also runs when the scene's items change and
-    // discarding a GM's choice because an unrelated token moved would be its own bug.
-    const checked = container.querySelector<HTMLInputElement>("input:checked");
-    const previous = checked?.value ?? "";
-    const enabled = container.getAttribute("aria-disabled") !== "true";
-
-    container.replaceChildren();
-
-    if (maps.length === 0) {
-      const empty = document.createElement("p");
-      empty.textContent = "No MAP-layer image in this scene.";
-      empty.className = "note";
-      container.append(empty);
-    } else {
-      // A nomination naming an id this scene does not contain selects nothing rather than adding a
-      // phantom row, which matches what the resolver does with it: warn, and fall through.
-      const wanted = previous || nominated || "";
-      const known = maps.some((map) => map.id === wanted);
-
-      container.append(
-        mapRow("", "Auto", known ? "" : "refuses if two look alike", !known),
-      );
-      for (const map of maps) {
-        const notes = [
-          `${map.width}×${map.height} squares`,
-          map.plausible ? "" : "too small?",
-          map.locked ? "locked" : "",
-          map.visible ? "" : "hidden",
-        ].filter(Boolean);
-        container.append(mapRow(map.id, map.name, notes.join(", "), map.id === wanted));
-      }
-    }
-
-    setPickerEnabled(container, enabled);
-
-    // Unconditional, including the zero case. An empty picker was reported as a bug precisely
-    // because nothing here spoke: "found no maps" and "never asked" produced identical silence.
-    devLog(
-      "info",
-      `panel: map picker listed ${maps.length} map image${maps.length === 1 ? "" : "s"}` +
-        (maps.length > 0
-          ? ` — ${maps.map((map) => `${map.name} ${map.width}x${map.height}${map.plausible ? "" : " (small)"}`).join("; ")}`
-          : "") +
-        `; nomination ${nominated ?? "auto"}, rows ${container.querySelectorAll("input").length}, ` +
-        `enabled ${enabled}`,
-    );
-  } catch (error) {
-    const detail = describeError(error);
-    reportResult(`Could not list the scene's maps: ${detail}`, "bad");
-    console.error(`Fog Nudger — listing maps failed: ${detail}`);
-  }
-}
-
-/** One choosable row. Built as DOM rather than markup so a map's name cannot be read as HTML. */
-function mapRow(
-  value: string,
-  name: string,
-  note: string,
-  checked: boolean,
-): HTMLLabelElement {
-  const label = document.createElement("label");
-
-  const input = document.createElement("input");
-  input.type = "radio";
-  input.name = "map";
-  input.value = value;
-  input.checked = checked;
-
-  const text = document.createElement("span");
-  text.textContent = name;
-
-  label.append(input, text);
-  if (note) {
-    const hint = document.createElement("span");
-    hint.className = "note";
-    hint.textContent = note;
-    label.append(hint);
-  }
-  return label;
 }
 
 /**
@@ -502,8 +361,6 @@ OBR.onReady(async () => {
     ...STAGES.map((stage) => wireButton(`reset-${stage}`, () => resetStageSettings(stage))),
   ];
 
-  const mapSelect = wireMapPicker();
-
   try {
     // A popover's connection going ready is NOT the scene being ready — the sibling lost two days
     // to treating them as the same event. Ask separately, and say which of the two is true.
@@ -518,7 +375,6 @@ OBR.onReady(async () => {
     const setEnabled = (open: boolean): void => {
       sceneReady = open;
       for (const button of buttons) if (button) button.disabled = !open;
-      setPickerEnabled(mapSelect, open);
       reportResult(open ? "Ready." : "Waiting for a scene.", "ok");
       // Settings live in scene metadata, so there is nothing real to show until a scene is open.
       if (open) {
@@ -533,30 +389,10 @@ OBR.onReady(async () => {
       } else {
         renderSettings();
       }
-      // Repopulated on every transition rather than once: the list belongs to the scene, so a
-      // scene change makes the previous one's maps stale, and a stale nomination silently pointing
-      // at an id from another scene is exactly the confusion the picker exists to remove.
-      if (open) void refreshMaps(mapSelect);
     };
     OBR.scene.onReadyChange(setEnabled);
     setEnabled(ready);
 
-    // Populating once at open is not enough, and that is what left the picker empty on its first
-    // outing. A popover is a fresh iframe every time it is opened, and the scene being *ready* is
-    // not the same event as this iframe having received the scene's items — so the first query can
-    // legitimately answer "no maps" a moment before the answer becomes two. Watching for the items
-    // makes the race moot rather than betting on having won it.
-    //
-    // Guarded by a signature so the select is rebuilt only when the map images themselves change.
-    // Items change constantly in a live room, and rebuilding on every one of them would collapse
-    // the dropdown under the GM's cursor as they tried to use it.
-    let signature: string | null = null;
-    OBR.scene.items.onChange((items) => {
-      const next = mapSignature(items);
-      if (next === signature) return;
-      signature = next;
-      void refreshMaps(mapSelect);
-    });
   } catch (error) {
     // Plain text on screen, full detail to the console. The SDK's rejections are not `Error`s, so
     // this goes through `describeError` rather than reading `.message`, which would be undefined.

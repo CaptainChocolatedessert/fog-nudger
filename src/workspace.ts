@@ -38,14 +38,15 @@ import OBR from "@owlbear-rodeo/sdk";
 
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
-import { resolveTraceMap } from "./map/mapImage";
-import { renderPanel } from "./workspace/accordion";
+import { registerStepContent, renderPanel } from "./workspace/accordion";
 import { registerBreaksLayer } from "./workspace/layers/breaks";
 import { registerInkLayer } from "./workspace/layers/ink";
-import { adoptOpeningReading, onReading, readOnOpen } from "./workspace/reading";
+import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
+import { loadNominatedMap } from "./workspace/mapSource";
+import { onReading } from "./workspace/reading";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { loadSettings } from "./workspace/settingsState";
-import { openOnOwlbearsView, say, setMapImage, setMapName, start } from "./workspace/shell";
+import { say, start } from "./workspace/shell";
 
 installDevLog("workspace");
 
@@ -58,6 +59,10 @@ installDevLog("workspace");
 */
 registerInkLayer();
 registerBreaksLayer();
+
+// The one step whose body is not built from parameters: choosing a map is a list of what the scene
+// holds, not a number to turn.
+registerStepContent("map", renderMapPicker);
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after
 // the layers, so a layer that could not take a reading stops this too.
@@ -84,31 +89,10 @@ async function run(): Promise<void> {
   // the defaults it was first drawn with.
   renderPanel();
 
-  const result = await readOnOpen();
-  if (!result) {
-    say("no map nominated — choose one in the panel", "bad");
-    setMapName("No map nominated.");
-    return;
-  }
-
-  setMapName(result.mapName);
-
-  // The map image, drawn by us rather than by Owlbear. `crossOrigin` matches the pipeline's loader:
-  // it proves the CDN sends the headers, and matching it means this cannot succeed where a trace
-  // would fail.
-  const image = new Image();
-  image.crossOrigin = "anonymous";
-  image.onload = () => {
-    setMapImage(image);
-    void openOnOwlbearsView(result.bounds);
-  };
-  image.onerror = () => {
-    say("the map image would not load", "bad");
-    devLog("error", "workspace: the map image failed to load");
-  };
-  image.src = (await resolveTraceMap())?.image.url ?? "";
-
-  adoptOpeningReading(result);
+  // Watched before the first load, so a scene whose items arrive after this iframe does not leave
+  // the picker empty — the race the panel's version lost on its first outing.
+  watchSceneMaps();
+  await loadNominatedMap(true);
 }
 
 // `OBR.onReady` does not fire outside a room, so opening this page directly in a browser runs the

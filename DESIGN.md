@@ -729,8 +729,8 @@ three stages above **remain** as the cascade — what a change destroys, which i
 reads. The six steps are a *presentation and interaction* layer on top of them, and the two must not be
 conflated.
 
-1. **Map** — pick the image. The workspace opens with no map and draws nothing until one is chosen,
-   which handles the chicken-and-egg of a surface that needs a map to draw.
+1. **Map** — pick the image. **Built 2026-08-29.** The workspace opens with no map and draws nothing
+   until one is chosen, which handles the chicken-and-egg of a surface that needs a map to draw.
 2. **Ink** — threshold, blur, detail window, and the break repair under its own sub-heading. (Was 1a
    plus the breaks.) The repair rides here rather than in a step of its own because it **invents
    ink**, and because it is provisional: step F retires it, so nothing is arranged around it.
@@ -866,7 +866,27 @@ refactor gets harder every session it is deferred.
 
    A scan for orphaned modules found none — every source file is reachable from an entry point, a
    test, or another module.
-4. **Move the map picker in** as step 1; the panel loses it.
+4. **Move the map picker in as step 1 — DONE 2026-08-29.** The panel loses it entirely: the picker,
+   its scene-items watcher and its styles are now the Map step's, and the panel keeps only the
+   actions that need the real scene in view.
+
+   - **The Map step shows no layers**, deliberately. Its question is *which image*, and the answer is
+     the image itself — a mask drawn on top would be answering the next question over this one. It is
+     also what resolves the chicken-and-egg of a surface that needs a map to draw: with nothing
+     chosen there is the picker and no canvas content, which is a complete state rather than an empty
+     one.
+   - **Choosing a map reloads everything**, because a different map is a different image, a different
+     reading and a different place in the world. The mask cache is keyed on map identity, so the
+     reading that follows is genuinely fresh rather than the previous map's.
+   - **Start-up moves the GM on once**, from Map to Ink, when a map is already chosen — the common
+     case, and where they were going anyway. It never moves them after a deliberate click on a
+     header, and never at all when there is no map, which leaves them in the one step that can fix
+     that.
+   - **The picker had to be gated on `onReady`**, found by loading the page outside a room: asking
+     Owlbear for the scene's items before it is ready does not return an empty list, it **throws**,
+     and the message landed on the state line where the map's name belongs. Same rule as the
+     disabled sliders, sharper failure — the surface is built at module load, but anything that asks
+     the *scene* a question waits.
 5. **Move region derivation in** as step 5, drawing the partition. The largest piece, and the one that
    makes OQ6 answerable at last.
 6. **Reduce the panel** to open-workspace, accept / back / remove, and diagnostics.
