@@ -856,8 +856,16 @@ refactor gets harder every session it is deferred.
      appearing as an empty section a GM can open and find nothing in. An explicit flag rather than
      "skip a step that renders empty", because the derived version would silently hide a step that
      legitimately has neither controls nor layers — picking the map is exactly that. It dies at A.5.
-3. **Sweep what is already dead** — the overlay-probe buttons in the panel drive a surface that was
-   deleted.
+3. **Sweep what is already dead — DONE 2026-08-29.** The overlay-probe buttons went: that probe asked
+   whether a *click-through* sheet over the map was possible at all, and the design it was for is
+   closed — the workspace owns its input instead, and the workspace probe answered a harder version of
+   the same question. **The probe itself stays**, unwired, in the posture the shape-placing buttons
+   already have: the code and its page are the record of how the answer was got, and re-importing one
+   function brings the buttons back. The stale note above the workspace button went with them, since
+   it still described stage one as two sections of this panel.
+
+   A scan for orphaned modules found none — every source file is reachable from an entry point, a
+   test, or another module.
 4. **Move the map picker in** as step 1; the panel loses it.
 5. **Move region derivation in** as step 5, drawing the partition. The largest piece, and the one that
    makes OQ6 answerable at last.

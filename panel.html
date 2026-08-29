@@ -288,18 +288,13 @@
       </div>
 
       <!--
-        Stage one is two things in series, and the panel says so because the GM's question changes
-        between them.
+        The reading's own controls are not here: they are steps on the workspace, declared in
+        `steps.ts` along with what each one paints and what a drag does in it. What stays on this
+        side is the button that opens that surface, plus the two things that need the real scene —
+        a trace that emits nothing, and the point probe.
 
-        First: what is a mark at all, as against background, shading and paper. Local contrast is
-        the only tool for it today; selecting or ignoring by hue would join it here, since colour is
-        also a question about what the mark *is*.
-
-        Second: which of those marks are walls. A width filter is the only tool today; smoothing the
-        nubs an opening leaves where a thick wall crossed a thin gridline would join it here.
-
-        Both are reading-stage pipeline controls — either re-partitions the map wholesale — so the
-        division is presentational and the cascade is unaffected.
+        The steps are all reading-stage pipeline controls whatever they are called, so the split
+        between them is about the GM's question rather than about the cascade, which is unaffected.
       -->
       <div class="actions">
         <button id="open-workspace" disabled>Open the workspace</button>
@@ -373,16 +368,7 @@
       <div class="actions">
         <button id="census" disabled>Census</button>
         <button id="inspect" disabled>Inspect fog</button>
-        <button id="overlay-probe" disabled>Overlay probe</button>
-        <button id="overlay-probe-close" class="quiet" disabled>Close overlay</button>
       </div>
-      <p class="note">
-        <em>Overlay probe</em> puts a full-screen transparent sheet over the map for 25 seconds to
-        find out whether the stage-one overlay is possible at all: whether a modal composites over
-        the map, whether panning still reaches it, whether its pixels are the viewport's, and what
-        it covers. It closes itself on a timer — <em>Close overlay</em> is only a convenience, since
-        this panel disappears the moment you click the map.
-      </p>
 
       <div class="actions">
         <button id="workspace-probe-bare" disabled>Workspace probe</button>

@@ -16,7 +16,11 @@ import { themeVariables } from "./theme";
 // so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
 // buttons back, and re-add the markup in panel.html.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
-import { closeOverlayProbe, openOverlayProbe } from "./probe/overlayProbeControl";
+// The overlay probe is not wired up either, and for a stronger reason than the shape-placing
+// buttons: it measured whether a *click-through* sheet over the map was possible at all, and that
+// design is closed — the workspace owns its input instead, and its probe measured the same modal
+// answering a harder question. `overlayProbeControl.ts` and its page stay as the record of how the
+// answer was got; re-import `openOverlayProbe` here and re-add the markup to bring it back.
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
 import { dryRun, lastInkWidth, lastPixelsPerSquare, probeWorldPoint } from "./pipeline";
 import { CONTROLS, type Control, type Measured } from "./controls";
@@ -491,8 +495,6 @@ OBR.onReady(async () => {
     wireButton("remove", removeOurs),
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
-    wireButton("overlay-probe", openOverlayProbe),
-    wireButton("overlay-probe-close", closeOverlayProbe),
     wireButton("workspace-probe-bare", () => openWorkspaceProbe("bare")),
     wireButton("workspace-probe-framed", () => openWorkspaceProbe("framed")),
     wireButton("workspace-probe-close", closeWorkspaceProbe),
