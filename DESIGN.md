@@ -776,6 +776,29 @@ than of our care. Its *other* justification, native editing, is genuinely weaken
 region is editing the output, where editing a line is editing the input. Revisit once painting exists
 and it is clear how often a hand edit is still wanted.
 
+#### The order within step A — split before growing
+
+The workspace is already a thousand lines and would absorb the panel's settings rendering, the derive
+stage, partition drawing, painting and eventually doors. **Split it first, then add steps** — the same
+refactor gets harder every session it is deferred.
+
+1. **Split the workspace into a shell plus per-step modules, with no behaviour change.** The shell owns
+   the transform, input handling and the canvas stack; a step owns its controls, what it paints, and
+   what a drag means.
+2. **Promote `section` to a first-class step declaration** carrying paint layer and tool binding, with
+   a test pinning that the step, the stage, the kind and the post-reading boundary are declared
+   independently and none is derived from another.
+3. **Sweep what is already dead** — the overlay-probe buttons in the panel drive a surface that was
+   deleted.
+4. **Move the map picker in** as step 1; the panel loses it.
+5. **Move region derivation in** as step 5, drawing the partition. The largest piece, and the one that
+   makes OQ6 answerable at last.
+6. **Reduce the panel** to open-workspace, accept / back / remove, and diagnostics.
+
+**Do not renest the stored settings to match the six steps.** This was refused once already for the
+three stages, and the reason is unchanged: renesting means either a migration or a normaliser that
+resets a GM's whole tuning. The step mapping carries the semantics; storage keeps its existing groups.
+
 ### The cache boundary, and what it is not — 2026-08-23
 
 Binarisation is the expensive half — **690ms of a 1.4s run**, against 360ms to label, 320ms to trace
