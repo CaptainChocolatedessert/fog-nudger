@@ -314,6 +314,17 @@
         font-family: ui-monospace, Consolas, monospace;
         font-size: 0.75rem;
         color: #9aa0c8;
+        /*
+          Capped and wrapping, rather than growing left across the whole window.
+
+          Most of what lands here is a short figure, but the point probe answers in whole sentences —
+          and an unbounded line ran the full width of the map, which is a banner across the thing the
+          GM is looking at. The middle bound keeps it clear of the controls on the left however wide
+          the window is; the outer one stops a narrow window producing a negative width, which CSS
+          discards as invalid — leaving exactly the unbounded line this is here to prevent.
+        */
+        max-width: max(12rem, min(34rem, calc(100vw - 26rem)));
+        text-align: left;
       }
       #state.bad {
         color: #ff8080;
