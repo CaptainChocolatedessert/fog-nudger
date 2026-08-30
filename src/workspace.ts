@@ -43,11 +43,13 @@ import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accord
 import { registerBreaksLayer } from "./workspace/layers/breaks";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerRegionsLayer } from "./workspace/layers/regions";
+import { registerSkeletonLayer } from "./workspace/layers/skeleton";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { onReading } from "./workspace/reading";
 import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
+import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
 import { renderStageAction } from "./workspace/stageAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { loadSettings } from "./workspace/settingsState";
@@ -64,14 +66,18 @@ installDevLog("workspace");
 */
 registerInkLayer();
 registerBreaksLayer();
+registerSkeletonLayer();
 registerRegionsLayer();
 
 // A new reading is a new partition. Registered before the hint refresher below for no reason beyond
 // order of appearance; both are listeners and neither depends on the other.
 registerRegionInvalidation();
+registerSkeletonInvalidation();
 // Deriving costs the better part of a second and is visible in one step, so entering it is what pays
 // for it.
 onStepOpen("regions", watchRegions);
+// Thinning is the same shape of cost and gets the same answer: entering the step pays for it.
+onStepOpen("walls", watchSkeleton);
 
 // The one step whose body is not built from parameters: choosing a map is a list of what the scene
 // holds, not a number to turn.

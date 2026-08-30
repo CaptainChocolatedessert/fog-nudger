@@ -12,6 +12,7 @@
 import { type Control, type Measured } from "../controls";
 import { lastInkWidth, lastPixelsPerSquare } from "../pipeline";
 import {
+  isSkeletonOnly,
   PARAMETER_KIND,
   PARAMETER_STAGE,
   readParameter,
@@ -22,6 +23,7 @@ import type { SettingName } from "../settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
 import { requestReread } from "./reading";
 import { invalidateRegions } from "./regions";
+import { invalidateSkeleton } from "./skeleton";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 
@@ -111,8 +113,13 @@ export function setControlsLive(next: boolean): void {
  */
 export function recomputeFor(names: readonly SettingName[]): void {
   const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
-  if (pipeline.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
-  else if (pipeline.length > 0) invalidateRegions();
+  // Skeleton-only first, and exclusively: a prune costs a walk of the branches where a re-read costs
+  // 690ms and would produce an identical mask. `SKELETON_ONLY` is what makes that safe, and it says
+  // there when it stops being.
+  const rest = pipeline.filter((name) => !isSkeletonOnly(name));
+  if (pipeline.some(isSkeletonOnly)) invalidateSkeleton();
+  if (rest.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
+  else if (rest.length > 0) invalidateRegions();
   invalidate();
 }
 

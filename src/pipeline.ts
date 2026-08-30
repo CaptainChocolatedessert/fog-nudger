@@ -860,6 +860,14 @@ export interface MaskForOverlay {
    * like read ink, and a surface handed only the composite could not tell them apart.
    */
   readonly mask: BinaryMask;
+  /**
+   * The ink everything downstream derives from: `mask` plus whatever the repair invented.
+   *
+   * Handed over as well as the base because the **skeleton** must be thinned from it. A repair
+   * asserts that two wall segments are connected, and a centreline built from the unrepaired ink
+   * would show them as two — which is the assertion being thrown away at the point it matters most.
+   */
+  readonly composed: BinaryMask;
   /** The breaks found, each carrying whether the fill closed it. */
   readonly gaps: GapFinding;
   readonly bounds: WorldBounds;
@@ -923,6 +931,7 @@ export async function maskForOverlay(
 
   return {
     mask: resolved.stage.base,
+    composed: resolved.stage.mask,
     gaps: resolved.stage.gaps,
     bounds: resolved.stage.bounds,
     mapName: resolved.stage.name,

@@ -147,6 +147,16 @@ export const CONTROLS: readonly Control[] = [
       value <= 0 ? "repair every break" : `${Math.round(value)}px along the ink`,
   },
   {
+    name: "spurPrunePx",
+    label: "Prune spurs",
+    hint: "Removes dead-end branches shorter than this, in pixels walked along the skeleton. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Zero is off</b>, and past a wall's own length it eats the graph.",
+    derive: (value, { pxPerSquare }) => {
+      if (value <= 0) return "off";
+      if (pxPerSquare === null) return `${Math.round(value)}px`;
+      return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
+    },
+  },
+  {
     name: "fillOpacity",
     label: "Proposal fill",
     hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",

@@ -44,7 +44,7 @@ import {
 } from "./settings";
 
 /** Every step that exists today. Six are designed; the rest arrive with the code that needs them. */
-export type StepId = "map" | "ink" | "regions" | "view";
+export type StepId = "map" | "ink" | "walls" | "regions" | "view";
 
 /**
  * What the canvas can draw over the map.
@@ -54,7 +54,7 @@ export type StepId = "map" | "ink" | "regions" | "view";
  * map with no mask on it at all. Nothing is drawn "because it exists" — a layer is on screen because
  * the step the GM is in is about it.
  */
-export const LAYERS = ["ink", "breaks", "regions"] as const;
+export const LAYERS = ["ink", "breaks", "skeleton", "regions"] as const;
 
 export type LayerId = (typeof LAYERS)[number];
 
@@ -145,7 +145,10 @@ export const STEPS: readonly Step[] = [
     drag: "pan",
     groups: [
       {
-        title: "Walls",
+        // Called "Walls" until the skeleton arrived and took the name back — these two decide which
+        // marks are *linework*, which is a question about ink. A wall is what the step below makes
+        // of the linework.
+        title: "Linework",
         blurb: "Filtering those marks down to linework. Both go far past useful, so the edge is findable.",
         parameters: ["minStrokeInkWidths", "minIslandPx"],
       },
@@ -158,6 +161,22 @@ export const STEPS: readonly Step[] = [
         parameters: ["gapFillPx", "gapTravelPx"],
       },
     ],
+  },
+  {
+    id: "walls",
+    title: "Walls",
+    blurb:
+      "The centreline of every piece of linework, one pixel wide. <b>A view only</b> \u2014 nothing here " +
+      "is emitted yet, and the regions below are still derived from the ink rather than from this.",
+    /*
+      The skeleton over the ink, which is the only pairing that answers the question.
+
+      A centreline on its own says nothing: what a GM is judging is whether it runs down the middle
+      of the wall it came from, and whether the hairs on it are artefacts of a ragged edge or stubs
+      that are really there. Both are comparisons against the ink, so the ink is drawn under it.
+    */
+    layers: ["ink", "skeleton"],
+    drag: "pan",
   },
   {
     id: "regions",
@@ -207,6 +226,7 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   minIslandPx: "ink",
   gapFillPx: "ink",
   gapTravelPx: "ink",
+  spurPrunePx: "walls",
   fillOpacity: "regions",
   strokeSquares: "regions",
   minRoomSquares: "regions",

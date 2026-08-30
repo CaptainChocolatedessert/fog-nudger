@@ -165,6 +165,17 @@ export interface TraceSettings {
    * unless a filled hole happens to reach it. §5's bias favours setting it low: a spurious region
    * costs one click, a bare patch is a visible defect.
    */
+  /**
+   * The longest dead-end branch spur pruning will remove from the skeleton, in raster pixels walked.
+   *
+   * A spur is the artefact a ragged ink edge leaves on a centreline; a **stub** is a wall that
+   * genuinely stops in mid-air. They are the same shape locally and only length separates them,
+   * which is why this is a number rather than a rule. Zero is off.
+   *
+   * Destructive out of proportion to its size at the top end: a budget longer than a wall's own arms
+   * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
+   */
+  readonly spurPrunePx: number;
   readonly minRoomSquares: number;
   /**
    * Simplification tolerance, as a fraction of the measured ink width.
@@ -242,6 +253,11 @@ export const DEFAULT_SETTINGS: Settings = {
     // would have covered that, and they went when the two-slider split did.
     gapFillPx: 0,
     gapTravelPx: 40,
+    // Off by default, like every other control that removes something a GM has not looked at yet.
+    // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a budget longer
+    // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
+    // skeleton as thinning produced it, hairs and all.
+    spurPrunePx: 0,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -298,6 +314,10 @@ export const SETTING_LIMITS = {
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
   // the repair; the bottom end repairs every break that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },
+  // In raster pixels of path walked, not straight-line distance. The top end is past any plausible
+  // stub and will eat walls whole, which is the same deliberate over-reach the ink filters have and
+  // is defensible for the same reason: the skeleton is drawn, so it is visible rather than silent.
+  spurPrunePx: { min: 0, max: 60, step: 1 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -340,6 +360,7 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   inkOpacity: "read",
   gapFillPx: "read",
   gapTravelPx: "read",
+  spurPrunePx: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
@@ -387,6 +408,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   inkOpacity: "display",
   gapFillPx: "pipeline",
   gapTravelPx: "pipeline",
+  spurPrunePx: "pipeline",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
@@ -440,6 +462,9 @@ export function writeParameter(
  */
 export function maskFingerprint(settings: Settings): string {
   return readingParameters()
+    // The skeleton-only ones are excluded, which is what stops a prune costing a re-read. See
+    // `SKELETON_ONLY` for why that is safe today and when it stops being.
+    .filter((name) => !isSkeletonOnly(name))
     .map((name) => `${name}=${readParameter(settings, name)}`)
     .join(",");
 }
@@ -467,7 +492,28 @@ const POST_READING: readonly SettingName[] = [
   "minIslandPx",
   "gapFillPx",
   "gapTravelPx",
+  "spurPrunePx",
 ];
+
+/**
+ * Parameters that feed **only the skeleton view**, and therefore nothing the mask is used for.
+ *
+ * A third recompute target, and a deliberately temporary one. The skeleton is drawn over the ink and
+ * emits nothing (step C), so changing how hard it is pruned costs a prune and not a re-read — while
+ * every other reading-stage parameter costs the whole 690ms. Leaving it out of the mask fingerprint
+ * is what makes that true rather than merely intended.
+ *
+ * **It has an end date.** When faces are derived from the graph rather than from the mask (step D),
+ * pruning starts deciding what gets emitted and this list empties — loudly, because the parameter
+ * then joins the mask fingerprint and a stale mask stops being possible. Declared as an opt-in list
+ * for exactly that reason: the safe default for anything new is to invalidate everything.
+ */
+const SKELETON_ONLY: readonly SettingName[] = ["spurPrunePx"];
+
+/** Whether a parameter changes only the skeleton. Exported for the recompute dispatch and the tests. */
+export function isSkeletonOnly(name: SettingName): boolean {
+  return SKELETON_ONLY.includes(name);
+}
 
 /** Every reading-stage pipeline parameter, in declaration order. */
 function readingParameters(): readonly SettingName[] {
@@ -562,6 +608,7 @@ export function normaliseSettings(raw: unknown): Settings {
       minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
+      spurPrunePx: clamp(trace.spurPrunePx, "spurPrunePx", t.spurPrunePx),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,

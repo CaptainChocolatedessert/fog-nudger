@@ -446,11 +446,23 @@ editing in general does not.
 
 #### What it costs — stated, not minimised
 
-- **Thinning, never the medial axis, and this decides whether the stub claim is even true.** The medial
-  axis of a rectangle retracts half a wall width from each free end, so a distance-transform skeleton
-  shortens stubs by exactly as much as the pullback would and the whole argument evaporates.
-  Topology-preserving thinning explicitly preserves endpoints. It is the sibling's algorithm and it is
-  the right one; the distinction is load-bearing and easy to lose.
+- **Thinning, never the medial axis — and the reason recorded here was wrong. Corrected by
+  measurement, 2026-08-29.** The claim was that the medial axis retracts half a wall width at a free
+  end while topology-preserving thinning "explicitly preserves endpoints". The first half is right.
+  The second is not: **Zhang–Suen pulls back too, by (w + 1) / 2 pixels** — two on a three-wide
+  stroke, four on a seven-wide one, measured on bars of known width. Nothing reaches the true end of
+  a stroke.
+
+  **What the distinction actually is, and it still holds:** the *branch survives*. A stub off a wall
+  thins to an edge hanging off a junction, shortened at the tip. A partition deletes it outright,
+  because a watershed provably drops every wall that separates nothing. A stub three pixels short is
+  a wall; a stub that is gone is not — and that is the difference the pivot rests on, not the
+  retraction.
+
+  **The retraction is a standing cost.** Half a wall width at the free tip of a stub is about 0.06 of
+  a grid square on this project's test map. If a room shows it mattering, the fix is extending each
+  branch end back along its own direction to the ink boundary — end restoration, not a different
+  skeleton.
 - **Spurs are a new failure mode.** Preserving endpoints also preserves the spur from every bump on a
   hand-drawn edge, and a spur that separates nothing emits as a stub wall blocking sight where nothing
   does. Pruning is one honest parameter, but per §8 it needs a visual channel before it ships — which
@@ -1590,10 +1602,11 @@ hard; the stages that took the sibling the longest are the ones we are not using
 were the artifact. §4 establishes that a partition cannot represent a wall that separates nothing, so
 they no longer are.
 
-**Two cautions carried from §4 rather than repeated here:** it must be topology-preserving **thinning**,
-never a distance-transform medial axis, or stubs shorten by half a wall width and the whole reason for
-the change evaporates. And thinning preserves spurs along with endpoints, so pruning is a required
-stage rather than a refinement.
+**Two cautions carried from §4 rather than repeated here:** it must be topology-preserving
+**thinning** rather than a distance-transform medial axis — not because thinning avoids the free-end
+retraction, which it does not (see §4, corrected by measurement), but because it keeps the branch at
+all where a partition deletes it. And thinning keeps a spur for every bump on a hand-drawn edge, so
+pruning is a required stage rather than a refinement.
 
 ### Resolution — native, decided 2026-08-15
 
@@ -2668,11 +2681,31 @@ below. Agreed 2026-08-29; unaffected by the pivot, which is why it goes first.
 while staying region-first. Correct, and not worth building on a representation we are leaving —
 "re-inventing skeletonization with a series of tweaks" (user).
 
-**C. The skeleton as a workspace *view*, before it is an emit path.** Thinning plus pruning, drawn over
-the ink, emitting nothing. Spur density, junction behaviour and stub survival on a real hand-drawn map
-are exactly what reasoning cannot settle, and finding out costs a view rather than a rewrite. Same
-posture as the two probes that have already paid for themselves. **The one step to keep ahead of the
-rest**: if the skeleton comes out hairy on a real map, that is known before anything is committed.
+**C. The skeleton as a workspace *view*, before it is an emit path — BUILT 2026-08-29.** Thinning plus
+pruning, drawn over the ink, emitting nothing. Spur density, junction behaviour and stub survival on a
+real hand-drawn map are exactly what reasoning cannot settle, and finding out costs a view rather than
+a rewrite. **Nothing about it has been seen on a real map yet** — that is the next thing it is for.
+
+- **The Walls step comes back**, this time with something to paint: the skeleton over the ink, which
+  is the only pairing that answers the question. A centreline alone says nothing; what is being judged
+  is whether it runs down the middle of the stroke it came from and whether its hairs are artefacts or
+  stubs. The Ink step's "Walls" sub-heading is renamed **Linework**, since those two controls decide
+  which marks are linework and a wall is what this step makes of them.
+- **Thinning is Zhang–Suen**, iterating over a list of surviving ink pixels rather than the raster —
+  a few per cent of the map, shrinking as the skeleton emerges.
+- **Pruning walks branches from their free ends**, counting pixels stepped rather than straight-line
+  distance, and stops at a junction without deleting it. **Junctions are counted by crossing number,
+  not by neighbour count**, and that was a bug first: a pixel one row above a horizontal line touches
+  three of its pixels diagonally, so a neighbour count calls it a junction, stops the walk one pixel
+  short, and leaves a nub on the wall for every spur pruned.
+- **A high budget erodes the whole graph, and that is a property rather than a bug.** Every arm of a
+  junction is a dead end once the arms around it go, so a budget longer than a wall's own arms eats
+  the wall. Same deliberate over-reach as the two ink filters, defensible for the same reason — the
+  skeleton is drawn, so it is visible rather than silent — and the reason the default is off.
+- **A third recompute target, `SKELETON_ONLY`, with an end date.** Pruning is a reading-stage pipeline
+  parameter but changes nothing the mask is used for today, so it is excluded from the mask
+  fingerprint and a sweep costs a walk of the branches rather than 690ms. It stops being safe at step
+  D, when faces come from the graph; the tests that pin it say so.
 
 **D. Faces from the graph.** Rasterise the graph, label, trace contours — reusing the existing
 labelling, contour tracing, area check and simplification with a different input. Half-wall reveal
