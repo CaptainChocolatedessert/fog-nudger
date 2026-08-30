@@ -463,10 +463,16 @@ editing in general does not.
   a grid square on this project's test map. If a room shows it mattering, the fix is extending each
   branch end back along its own direction to the ink boundary — end restoration, not a different
   skeleton.
-- **Spurs are a new failure mode.** Preserving endpoints also preserves the spur from every bump on a
-  hand-drawn edge, and a spur that separates nothing emits as a stub wall blocking sight where nothing
-  does. Pruning is one honest parameter, but per §8 it needs a visual channel before it ships — which
-  the workspace gives it.
+- **Spurs are a new failure mode — and on the test map they are a small one. Measured in a room,
+  2026-08-29.** Thinning keeps the spur from every bump on a hand-drawn edge, and a spur that
+  separates nothing would emit as a stub wall blocking sight where nothing does. That was the worry.
+  What a real map gave: a 15px prune budget removed **51 branches totalling 295 pixels out of 42,912**
+  — **0.7% of the skeleton** — rising smoothly from 15 branches at 3px through 32 at 7px, with no
+  cliff anywhere. The GM's summary was "not hairy".
+
+  **So pruning stays an off-by-default correction rather than becoming a required stage**, which this
+  section had allowed it might have to be. It still needs the visual channel §8 asks for, and it has
+  one: the skeleton is drawn.
 - **The area check stops covering the emitted walls.** It still covers derived regions, so it is not
   lost, but the wall artifact becomes the unchecked part and there is no equivalent invariant for it
   yet.
@@ -2681,8 +2687,24 @@ below. Agreed 2026-08-29; unaffected by the pivot, which is why it goes first.
 while staying region-first. Correct, and not worth building on a representation we are leaving —
 "re-inventing skeletonization with a series of tweaks" (user).
 
-**C. The skeleton as a workspace *view*, before it is an emit path — BUILT 2026-08-29.** Thinning plus
-pruning, drawn over the ink, emitting nothing. Spur density, junction behaviour and stub survival on a
+**C. The skeleton as a workspace *view*, before it is an emit path — BUILT AND SEEN IN A ROOM,
+2026-08-29.** Thinning plus pruning, drawn over the ink, emitting nothing.
+
+**What the room said, which is what this step existed to ask.** The skeleton is **not hairy**; the
+centreline **sits down the middle** of the linework; nothing over-pruned at any setting tried. On
+*Lair Of The Lamb*:
+
+> Thinned **430,721 ink pixels to 42,912 in 428ms over 11 passes**. Pruning **38–130ms** in three
+> rounds, independent of the budget: 15 branches at 3px, 32 at 7px, 51 at 15px — 295 pixels, 0.7% of
+> the skeleton, at the widest setting tried.
+
+- **428ms is cheaper than a reading**, so running it synchronously on entering the step is settled and
+  there is no case for a worker.
+- **Pruning does not re-thin**, which the flat ~100ms confirms: the thinned skeleton is kept and only
+  the branch walk is redone. A slider sweep costs a tenth of a second rather than seven.
+- *Not read as a contradiction:* ink-to-skeleton is 10:1 against a recorded ink width of ~5.7px. That
+  figure was measured on the raw reading, this ink is after the Linework filters, and a diagonal
+  skeleton run covers more ground per pixel than a straight one. Spur density, junction behaviour and stub survival on a
 real hand-drawn map are exactly what reasoning cannot settle, and finding out costs a view rather than
 a rewrite. **Nothing about it has been seen on a real map yet** — that is the next thing it is for.
 
