@@ -1054,7 +1054,6 @@ export async function runTrace(
 
   const derived = deriveGraphRegions(inkMask, {
     spurPrunePx: settings.trace.spurPrunePx,
-    weldRadiusPx: settings.trace.weldRadiusPx,
     minArea,
     tolerance,
     maxTolerance: MAX_SIMPLIFY_INK_WIDTHS * inkWidth,
@@ -1074,11 +1073,10 @@ export async function runTrace(
     `trace: graph — thinned ${derived.thinning.before} ink pixels to ${derived.thinning.after} in ` +
       `${derived.thinning.passes} passes; pruned ${derived.pruning.removed} spurs ` +
       `(${derived.pruning.pixels} px) at ${settings.trace.spurPrunePx}px; ` +
-      `${derived.graph.stats.chains} chains welded at ${settings.trace.weldRadiusPx}px into ` +
-      `${derived.graph.nodes.length} nodes and ${derived.graph.edges.length} edges ` +
-      `(${derived.graph.stats.dropped} junction clusters dropped, ` +
-      `${derived.graph.stats.merged} joins through path nodes, ` +
-      `${derived.graph.stats.orphans} orphaned pixels)`,
+      `${derived.graph.stats.chains} chains into ${derived.graph.nodes.length} nodes and ` +
+      `${derived.graph.edges.length} edges (${derived.graph.stats.merged} joins through path ` +
+      `nodes, ${derived.graph.stats.orphans} orphaned pixels); ${derived.sliversRemoved} sub-pixel ` +
+      `slivers deleted in ${derived.sliverRounds} rounds, ${derived.sliversLeft} left`,
   );
   if (derived.graph.stats.orphans > 0) {
     devLog(

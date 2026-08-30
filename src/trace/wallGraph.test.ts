@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
+import { buildFaces } from "./faces";
+import { labelSpace } from "./label";
 import { buildWallGraph, frameSkeleton, type WallGraph } from "./wallGraph";
 
 /**
@@ -8,8 +10,17 @@ import { buildWallGraph, frameSkeleton, type WallGraph } from "./wallGraph";
  * `buildWallGraph` paints the frame itself. Keep linework **two** pixels clear of the edge: one
  * pixel in is 8-adjacent to the frame and fuses with it.
  */
-function graphOf(rows: readonly string[], weldRadius: number): WallGraph {
-  return buildWallGraph(maskFromRows(rows), weldRadius);
+function graphOf(rows: readonly string[]): WallGraph {
+  return buildWallGraph(maskFromRows(rows));
+}
+
+/** Every skeleton pixel that reached the graph. */
+function claimed(graph: WallGraph): Set<string> {
+  const seen = new Set<string>();
+  for (const edge of graph.edges) {
+    for (const point of edge.points) seen.add(`${point.x},${point.y}`);
+  }
+  return seen;
 }
 
 /** A crossroads drawn as two T-junctions one pixel apart — the cluster thinning actually leaves. */
@@ -48,6 +59,48 @@ const BROKEN_RUN = [
   "...................",
 ];
 
+/**
+ * A pixel with **four** neighbours falling in two contiguous runs.
+ *
+ * (4,4) touches (5,3), (5,4) and (5,5) — one run around the ring — and (3,4) on its own. Two runs, so
+ * the crossing number calls it an ordinary path pixel; four neighbours, so it is really a junction.
+ * The free end at (3,4) is what gets stranded when the walk believes the crossing number.
+ */
+const FOUR_NEIGHBOUR_PATH = [
+  ".........",
+  ".........",
+  ".........",
+  ".....#...",
+  "...###...",
+  ".....#...",
+  ".........",
+  ".........",
+  ".........",
+];
+
+/** A single pixel with nothing adjacent to it. */
+const SPECK = [
+  ".........",
+  ".........",
+  ".........",
+  "....#....",
+  ".........",
+  ".........",
+  ".........",
+];
+
+/** One run with a corner in it, which puts a two-end node in the middle. */
+const BENT_RUN = [
+  ".........",
+  ".........",
+  ".........",
+  "...###...",
+  ".....#...",
+  ".....#...",
+  ".........",
+  ".........",
+];
+
 /** A diagonal staircase, where a pixel's two forward neighbours are adjacent to each other. */
 const STAIRCASE = [
   ".........",
@@ -66,11 +119,22 @@ describe("the border frame", () => {
   });
 
   it("is why the map's exterior is a face at all", () => {
-    // Without it the outer face is unbounded and has no polygon. With it, an empty raster is one
-    // ring and one interior.
-    const graph = graphOf([".....", ".....", ".....", ".....", "....."], 0);
-    expect(graph.edges).toHaveLength(1);
-    expect(graph.edges[0]!.a).toBe(graph.edges[0]!.b);
+    // Without it the outer face is unbounded and has no polygon at all. With it, an empty raster is
+    // one ring around one interior.
+    const graph = graphOf([".....", ".....", ".....", ".....", "....."]);
+    const faces = buildFaces(graph, labelSpace(graph.framed, { minArea: 0 }));
+    expect(faces.faces).toHaveLength(1);
+    expect(faces.faces[0]!.interior).toBe(9);
+  });
+
+  it("fragments at its own corners, which is the cost of counting neighbours", () => {
+    // The pixel beside a corner touches the pixel on the adjoining side diagonally, so it has three
+    // neighbours and reads as a junction. The frame therefore arrives as several edges with a
+    // half-pixel triangle at each corner, and those triangles are removed downstream with every
+    // other sub-pixel sliver. Recorded rather than fixed: the alternative is the crossing number,
+    // which strands pixels.
+    const graph = graphOf([".....", ".....", ".....", ".....", "....."]);
+    expect(graph.edges.length).toBeGreaterThan(1);
   });
 });
 
@@ -78,85 +142,80 @@ describe("chains", () => {
   it("leaves no skeleton pixel unclaimed on a staircase", () => {
     // The chain walk steps orthogonally first. Taking the diagonal would step straight over the
     // near neighbour and orphan it.
-    expect(graphOf(STAIRCASE, 0).stats.orphans).toBe(0);
+    expect(graphOf(STAIRCASE).stats.orphans).toBe(0);
   });
 
   it("keeps every step to an 8-neighbour, which the area check depends on", () => {
-    for (const rows of [JUNCTION_CLUSTER, BROKEN_RUN, STAIRCASE]) {
-      for (const radius of [0, 2, 3]) {
-        for (const edge of graphOf(rows, radius).edges) {
-          for (let i = 1; i < edge.points.length; i++) {
-            const dx = Math.abs(edge.points[i]!.x - edge.points[i - 1]!.x);
-            const dy = Math.abs(edge.points[i]!.y - edge.points[i - 1]!.y);
-            expect(Math.max(dx, dy), `step ${dx},${dy} in ${rows.length}-row fixture`).toBe(1);
-          }
+    for (const rows of [JUNCTION_CLUSTER, BROKEN_RUN, STAIRCASE, FOUR_NEIGHBOUR_PATH]) {
+      for (const edge of graphOf(rows).edges) {
+        for (let i = 1; i < edge.points.length; i++) {
+          const dx = Math.abs(edge.points[i]!.x - edge.points[i - 1]!.x);
+          const dy = Math.abs(edge.points[i]!.y - edge.points[i - 1]!.y);
+          expect(Math.max(dx, dy), `step ${dx},${dy} in a ${rows.length}-row fixture`).toBe(1);
         }
       }
     }
   });
 });
 
-describe("welding junction clusters", () => {
-  it("leaves the cluster in place when welding is off", () => {
-    const graph = graphOf(JUNCTION_CLUSTER, 0);
-    // Four arms, the one-pixel connector between the two junctions, and the frame.
-    expect(graph.edges).toHaveLength(6);
-    expect(graph.stats.dropped).toBe(0);
-
-    const connector = graph.edges.find(
-      (edge) => edge.points.length === 2 && edge.a !== edge.b,
-    );
-    expect(connector).toBeDefined();
-  });
-
-  it("collapses it to one node and drops the connector", () => {
-    const graph = graphOf(JUNCTION_CLUSTER, 2);
-    expect(graph.stats.dropped).toBe(1);
-    expect(graph.edges).toHaveLength(5);
-
-    // All four arms still meet, now at a single node.
-    const arms = graph.edges.filter((edge) => edge.a !== edge.b);
-    expect(arms).toHaveLength(4);
-    const shared = new Set(arms.flatMap((edge) => [edge.a, edge.b]));
-    expect(shared.size).toBe(5);
-  });
-
-  it("does not weld the arm ends along with it", () => {
-    // The failure this guards is a radius large enough to swallow a short arm, which would delete
-    // a wall outright rather than tidy a junction.
-    const graph = graphOf(JUNCTION_CLUSTER, 2);
-    for (const edge of graph.edges) {
-      if (edge.a === edge.b) continue;
-      expect(edge.points.length).toBeGreaterThanOrEqual(3);
+describe("claiming every pixel", () => {
+  it("leaves no skeleton pixel out of the graph, on any fixture", () => {
+    for (const rows of [JUNCTION_CLUSTER, BROKEN_RUN, STAIRCASE, FOUR_NEIGHBOUR_PATH]) {
+      const graph = graphOf(rows);
+      const seen = claimed(graph);
+      const { width, height, data } = graph.framed;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (data[y * width + x] !== 1) continue;
+          expect(seen.has(`${x},${y}`), `pixel ${x},${y} reached no edge`).toBe(true);
+        }
+      }
+      expect(graph.stats.orphans).toBe(0);
     }
+  });
+
+  it("counts a node as a node by its neighbours, not by contiguous runs", () => {
+    /*
+      The regression for the defect that made the area check fail on a real map.
+
+      The crossing number counts contiguous *runs* of ink around the ring, so a pixel with four
+      neighbours in two runs reads as an ordinary path pixel. The walk then passes straight through
+      it, consuming it, and whichever branch it did not take is stranded — here the free end at the
+      left, which vanished from the graph entirely. It is skeleton, so the labelling does not count
+      it as space either, and the face it sits in comes up one interior point short.
+
+      Spur pruning still counts runs, where that is the right measure. These are different jobs.
+    */
+    const graph = graphOf(FOUR_NEIGHBOUR_PATH);
+    expect(claimed(graph).has("3,4")).toBe(true);
+  });
+
+  it("erases an isolated speck rather than leaving it in the graph", () => {
+    // A pixel with no neighbours is a component with no edges: it contributes no cycle, so it ends
+    // up neither inside a face nor on any boundary and the area identity comes up short by it.
+    const graph = graphOf(SPECK);
+    expect(graph.framed.data[3 * 9 + 4]).toBe(0);
+    expect(graph.stats.orphans).toBe(0);
   });
 });
 
 describe("joining where exactly two ends meet", () => {
-  it("keeps a break open when the radius does not reach across it", () => {
-    const graph = graphOf(BROKEN_RUN, 1);
-    expect(graph.stats.merged).toBe(0);
-    // Two separate runs, plus the frame.
-    expect(graph.edges).toHaveLength(3);
+  it("leaves a break in the linework open", () => {
+    // Nothing welds any more, so a break stays a break however narrow it is. Closing one is the gap
+    // repair's job, where a GM can see it happen.
+    const runs = graphOf(BROKEN_RUN).edges.filter((edge) =>
+      edge.points.every((point) => point.y === 4),
+    );
+    expect(runs).toHaveLength(2);
   });
 
-  it("welds the break shut and joins the two runs into one edge", () => {
-    const graph = graphOf(BROKEN_RUN, 3);
-    expect(graph.stats.merged).toBe(1);
-    expect(graph.edges).toHaveLength(2);
-
+  it("joins two chains at a node where exactly two ends meet", () => {
+    // A node with two ends is not a junction, so the chains through it are one edge. This is the
+    // one part of the sibling's welding that survives; joining *through a junction* is forbidden,
+    // because it would destroy the incidence the faces are read from.
+    const graph = graphOf(BENT_RUN);
     const run = graph.edges.find((edge) => edge.a !== edge.b);
     expect(run).toBeDefined();
-    expect(run!.points[0]).toEqual({ x: 4, y: 4 });
-    expect(run!.points[run!.points.length - 1]).toEqual({ x: 14, y: 4 });
-  });
-
-  it("is the cost of the weld radius, stated: it closes a gap it can reach across", () => {
-    // Not a bug. It is the same operation that tidies a junction cluster, and it is why the radius
-    // needs the Walls step to draw the graph rather than the skeleton — a doorway two pixels wide
-    // disappears here with nothing else to show for it.
-    const open = graphOf(BROKEN_RUN, 1);
-    const shut = graphOf(BROKEN_RUN, 3);
-    expect(open.edges.length).toBeGreaterThan(shut.edges.length);
+    expect(run!.points.length).toBeGreaterThan(4);
   });
 });

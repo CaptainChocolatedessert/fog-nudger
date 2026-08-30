@@ -176,22 +176,6 @@ export interface TraceSettings {
    * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
    */
   readonly spurPrunePx: number;
-  /**
-   * How far apart two ends of the skeleton may be and still count as one node, in raster pixels.
-   *
-   * **What it is for:** thinning leaves a junction as a *cluster* of junction pixels one or two
-   * apart rather than a single crossing, and the stubby chains between them survive every other
-   * cleanup — spur pruning refuses them because both ends are junctions, and collinear merging
-   * refuses them because they are not path pixels. Welding endpoints within a radius is the only
-   * thing that removes them, and without it a crossroads arrives as a fistful of tiny edges.
-   *
-   * **What it costs, stated:** it is the same operation as closing a gap, so a radius that reaches
-   * across a doorway welds the doorway shut, and a radius longer than a short wall welds that wall
-   * into nothing. Neither announces itself in the linework, which is why the Walls step draws the
-   * *graph* — nodes and edges — rather than the skeleton's pixels. One node where there should be
-   * two is the thing to look for.
-   */
-  readonly weldRadiusPx: number;
   readonly minRoomSquares: number;
   /**
    * Simplification tolerance, as a fraction of the measured ink width.
@@ -274,10 +258,6 @@ export const DEFAULT_SETTINGS: Settings = {
     // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
     // skeleton as thinning produced it, hairs and all.
     spurPrunePx: 0,
-    // Three pixels, which is the sibling project's own default and was tuned against maps of
-    // exactly this kind. Not off by default, unlike every other correction here: without it a
-    // junction is a cluster rather than a crossing, and the graph is wrong rather than untidy.
-    weldRadiusPx: 3,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -338,9 +318,6 @@ export const SETTING_LIMITS = {
   // stub and will eat walls whole, which is the same deliberate over-reach the ink filters have and
   // is defensible for the same reason: the skeleton is drawn, so it is visible rather than silent.
   spurPrunePx: { min: 0, max: 60, step: 1 },
-  // Reaches past useful at the top end, like the filters above it, and the failure it produces
-  // there is a doorway welded shut. Visible in the Walls step, which draws the graph.
-  weldRadiusPx: { min: 0, max: 12, step: 1 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -384,7 +361,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   gapFillPx: "read",
   gapTravelPx: "read",
   spurPrunePx: "read",
-  weldRadiusPx: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
@@ -433,7 +409,6 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   gapFillPx: "pipeline",
   gapTravelPx: "pipeline",
   spurPrunePx: "pipeline",
-  weldRadiusPx: "pipeline",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
@@ -519,7 +494,6 @@ const POST_READING: readonly SettingName[] = [
   "gapFillPx",
   "gapTravelPx",
   "spurPrunePx",
-  "weldRadiusPx",
 ];
 
 /**
@@ -539,7 +513,7 @@ const POST_READING: readonly SettingName[] = [
  * The cost this saves is real: a prune sweep costs a branch walk and a face traversal rather than
  * re-binarising the map or recomposing the ink.
  */
-const GRAPH_ONLY: readonly SettingName[] = ["spurPrunePx", "weldRadiusPx"];
+const GRAPH_ONLY: readonly SettingName[] = ["spurPrunePx"];
 
 /**
  * Whether a parameter changes the graph without changing the mask.
@@ -645,7 +619,6 @@ export function normaliseSettings(raw: unknown): Settings {
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
       spurPrunePx: clamp(trace.spurPrunePx, "spurPrunePx", t.spurPrunePx),
-      weldRadiusPx: clamp(trace.weldRadiusPx, "weldRadiusPx", t.weldRadiusPx),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,

@@ -227,7 +227,6 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   gapFillPx: "ink",
   gapTravelPx: "ink",
   spurPrunePx: "walls",
-  weldRadiusPx: "walls",
   fillOpacity: "regions",
   strokeSquares: "regions",
   minRoomSquares: "regions",

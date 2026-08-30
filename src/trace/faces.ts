@@ -43,7 +43,7 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 import type { LabelledSpace } from "./label";
 import { simplifyPolyline } from "./simplify";
-import type { WallGraph } from "./wallGraph";
+import { removeEdges, type WallGraph } from "./wallGraph";
 
 export interface FaceCycle {
   /** Lattice points, closing implicitly: the last steps back to the first. */
@@ -72,6 +72,14 @@ export interface GraphFace {
 
 export interface GraphFaces {
   readonly faces: readonly GraphFace[];
+  /**
+   * Enclosing cycles that belong to no labelled face — sub-pixel slivers left by junction clusters.
+   *
+   * Each is a real face of the arrangement that holds no space on the map. They must be removed
+   * from the graph rather than tolerated: absorbed into a neighbour they corrupt its area identity,
+   * and left alone they emit as shapes enclosing nothing.
+   */
+  readonly slivers: readonly FaceCycle[];
   /**
    * Cycles whose right-hand sample found no label at all.
    *
@@ -179,6 +187,7 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
 
   const seen = new Uint8Array(halfEdgeCount);
   const byLabel = new Map<number, FaceCycle[]>();
+  const slivers: FaceCycle[] = [];
   let unlabelled = 0;
   let disagreements = 0;
 
@@ -187,7 +196,8 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
 
     const points: Vector2[] = [];
     const halfEdges: number[] = [];
-    let label = 0;
+    /** One representative sampled pixel per label seen to the right of this cycle. */
+    const samples = new Map<number, Vector2>();
     let half = start;
 
     do {
@@ -204,9 +214,7 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
           continue;
         }
         const found = labelled.labels[flank.y * labelled.width + flank.x]!;
-        if (found === 0) continue;
-        if (label === 0) label = found;
-        else if (label !== found) disagreements += 1;
+        if (found !== 0 && !samples.has(found)) samples.set(found, flank);
       }
 
       half = next(half);
@@ -228,8 +236,34 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
 
     const cycle: FaceCycle = { points, halfEdges, doubleArea, steps: points.length };
 
+    /*
+      A sample one step to the right is *usually* inside the face this cycle bounds — but not
+      always, and the exception is what made the area check fail on a real map. Where thinning turns
+      a T into a small Y, two chains run between the same pair of nodes and enclose a **sub-pixel
+      face**: a triangle of half a pixel with no lattice point in it at all. Every sample around it
+      lands in the neighbouring face, so the sliver was silently absorbed into its neighbour and
+      corrupted that neighbour's accounting.
+
+      So the sample is verified rather than trusted: it must lie inside the cycle when the cycle
+      encloses, and outside it when the cycle is a hole. Exact, because a sampled pixel is never on
+      the boundary — the polygon's vertices are skeleton pixels and its steps are to 8-neighbours,
+      so no other lattice point can lie on one.
+    */
+    const shouldContain = doubleArea > 0;
+    let label = 0;
+    for (const [candidate, point] of samples) {
+      if (containsPoint(points, point) !== shouldContain) continue;
+      if (label === 0) label = candidate;
+      else if (label !== candidate) disagreements += 1;
+    }
+
     if (label === 0) {
       unlabelled += 1;
+      // An enclosing cycle that belongs to no labelled face is a sliver: a face of the arrangement
+      // holding no space on the map. Reported so the caller can remove it from the graph; the one
+      // legitimately unlabelled cycle, the unbounded face outside the border frame, runs the other
+      // way and is negative.
+      if (doubleArea > 0) slivers.push(cycle);
       continue;
     }
     const list = byLabel.get(label);
@@ -267,12 +301,32 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
 
   return {
     faces,
+    slivers,
     unlabelled,
     disagreements,
     exact,
     checked: faces.length,
     ambiguous,
   };
+}
+
+/**
+ * Whether a lattice point lies strictly inside a closed lattice polygon.
+ *
+ * Plain crossing number. Safe without any on-boundary handling for the one thing it is asked here:
+ * the polygon's vertices are skeleton pixels and consecutive ones are 8-neighbours, so no other
+ * lattice point lies on an edge, and the points tested are never skeleton.
+ */
+function containsPoint(polygon: readonly Vector2[], point: Vector2): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i]!;
+    const b = polygon[j]!;
+    if (a.y > point.y === b.y > point.y) continue;
+    const crossing = ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
+    if (point.x < crossing) inside = !inside;
+  }
+  return inside;
 }
 
 /** One line for the log, in the same shape as the old area check's. */
@@ -328,4 +382,74 @@ export function fitFaces(
   );
 
   return { rings, fitted };
+}
+
+/** Enough rounds for a cluster of any plausible size; a guard rather than a working limit. */
+const MAX_SLIVER_ROUNDS = 8;
+
+export interface ResolvedFaces {
+  /** The graph after its sub-pixel slivers were removed. Use this one downstream, not the input. */
+  readonly graph: WallGraph;
+  readonly faces: GraphFaces;
+  readonly sliversRemoved: number;
+  readonly rounds: number;
+}
+
+/**
+ * Walk the faces, then clean up after the junction clusters, then walk again.
+ *
+ * The two halves are one operation, which is why they live together: a raw traversal is not a usable
+ * partition. Where thinning turns a T into a small Y, two chains run between the same pair of nodes
+ * and enclose a triangle of half a pixel with no lattice point inside it. That is a real face of the
+ * arrangement holding no space on the map, and it has to go: left in, it emits as a shape enclosing
+ * nothing; absorbed into a neighbour, it corrupts that neighbour's area identity. The second is what
+ * it did, and it is what made the area check fail on a real map.
+ *
+ * The repair deletes one of the sliver's bounding edges, merging it into whatever lies on the other
+ * side. Deleting an edge cannot break planarity and moves no point, which is exactly what the
+ * endpoint welding this replaces could not promise. Two constraints on which edge:
+ *
+ * - **It must have no interior pixels.** Deleting an edge that has them takes those pixels out of
+ *   the graph entirely, leaving them neither inside a face nor on any boundary — and the identity
+ *   then comes up short by exactly them.
+ * - **A diagonal link is preferred.** Three mutually-touching pixels make a triangle whose
+ *   hypotenuse is the redundant 8-connection; giving up a leg instead cuts the corner off the
+ *   linework rather than tidying it.
+ *
+ * Iterated, because removing one sliver's edge can expose another.
+ */
+export function resolveFaces(graph: WallGraph, labelled: LabelledSpace): ResolvedFaces {
+  let current = graph;
+  let faces = buildFaces(current, labelled);
+  let sliversRemoved = 0;
+  let rounds = 0;
+
+  for (; rounds < MAX_SLIVER_ROUNDS && faces.slivers.length > 0; rounds += 1) {
+    const drop = new Set<number>();
+    for (const sliver of faces.slivers) {
+      let chosen = -1;
+      let already = false;
+      for (const half of sliver.halfEdges) {
+        const edge = half >> 1;
+        // Two slivers can share an edge; one deletion serves both, and dropping a second edge of
+        // the same pair could disconnect linework that is really there.
+        if (drop.has(edge)) {
+          already = true;
+          break;
+        }
+        const points = current.edges[edge]!.points;
+        if (points.length !== 2) continue;
+        const diagonal = points[0]!.x !== points[1]!.x && points[0]!.y !== points[1]!.y;
+        if (chosen < 0 || diagonal) chosen = edge;
+        if (diagonal) break;
+      }
+      if (!already && chosen >= 0) drop.add(chosen);
+    }
+    if (drop.size === 0) break;
+    sliversRemoved += drop.size;
+    current = removeEdges(current, drop);
+    faces = buildFaces(current, labelled);
+  }
+
+  return { graph: current, faces, sliversRemoved, rounds };
 }

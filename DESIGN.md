@@ -581,36 +581,103 @@ float segments, where a single mis-sorted half-edge merges two rooms — this pr
 **We compute none.** The skeleton is already a planar embedding: nodes exist only where pixels are
 adjacent, which is exact integer work, and the traversal is combinatorial rather than geometric. The
 one residual geometric decision is the angular sort of half-edges at a node, and it is only close when
-two edges leave a node at nearly the same heading — which is the case the weld radius has already
-removed.
+two edges leave a node at nearly the same heading. **That safety is conditional on nothing moving a
+point**, which is what the withdrawn weld radius did — see below.
 
 #### Prior art: the sibling solved graph building, and one of its rules binds us
 
 `../W - cartographers-fog/` turns a thinned skeleton into strokes, and its four rules come in turn from
-the author's own `VTT_Maps`. Three transfer as they stand:
+the author's own `VTT_Maps`. Two transfer as they stand, one was taken and then **withdrawn**, and one
+is forbidden outright.
 
-- **Walk the skeleton into pixel chains running node to node**, a node being any pixel whose degree is
-  not 2. Interior pixels are marked as consumed so a chain is not traced again from its far end; node
-  pixels are never marked, because several chains legitimately share one.
-- **Weld chain endpoints within a small radius into a single node** — union-find over a hash grid,
-  radius 3px there. This is the junction-cluster fix, and nothing else does it: thinning leaves junction
-  pixels one or two apart, and the stubby chains between them survive stub pruning (both ends are
-  junctions) and collinear merging (they are not degree-2) alike.
-- **Drop chains that begin and end inside the same welded node** before anything looks at degree, or
-  those stubs inflate the node's degree and the real edges never join through it.
+- **Walk the skeleton into pixel chains running node to node.** Interior pixels are marked as consumed
+  so a chain is not traced again from its far end; node pixels are never marked, because several
+  chains legitimately share one.
+- **Join two chains where exactly two ends meet at a node.** Such a node is not a junction, so those
+  chains are one edge.
+- **Merging chains *through* a junction is forbidden here**, not merely defaulted off. The sibling
+  pairs the straightest continuations through a crossroads, because a stroke drawn as one line has to
+  wobble as one line. Merging two edges through a degree-3 node would destroy the incidence the faces
+  are read from.
 
-The fourth is where we **must** diverge. The sibling then merges chains *through* nodes to recover long
-strokes, because a stroke drawn as one line has to wobble as one line. Merging where exactly two ends
-meet is right for us as well — such a node is not a junction, so those chains are one edge. But its
-optional `joinThroughJunctions`, pairing the straightest continuations through a crossroads, is
-**forbidden here rather than merely defaulted off**: merging two edges through a degree-3 node destroys
-the incidence the faces are read from.
+### Welding was taken from the sibling and withdrawn — measured 2026-08-30
 
-**One ordering constraint of the sibling's does not apply to us.** It counts degree as a raw
-8-neighbour count and therefore depends on welding running *before* pruning — otherwise a pixel sitting
-one row off a straight line reads as a junction and leaves a nub on the wall for every spur removed. We
-already pay for the crossing number in spur pruning, having hit that same bug independently, so our
-order is the natural one: thin, prune, chain, weld.
+The rule not listed above is **welding**: collapsing chain endpoints within a small radius onto one
+shared node, union-find over a hash grid, 3px there. It is the sibling's answer to the junction
+cluster, and nothing else it does removes one — thinning leaves junction pixels one or two apart, and
+the stubby chains between them survive stub pruning (both ends are junctions) and collinear merging
+(they are not path pixels) alike. It was adopted here on that reasoning, with a GM-facing radius.
+
+**It is wrong here, and the reason is specific to wanting faces rather than polylines.** Welding moves
+a chain's endpoint to a node it was not on. To keep every step between 8-adjacent lattice points — the
+area check is a lattice identity and needs that — the moved end was walked to its node along a
+straight lattice path. **That invented path can cross other linework.** Once the embedding is not
+planar, a half-edge traversal means nothing: the angular order at a node no longer corresponds to the
+order faces appear around it, and the walk crosses between faces without noticing.
+
+Measured over generated linework, by failure rate of the area check:
+
+| weld radius | area-check failures |
+| --- | --- |
+| 0 px | 21 / 600 |
+| 2 px | 30 / 600 |
+| **3 px — the default that shipped** | **459 / 600** |
+| 4 px | 540 / 600 |
+
+**So the rule for this project is stronger than the sibling's and is worth stating as a rule:
+nothing between the skeleton and the faces may move a point.** Every point in the graph is a pixel
+that was in the skeleton, and every step is to an 8-neighbour of the last. Deleting is allowed;
+inventing is not.
+
+**The weld radius control is therefore gone**, not defaulted to zero. It was the only stage-one
+control this project has ever shipped that was wrong rather than risky, and it lasted one commit.
+
+### What replaces it: deleting the sub-pixel faces instead — 2026-08-30
+
+A junction cluster's real signature is not that its pixels are close together. It is that the chains
+between them **enclose a face with no space in it** — where thinning turns a T into a small Y, two
+chains run between the same pair of nodes and bound a triangle of half a pixel containing no lattice
+point at all.
+
+That is something to find rather than a distance to guess at, and the repair is to **delete one of
+the sliver's bounding edges**, merging it into whatever lies on the other side. Deleting an edge
+cannot break planarity and moves nothing, which is exactly what welding could not promise. Two
+constraints on which edge, both learned by the area check failing:
+
+- **It must have no interior pixels.** Deleting an edge that has them takes those pixels out of the
+  graph entirely, leaving them neither inside a face nor on any boundary — and the identity then
+  comes up short by exactly them. A sliver is sub-pixel, so it nearly always has a direct
+  node-to-node link available; where it does not, it is left alone and counted.
+- **A diagonal link is preferred.** Three mutually-touching pixels form a triangle whose hypotenuse
+  is the redundant 8-connection; giving up a leg instead cuts the corner off the linework rather than
+  tidying it.
+
+**No parameter, and that is the point.** A sliver either encloses a lattice point or it does not.
+
+### Degree is counted two ways, deliberately — corrected 2026-08-30
+
+The record previously said degree here is the crossing number, on the strength of the spur-pruning
+bug where a raw count stopped a branch walk one pixel early and left a nub on the wall. **That is
+right for pruning and wrong for chain walking**, and the difference is load-bearing in both
+directions.
+
+The crossing number counts contiguous *runs* of ink around the ring, so a pixel with four neighbours
+falling in two runs reads as an ordinary path pixel. The chain walk then passes straight through it,
+consuming it, and whichever branch it did not take is **stranded** — on generated linework this
+silently dropped a free end out of the graph entirely. It is still skeleton, so the labelling does
+not count it as space either, and the face it sits in comes up one interior point short.
+
+So: **pruning counts runs, chain walking counts neighbours.** Two measures, two jobs.
+
+**The cost of counting neighbours, stated:** three mutually-touching pixels become two nodes and a
+redundant link, which is a half-pixel sliver. They are common — the border frame produces one at each
+of its own four corners, because the pixel beside a corner touches the pixel on the adjoining side
+diagonally. Sliver removal handles them; the price is that it has real work to do on every map rather
+than occasionally.
+
+**One ordering constraint of the sibling's does not apply to us.** It counts raw neighbours in
+*pruning* too, and therefore depends on welding running before pruning — otherwise the nub. We pay
+for the crossing number where it belongs, so our order is the natural one: thin, prune, chain.
 
 #### The steps
 
@@ -620,7 +687,7 @@ order is the natural one: thin, prune, chain, weld.
    ordinary bounded face whose outer ring is the frame and whose holes are the buildings, exactly what
    the labelling gives today. Exactly one face is then unbounded, the one outside the frame, and it is
    discarded by having no interior at all.
-1. **Chain and weld** into a graph of nodes and edges, each edge carrying its full pixel chain.
+1. **Chain** the skeleton into a graph of nodes and edges, each edge carrying its full pixel chain.
 2. **Faces by half-edge traversal.** Two half-edges per edge; at each node sort them by outgoing angle;
    walk by taking the next one clockwise on each arrival. Every cycle is a face.
 3. **Tie each face to a raster label during the traversal.** For each half-edge, sample the pixel one
@@ -651,11 +718,12 @@ order is the natural one: thin, prune, chain, weld.
 
 #### Two consequences, recorded because they are easy to inherit wrongly
 
-- **The weld radius is a new control that can be wrong.** Too large and it merges two genuinely distinct
-  junctions, closing a doorway. §8 requires a visual channel for such a control, and the Walls step
-  currently draws *skeleton pixels*, which cannot show it. It must draw the **graph** — nodes as marks,
-  edges distinguishable — so that a wrongly welded junction is visible as one node where there should
-  be two.
+- **No new control ships with this.** The weld radius briefly did, and it is gone — see above. What
+  remains is the Walls step drawing the **graph's nodes** as screen-space marks over the centrelines.
+  That was built to give the weld radius the visual channel §8 demands; with the control withdrawn it
+  is no longer owed, and it is kept because a picture of where the graph thinks its junctions are is
+  worth having while judging a skeleton. Capped at 4,000 marks, above which they are a wash rather
+  than a picture.
 - **The simplification cap loses its reason and needs a new one.** Today the tolerance is capped below
   half the ink width, which is what stops a boundary crossing the centre of a wall into the next room.
   Under the graph the boundary *is* the centre of the wall, and both faces move together, so that
@@ -2018,12 +2086,32 @@ pixels are walked twice, and Pick under-counts it — 3.5 against a true 4 on th
 Counting **steps** counts a slit pixel twice, which is exactly the correction required. Caught by
 working the example rather than by a failing test, which is the cheaper end of §8's own rule.
 
-**One honest caveat, and it is this document's own rule turned on the check itself:** as far as anyone
-has recorded, **it has never failed**. The difference from the coverage line that lied is structural —
-that one had a wrong formula subtracting a whole ink total, while this is an equality between two
-numbers that share no code. But *treat a clean diagnostic as evidence about the diagnostic until it has
-failed once*, so it wants a test that deliberately corrupts a ring and confirms it reports FAILED. If
-no such test exists, add one before trusting it further.
+### It has now failed, and it was right — 2026-08-30
+
+This section carried a caveat for weeks: the check had never failed, and by this document's own rule
+*a clean diagnostic is evidence about the diagnostic until it has failed once*. **The caveat is
+discharged.** On the first new map tried after step D shipped, the log read:
+
+> area check FAILED on 4 of 27 faces — 196 handedness disagreements, 1 faces with no single outer ring
+
+It was reporting two real defects, both in code written the day before, and **neither was visible in
+the picture**. The regions drew plausibly; a GM's report was that one wall had gone missing from the
+Regions view, which turned out to be a separate and correct behaviour. Nothing but the check said the
+geometry was wrong.
+
+- **Welding moved points and broke planarity.** Full account in §4. The failure rate against the weld
+  radius was measured afterwards: 76% of generated cases at the 3px default.
+- **The chain walk counted contiguous runs instead of neighbours**, and stranded a free end out of the
+  graph. Being skeleton it was not counted as space either, so its face came up one interior point
+  short — which is the smallest possible failure and exactly the kind an eye cannot find.
+
+**Two practices came out of it, both cheap and both now in the suite.** A test that corrupts a ring
+and confirms FAILED, which this section had asked for and which did not exist. And a **randomised
+sweep**: 700 generated skeletons across three sizes, asserting the identity, the handedness, that
+every skeleton pixel reached the graph, and that exactly one cycle has no interior. Both defects lived
+in configurations no hand-written fixture contained, because a fixture is a shape somebody thought of.
+The sweep pins invariants rather than values, so it does not have to be rewritten when the generator
+changes.
 
 ### A warning is not a safeguard — settled 2026-08-23 (user)
 

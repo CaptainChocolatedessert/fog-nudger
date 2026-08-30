@@ -12,11 +12,10 @@
  * - **Chains run node to node**, a node being any pixel whose degree is not 2. Interior pixels are
  *   marked as consumed so a chain is not traced again from its far end; node pixels are never marked,
  *   because several chains legitimately share one.
- * - **Junction clusters must be welded.** Thinning leaves junction pixels one or two apart, and the
- *   stubby chains between them survive everything else: stub pruning refuses them because both ends
- *   are junctions, and collinear merging refuses them because they are not degree-2.
- * - **The cluster's own connectors are dropped before anything looks at degree**, or they inflate the
- *   node's degree and the real edges never join through it.
+ * - **Junction clusters have to be dealt with somehow.** Thinning leaves junction pixels one or two
+ *   apart, and the stubby chains between them survive everything else: stub pruning refuses them
+ *   because both ends are junctions, and collinear merging refuses them because they are not
+ *   degree-2. The sibling welds nearby endpoints together. **We cannot** — see `buildWallGraph`.
  *
  * **One rule of the sibling's is forbidden here rather than merely defaulted off.** It also merges
  * chains *through* junctions, pairing the straightest continuations, because a stroke drawn as one
@@ -24,14 +23,16 @@
  * node is not a junction — but merging through a degree-3 node would destroy the incidence the faces
  * are read from.
  *
- * **Degree is the crossing number, not a raw neighbour count.** The sibling counts raw neighbours and
- * therefore has to weld before pruning, otherwise a pixel one row off a straight line reads as a
- * junction and leaves a nub. We already pay for the crossing number in spur pruning, so the order
- * here is the natural one: thin, prune, chain, weld.
+ * **Degree here is a raw neighbour count, and spur pruning's is the crossing number.** They are
+ * different measures for different jobs and the difference is load-bearing both ways. Pruning walks
+ * branches and must not stop early, so it counts contiguous runs — counting raw leaves a nub on the
+ * wall at every pruned spur. Chain walking must not lose a pixel, so it counts neighbours — counting
+ * runs lets the walk pass straight through a four-neighbour pixel and strand whichever branch it did
+ * not take.
  *
  * Every point is a lattice point and every step between consecutive points is to an 8-neighbour.
  * That is not incidental tidiness — the area check in `faces.ts` is an exact lattice identity and
- * needs it. Welding therefore *walks* an endpoint to its node rather than teleporting it.
+ * needs it, and it is the second of the two reasons nothing here may ever move a point.
  *
  * Pure: no DOM, no SDK.
  */
@@ -66,12 +67,8 @@ export interface WallGraph {
 }
 
 export interface WallGraphStats {
-  /** Chains found before welding. */
+  /** Chains found, before the degree-2 joins. */
   readonly chains: number;
-  /** Endpoints that moved onto a shared node. */
-  readonly welded: number;
-  /** Cluster connectors dropped — the junction clusters themselves. */
-  readonly dropped: number;
   /** Degree-2 nodes smoothed away by joining the two chains that met there. */
   readonly merged: number;
   /**
@@ -101,16 +98,6 @@ function at(data: Uint8Array, width: number, height: number, x: number, y: numbe
   return data[y * width + x] ?? 0;
 }
 
-/** How many times the ring goes background→ink: 1 at an end, 2 on a path, 3 or more at a junction. */
-function crossings(data: Uint8Array, width: number, height: number, index: number): number {
-  const x = index % width;
-  const y = (index - x) / width;
-  const ring = RING.map(([dx, dy]) => at(data, width, height, x + dx, y + dy));
-  let count = 0;
-  for (let i = 0; i < 8; i++) if (ring[i] === 0 && ring[(i + 1) % 8] === 1) count += 1;
-  return count;
-}
-
 /**
  * Paint the raster border into the skeleton.
  *
@@ -132,6 +119,24 @@ export function frameSkeleton(skeleton: BinaryMask): BinaryMask {
     data[y * width] = 1;
     data[y * width + width - 1] = 1;
   }
+
+  /*
+    Isolated single pixels are erased here, and it is the area check that asks for it.
+
+    A pixel with no neighbours is a component with no edges: it contributes no cycle, so it ends up
+    neither inside a face nor on any boundary, and the identity comes up one interior point short.
+    Erasing it makes it ordinary space, which is what a speck of skeleton is. The island filter
+    normally removes these upstream; this is the backstop, not the policy.
+  */
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[y * width + x] !== 1) continue;
+      let neighbours = 0;
+      for (const [dx, dy] of RING) neighbours += at(data, width, height, x + dx, y + dy);
+      if (neighbours === 0) data[y * width + x] = 0;
+    }
+  }
+
   return { width, height, data };
 }
 
@@ -152,7 +157,21 @@ function walkChains(mask: BinaryMask): { chains: Chain[]; orphans: number } {
   const consumed = new Uint8Array(width * height);
   const chains: Chain[] = [];
 
-  const nodeAt = (index: number): boolean => crossings(data, width, height, index) !== 2;
+  /*
+    A node is any pixel without exactly two neighbours, counted **raw**.
+
+    Not the crossing number, and that was a bug first. The crossing number counts contiguous *runs*
+    of ink around the ring, so a pixel with four neighbours in two runs reads as an ordinary path
+    pixel — and the walk then passes straight through it, consuming it, and whichever branch was not
+    taken is stranded. On one random fixture that silently dropped a free end from the graph, and the
+    area check caught it as a face short by one interior point.
+
+    The cost of counting raw is spurious nodes where three mutually-adjacent pixels form a triangle.
+    Those are real faces of half a pixel, and they are removed downstream with every other sub-pixel
+    sliver. Spur pruning still uses the crossing number, where it is the right measure and where
+    getting it wrong left a nub on every pruned wall.
+  */
+  const nodeAt = (index: number): boolean => neighbours(index).length !== 2;
 
   const neighbours = (index: number): number[] => {
     const x = index % width;
@@ -246,172 +265,88 @@ function walkChains(mask: BinaryMask): { chains: Chain[]; orphans: number } {
     }
   }
 
+  // Every skeleton pixel must have reached a chain, **node pixels included**. Counting only
+  // non-nodes was the blind spot that let a stranded free end go unreported.
+  const claimed = new Set<number>();
+  for (const chain of chains) {
+    for (const point of chain.points) claimed.add(point.y * width + point.x);
+  }
   for (let index = 0; index < data.length; index++) {
-    if (data[index] === 1 && consumed[index] !== 1 && !nodeAt(index)) orphans += 1;
+    if (data[index] === 1 && !claimed.has(index)) orphans += 1;
   }
 
   return { chains, orphans };
 }
 
-/** Union endpoints within `radius` of each other, via a hash grid so dense linework stays linear-ish. */
-function clusterEnds(
-  positions: readonly Vector2[],
-  radius: number,
-): { of: number[]; position: Vector2[] } {
-  const parent = positions.map((_, index) => index);
-  const find = (index: number): number => {
-    let root = index;
-    while (parent[root] !== root) {
-      parent[root] = parent[parent[root]!]!;
-      root = parent[root]!;
-    }
-    return root;
-  };
-
-  if (positions.length > 0) {
-    const cell = Math.max(1, radius);
-    const buckets = new Map<string, number[]>();
-    const keyOf = (point: Vector2) => `${Math.floor(point.x / cell)},${Math.floor(point.y / cell)}`;
-
-    positions.forEach((point, index) => {
-      const key = keyOf(point);
-      const bucket = buckets.get(key);
-      if (bucket) bucket.push(index);
-      else buckets.set(key, [index]);
-    });
-
-    positions.forEach((point, index) => {
-      const cx = Math.floor(point.x / cell);
-      const cy = Math.floor(point.y / cell);
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          for (const other of buckets.get(`${cx + dx},${cy + dy}`) ?? []) {
-            if (other === index) continue;
-            const target = positions[other]!;
-            const distance = Math.hypot(point.x - target.x, point.y - target.y);
-            // Coincident ends are always one node, whatever the radius. Otherwise a radius of zero
-            // would leave two chains meeting at a pixel unaware of each other, and nothing would
-            // count that node's degree correctly.
-            if (distance === 0 || distance < radius) {
-              const rootA = find(index);
-              const rootB = find(other);
-              if (rootA !== rootB) parent[rootA] = rootB;
-            }
-          }
-        }
-      }
-    });
-  }
-
-  const of = positions.map((_, index) => find(index));
-
-  // The node sits on the cluster member nearest its centroid, **not on the centroid itself**. A
-  // centroid is generally not a lattice point, and the area check is a lattice identity.
-  const totals = new Map<number, { x: number; y: number; count: number }>();
-  positions.forEach((point, index) => {
-    const root = of[index]!;
-    const total = totals.get(root) ?? { x: 0, y: 0, count: 0 };
-    total.x += point.x;
-    total.y += point.y;
-    total.count += 1;
-    totals.set(root, total);
-  });
-
-  const best = new Map<number, { index: number; distance: number }>();
-  positions.forEach((point, index) => {
-    const root = of[index]!;
-    const total = totals.get(root)!;
-    const distance = Math.hypot(point.x - total.x / total.count, point.y - total.y / total.count);
-    const current = best.get(root);
-    if (!current || distance < current.distance) best.set(root, { index, distance });
-  });
-
-  const position: Vector2[] = [];
-  for (const [root, choice] of best) position[root] = positions[choice.index]!;
-
-  return { of, position };
-}
-
-/**
- * An 8-connected lattice walk from `from` to `to`, excluding `from` and including `to`.
- *
- * Used to carry a welded endpoint onto its node without leaving a step that spans intermediate
- * lattice points. Chebyshev stepping, which is the shortest such walk.
- */
-function walkTo(from: Vector2, to: Vector2): Vector2[] {
-  const path: Vector2[] = [];
-  let { x, y } = from;
-  while (x !== to.x || y !== to.y) {
-    x += Math.sign(to.x - x);
-    y += Math.sign(to.y - y);
-    path.push({ x, y });
-  }
-  return path;
-}
-
-function chainLength(points: readonly Vector2[]): number {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    total += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y);
-  }
-  return total;
-}
-
 /**
  * Build the wall graph from a pruned skeleton.
  *
- * `weldRadius` is in raster pixels and collapses endpoints within it into one node. Zero disables
- * welding entirely, which leaves every junction cluster in place — useful in tests, wrong on a map.
+ * **Nothing here moves a point**, and that is a hard requirement rather than a preference. An earlier
+ * version welded chain ends within a radius onto a shared node, walking the moved end there along a
+ * straight lattice path. That is the sibling's approach and it is safe when the output is polylines.
+ * It is not safe when the output is *faces*: an invented path can cross other linework, and once the
+ * embedding is no longer planar a half-edge traversal means nothing at all. Measured over random
+ * linework, the 3px default failed the area check on **76% of cases**, against 3.5% with no welding.
+ *
+ * What welding was for — the junction cluster thinning leaves — is dealt with after the faces are
+ * walked instead, by deleting the sub-pixel faces such a cluster produces. Deleting an edge is a
+ * purely combinatorial edit and cannot cross anything. See `removeEdges` and `graphRegions.ts`.
  */
-export function buildWallGraph(skeleton: BinaryMask, weldRadius: number): WallGraph {
+export function buildWallGraph(skeleton: BinaryMask): WallGraph {
   const framed = frameSkeleton(skeleton);
   const { chains, orphans } = walkChains(framed);
+  return assembleGraph(
+    chains.map((chain) => chain.points),
+    framed,
+    { chains: chains.length, orphans },
+  );
+}
 
-  const ends: Vector2[] = [];
+/**
+ * A copy of the graph with some edges gone, rejoined wherever that leaves a node with two ends.
+ *
+ * Deleting an edge is the one repair available here that cannot break planarity: it merges two faces
+ * and moves nothing. Used on the sub-pixel slivers a junction cluster leaves, which hold no space at
+ * all, so the face each is merged into keeps exactly the pixels it already had.
+ */
+export function removeEdges(graph: WallGraph, dropped: ReadonlySet<number>): WallGraph {
+  const kept = graph.edges
+    .filter((_, index) => !dropped.has(index))
+    .map((edge) => [...edge.points]);
+  return assembleGraph(kept, graph.framed, {
+    chains: graph.stats.chains,
+    orphans: graph.stats.orphans,
+  });
+}
+
+/** Nodes by exact position, then the degree-2 join, then the tables. Shared by both entry points. */
+function assembleGraph(
+  chains: Vector2[][],
+  framed: BinaryMask,
+  carried: { chains: number; orphans: number },
+): WallGraph {
+  // Two ends are the same node when they are the same pixel. Nothing approximate about it: a node is
+  // a skeleton pixel, and two chains either meet there or they do not.
+  const nodeOf = new Map<string, number>();
+  const clusterOf: number[] = [];
   for (const chain of chains) {
-    ends.push(chain.points[0]!);
-    ends.push(chain.points[chain.points.length - 1]!);
+    for (const end of [chain[0]!, chain[chain.length - 1]!]) {
+      const key = `${end.x},${end.y}`;
+      let id = nodeOf.get(key);
+      if (id === undefined) {
+        id = nodeOf.size;
+        nodeOf.set(key, id);
+      }
+      clusterOf.push(id);
+    }
   }
 
-  const cluster = clusterEnds(ends, weldRadius);
-
-  // Carry each end onto its node, keeping every step 8-adjacent.
-  let welded = 0;
-  const moved = chains.map((chain, index) => {
-    const startNode = cluster.position[cluster.of[index * 2]!]!;
-    const endNode = cluster.position[cluster.of[index * 2 + 1]!]!;
-    const body = [...chain.points];
-
-    const head = body[0]!;
-    if (head.x !== startNode.x || head.y !== startNode.y) {
-      welded += 1;
-      body.splice(0, 1, startNode, ...walkTo(startNode, head));
-    }
-
-    const tail = body[body.length - 1]!;
-    if (tail.x !== endNode.x || tail.y !== endNode.y) {
-      welded += 1;
-      // Appended, never spliced over the tail: dropping it would leave a two-pixel jump behind, and
-      // every step has to stay 8-adjacent for the area check to hold.
-      body.push(...walkTo(tail, endNode));
-    }
-
-    return body;
-  });
-
-  // Chains that begin and end inside the same welded node are the junction cluster itself, not
-  // geometry. Dropped **before** anything counts degree, or they inflate it and the real edges
-  // never join through the node.
-  const dropped = moved.map(
-    (points, index) =>
-      cluster.of[index * 2] === cluster.of[index * 2 + 1] &&
-      !chains[index]!.closed &&
-      chainLength(points) <= Math.max(weldRadius, 1),
+  const merged = mergeThroughPathNodes(
+    chains,
+    clusterOf,
+    chains.map(() => false),
   );
 
-  const merged = mergeThroughPathNodes(moved, cluster.of, dropped);
-
-  // Rebuild the node table from the endpoints that survived.
   const nodeIndex = new Map<string, number>();
   const nodes: WallNode[] = [];
   const idFor = (point: Vector2): number => {
@@ -436,13 +371,7 @@ export function buildWallGraph(skeleton: BinaryMask, weldRadius: number): WallGr
     nodes,
     edges,
     framed,
-    stats: {
-      chains: chains.length,
-      welded,
-      dropped: dropped.filter(Boolean).length,
-      merged: merged.merged,
-      orphans,
-    },
+    stats: { chains: carried.chains, merged: merged.merged, orphans: carried.orphans },
   };
 }
 

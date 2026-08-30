@@ -5,7 +5,6 @@ import { coveredArea, deriveGraphRegions, type GraphRegionOptions } from "./grap
 
 const BASE: GraphRegionOptions = {
   spurPrunePx: 0,
-  weldRadiusPx: 0,
   minArea: 0,
   tolerance: 0.5,
   maxTolerance: 4,
@@ -93,20 +92,12 @@ describe("regions derived from the wall graph", () => {
     expect(result.faces.exact).toBe(result.faces.checked);
   });
 
-  it("holds the area identity whatever the pruning and welding", () => {
+  it("holds the area identity whatever the pruning", () => {
     for (const spurPrunePx of [0, 3, 7]) {
-      for (const weldRadiusPx of [0, 2, 3]) {
-        const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), {
-          ...BASE,
-          spurPrunePx,
-          weldRadiusPx,
-        });
-        expect(
-          result.faces.exact,
-          `prune ${spurPrunePx}, weld ${weldRadiusPx}`,
-        ).toBe(result.faces.checked);
-        expect(result.faces.disagreements).toBe(0);
-      }
+      const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), { ...BASE, spurPrunePx });
+      expect(result.faces.exact, `prune ${spurPrunePx}`).toBe(result.faces.checked);
+      expect(result.faces.disagreements).toBe(0);
+      expect(result.graph.stats.orphans).toBe(0);
     }
   });
 

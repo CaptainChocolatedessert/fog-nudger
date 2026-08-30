@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildFaces, fitFaces, type GraphFace } from "./faces";
+import { fitFaces, resolveFaces, type GraphFace } from "./faces";
 import { maskFromRows } from "./fixtures";
 import { labelSpace } from "./label";
 import { buildWallGraph, type WallGraph } from "./wallGraph";
@@ -12,13 +12,17 @@ import { buildWallGraph, type WallGraph } from "./wallGraph";
  * The border of every fixture is *empty*, because `buildWallGraph` paints the raster frame in
  * itself. A fixture that drew its own border would end up with the frame twice.
  */
-function graphOf(rows: readonly string[], weldRadius = 0): WallGraph {
-  return buildWallGraph(maskFromRows(rows), weldRadius);
+function graphOf(rows: readonly string[]): WallGraph {
+  return buildWallGraph(maskFromRows(rows));
 }
 
-function facesOf(rows: readonly string[], weldRadius = 0) {
-  const graph = graphOf(rows, weldRadius);
-  return { graph, result: buildFaces(graph, labelSpace(graph.framed, { minArea: 0 })) };
+function facesOf(rows: readonly string[]) {
+  // `resolveFaces`, not `buildFaces`: a raw traversal is not a usable partition until the sub-pixel
+  // slivers a junction cluster leaves have been taken out, and every fixture here has them — the
+  // border frame alone produces one at each of its own corners.
+  const built = graphOf(rows);
+  const resolved = resolveFaces(built, labelSpace(built.framed, { minArea: 0 }));
+  return { graph: resolved.graph, result: resolved.faces };
 }
 
 const ROOM = [
@@ -165,10 +169,14 @@ describe("faces from the wall graph", () => {
     const { result } = facesOf(ROOM);
     const room = faceOfArea(result.faces, 32);
 
-    // Move one vertex: the shape still renders plausibly, which is the whole reason the check
-    // exists. It must not still balance.
+    // Push the rightmost vertex one pixel further right. The shape still renders perfectly
+    // plausibly, which is the whole reason this check exists — and it must no longer balance.
     const corrupted = [...room.cycles[0]!.points];
-    corrupted[0] = { x: corrupted[0]!.x + 1, y: corrupted[0]!.y };
+    let rightmost = 0;
+    corrupted.forEach((point, index) => {
+      if (point.x > corrupted[rightmost]!.x) rightmost = index;
+    });
+    corrupted[rightmost] = { x: corrupted[rightmost]!.x + 1, y: corrupted[rightmost]!.y };
     let doubled = 0;
     for (let i = 0; i < corrupted.length; i++) {
       const a = corrupted[i]!;
@@ -198,10 +206,19 @@ describe("fitting the faces", () => {
     );
   });
 
-  it("keeps a square square, at four corners", () => {
+  it("keeps a square square, corners and all", () => {
     const { graph, result } = facesOf(ROOM);
     const { rings } = fitFaces(graph, result.faces, 0.5);
     const room = result.faces.findIndex((face) => face.cycles.length === 1);
-    expect(rings[room]![0]).toHaveLength(4);
+    const ring = rings[room]![0]!;
+
+    const corners = new Set(ring.map((point) => `${point.x},${point.y}`));
+    for (const corner of ["2,2", "6,2", "6,6", "2,6"]) {
+      expect(corners.has(corner), `corner ${corner} was fitted away`).toBe(true);
+    }
+    // Four corners, and at most a couple of extra vertices: fitting pins every node, and removing a
+    // sliver at a corner can leave one behind. Vertices are the cheap thing here.
+    expect(ring.length).toBeGreaterThanOrEqual(4);
+    expect(ring.length).toBeLessThanOrEqual(6);
   });
 });

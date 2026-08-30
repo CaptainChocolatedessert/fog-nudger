@@ -34,7 +34,7 @@
 
 import { commandCount, doubleSignedArea, MIN_RING_POINTS, type Ring } from "../geometry/ring";
 import type { BinaryMask } from "./binarize";
-import { buildFaces, fitFaces, type GraphFace, type GraphFaces } from "./faces";
+import { fitFaces, resolveFaces, type GraphFace, type GraphFaces } from "./faces";
 import { labelSpace, type LabelledSpace } from "./label";
 import { COMMAND_CAP } from "./simplify";
 import { pruneSpurs } from "./spurs";
@@ -44,8 +44,6 @@ import { buildWallGraph, type WallGraph } from "./wallGraph";
 export interface GraphRegionOptions {
   /** Longest dead-end branch to prune from the skeleton, in pixels walked. Zero is off. */
   readonly spurPrunePx: number;
-  /** How far apart two skeleton ends may be and still be one node, in pixels. */
-  readonly weldRadiusPx: number;
   /** Smallest face kept, in pixels. */
   readonly minArea: number;
   /** Douglas–Peucker tolerance in raster pixels. */
@@ -102,6 +100,11 @@ export interface GraphRegionResult {
   readonly filledHoles: number;
   readonly tolerance: number;
   readonly escalations: number;
+  /** Sub-pixel slivers deleted from the graph, and how many rounds it took. */
+  readonly sliversRemoved: number;
+  readonly sliverRounds: number;
+  /** Slivers still present when the round cap was reached. Expected to be zero. */
+  readonly sliversLeft: number;
   readonly timings: {
     readonly thinMs: number;
     readonly pruneMs: number;
@@ -132,18 +135,25 @@ export function deriveGraphRegions(
   const pruneMs = performance.now() - pruneStarted;
 
   const graphStarted = performance.now();
-  const graph = buildWallGraph(pruned.mask, options.weldRadiusPx);
+  let graph = buildWallGraph(pruned.mask);
   const graphMs = performance.now() - graphStarted;
 
   // No minimum here on purpose. The area identity compares against this pixel count, and filtering
   // first would leave it checking against a count with holes punched in it. The smallest-room
   // filter is applied to whole faces below, where it belongs.
+  //
+  // Labelled once and reused across the sliver rounds below: deleting a graph edge changes the
+  // arrangement and never the raster, so the labels cannot move under it.
   const labelStarted = performance.now();
   const labelled = labelSpace(graph.framed, { minArea: 0 });
   const labelMs = performance.now() - labelStarted;
 
   const faceStarted = performance.now();
-  const faces = buildFaces(graph, labelled);
+  const resolved = resolveFaces(graph, labelled);
+  graph = resolved.graph;
+  const faces = resolved.faces;
+  const sliversRemoved = resolved.sliversRemoved;
+  const sliverRounds = resolved.rounds;
   const faceMs = performance.now() - faceStarted;
 
   const survives = new Set<number>();
@@ -216,6 +226,9 @@ export function deriveGraphRegions(
     filledHoles: built.filledHoles,
     tolerance,
     escalations,
+    sliversRemoved,
+    sliverRounds,
+    sliversLeft: faces.slivers.length,
     timings: { thinMs, pruneMs, graphMs, labelMs, faceMs, fitMs },
     thinning: { before: thinned.before, after: thinned.after, passes: thinned.passes },
     pruning: { removed: pruned.removed, pixels: pruned.pixels, rounds: pruned.rounds },
@@ -303,6 +316,7 @@ export function describeGraphRegions(result: GraphRegionResult): string {
   return (
     `${result.regions.length} faces from ${graph.nodes.length} nodes and ${graph.edges.length} ` +
     `edges (${result.discarded} below the minimum, ${result.bridges} bridges, ` +
+    `${result.sliversRemoved} slivers removed in ${result.sliverRounds} rounds, ` +
     `${result.filledHoles} holes filled); ${exact}; tolerance ${result.tolerance.toFixed(2)}px ` +
     `after ${result.escalations} escalations; thin ${Math.round(timings.thinMs)}ms, ` +
     `prune ${Math.round(timings.pruneMs)}ms, graph ${Math.round(timings.graphMs)}ms, ` +

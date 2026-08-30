@@ -109,7 +109,7 @@ function rebuild(reuseThinned = false): void {
     current = pruned.mask;
 
     const graphStarted = performance.now();
-    graph = buildWallGraph(current, settings.weldRadiusPx);
+    graph = buildWallGraph(current);
     const graphMs = Math.round(performance.now() - graphStarted);
     stale = false;
     requests.fulfil(generation);
@@ -124,10 +124,9 @@ function rebuild(reuseThinned = false): void {
     );
     devLog(
       "info",
-      `workspace: graph — ${graph.stats.chains} chains welded at ${settings.weldRadiusPx}px into ` +
-        `${graph.nodes.length} nodes and ${graph.edges.length} edges in ${graphMs}ms ` +
-        `(${graph.stats.dropped} junction clusters dropped, ${graph.stats.merged} joins through ` +
-        `path nodes, ${graph.stats.orphans} orphaned pixels)`,
+      `workspace: graph — ${graph.stats.chains} chains into ${graph.nodes.length} nodes and ` +
+        `${graph.edges.length} edges in ${graphMs}ms (${graph.stats.merged} joins through path ` +
+        `nodes, ${graph.stats.orphans} orphaned pixels)`,
     );
     say(
       (budget <= 0
