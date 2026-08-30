@@ -296,6 +296,24 @@ export function setDrag(next: Drag): void {
   drag = next;
 }
 
+/**
+ * A click on the map, reported as a fraction of the map image.
+ *
+ * A fraction rather than pixels, because what is on the other side of this is the pipeline, whose
+ * raster may have been reduced by the memory cap. The shell knows where the map is drawn and nothing
+ * about what was made of it, which is the division this file exists to keep.
+ *
+ * **A click means a press and a release that did not move.** Drag is already taken — it pans, and it
+ * will paint — so the inspector rides on the gesture neither of them uses. When a step takes the
+ * drag for a brush this needs revisiting: the same press will start a stroke, and a stroke that
+ * happens to end where it began is not a request for information.
+ */
+const clickListeners: ((u: number, v: number) => void)[] = [];
+
+export function onMapClick(listener: (u: number, v: number) => void): void {
+  clickListeners.push(listener);
+}
+
 /*
   The navigation listens on the **canvas**, not on the surface that contains everything.
 
@@ -313,7 +331,15 @@ if (canvas instanceof HTMLCanvasElement) {
   let panning = false;
   let last: { x: number; y: number } | null = null;
 
+  // Where the press landed and whether it has moved since, which is what separates a click from a
+  // drag. Four pixels of slop, because a mouse moves a little under a finger and a click that only
+  // counts when nothing moved at all is a click most people cannot make.
+  let pressed: { x: number; y: number } | null = null;
+  let moved = false;
+
   canvas.addEventListener("pointerdown", (event) => {
+    pressed = { x: event.clientX, y: event.clientY };
+    moved = false;
     // Ctrl pans in any step, which is what keeps a pan available once the plain drag is a brush.
     if (drag !== "pan" && !event.ctrlKey) return;
     panning = true;
@@ -327,6 +353,9 @@ if (canvas instanceof HTMLCanvasElement) {
   });
 
   canvas.addEventListener("pointermove", (event) => {
+    if (pressed && (Math.abs(event.clientX - pressed.x) > 4 || Math.abs(event.clientY - pressed.y) > 4)) {
+      moved = true;
+    }
     if (!panning || !last) return;
     setView(panBy(view, event.clientX - last.x, event.clientY - last.y));
     last = { x: event.clientX, y: event.clientY };
@@ -335,9 +364,22 @@ if (canvas instanceof HTMLCanvasElement) {
   const endPan = (): void => {
     panning = false;
     last = null;
+    pressed = null;
     canvas.classList.remove("dragging");
   };
-  canvas.addEventListener("pointerup", endPan);
+
+  canvas.addEventListener("pointerup", (event) => {
+    const wasClick = pressed !== null && !moved;
+    endPan();
+    if (!wasClick || !mapImage) return;
+    const u = (event.clientX - view.x) / (mapImage.naturalWidth * view.scale);
+    const v = (event.clientY - view.y) / (mapImage.naturalHeight * view.scale);
+    // Outside the map is not a question about the map, and the pipeline's own "outside the raster"
+    // answer would be a stranger reading of a click on the surrounding dark.
+    if (u < 0 || v < 0 || u > 1 || v > 1) return;
+    for (const listener of clickListeners) listener(u, v);
+  });
+
   canvas.addEventListener("pointercancel", endPan);
 
   canvas.addEventListener(

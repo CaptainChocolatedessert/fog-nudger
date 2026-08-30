@@ -29,14 +29,18 @@
 
 import {
   groupControls,
+  isStepDefault,
+  resetStep,
   STEPS,
+  stepParameters,
   ungroupedControls,
   workspaceSteps,
   type Step,
   type StepId,
 } from "../steps";
-import { resetHints, settingRow } from "./settingRows";
-import { invalidate, setActiveLayers, setDrag } from "./shell";
+import { recomputeFor, resetHints, settingRow } from "./settingRows";
+import { currentSettings, persistSettings, setSettings } from "./settingsState";
+import { invalidate, say, setActiveLayers, setDrag } from "./shell";
 
 /**
  * Which step is open. Not stored in the scene: it is where the GM is looking, not a setting, and a
@@ -120,9 +124,43 @@ function stepBody(step: Step): HTMLElement {
     }
   }
 
+  if (stepParameters(step.id).length > 0) body.append(defaultsButton(step));
+
   content.get(step.id)?.bottom?.(body);
 
   return body;
+}
+
+/**
+ * One step's way back.
+ *
+ * Deliberately **not disabled when the step is already at its defaults**, which is what the panel's
+ * per-stage version did. That state went stale here the moment a slider moved, because the rows are
+ * not rebuilt on every release — and a button that is sometimes wrong about whether it would do
+ * anything is worse than one that always says what it did.
+ */
+function defaultsButton(step: Step): HTMLElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chip quiet";
+  button.textContent = "Defaults";
+  button.addEventListener("click", () => {
+    if (isStepDefault(currentSettings(), step.id)) {
+      say(`${step.title} is already at its defaults.`);
+      return;
+    }
+    setSettings(resetStep(currentSettings(), step.id));
+    recomputeFor(stepParameters(step.id));
+    void persistSettings();
+    // Wholesale, because every row in this step is now showing a value it does not hold.
+    renderPanel();
+    say(`${step.title} back to defaults.`);
+  });
+
+  const row = document.createElement("div");
+  row.className = "step-actions";
+  row.append(button);
+  return row;
 }
 
 /**

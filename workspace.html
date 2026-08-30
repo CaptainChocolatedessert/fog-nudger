@@ -220,11 +220,23 @@
         margin-top: 0.4rem;
       }
 
-      /* A step's own action, at the end of its body. */
+      /* A step's own actions, at the end of its body. */
       .step-actions {
         display: flex;
         gap: 0.4rem;
         margin: 0.6rem 0 0.4rem;
+      }
+      .step-actions .quiet {
+        border-color: rgba(187, 153, 255, 0.25);
+        background: transparent;
+        color: #9aa0c8;
+      }
+      .step-actions .quiet:hover {
+        color: #e8e9f5;
+      }
+      .step-actions button:disabled {
+        opacity: 0.5;
+        cursor: default;
       }
 
       /* The map picker, the one step whose body is a list rather than sliders. */

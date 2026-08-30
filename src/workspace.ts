@@ -37,6 +37,7 @@
 import OBR from "@owlbear-rodeo/sdk";
 
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
+import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
 import { registerBreaksLayer } from "./workspace/layers/breaks";
@@ -50,7 +51,7 @@ import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { renderStageAction } from "./workspace/stageAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { loadSettings } from "./workspace/settingsState";
-import { say, start } from "./workspace/shell";
+import { onMapClick, say, start } from "./workspace/shell";
 
 installDevLog("workspace");
 
@@ -81,6 +82,18 @@ registerStepContent("ink", renderSwatches);
 // The one action on this surface that writes to the scene, at the *end* of the step that judges what
 // would be written.
 registerStepContent("regions", renderStageAction, "bottom");
+
+/*
+  "What is here?" is a click on the map now, in every step.
+
+  It was a button on the panel that probed the *viewport centre*, because a popover beside the map
+  had no way to be pointed at anything. This surface does: the GM centres nothing, aims at the thing
+  that looks wrong, and clicks it. `DESIGN.md` §8 insists this diagnostic be used rather than reasoned
+  around, and the reason it insists is that every other one reports a total.
+*/
+onMapClick((u, v) => {
+  say(probeMapFraction(u, v));
+});
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after
 // the layers, so a layer that could not take a reading stops this too.

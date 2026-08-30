@@ -805,9 +805,15 @@ there is no skipping it); accept, back-to-staging and remove, because they act o
 GM should be looking at the real scene to judge them; and the diagnostics. Everything else goes,
 including the dead overlay-probe buttons whose surface was deleted.
 
-**"What is here?" becomes a click on the canvas** rather than a button that probes the viewport centre —
-available from every step, like an inspector. A straight upgrade to the one diagnostic §8 insists on
+**"What is here?" is a click on the canvas** rather than a button that probes the viewport centre —
+available from every step, like an inspector, and answering from the reading alone when no partition
+has been derived yet. **Built 2026-08-29.** A straight upgrade to the one diagnostic §8 insists on
 using instead of reasoning.
+
+The gesture is a press and release that did not move, with four pixels of slop. That is the one
+gesture neither pan nor brush wants — and it **needs revisiting when a step takes the drag for a
+brush**, because the same press will start a stroke, and a stroke that happens to end where it began
+is not a request for information.
 
 **Staging is kept, for the interlock alone.** Staged items sit on a non-`FOG` layer and therefore derive
 zero walls, so a first run cannot affect play whatever it gets wrong — a property of the layer rather
@@ -964,7 +970,33 @@ refactor gets harder every session it is deferred.
      the partition across, since it is drawn on this canvas now — along with the button that staged
      them. What is left there is what acts on the *scene*, which is the one thing a full-screen sheet
      over the map cannot show you.
-6. **Reduce the panel** to open-workspace, accept / back / remove, and diagnostics.
+6. **Reduce the panel to open-workspace, accept / back / remove, and diagnostics — DONE
+   2026-08-29.** What is left has one thing in common: it acts on the *scene* rather than on a
+   picture, and a full-screen sheet over the map is the one place you cannot watch Owlbear draw the
+   result.
+
+   - **The three stage tabs went.** They carried a cascade that is still real and still declared, but
+     a cascade is a property of *settings* and there are none left on that side. Tabs over a short
+     list of actions with no ordering between them would have been claiming one.
+   - **"What is here?" became a click on the map**, in every step. It used to probe the *viewport
+     centre*, because a popover beside the map had no way to be pointed at anything; the workspace
+     does, so the GM aims at the thing that looks wrong instead of centring it first.
+   - **The probe answers from the reading when no partition has been derived**, rather than saying
+     "nothing traced yet" in three steps out of four. `readPoint` takes the labelling as optional and
+     a fourth outcome — *space, not yet derived* — says exactly what is and is not known. That
+     matters because the question it settles most often is about **luminance**, which the reading
+     alone can answer: the standing example is a bare patch that turned out to be floor at 0.991,
+     settled after four wrong explanations argued from aggregates.
+   - **It takes a fraction of the map rather than a pixel**, so a surface drawing the map at any size
+     never has to know the trace's raster — which §5's memory cap can reduce on a large map.
+   - **Defaults are per step now, not per stage.** A GM who has just wrecked the ink wants the ink
+     back; "the reading stage" is a phrase about cache invalidation, and it stopped naming anything
+     visible once the sections were cut differently from the stages. Deliberately **not disabled when
+     a step is already at its defaults**: that state went stale the moment a slider moved, since the
+     rows are not rebuilt on every release, and a button that is sometimes wrong about whether it
+     would do anything is worse than one that always says what it did.
+   - **The dry run stays**, under diagnostics. The workspace draws the same partition, but this is
+     the only thing that reports it in numbers — coverage, region counts, and the area check.
 
 **Do not renest the stored settings to match the six steps.** This was refused once already for the
 three stages, and the reason is unchanged: renesting means either a migration or a normaliser that

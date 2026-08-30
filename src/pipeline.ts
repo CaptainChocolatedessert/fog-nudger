@@ -260,6 +260,56 @@ let lastRun: {
 } | null = null;
 
 /**
+ * The last mask the overlay path produced, for the probe.
+ *
+ * The full run holds a labelling and this does not, which is the whole difference between what the
+ * probe can say in the Regions step and what it can say in the Ink step. Kept separately rather than
+ * folded into `lastRun`, because a half-filled `lastRun` would let anything reading it believe a
+ * partition existed.
+ */
+let lastReading: {
+  rawField: ScalarField;
+  mask: BinaryMask;
+  pxPerSquare: number;
+  name: string;
+} | null = null;
+
+/**
+ * What the pipeline computed at one point of the map, given as a fraction of it.
+ *
+ * **A fraction rather than a pixel**, because the caller is a surface drawing the map at whatever
+ * size it likes and the raster here may have been reduced by §5's memory cap. Converting on this
+ * side means the surface never has to know the trace's resolution, and cannot be half a raster out
+ * when the cap bites on a large map.
+ *
+ * Answers from the partition when one has been derived and from the reading when one has not, which
+ * is why it says something useful in the steps where the question "what is here?" is usually asked.
+ */
+export function probeMapFraction(u: number, v: number): string {
+  if (lastRun) {
+    const { rawField, mask, labelled, pxPerSquare, name } = lastRun;
+    const line = describePoint(
+      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height),
+      pxPerSquare,
+    );
+    devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
+    return line;
+  }
+
+  if (lastReading) {
+    const { rawField, mask, pxPerSquare, name } = lastReading;
+    const line = describePoint(
+      readPoint(rawField, mask, null, u * mask.width, v * mask.height),
+      pxPerSquare,
+    );
+    devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
+    return line;
+  }
+
+  return "Nothing read yet in this frame — wait for the ink, then click again.";
+}
+
+/**
  * What the pipeline computed at one world point.
  *
  * The diagnostic every other one in this project could not be: all of them report a total, and a
@@ -859,6 +909,17 @@ export async function maskForOverlay(
   const dpi = await readGridDpi();
   const resolved = await resolveMask(map, dpi, settings);
   if (!resolved) return null;
+
+  // Kept for the point probe, which the workspace answers from wherever the GM clicks. The mask here
+  // is the *composed* one, since that is what a region would be derived from — the base is what gets
+  // drawn, and a probe reporting the drawn version would disagree with the partition on exactly the
+  // pixels the repair invented.
+  lastReading = {
+    rawField: resolved.stage.rawField,
+    mask: resolved.stage.mask,
+    pxPerSquare: resolved.stage.pxPerSquare,
+    name: resolved.stage.name,
+  };
 
   return {
     mask: resolved.stage.base,

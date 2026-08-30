@@ -35,7 +35,13 @@
  */
 
 import { CONTROLS, type Control } from "./controls";
-import type { SettingName } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  readParameter,
+  writeParameter,
+  type SettingName,
+  type Settings,
+} from "./settings";
 
 /** Every step that exists today. Six are designed; the rest arrive with the code that needs them. */
 export type StepId = "map" | "ink" | "regions" | "view";
@@ -206,6 +212,44 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   minRoomSquares: "regions",
   simplifyInkWidths: "regions",
 };
+
+/**
+ * The step the overlay's colour belongs to.
+ *
+ * The same wart `settings.ts` carries one axis down, for the same reason: the colour is the one
+ * setting that is not a number, so it sits outside `SETTING_LIMITS` and every function that walks a
+ * step's parameters has to remember it separately. Named once here rather than in each of them.
+ */
+const COLOUR_STEP: StepId = "ink";
+
+/** Whether a step's controls are all at their defaults. */
+export function isStepDefault(settings: Settings, id: StepId): boolean {
+  const numbers = stepParameters(id).every(
+    (name) => readParameter(settings, name) === readParameter(DEFAULT_SETTINGS, name),
+  );
+  if (id !== COLOUR_STEP) return numbers;
+  return numbers && settings.overlay.inkColour === DEFAULT_SETTINGS.overlay.inkColour;
+}
+
+/**
+ * Put one step's controls back, leaving every other step alone.
+ *
+ * Per step rather than per stage, which is what the panel offered (user, 2026-08-29). A GM who has
+ * just wrecked the ink wants the ink back — "the reading stage" is a phrase about cache invalidation,
+ * and it stopped naming anything they can see the moment the sections were cut differently from the
+ * stages.
+ */
+export function resetStep(settings: Settings, id: StepId): Settings {
+  const numbers = stepParameters(id).reduce(
+    (accumulated, name) => writeParameter(accumulated, name, readParameter(DEFAULT_SETTINGS, name)),
+    settings,
+  );
+  if (id !== COLOUR_STEP) return numbers;
+  return {
+    ...numbers,
+    overlay: { ...numbers.overlay, inkColour: DEFAULT_SETTINGS.overlay.inkColour },
+  };
+}
 
 export function findStep(id: StepId): Step | undefined {
   return STEPS.find((step) => step.id === id);

@@ -1,9 +1,21 @@
 /**
- * The action popover. Skeleton scope: say plainly whether the extension is talking to Owlbear.
+ * The action popover: what acts on the *scene*, and nothing else.
  *
- * It exists at this stage as a second, independent signal. The background page reports through the
- * dev log; this reports on screen. Two signals separate "the manifest never loaded" from "the
- * manifest loaded and the background script failed", which one signal cannot do.
+ * Every control a GM turns is a step on the workspace now. What is left here is the button that
+ * opens it, the three that move staged items around, and the diagnostics — and what those have in
+ * common is that they are about a scene rather than about a picture. A full-screen sheet over the
+ * map is the one place you cannot watch Owlbear draw the result, which is exactly what accepting a
+ * set of proposals asks you to do.
+ *
+ * **The three stage tabs went with the controls.** They carried a cascade that is still real and
+ * still declared — reading destroys deriving, deriving destroys adjusting — but a cascade is a
+ * property of *settings*, and there are none here. Tabs over a short list of actions with no
+ * ordering between them would have been claiming one.
+ *
+ * It also remains what it started as: a second, independent signal that the extension is talking to
+ * Owlbear. The background page reports through the dev log; this reports on screen. Two signals
+ * separate "the manifest never loaded" from "the manifest loaded and the background script failed",
+ * which one signal cannot do.
  */
 
 import OBR from "@owlbear-rodeo/sdk";
@@ -22,17 +34,8 @@ import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 // answering a harder question. `overlayProbeControl.ts` and its page stay as the record of how the
 // answer was got; re-import `openOverlayProbe` here and re-add the markup to bring it back.
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
-import { dryRun, probeWorldPoint } from "./pipeline";
+import { dryRun } from "./pipeline";
 import { openWorkspace } from "./workspace/workspaceControl";
-import {
-  DEFAULT_SETTINGS,
-  isStageDefault,
-  resetStage,
-  STAGES,
-  type Settings,
-  type Stage,
-} from "./settings";
-import { readSettings, writeSettings } from "./settingsStore";
 import {
   acceptStaged,
   removeOurs,
@@ -43,22 +46,6 @@ import {
 
 installDevLog("ui");
 
-/**
- * Ask the pipeline what it computed where the GM is looking.
- *
- * The viewport centre rather than a click or a selection, because it needs no new interaction to
- * learn and no item to exist: centre the view on the thing that looks wrong and press the button.
- */
-async function probeViewportCentre(): Promise<string> {
-  const [width, height] = await Promise.all([
-    OBR.viewport.getWidth(),
-    OBR.viewport.getHeight(),
-  ]);
-  const centre = await OBR.viewport.inverseTransformPoint({ x: width / 2, y: height / 2 });
-  return probeWorldPoint(centre.x, centre.y);
-}
-
-let sceneReady = false;
 const status = document.getElementById("status");
 const result = document.getElementById("result");
 
@@ -123,86 +110,6 @@ function applyTheme(theme: unknown): void {
 }
 
 
-let settings: Settings = DEFAULT_SETTINGS;
-
-/**
- * Keep the reset buttons honest.
- *
- * All that is left of what was a settings panel. Every control a GM can turn is on the workspace
- * now — the reading's, the deriving stage's, and the two that decide how proposals are drawn, which
- * followed the partition across when the workspace started drawing it. What stays here is what acts
- * on the *scene*, and a scene is the one thing a full-screen sheet over the map cannot show you.
- *
- * The buttons are still worth having on this side: a reset is an action rather than a control, and
- * it is disabled when the stage it would reset is already at its defaults, which is the only reason
- * this function survives.
- */
-function renderSettings(): void {
-  for (const stage of STAGES) {
-    const reset = document.getElementById(`reset-${stage}`);
-    if (reset instanceof HTMLButtonElement) {
-      reset.disabled = !sceneReady || isStageDefault(settings, stage);
-    }
-  }
-}
-
-async function save(next: Settings, stage?: Stage): Promise<void> {
-  try {
-    settings = await writeSettings(next);
-  } catch (error) {
-    const detail = describeError(error);
-    reportResult(`Could not save the setting: ${detail}`, "bad");
-    console.error(`Fog Nudger — saving settings failed: ${detail}`);
-    return;
-  }
-  renderSettings();
-  // Named per stage, because what a GM has to do next differs and so does what it will cost them.
-  // A reading change means the image is read again and everything downstream is discarded; a
-  // deriving change reuses the reading and only regenerates the polygons.
-  reportResult(
-    stage === "read"
-      ? "Saved. Trace again — this re-reads the map and discards work in tabs 2 and 3."
-      : stage === "derive"
-        ? "Saved. Derive again — this reuses the reading and discards hand edits."
-        : "Saved.",
-    "ok",
-  );
-}
-
-/** Put one stage's parameters back to their defaults, leaving the other stages alone. */
-async function resetStageSettings(stage: Stage): Promise<string> {
-  await save(resetStage(settings, stage), stage);
-  return stage === "read"
-    ? "Reading back to defaults. Trace again to see it."
-    : stage === "derive"
-      ? "Region derivation back to defaults. Derive again to see it."
-      : "Appearance back to defaults.";
-}
-
-/** Show one tab. Kept plain: one button and one panel per stage, one selected. */
-function selectTab(which: Stage): void {
-  for (const stage of STAGES) {
-    const tab = document.getElementById(`tab-${stage}`);
-    const panel = document.getElementById(`panel-${stage}`);
-    tab?.setAttribute("aria-selected", String(stage === which));
-    if (panel) panel.hidden = stage !== which;
-  }
-}
-
-// Painted once at load, before Owlbear is known to be there at all. The values are the defaults
-// and every control is disabled until a scene opens, but the panel shows what it is rather than an
-// empty column — which is the same rule the status line follows, and the reason the map picker was
-// reported as broken when it was merely empty.
-renderSettings();
-
-// Wired at load rather than inside `onReady`: switching tabs is pure UI and has no business waiting
-// on the SDK. It *was* inside, and outside a room the tabs were simply dead — which is also how it
-// was caught, since the SDK is inert there by design.
-for (const stage of STAGES) {
-  document.getElementById(`tab-${stage}`)?.addEventListener("click", () => selectTab(stage));
-}
-selectTab("read");
-
 OBR.onReady(async () => {
   // Same first move as the background page, and for the same reason. This page is a separate
   // iframe from it, so it has its own copy of the shim with its own unset label — which is how
@@ -229,7 +136,6 @@ OBR.onReady(async () => {
 
   const buttons = [
     wireButton("dry-run", dryRun),
-    wireButton("probe", probeViewportCentre),
     wireButton("open-workspace", openWorkspace),
     wireButton("accept", acceptStaged),
     wireButton("unaccept", returnToStaging),
@@ -240,7 +146,6 @@ OBR.onReady(async () => {
     wireButton("workspace-probe-framed", () => openWorkspaceProbe("framed")),
     wireButton("workspace-probe-close", closeWorkspaceProbe),
     wireButton("restyle", restyleStaged),
-    ...STAGES.map((stage) => wireButton(`reset-${stage}`, () => resetStageSettings(stage))),
   ];
 
   try {
@@ -255,22 +160,8 @@ OBR.onReady(async () => {
     // Subscribe as well as check, for the usual reason: a scene opened while the popover is already
     // up would otherwise leave the buttons dead with no explanation.
     const setEnabled = (open: boolean): void => {
-      sceneReady = open;
       for (const button of buttons) if (button) button.disabled = !open;
       reportResult(open ? "Ready." : "Waiting for a scene.", "ok");
-      // Settings live in scene metadata, so there is nothing real to show until a scene is open.
-      if (open) {
-        void readSettings()
-          .then((loaded) => {
-            settings = loaded;
-            renderSettings();
-          })
-          .catch((error: unknown) => {
-            console.error("Fog Nudger — reading settings failed: " + describeError(error));
-          });
-      } else {
-        renderSettings();
-      }
     };
     OBR.scene.onReadyChange(setEnabled);
     setEnabled(ready);

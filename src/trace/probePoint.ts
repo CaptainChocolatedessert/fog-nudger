@@ -34,6 +34,14 @@ export type PointKind =
   | "outside-raster"
   /** Ink in the chosen mask, so never a region and never covered by one. */
   | "ink"
+  /**
+   * Not ink, and nothing more can be said yet: no partition has been derived in this frame.
+   *
+   * The honest answer while the GM is still on the reading steps, where the labelling that separates
+   * a kept region from a discarded one has not been run. Saying "discarded" there would be inventing
+   * a verdict from the absence of one.
+   */
+  | "space"
   /** Space, but a component too small to keep — it has no shape of its own. */
   | "discarded"
   /** Part of a surviving region, and therefore under that region's emitted shape. */
@@ -52,7 +60,14 @@ export interface PointReading {
 export function readPoint(
   field: ScalarField,
   mask: BinaryMask,
-  labelled: LabelledSpace,
+  /**
+   * The partition, if one has been derived. `null` reports what the *reading* alone can say.
+   *
+   * Optional rather than a second function: the luminance and the ink verdict are the same lookup
+   * either way, and the whole value of this diagnostic is that it reports one pixel from the data
+   * that actually produced the picture rather than from a parallel path.
+   */
+  labelled: LabelledSpace | null,
   x: number,
   y: number,
 ): PointReading {
@@ -65,6 +80,8 @@ export function readPoint(
   const i = py * mask.width + px;
   const luminance = field.data[i] ?? 0;
   if (mask.data[i] === 1) return { x: px, y: py, kind: "ink", luminance, region: 0 };
+
+  if (!labelled) return { x: px, y: py, kind: "space", luminance, region: 0 };
 
   const region = labelled.labels[i] ?? 0;
   return {
@@ -99,6 +116,11 @@ export function describePoint(reading: PointReading, pxPerSquare: number): strin
           ? `That luminance is nearly white, which a local threshold should not call ink — if this ` +
             `is a flat area rather than fine linework, the binariser is wrong here.`
           : `It is dark enough for that to be the expected answer.`)
+      );
+    case "space":
+      return (
+        `${at}${tone} is not ink. Whether it survives as a region is a deriving-stage question, ` +
+        `and nothing has been derived yet — open Regions to find out.`
       );
     case "discarded":
       return (

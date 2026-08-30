@@ -18,6 +18,7 @@ import {
   SETTING_LIMITS,
   writeParameter,
 } from "../settings";
+import type { SettingName } from "../settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
 import { requestReread } from "./reading";
 import { invalidateRegions } from "./regions";
@@ -101,6 +102,20 @@ export function setControlsLive(next: boolean): void {
  * cached mask may be reused for — so this reads them rather than keeping a third list of which
  * slider does what.
  */
+/**
+ * Recompute whatever a set of changed parameters invalidates, and nothing else.
+ *
+ * Shared by a slider's release and a step's Defaults, so the two cannot disagree about what a change
+ * costs. A reading covers the partition as well — the regions subscribe to it — so the two cases are
+ * exclusive rather than cumulative.
+ */
+export function recomputeFor(names: readonly SettingName[]): void {
+  const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
+  if (pipeline.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
+  else if (pipeline.length > 0) invalidateRegions();
+  invalidate();
+}
+
 export function settingRow(control: Control): HTMLElement {
   const limits = SETTING_LIMITS[control.name];
   const scale = control.scale ?? "linear";
@@ -185,10 +200,7 @@ export function settingRow(control: Control): HTMLElement {
     setSettings(writeParameter(currentSettings(), control.name, current));
     setPendingEdit(false);
 
-    if (kind === "pipeline") {
-      if (PARAMETER_STAGE[control.name] === "read") requestReread();
-      else invalidateRegions();
-    }
+    recomputeFor([control.name]);
     void persistSettings();
   });
 

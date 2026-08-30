@@ -249,112 +249,74 @@
       region. What it *can* do is delete a region and, through the containment rule, absorb the
       space it held into whatever encloses it. That is abstraction, not reading.
     -->
-    <nav class="tabs" role="tablist">
-      <button role="tab" id="tab-read" aria-selected="true" aria-controls="panel-read">
-        1 · Read the map
-      </button>
-      <button role="tab" id="tab-derive" aria-selected="false" aria-controls="panel-derive">
-        2 · Derive the regions
-      </button>
-      <button role="tab" id="tab-adjust" aria-selected="false" aria-controls="panel-adjust">
-        3 · Adjust &amp; accept
-      </button>
-    </nav>
+    <!--
+      What is left here, and why each thing is not on the workspace.
 
-    <section id="panel-read" role="tabpanel" aria-labelledby="tab-read">
-      <!--
-        The reading's own controls are not here: they are steps on the workspace, declared in
-        `steps.ts` along with what each one paints and what a drag does in it. What stays on this
-        side is the button that opens that surface, plus the two things that need the real scene —
-        a trace that emits nothing, and the point probe.
+      Everything a GM turns is a step on that surface now. What stays is what acts on the *scene* —
+      accepting, un-accepting and removing items — plus the diagnostics, which report on a scene
+      rather than on a picture. A full-screen sheet over the map is the one place you cannot look at
+      the map as Owlbear is actually drawing it, which is exactly what these buttons need you to do.
 
-        The steps are all reading-stage pipeline controls whatever they are called, so the split
-        between them is about the GM's question rather than about the cascade, which is unaffected.
-      -->
-      <div class="actions">
-        <button id="open-workspace" disabled>Open the workspace</button>
-      </div>
-      <p class="note">
-        Reading the map happens on its own surface: it draws the map, paints the ink over it, and
-        carries the controls that decide what counts as ink. It has to be its own surface because
-        the answer here is a per-pixel verdict, which only a picture can carry &mdash; and because
-        the controls belong beside the thing they change rather than in a panel the picture would
-        cover.
-      </p>
+      The three stage tabs went with the controls. They carried a cascade — reading destroys
+      deriving, deriving destroys adjusting — and that cascade is still real and still declared, but
+      what is left on this side is a short list of actions with no ordering between them, and tabs
+      claiming one would have been decoration.
+    -->
+    <div class="actions">
+      <button id="open-workspace" disabled>Open the workspace</button>
+    </div>
+    <p class="note">
+      Everything that decides what gets traced is there: the map, the ink, the regions, and the
+      button that stages them. It has to be its own surface because the answers are per-pixel
+      verdicts, which only a picture can carry &mdash; and because the controls belong beside the
+      thing they change rather than in a panel the picture would cover.
+    </p>
 
-      <div class="actions">
-        <button id="dry-run" disabled>Trace, emit nothing</button>
-        <button id="probe" disabled>What is here?</button>
-        <button id="reset-read" class="quiet" disabled>Defaults</button>
-      </div>
-      <p class="note">
-        Changing anything here re-reads the image and re-partitions the map, so it discards
-        everything from tabs 2 and 3. <em>What is here?</em> reports what the last trace computed at
-        the centre of your view — region, ink, or discarded floor, with the luminance it read.
-      </p>
-    </section>
+    <p class="field">Staged proposals</p>
+    <div class="actions">
+      <button id="accept" disabled>Accept staged</button>
+      <button id="unaccept" disabled>Back to staging</button>
+      <button id="remove" disabled>Remove ours</button>
+      <button id="restyle" disabled>Apply appearance</button>
+    </div>
+    <p class="note">
+      Staged proposals are GM-only and produce no walls, so nothing here can affect play until you
+      accept. Accepting moves them to the fog layer, where Dynamic Fog starts deriving walls. Going
+      back to staging is the exact inverse and keeps every hand edit; re-tracing does not.
+      <em>Apply appearance</em> restyles what is already staged from the workspace's fill and
+      outline &mdash; an accepted shape is forced to full opacity regardless, because fog below that
+      leaves a tint over ground the party has revealed.
+    </p>
 
-    <section id="panel-derive" role="tabpanel" aria-labelledby="tab-derive" hidden>
-      <p class="field">How ink becomes regions</p>
-      <div class="actions">
-        <button id="reset-derive" class="quiet" disabled>Defaults</button>
-      </div>
-      <p class="note">
-        The two controls and the button that stages them are in the workspace now, under
-        <em>Regions</em>, where the partition itself is drawn. Neither control can split or join a
-        region — the reading already decided which rooms exist. Both regenerate every polygon, so
-        both discard hand edits made in tab 3, and both leave the reading alone.
-      </p>
-    </section>
+    <!--
+      Not product UI. Step 1's shape-placing buttons are gone now that it is closed; these earned a
+      longer stay because they answer "what is actually in this scene", which the workspace cannot.
+    -->
+    <p class="field">Diagnostics</p>
+    <div class="actions">
+      <button id="dry-run" disabled>Trace, emit nothing</button>
+      <button id="census" disabled>Census</button>
+      <button id="inspect" disabled>Inspect fog</button>
+    </div>
+    <p class="note">
+      <em>Trace, emit nothing</em> runs the whole chain and writes the numbers to the log &mdash;
+      coverage, region counts, and the area check, which is two independent computations of the same
+      figure agreeing. The workspace draws the same partition; this is the only thing that reports
+      it in numbers. <em>What is here?</em> is no longer a button: click the map in the workspace.
+    </p>
 
-    <section id="panel-adjust" role="tabpanel" aria-labelledby="tab-adjust" hidden>
-      <div class="actions">
-        <button id="accept" disabled>Accept staged</button>
-        <button id="unaccept" disabled>Back to staging</button>
-        <button id="remove" disabled>Remove ours</button>
-      </div>
-      <p class="note">
-        Staged proposals are GM-only and produce no walls, so nothing here can affect play until you
-        accept. Accepting moves them to the fog layer, where Dynamic Fog starts deriving walls.
-        Going back to staging is the exact inverse and keeps every hand edit; re-tracing does not.
-      </p>
-
-      <p class="field">How proposals look while you judge them</p>
-      <div class="actions">
-        <button id="restyle" disabled>Apply to staged</button>
-        <button id="reset-adjust" class="quiet" disabled>Defaults</button>
-      </div>
-      <p class="note">
-        Neighbouring regions are drawn in different colours so the partition is what you see rather
-        than a flat tint. Appearance affects staged proposals only — an accepted shape is forced to
-        full opacity, because fog below that leaves a tint over ground the party has revealed.
-      </p>
-
-      <!--
-        Not product UI. Step 1's shape-placing buttons are gone now that it is closed; these two
-        earned a longer stay because they answer "what is actually in this scene".
-      -->
-      <p class="field">Diagnostics</p>
-      <div class="actions">
-        <button id="census" disabled>Census</button>
-        <button id="inspect" disabled>Inspect fog</button>
-      </div>
-
-      <div class="actions">
-        <button id="workspace-probe-bare" disabled>Workspace probe</button>
-        <button id="workspace-probe-framed" disabled>…framed</button>
-        <button id="workspace-probe-close" class="quiet" disabled>Close workspace</button>
-      </div>
-      <p class="note">
-        <em>Workspace probe</em> puts up an <strong>opaque</strong> full-screen sheet that keeps its
-        own input, which is what stage one would eventually be drawn on. Drag on the pad, spin the
-        wheel, right-click, and type in the box; the sheet reports whether Owlbear moved underneath,
-        which you cannot see, because the sheet is covering it. <em>…framed</em> is the same thing
-        inside Owlbear's own modal card, to find out what that frame costs. Both last 60 seconds and
-        close on Escape, on their own button, or on their own timer — three ways out, because an
-        opaque sheet is a worse thing to be stuck behind than a transparent one.
-      </p>
-    </section>
+    <div class="actions">
+      <button id="workspace-probe-bare" disabled>Workspace probe</button>
+      <button id="workspace-probe-framed" disabled>&hellip;framed</button>
+      <button id="workspace-probe-close" class="quiet" disabled>Close workspace</button>
+    </div>
+    <p class="note">
+      <em>Workspace probe</em> puts up an <strong>opaque</strong> full-screen sheet that keeps its
+      own input, which is what the workspace is drawn on. Drag on the pad, spin the wheel,
+      right-click, and type in the box; the sheet reports whether Owlbear moved underneath, which you
+      cannot see, because the sheet is covering it. Kept because its leak detector is the only way to
+      re-check that a change has not started letting input through to Owlbear.
+    </p>
 
     <p id="result">Waiting for a scene.</p>
 
