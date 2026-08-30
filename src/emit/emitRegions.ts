@@ -26,10 +26,13 @@
  */
 
 import OBR, {
+  buildLine,
   buildPath,
   Command,
+  isLine,
   isPath,
   type Item,
+  type Line,
   type Path,
 } from "@owlbear-rodeo/sdk";
 
@@ -46,6 +49,7 @@ import {
   totalCommands,
   type FogShapeSpec,
 } from "./fogShapes";
+import { stageWallLines, WALL_KEY, type WallLineSpec } from "./wallLines";
 
 /**
  * Compile-time assertion that the numbers mirrored in `geometry/ring` still match the SDK's enum.
@@ -154,8 +158,48 @@ export async function stageRegions(): Promise<string> {
   }
 
   devLog("info", `emit: staged ${written} shapes on the DRAWING layer`);
+
+  // ## The walls no shape's boundary covers
+  //
+  // A stub hanging into a room is the usual case. These go out as `LINE` items, which is what
+  // Dynamic Fog's own wall mode builds and the only item type with no interior to reveal.
+  const { lines, dropped } = stageWallLines(
+    run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed, ids: wall.ids })),
+    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: Math.max(1, stroke) },
+  );
+  if (dropped > 0) {
+    devLog("warn", `emit: dropped ${dropped} zero-length wall segments — nothing to select there`);
+  }
+
+  let walls = 0;
+  if (lines.length > 0) {
+    devLog(
+      "info",
+      `emit: staging ${lines.length} wall segments from ${run.walls.length} uncovered edges`,
+    );
+    for (const batch of chunk(lines, BATCH_LIMITS.maxItems)) {
+      try {
+        await writeWithBackoff(
+          () => OBR.scene.items.addItems(batch.map(stagedLine)),
+          `wall batch`,
+        );
+      } catch (error) {
+        const detail = describeError(error);
+        devLog("error", `emit: stopped after ${walls} of ${lines.length} wall segments — ${detail}`);
+        return (
+          `Staged ${written} proposals, then stopped after ${walls} of ${lines.length} wall ` +
+          `segments: ${detail}. What landed is still in the scene.`
+        );
+      }
+      walls += batch.length;
+      await pause(BATCH_PAUSE_MS);
+    }
+    devLog("info", `emit: staged ${walls} wall segments on the DRAWING layer`);
+  }
+
   return (
     `${run.summary}. Staged ${written} proposals` +
+    (walls > 0 ? ` and ${walls} wall segments` : "") +
     (skipped.length > 0 ? `, skipped ${skipped.length} over the cap` : "") +
     `. Coloured, GM-only, no walls — neighbouring regions differ so the partition is visible.`
   );
@@ -205,11 +249,48 @@ export async function acceptStaged(): Promise<string> {
     return `Could not accept: ${detail}`;
   }
 
+  const walls = await acceptWallLines();
+
   devLog("info", `emit: accepted ${staged.length} proposals onto the FOG layer`);
   return (
-    `Accepted ${staged.length}. They are fog now — if Dynamic Fog is installed, give it a ` +
-    `moment and expect roughly two walls per contour.`
+    `Accepted ${staged.length}${walls > 0 ? ` and ${walls} wall segments` : ""}. They are fog now ` +
+    `— if Dynamic Fog is installed, give it a moment and expect roughly two walls per contour.`
   );
+}
+
+/**
+ * Promote the staged wall lines with the shapes, taking the scene's own fog styling on the way.
+ *
+ * Dynamic Fog's wall mode reads `OBR.scene.fog.getColor()` and `getStrokeWidth()` when it builds a
+ * line, so an accepted wall of ours matches one a GM drew by hand. Staged, they are in the review
+ * colour instead, because during review they are something to look at rather than something to
+ * match.
+ */
+async function acceptWallLines(): Promise<number> {
+  const staged = await OBR.scene.items.getItems<Line>(
+    (item) => WALL_KEY in item.metadata && item.layer === "DRAWING" && isLine(item),
+  );
+  if (staged.length === 0) return 0;
+
+  const [colour, width] = await Promise.all([
+    OBR.scene.fog.getColor(),
+    OBR.scene.fog.getStrokeWidth(),
+  ]);
+
+  await writeWithBackoff(
+    () =>
+      OBR.scene.items.updateItems<Line>(staged, (drafts) => {
+        for (const draft of drafts) {
+          draft.layer = "FOG";
+          draft.visible = false;
+          draft.style.strokeColor = colour;
+          draft.style.strokeWidth = width;
+        }
+      }),
+    "accept walls",
+  );
+  devLog("info", `emit: accepted ${staged.length} wall segments onto the FOG layer`);
+  return staged.length;
 }
 
 /**
@@ -249,6 +330,22 @@ export async function returnToStaging(): Promise<string> {
     const detail = describeError(error);
     console.error(`Fog Nudger — returning shapes to staging failed: ${detail}`);
     return `Could not return to staging: ${detail}`;
+  }
+
+  const walls = await OBR.scene.items.getItems<Line>(
+    (item) => WALL_KEY in item.metadata && item.layer === "FOG" && isLine(item),
+  );
+  if (walls.length > 0) {
+    await writeWithBackoff(
+      () =>
+        OBR.scene.items.updateItems<Line>(walls, (drafts) => {
+          for (const draft of drafts) {
+            draft.layer = "DRAWING";
+            draft.style.strokeColor = WALL_COLOUR;
+          }
+        }),
+      "return walls to staging",
+    );
   }
 
   devLog("info", `emit: returned ${accepted.length} shapes to the DRAWING layer`);
@@ -324,8 +421,26 @@ export async function removeOurs(): Promise<string> {
 }
 
 /** Only ours. The GM's fog — 419 hand-drawn items in this project's own test scene — is not ours. */
+/**
+ * The colour staged wall lines are drawn in.
+ *
+ * Fixed rather than cycled like the proposal fills: a wall is one kind of thing, and what a GM is
+ * judging here is where it runs, not which wall it is. Distinct from the six proposal colours so a
+ * line over a fill still reads as a line.
+ */
+const WALL_COLOUR = "#111111";
+
+/** Split a list into batches of at most `size`. */
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 function ourItems(): Promise<Item[]> {
-  return OBR.scene.items.getItems((item) => REGION_KEY in item.metadata);
+  return OBR.scene.items.getItems(
+    (item) => REGION_KEY in item.metadata || WALL_KEY in item.metadata,
+  );
 }
 
 /**
@@ -355,6 +470,34 @@ async function writeWithBackoff<T>(write: () => Promise<T>, label: string): Prom
 
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * One wall segment, built the way Dynamic Fog's own wall mode builds one.
+ *
+ * A `LINE` rather than anything with an interior, because Owlbear reads a fog item's interior as
+ * revealable ground and a wall must reveal nothing. Staged on `DRAWING` in the review colour like
+ * every other proposal; `acceptStaged` moves it to `FOG`.
+ *
+ * **`visible: false`, deliberately unlike Dynamic Fog's wall mode**, which leaves the default of
+ * true. Ours are staged before they are accepted, and a visible staged item leaks the map's layout
+ * to players during prep — the same reasoning the fog shapes already follow. The conservative
+ * direction: if it turns out a hidden line yields no wall, the failure is a missing wall the GM can
+ * see is missing, where the other way round is a leak nobody notices.
+ */
+function stagedLine(line: WallLineSpec): Item {
+  return buildLine()
+    .startPosition({ x: 0, y: 0 })
+    .endPosition(line.end)
+    .position(line.position)
+    .strokeColor(line.colour)
+    .strokeOpacity(1)
+    .strokeWidth(line.strokeWidth)
+    .layer("DRAWING")
+    .visible(false)
+    .name(line.name)
+    .metadata({ [WALL_KEY]: line.provenance })
+    .build();
 }
 
 function stagedItem(shape: FogShapeSpec): Item {

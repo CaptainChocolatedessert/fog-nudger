@@ -27,7 +27,7 @@
 
 import { PROPOSAL_COLOURS } from "../../emit/fogShapes";
 import { lastPixelsPerSquare } from "../../pipeline";
-import { currentRaster, currentRegions, regionsShowing } from "../regions";
+import { currentRaster, currentRegions, currentWalls, regionsShowing } from "../regions";
 import { currentSettings } from "../settingsState";
 import { addPainter, type Painter } from "../shell";
 
@@ -39,6 +39,13 @@ import { addPainter, type Painter } from "../shell";
  * partition. The setting decides the width; this decides the floor.
  */
 const MIN_STROKE_PX = 1;
+
+/**
+ * Staged wall lines are drawn in this, matching the colour the emit path stages them in.
+ *
+ * Fixed rather than cycled: a wall is one kind of thing, and what is being judged is where it runs.
+ */
+const WALL_COLOUR = "#111111";
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const regions = currentRegions();
@@ -83,6 +90,30 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     context.strokeStyle = colour;
     context.stroke();
   });
+
+  /*
+    The walls that emit as lines rather than as part of a ring — a stub hanging into a room being the
+    usual case.
+
+    Drawn here because otherwise the preview would show *fewer walls than staging writes*, which is
+    the one thing this surface exists to prevent: the preview and the staged scene have to be the
+    same picture. They are lines rather than fills because that is what they become.
+  */
+  const walls = currentWalls();
+  if (walls.length > 0) {
+    context.globalAlpha = 1;
+    context.strokeStyle = WALL_COLOUR;
+    context.beginPath();
+    for (const wall of walls) {
+      wall.points.forEach((point, at) => {
+        const x = view.x + point.x * scaleX;
+        const y = view.y + point.y * scaleY;
+        if (at === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+    }
+    context.stroke();
+  }
 
   context.restore();
 };

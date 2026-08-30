@@ -79,6 +79,44 @@ describe("regions derived from the wall graph", () => {
     }
   });
 
+  it("emits a joined stub as a line, and leaves no slit in the room's ring", () => {
+    /*
+      The traversal walks a bridge out and back, so a stub hanging into a room appears in the room's
+      boundary as a zero-width slit. That is right for the area check, which counts those steps, and
+      wrong to emit: it would put our internal representation into the scene and leave Owlbear's fill
+      and Dynamic Fog's stroke to interpret a degenerate excursion. A human would draw the room, then
+      draw the wall.
+
+      So the ring drops the excursion — costing it nothing, since a slit encloses no area — and the
+      bridge comes out in `uncoveredEdges` to be emitted as its own line.
+    */
+    const result = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
+    const room = result.regions.find((region) => region.rings.length === 1);
+    expect(room).toBeDefined();
+
+    const keys = room!.rings[0]!.map((point) => `${point.x},${point.y}`);
+    expect(new Set(keys).size, "the ring visits no vertex twice").toBe(keys.length);
+    expect(result.uncoveredEdges).toHaveLength(result.bridges);
+  });
+
+  it("gives the stub's line the room's own vertex id where they meet", () => {
+    // What makes the graph reconstructible from the scene: the junction is one id, carried by the
+    // room's ring and by the stub's line alike. Geometry alone could not tell that join from a
+    // doorway, which is two ends deliberately close and deliberately separate.
+    const result = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
+    const room = result.regions.find((region) => region.rings.length === 1);
+    const stub = result.uncoveredEdges[0];
+    expect(stub).toBeDefined();
+
+    const ringIds = new Set(room!.ringIds[0]!);
+    const shared = stub!.ids.filter((id) => ringIds.has(id));
+    expect(shared, "exactly one end of the stub is on the room's boundary").toHaveLength(1);
+
+    // ...and the free tip belongs to nothing else, which is what says it is a stub and not a doorway.
+    const tip = stub!.ids[stub!.ids.length - 1] === shared[0] ? stub!.ids[0] : stub!.ids.at(-1);
+    expect(ringIds.has(tip!)).toBe(false);
+  });
+
   it("keeps a stub wall, which is the whole reason for the pivot", () => {
     const result = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
     // A stub separates nothing, so the same face lies on both sides of it — the bridge criterion.

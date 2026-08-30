@@ -200,17 +200,19 @@ describe("fitting the faces", () => {
     // The room's outer ring and the band's hole are the same wall, walked opposite ways.
     const roomRing = rings[room]![0]!;
     const bandHole = rings[band]![1]!;
-    expect(roomRing).toHaveLength(bandHole.length);
-    expect(new Set(roomRing.map((p) => `${p.x},${p.y}`))).toEqual(
-      new Set(bandHole.map((p) => `${p.x},${p.y}`)),
+    expect(roomRing.points).toHaveLength(bandHole.points.length);
+    expect(new Set(roomRing.points.map((p) => `${p.x},${p.y}`))).toEqual(
+      new Set(bandHole.points.map((p) => `${p.x},${p.y}`)),
     );
+    // And the same vertex ids, which is what makes a join reconstructible rather than inferred.
+    expect(new Set(roomRing.ids)).toEqual(new Set(bandHole.ids));
   });
 
   it("keeps a square square, corners and all", () => {
     const { graph, result } = facesOf(ROOM);
     const { rings } = fitFaces(graph, result.faces, 0.5);
     const room = result.faces.findIndex((face) => face.cycles.length === 1);
-    const ring = rings[room]![0]!;
+    const ring = rings[room]![0]!.points;
 
     const corners = new Set(ring.map((point) => `${point.x},${point.y}`));
     for (const corner of ["2,2", "6,2", "6,6", "2,6"]) {

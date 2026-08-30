@@ -34,7 +34,13 @@
 
 import { commandCount, doubleSignedArea, MIN_RING_POINTS, type Ring } from "../geometry/ring";
 import type { BinaryMask } from "./binarize";
-import { fitFaces, resolveFaces, type GraphFace, type GraphFaces } from "./faces";
+import {
+  fitFaces,
+  resolveFaces,
+  type FittedEdge,
+  type GraphFace,
+  type GraphFaces,
+} from "./faces";
 import { labelSpace, type LabelledSpace } from "./label";
 import { COMMAND_CAP } from "./simplify";
 import { pruneSpurs } from "./spurs";
@@ -58,6 +64,13 @@ export interface GraphRegion {
   /** The face's label in the skeleton's labelling. */
   readonly id: number;
   readonly rings: readonly Ring[];
+  /**
+   * Vertex ids per ring, in the same order as its points.
+   *
+   * `null` where a ring was kept unfitted to stop it collapsing: those points come from the pixel
+   * chain rather than the fitted edges, so there is nothing meaningful to label them with.
+   */
+  readonly ringIds: readonly (readonly number[] | null)[];
   readonly commands: number;
   /** Area the face covers, in pixels, measured before fitting. */
   readonly area: number;
@@ -98,6 +111,25 @@ export interface GraphRegionResult {
   readonly degenerateCycles: number;
   /** Holes dropped because the face they enclose did not survive the minimum. */
   readonly filledHoles: number;
+  /**
+   * Edges no emitted ring traverses — the walls that need a line of their own.
+   *
+   * **This is narrower than the design record predicted, and the record is wrong on the point.** §4
+   * says a bridge can never be covered "because there is only one region there". That was reasoned
+   * from a region-first partition, where a room's outline does not visit a stub hanging into it.
+   * The half-edge traversal walks the stub **out and back as a slit inside the room's own ring**, so
+   * the geometry is there, and stroking it yields the wall. Demonstrated by a fixture: the room's
+   * emitted ring repeats the stub's tip.
+   *
+   * What is genuinely left over is smaller and different:
+   *
+   * - **A free-floating piece of linework inside a face.** It forms a cycle of its own enclosing no
+   *   area, which is not emitted as a ring, so nothing covers it.
+   * - **An edge with no emitted face on either side** — between two faces the minimum discarded.
+   *
+   * Carried as fitted polylines in raster space, ready for placement.
+   */
+  readonly uncoveredEdges: readonly FittedEdge[];
   readonly tolerance: number;
   readonly escalations: number;
   /** Sub-pixel slivers deleted from the graph, and how many rounds it took. */
@@ -185,14 +217,17 @@ export function deriveGraphRegions(
     }
   }
 
-  // The bridge criterion: an edge with the same face on both sides is a wall no region boundary
-  // can ever cover, because there is only one region there. Step E emits these as lines.
-  let bridges = 0;
+  // The bridge criterion: an edge with the same face on both sides is a wall no region boundary can
+  // cover, because there is only one region there. The traversal walks it out and back as a slit,
+  // which is right for the area check and wrong to emit, so these are left out of the rings and
+  // emitted as lines of their own.
+  const bridgeEdges = new Set<number>();
   for (let edge = 0; edge < graph.edges.length; edge += 1) {
     const left = faceOfHalfEdge.get(edge * 2);
     const right = faceOfHalfEdge.get(edge * 2 + 1);
-    if (left !== undefined && left === right) bridges += 1;
+    if (left !== undefined && left === right) bridgeEdges.add(edge);
   }
+  const bridges = bridgeEdges.size;
 
   const kept = faces.faces.filter((face) => survives.has(face.label));
 
@@ -202,14 +237,14 @@ export function deriveGraphRegions(
 
   let tolerance = options.tolerance;
   let escalations = 0;
-  let built = assemble(graph, kept, faceOfHalfEdge, survives, tolerance);
+  let built = assemble(graph, kept, faceOfHalfEdge, survives, bridgeEdges, tolerance);
 
   // `tolerance > 0` is not decoration: doubling zero is zero, so a caller asking for no
   // simplification at all would spin here forever on any region over the cap.
   while (built.regions.some((region) => region.commands > cap) && tolerance > 0 && tolerance < ceiling) {
     tolerance = Math.min(tolerance * 2, ceiling);
     escalations += 1;
-    built = assemble(graph, kept, faceOfHalfEdge, survives, tolerance);
+    built = assemble(graph, kept, faceOfHalfEdge, survives, bridgeEdges, tolerance);
   }
   const fitMs = performance.now() - fitStarted;
 
@@ -222,6 +257,7 @@ export function deriveGraphRegions(
     discarded,
     discardedArea,
     bridges,
+    uncoveredEdges: built.uncovered,
     degenerateCycles: built.degenerateCycles,
     filledHoles: built.filledHoles,
     tolerance,
@@ -240,19 +276,26 @@ function assemble(
   kept: readonly GraphFace[],
   faceOfHalfEdge: ReadonlyMap<number, number>,
   survives: ReadonlySet<number>,
+  bridgeEdges: ReadonlySet<number>,
   tolerance: number,
 ): {
+  uncovered: FittedEdge[];
   regions: Omit<GraphRegion, "overCap">[];
   degenerateCycles: number;
   filledHoles: number;
+  /** Edges some emitted ring actually traverses. Everything else needs a line of its own. */
+  covered: Set<number>;
 } {
-  const { rings: fittedRings } = fitFaces(graph, kept, tolerance);
+  const { rings: fittedRings, edges: fittedEdges } = fitFaces(graph, kept, tolerance, bridgeEdges);
   const regions: Omit<GraphRegion, "overCap">[] = [];
+  const covered = new Set<number>();
   let degenerateCycles = 0;
   let filledHoles = 0;
 
   kept.forEach((face, index) => {
     const rings: Ring[] = [];
+    /** Vertex ids per ring, or null for a ring kept unfitted and therefore without them. */
+    const ringIds: (readonly number[] | null)[] = [];
     let preserved = 0;
     let verticesBefore = 0;
 
@@ -281,11 +324,19 @@ function assemble(
       // A ring small against the tolerance collapses to two points and stops being a shape at all,
       // which for a region means the room vanishes. Vertices are the cheap thing here and a room is
       // not, so the original is kept instead.
-      if (fitted.length < MIN_RING_POINTS) {
+      if (fitted.points.length < MIN_RING_POINTS) {
         preserved += 1;
         rings.push([...cycle.points]);
+        ringIds.push(null);
       } else {
-        rings.push(fitted);
+        rings.push(fitted.points);
+        ringIds.push(fitted.ids);
+      }
+
+      // This ring is emitted, so every edge it walks is represented in the scene by it — except the
+      // bridges, which `fitFaces` left out and which emit as lines instead.
+      for (const half of cycle.halfEdges) {
+        if (!bridgeEdges.has(half >> 1)) covered.add(half >> 1);
       }
     });
 
@@ -295,6 +346,7 @@ function assemble(
     regions.push({
       id: face.label,
       rings,
+      ringIds,
       commands: commandCount(rings),
       area: face.doubleArea / 2,
       preservedRings: preserved,
@@ -303,7 +355,14 @@ function assemble(
     });
   });
 
-  return { regions, degenerateCycles, filledHoles };
+  // Whatever no ring walked has to be emitted on its own, as the fitted polyline rather than the
+  // pixel chain: a line and a room that meet at a corner must carry the identical point.
+  const uncovered: FittedEdge[] = [];
+  for (let edge = 0; edge < graph.edges.length; edge += 1) {
+    if (!covered.has(edge)) uncovered.push(fittedEdges[edge]!);
+  }
+
+  return { regions, degenerateCycles, filledHoles, covered, uncovered };
 }
 
 /** One line for the log. */

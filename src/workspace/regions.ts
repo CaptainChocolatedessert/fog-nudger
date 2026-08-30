@@ -22,7 +22,7 @@
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { runTrace, type TracedRegion } from "../pipeline";
+import { runTrace, type TracedRegion, type TracedWall } from "../pipeline";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { onReading } from "./reading";
 import { currentSettings } from "./settingsState";
@@ -31,6 +31,9 @@ import { invalidate, isClosing, say } from "./shell";
 const requests = new MaskRequests();
 let inFlight = false;
 let regions: readonly TracedRegion[] = [];
+/** The walls that emit as lines rather than as part of a ring. Drawn with them, or the preview
+ * would show fewer walls than staging writes. */
+let walls: readonly TracedWall[] = [];
 /** The raster the rings are in, which is what the painter scales by. */
 let raster: { readonly width: number; readonly height: number } | null = null;
 
@@ -44,6 +47,10 @@ let stale = true;
 
 /** Whether the step that shows the partition is the one open. */
 let watching = false;
+
+export function currentWalls(): readonly TracedWall[] {
+  return walls;
+}
 
 export function currentRegions(): readonly TracedRegion[] {
   return regions;
@@ -106,6 +113,7 @@ async function derive(): Promise<void> {
     }
 
     regions = outcome.run.regions;
+    walls = outcome.run.walls;
     raster = outcome.run.raster;
     stale = false;
     lastSummary = `${regions.length} region${regions.length === 1 ? "" : "s"}`;

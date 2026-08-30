@@ -543,6 +543,46 @@ Everything else is covered by the two faces it separates and is emitted only as 
 This is what produces the human-equivalent scene of "The target" above, with no coincident duplication
 beyond the duplication a hand-drawn scene already has.
 
+#### The criterion survived a challenge to it — 2026-08-30
+
+Building step D made it look wrong, and it is worth recording why it is not. The half-edge traversal
+walks a bridge **out and back**, so a stub hanging into a room appears in the room's boundary cycle as
+a zero-width slit — which suggested the room's own shape already carries the stub and no line is
+needed. Measured on a fixture: it does, the ring repeats the stub's tip.
+
+**Emitting that was the wrong conclusion** (user, 2026-08-30). It puts our internal representation
+into the scene and leaves two other renderers to interpret a degenerate excursion: Skia may collapse a
+zero-area subpath when stroking, Owlbear may normalise it when storing, and neither is measured. It
+also produces something no human could have drawn, since Owlbear's fog tool cannot make a shape with a
+slit in it — against §4's own target of emulating a careful human's scene. And it is the near
+neighbour of an idea already rejected here: bundling a stub into its room as a second subpath.
+
+So the slit is dropped from what is emitted, and the bridge goes out as its own line. **The criterion
+stands as written.** The slit is still walked, and still counted by the area check, which needs those
+steps — the traversal and the rendering are different things and this is the clearest case of it.
+
+#### What a line is: a `LINE`, copied from Dynamic Fog — read from source 2026-08-30
+
+`createLineMode.ts` is the whole answer, and it is short. A wall drawn with Dynamic Fog's own tool is
+an ordinary **`LINE`**: two points, `layer: "FOG"`, stroke width and colour from `OBR.scene.fog`, the
+end stored relative to the item's position, `zIndex` set to the timestamp. **No fill anywhere** — and
+that is the property that matters, because a `LINE` has no interior *by type*, so it cannot reveal
+ground. Every tidier alternative fails there: an open subpath inside a `PATH` risks being implicitly
+closed for filling, which would reveal a sliver of floor along every free-standing wall.
+
+Dynamic Fog ships no other drawing tool. Everything else it reads is Owlbear's own fog tool output.
+
+**The cost, stated:** a fitted polyline of n points becomes n − 1 items, so a wall is several entries
+in the Outliner and a GM nudging one segment moves only that segment. In exchange nothing rests on
+undefined behaviour in someone else's renderer, and a two-point item cannot have a vertex inserted
+into it — which is the degradation mode the vertex ids otherwise have to detect.
+
+**Two deliberate differences from Dynamic Fog's mode**, both in the safe direction. Ours are staged on
+`DRAWING` in a review colour first, and take the scene's fog colour and stroke width only when
+accepted. And ours are `visible: false`, where its lines take the default of true: a staged item that
+players can see leaks the map's layout during prep, which is the same reasoning the fog shapes already
+follow.
+
 **A pleasant consequence: the pillar judgement falls out of a control that already exists.** Whether a
 pillar should block sight or merely decorate is a GM's call, and the smallest-room filter makes it. If
 the pillar's interior survives as a face, the pillar is a hole in the room — blocks sight, stays dark.

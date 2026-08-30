@@ -63,7 +63,7 @@ import {
 import { blur, luminanceField, type ScalarField } from "./trace/field";
 import type { BinaryMask } from "./trace/binarize";
 import type { LabelledSpace } from "./trace/label";
-import type { RasterPlacement, WorldBounds } from "./map/placement";
+import type { Point, RasterPlacement, WorldBounds } from "./map/placement";
 import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
@@ -78,6 +78,8 @@ import {
   deriveGraphRegions,
   describeGraphRegions,
 } from "./trace/graphRegions";
+import type { Vector2 } from "@owlbear-rodeo/sdk";
+
 import type { Ring } from "./geometry/ring";
 import { COMMAND_CAP } from "./trace/simplify";
 
@@ -380,6 +382,22 @@ export interface TracedRegion {
   readonly overCap: boolean;
 }
 
+/**
+ * A wall no emitted fog shape's boundary covers, ready to emit as lines.
+ *
+ * Both coordinate systems, for the same reason `TracedRegion` carries both: the world points are
+ * what an item needs, the raster points are what a picture of the map needs, and deriving one from
+ * the other twice is how the two end up disagreeing.
+ */
+export interface TracedWall {
+  /** The graph edge this came from. */
+  readonly edge: number;
+  readonly placed: readonly Point[];
+  readonly points: readonly Vector2[];
+  /** A vertex id per point. Shared with any region ring that meets this wall at a node. */
+  readonly ids: readonly number[];
+}
+
 export interface TraceRun {
   readonly mapId: string;
   readonly mapName: string;
@@ -394,6 +412,13 @@ export interface TraceRun {
    */
   readonly raster: { readonly width: number; readonly height: number };
   readonly regions: readonly TracedRegion[];
+  /**
+   * Walls emitted as lines rather than as part of a shape's boundary — the bridge criterion (§4).
+   *
+   * A stub hanging into a room is the common case: the traversal walks it out and back as a slit,
+   * which is right for the area check and wrong to emit, so the ring drops it and it comes out here.
+   */
+  readonly walls: readonly TracedWall[];
   /** One line for the panel. Detail is already in the dev log by the time this is returned. */
   readonly summary: string;
 }
@@ -1141,11 +1166,13 @@ export async function runTrace(
   // An edge with the same face on both sides. Step E emits these as lines; nothing here does, so
   // for now they are reported rather than drawn. A map with none has no free-standing linework at
   // all, which on a hand-drawn dungeon would itself be worth a second look.
+  const wallPoints = derived.uncoveredEdges.reduce((total, edge) => total + edge.points.length, 0);
   devLog(
     "info",
-    `trace: ${derived.bridges} of ${derived.graph.edges.length} edges are bridges — walls with the ` +
-      `same face on both sides, which no region boundary can cover. These are what step E will ` +
-      `emit as lines; nothing emits them yet.`,
+    `trace: ${derived.bridges} of ${derived.graph.edges.length} edges are bridges — the same face ` +
+      `on both sides, so no ring can cover them. With everything else no ring walks, that is ` +
+      `${derived.uncoveredEdges.length} walls in ${Math.max(0, wallPoints - derived.uncoveredEdges.length)} ` +
+      `segments, emitted as LINE items the way Dynamic Fog's own wall mode builds one.`,
   );
 
   // ## What is left uncovered, which is the only way to answer "why is there a gap"
@@ -1297,6 +1324,15 @@ export async function runTrace(
       pxPerSquare > 0 ? region.area / pxPerSquare ** 2 : 0,
     ]),
   );
+  // The uncovered edges, carried into world coordinates by the same placement the regions used.
+  // One transform, applied twice, rather than two that have to agree.
+  const walls: TracedWall[] = derived.uncoveredEdges.map((edge, index) => ({
+    edge: index,
+    points: edge.points,
+    ids: edge.ids,
+    placed: edge.points.map((point) => toWorldPoint(placement, point.x, point.y)),
+  }));
+
   const regions: TracedRegion[] = derived.regions.map((region, index) => ({
     id: region.id,
     placed: placed[index]!,
@@ -1328,6 +1364,7 @@ export async function runTrace(
       dpi,
       raster: { width: plan.width, height: plan.height },
       regions,
+      walls,
       summary,
     },
   };

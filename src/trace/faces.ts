@@ -342,46 +342,108 @@ export function describeAreaCheck(result: GraphFaces): string {
   return notes.length === 0 ? head : `${head} — ${notes.join(", ")}`;
 }
 
+/** A fitted polyline and the id of each of its points, which travel together everywhere. */
+export interface FittedEdge {
+  readonly points: readonly Vector2[];
+  readonly ids: readonly number[];
+}
+
+/** A ring's geometry with the vertex id of each point, in the same order. */
+export interface FittedRing {
+  readonly points: readonly Vector2[];
+  readonly ids: readonly number[];
+}
+
+export interface FittedFaces {
+  /** Per face, per cycle. Bridge excursions are omitted — see below. */
+  readonly rings: readonly FittedRing[][];
+  /** Per graph edge. */
+  readonly edges: readonly FittedEdge[];
+}
+
 /**
- * Fit every edge once, then reassemble the faces from the fitted edges.
+ * Fit every edge once, then assemble the faces from the fitted edges.
  *
  * **Per edge, not per ring, and that is the whole point.** Two faces sharing a wall reference the
  * same fitted point list, so they cannot drift apart and open a sliver between rooms — which
  * independent per-ring simplification would do, since under the graph their boundaries are
- * coincident rather than a wall width apart. The same list is what a bridge emits as a line, so a
+ * coincident rather than a wall width apart. The same list is what a bridge emits as lines, so a
  * room and the stub meeting it share their corner exactly, with no epsilon.
  *
  * Douglas–Peucker pins both endpoints, so nodes are never moved or removed.
+ *
+ * ## Vertex ids
+ *
+ * Every fitted point carries an integer id. A node's id is its index in the graph, so two edges
+ * meeting there agree by construction; an edge's surviving interior points get ids of their own from
+ * a separate range. Grouping emitted items by id reconstructs the graph — and, more to the point,
+ * tells a join that has come apart from two ends that were never joined, which geometry alone
+ * cannot: a doorway is two ends deliberately close and deliberately separate.
+ *
+ * **Stable within one emitted set, not across runs.** The ids are graph indices, and any change to
+ * the reading rebuilds the graph and renumbers everything.
+ *
+ * ## Bridges are left out of the rings
+ *
+ * A cycle walks a bridge out and back, so a stub hanging into a room appears in the room's boundary
+ * as a zero-width slit. That is right for the traversal and for the area check, which counts those
+ * steps — and wrong to emit. It would put our internal representation into the scene and leave two
+ * other renderers to interpret a degenerate excursion, where a human would simply have drawn the
+ * room and then drawn the wall. So the excursion is dropped here and the bridge is emitted as its
+ * own line, which is what Dynamic Fog's own wall mode builds.
+ *
+ * Dropping it costs the ring nothing: a slit encloses no area.
  */
 export function fitFaces(
   graph: WallGraph,
   faces: readonly GraphFace[],
   tolerance: number,
-): { rings: readonly (readonly Vector2[])[][]; fitted: readonly (readonly Vector2[])[] } {
-  const fitted = graph.edges.map((edge) => simplifyPolyline(edge.points, tolerance));
+  /** Edges to leave out of the rings — the bridges. Their geometry is emitted separately. */
+  omit: ReadonlySet<number> = new Set(),
+): FittedFaces {
+  let nextId = graph.nodes.length;
+  const edges: FittedEdge[] = graph.edges.map((edge) => {
+    const points = simplifyPolyline(edge.points, tolerance);
+    const ids = points.map((_, index) => {
+      if (index === 0) return edge.a;
+      if (index === points.length - 1) return edge.b;
+      return nextId++;
+    });
+    return { points, ids };
+  });
 
-  const oriented = (half: number): readonly Vector2[] => {
-    const points = fitted[half >> 1]!;
-    return (half & 1) === 0 ? points : [...points].reverse();
+  const oriented = (half: number): FittedEdge => {
+    const edge = edges[half >> 1]!;
+    if ((half & 1) === 0) return edge;
+    return { points: [...edge.points].reverse(), ids: [...edge.ids].reverse() };
   };
 
   const rings = faces.map((face) =>
     face.cycles.map((cycle) => {
       const points: Vector2[] = [];
+      const ids: number[] = [];
       for (const half of cycle.halfEdges) {
+        if (omit.has(half >> 1)) continue;
         const chain = oriented(half);
-        for (let i = points.length === 0 ? 0 : 1; i < chain.length; i++) points.push(chain[i]!);
+        // The shared node belongs to one step only, however many half-edges meet at it.
+        for (let i = points.length === 0 ? 0 : 1; i < chain.points.length; i++) {
+          points.push(chain.points[i]!);
+          ids.push(chain.ids[i]!);
+        }
       }
       if (points.length > 1) {
         const first = points[0]!;
         const last = points[points.length - 1]!;
-        if (first.x === last.x && first.y === last.y) points.pop();
+        if (first.x === last.x && first.y === last.y) {
+          points.pop();
+          ids.pop();
+        }
       }
-      return points;
+      return { points, ids };
     }),
   );
 
-  return { rings, fitted };
+  return { rings, edges };
 }
 
 /** Enough rounds for a cluster of any plausible size; a guard rather than a working limit. */
