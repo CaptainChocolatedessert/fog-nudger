@@ -873,10 +873,25 @@ tool. The differences that matter:
 - **`fillOpacity` must be 1.** Below that, ground the party has *revealed* keeps a translucent tint
   of the fog colour — for the GM and for players alike. Confirmed from both directions: a probe
   shape at opacity 1 had no tint, and Owlbear's own tool sets 1.
-- **`visible: false`**, because that is what Owlbear's fog tool produces. Not known to be
-  load-bearing — our `visible: true` shapes behaved correctly as fog — but there is no reason to
-  differ from the tool we are imitating, and an unexplained difference is one that surprises
-  someone later.
+- **`visible: true` — corrected 2026-08-30, and it was load-bearing after all.**
+
+  This said `visible: false`, "because that is what Owlbear's fog tool produces", with the caveat
+  *not known to be load-bearing — our `visible: true` shapes behaved correctly as fog*. That caveat
+  was the whole finding, and it was overridden on cosmetic grounds without re-measuring. A room
+  reported the consequence: every accepted room came back **revealed** instead of fogged.
+
+  **On the `FOG` layer, `visible` is not "can this be seen".** It is the difference between a shape
+  that *is* fog and one that has been cleared. The SDK carries no other flag for it — `Item` has
+  only `visible`, and `OBR.scene.fog`'s `filled` is scene-wide styling, filled-or-outline-only — so
+  this is the mechanism, and it appeared for a while as though there were none.
+
+  The flag means different things on the two layers, which is exactly how the error survived: on
+  `DRAWING` false is what stops a staged proposal leaking the layout to players, and staging still
+  sets it false. Only promotion sets it true.
+
+  **What this corrects in §3.** "Everything is hidden by default; shapes on the `FOG` layer are the
+  revealable regions" describes what a scene looks like when the shapes are cleared ones. A fog
+  shape at `visible: true` **is** the fog. Space in no shape is not fogged at all.
 - **`fillRule: "evenodd"`, deliberately unlike Owlbear's `nonzero`.** Under even-odd an inner ring
   cuts a hole regardless of winding, so winding direction never has to be got right. Dynamic Fog
   maps anything that is not `"nonzero"` onto Skia's even-odd, so the two ends agree. **This retires

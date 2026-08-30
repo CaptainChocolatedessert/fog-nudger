@@ -216,9 +216,20 @@ export async function stageRegions(): Promise<string> {
  *   appear on arrival and did not exist a moment earlier.
  * - **`fillOpacity` to 1** — required, not aesthetic. Below 1 a fog shape leaves a translucent tint
  *   of the fog colour over ground the party has revealed, for players as well as the GM.
- * - **`visible` to false** — matching what Owlbear's own fog tool produces. Not known to be
- *   load-bearing, but an unexplained difference from the tool we are imitating is one that
- *   surprises someone later.
+ * - **`visible` to TRUE — corrected 2026-08-30, and this one was load-bearing after all.**
+ *
+ *   It was false, "matching what Owlbear's own fog tool produces", and the record noted at the time
+ *   that this was *not known to be load-bearing* because the step-1 probe had used `visible: true`
+ *   and those shapes "behaved correctly as fog". Changing it on cosmetic grounds without
+ *   re-measuring was the mistake: a room reported that every accepted room came back **revealed**
+ *   rather than fogged.
+ *
+ *   On the `FOG` layer `visible` is not "can this be seen" — it is the difference between a shape
+ *   that **is** fog and one that has been cleared. The SDK has no other flag for it, which is why
+ *   there appeared to be no way to emit a shape that stays fogged. There is: this one.
+ *
+ *   The flag therefore means different things on the two layers. On `DRAWING` false is what keeps a
+ *   staged proposal from leaking the layout to players, and staging still sets it false.
  *
  * The magenta is left alone deliberately: fog rendering ignores an item's colour, so it costs
  * nothing, and demoting back to `DRAWING` restores the marking with no extra bookkeeping.
@@ -237,7 +248,9 @@ export async function acceptStaged(): Promise<string> {
         OBR.scene.items.updateItems<Path>(staged, (drafts) => {
           for (const draft of drafts) {
             draft.layer = "FOG";
-            draft.visible = false;
+            // **`visible` is the hide/reveal flag on a fog item.** See the note above: a shape
+            // accepted at false is a cleared region, which is why every room came back revealed.
+            draft.visible = true;
             draft.style.fillOpacity = ACCEPTED_FILL_OPACITY;
           }
         }),
@@ -282,7 +295,10 @@ async function acceptWallLines(): Promise<number> {
       OBR.scene.items.updateItems<Line>(staged, (drafts) => {
         for (const draft of drafts) {
           draft.layer = "FOG";
-          draft.visible = false;
+          // Matching Dynamic Fog's own wall mode, which leaves the default of true. Its wall
+          // reactor filters on layer and type alone and never reads `visible`, so this decides
+          // only whether the line is drawn — not whether it becomes a wall.
+          draft.visible = true;
           draft.style.strokeColor = colour;
           draft.style.strokeWidth = width;
         }
@@ -321,6 +337,10 @@ export async function returnToStaging(): Promise<string> {
         OBR.scene.items.updateItems<Path>(accepted, (drafts) => {
           for (const draft of drafts) {
             draft.layer = "DRAWING";
+            // Back to a GM-only proposal: on `DRAWING`, false is what keeps players from seeing the
+            // layout during prep. The same flag means different things on the two layers, which is
+            // exactly why accepting had it wrong.
+            draft.visible = false;
             draft.style.fillOpacity = stagedOpacity;
           }
         }),
@@ -341,6 +361,7 @@ export async function returnToStaging(): Promise<string> {
         OBR.scene.items.updateItems<Line>(walls, (drafts) => {
           for (const draft of drafts) {
             draft.layer = "DRAWING";
+            draft.visible = false;
             draft.style.strokeColor = WALL_COLOUR;
           }
         }),
