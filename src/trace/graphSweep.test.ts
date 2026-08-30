@@ -65,11 +65,20 @@ describe("the graph derivation over generated linework", () => {
     it(`holds every invariant on ${seeds} random ${width}x${height} skeletons`, () => {
       for (let seed = 1; seed <= seeds; seed++) {
         const where = `${width}x${height} seed ${seed}`;
+        /*
+          Fitting is switched off here, and that is what makes the ring-area assertion below exact.
+
+          Douglas-Peucker moves the boundary, so a fitted ring legitimately encloses a slightly
+          different area than the face — half a lattice unit at a time on a staircase. Checking the
+          decomposition against the fitting at once would need a tolerance, and a tolerance would
+          hide the thing being tested. So the sweep tests the derivation, and the fitting is pinned
+          by its own tests, which is the same split the area check upstream already uses.
+        */
         const result = deriveGraphRegions(randomInk(width, height, rng(seed), runs), {
           spurPrunePx: 0,
           minArea: 0,
-          tolerance: 0.5,
-          maxTolerance: 4,
+          tolerance: 0,
+          maxTolerance: 0,
         });
 
         // The area check. If this fails nothing downstream is real, which is why it is first.
@@ -86,6 +95,45 @@ describe("the graph derivation over generated linework", () => {
         // Exactly one cycle legitimately has no interior: the unbounded face outside the frame.
         // Anything else would be a sliver that survived the cleanup.
         expect(result.faces.unlabelled, `unlabelled cycles, ${where}`).toBe(1);
+
+        /*
+          The emitted rings must enclose exactly what the face does.
+
+          Bridges are dropped from the rings — a slit encloses no area, so the total cannot move.
+          This is the invariant that catches a ring left *discontinuous* by that drop, which the
+          area check upstream cannot see: it runs on the traversal, before anything is dropped.
+        */
+        const byLabel = new Map(result.faces.faces.map((face) => [face.label, face.doubleArea]));
+        for (const region of result.regions) {
+          let doubled = 0;
+          for (const ring of region.rings) {
+            /*
+              Unfitted, every step of an emitted ring is to an 8-neighbour — the ring is a walk along
+              the skeleton, and a walk cannot teleport.
+
+              This is the assertion that names the symptom rather than its consequence. When taking
+              the bridges out of a cycle was done as a linear skip, a lollipop's stalk left the ring
+              jumping from the stalk's base straight to the room on the end of it: a single segment
+              across the map, and long stretches of wall missing from the outline. The area
+              assertion below caught it too, but only as a number.
+            */
+            for (let i = 0; i < ring.length; i++) {
+              const a = ring[i]!;
+              const b = ring[(i + 1) % ring.length]!;
+              const step = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+              expect(step, `ring of face ${region.id} steps ${step}, ${where}`).toBeLessThanOrEqual(1);
+            }
+
+            for (let i = 0; i < ring.length; i++) {
+              const a = ring[i]!;
+              const b = ring[(i + 1) % ring.length]!;
+              doubled += a.x * b.y - b.x * a.y;
+            }
+          }
+          expect(doubled, `rings of face ${region.id} enclose the face, ${where}`).toBe(
+            byLabel.get(region.id),
+          );
+        }
       }
     });
   }

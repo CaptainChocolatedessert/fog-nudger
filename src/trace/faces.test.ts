@@ -71,6 +71,26 @@ const NESTED = [
   ".............",
 ];
 
+/**
+ * A lollipop: two boxes joined by a stalk, which is the shape that broke taking bridges out.
+ *
+ * The stalk has the exterior on both sides, so it is a bridge. The exterior's boundary walks around
+ * the left box, along the stalk, around the right box, and back along the stalk — one hole. Remove
+ * the stalk and that hole genuinely becomes **two**, one round each box. Skipping the stalk's two
+ * half-edges without splitting leaves a ring that jumps from one box to the other.
+ */
+const LOLLIPOP = [
+  ".................",
+  ".................",
+  "..#####...#####..",
+  "..#...#...#...#..",
+  "..#...#####...#..",
+  "..#...#...#...#..",
+  "..#####...#####..",
+  ".................",
+  ".................",
+];
+
 function faceOfArea(faces: readonly GraphFace[], doubleArea: number): GraphFace {
   const found = faces.find((face) => face.doubleArea === doubleArea);
   expect(found, `no face with doubled area ${doubleArea}`).toBeDefined();
@@ -198,8 +218,8 @@ describe("fitting the faces", () => {
     expect(room).toBeGreaterThanOrEqual(0);
 
     // The room's outer ring and the band's hole are the same wall, walked opposite ways.
-    const roomRing = rings[room]![0]!;
-    const bandHole = rings[band]![1]!;
+    const roomRing = rings[room]![0]![0]!;
+    const bandHole = rings[band]![1]![0]!;
     expect(roomRing.points).toHaveLength(bandHole.points.length);
     expect(new Set(roomRing.points.map((p) => `${p.x},${p.y}`))).toEqual(
       new Set(bandHole.points.map((p) => `${p.x},${p.y}`)),
@@ -208,11 +228,53 @@ describe("fitting the faces", () => {
     expect(new Set(roomRing.ids)).toEqual(new Set(bandHole.ids));
   });
 
+  it("splits a ring in two when a bridge between them is dropped", () => {
+    const { graph, result } = facesOf(LOLLIPOP);
+    const bridges = new Set<number>();
+    // The stalk: the same face on both sides of it.
+    const sideOf = new Map<number, number>();
+    for (const face of result.faces) {
+      for (const cycle of face.cycles) {
+        for (const half of cycle.halfEdges) sideOf.set(half, face.label);
+      }
+    }
+    for (let edge = 0; edge < graph.edges.length; edge += 1) {
+      const left = sideOf.get(edge * 2);
+      if (left !== undefined && left === sideOf.get(edge * 2 + 1)) bridges.add(edge);
+    }
+    expect(bridges.size, "the stalk is a bridge").toBeGreaterThan(0);
+
+    const exterior = result.faces.reduce((best, face) =>
+      face.doubleArea > best.doubleArea ? face : best,
+    );
+    const index = result.faces.indexOf(exterior);
+
+    const whole = fitFaces(graph, result.faces, 0).rings[index]!;
+    const split = fitFaces(graph, result.faces, 0, bridges).rings[index]!;
+
+    // The hole around both boxes becomes a hole around each.
+    const wholeCount = whole.reduce((total, list) => total + list.length, 0);
+    const splitCount = split.reduce((total, list) => total + list.length, 0);
+    expect(splitCount).toBe(wholeCount + 1);
+
+    // And no ring teleports: every step is still to an 8-neighbour, which is what a linear skip
+    // broke — the outline jumped from the stalk's base to the far box and back.
+    for (const list of split) {
+      for (const ring of list) {
+        for (let i = 0; i < ring.points.length; i++) {
+          const a = ring.points[i]!;
+          const b = ring.points[(i + 1) % ring.points.length]!;
+          expect(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+
   it("keeps a square square, corners and all", () => {
     const { graph, result } = facesOf(ROOM);
     const { rings } = fitFaces(graph, result.faces, 0.5);
     const room = result.faces.findIndex((face) => face.cycles.length === 1);
-    const ring = rings[room]![0]!.points;
+    const ring = rings[room]![0]![0]!.points;
 
     const corners = new Set(ring.map((point) => `${point.x},${point.y}`));
     for (const corner of ["2,2", "6,2", "6,6", "2,6"]) {

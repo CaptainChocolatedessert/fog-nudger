@@ -561,6 +561,34 @@ So the slit is dropped from what is emitted, and the bridge goes out as its own 
 stands as written.** The slit is still walked, and still counted by the area check, which needs those
 steps — the traversal and the rendering are different things and this is the clearest case of it.
 
+#### Taking a bridge out of a ring is a graph operation — found in a room, 2026-08-30
+
+The first version skipped a bridge's half-edges while walking the cycle, on the reasoning that an
+excursion returns to where it left, so the ring stays continuous. **A map showed that wrong within
+minutes**: the exterior's outline ran across the map to unrelated vertices and skipped long stretches
+of wall.
+
+The reasoning holds for a plain stub and fails for a **lollipop** — a room on the end of a stalk. The
+stalk is a bridge; the room's own outline is not, since it separates two faces. So the exterior's
+boundary walks along the stalk, right around the room, and back. Skip only the two stalk half-edges
+and the ring jumps from the stalk's base to the room and back, cutting a chord across everything in
+between. Removing the stalk from the boundary genuinely **disconnects** it: what was one hole around
+building-plus-lollipop becomes two, one around each.
+
+Both naive rules are wrong in opposite directions — cutting at every omitted half-edge separates a
+plain stub's two sides, which should stay joined; never cutting produces the chord. What settles it is
+that after the bridges are removed every node has as many kept half-edges arriving as leaving, because
+an excursion always comes back. So the kept half-edges decompose into closed loops, and following
+unused departures from each arrival finds them.
+
+**Three things this cost, worth having recorded.** The area check upstream could not see it, because it
+runs on the traversal before anything is dropped — a reminder that it checks the *derivation*, not what
+is emitted. The invariant that catches it is that an unfitted emitted ring's steps are all to an
+8-neighbour: a ring is a walk along the skeleton and a walk cannot teleport. And the sweep had to run
+with fitting **off** to assert areas exactly, since Douglas–Peucker legitimately moves a boundary by
+half a lattice unit at a time — checking the decomposition and the fitting together would have needed
+a tolerance, and a tolerance would have hidden the thing being tested.
+
 #### What a line is: a `LINE`, copied from Dynamic Fog — read from source 2026-08-30
 
 `createLineMode.ts` is the whole answer, and it is short. A wall drawn with Dynamic Fog's own tool is

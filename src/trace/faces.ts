@@ -352,11 +352,23 @@ export interface FittedEdge {
 export interface FittedRing {
   readonly points: readonly Vector2[];
   readonly ids: readonly number[];
+  /**
+   * The same ring before fitting, one point per skeleton pixel.
+   *
+   * Kept for the one caller that needs it: a ring small against the tolerance can fit down to two
+   * points and stop being a shape at all, and losing a room is worse than carrying its full detail.
+   */
+  readonly raw: readonly Vector2[];
 }
 
 export interface FittedFaces {
-  /** Per face, per cycle. Bridge excursions are omitted — see below. */
-  readonly rings: readonly FittedRing[][];
+  /**
+   * Per face, per cycle, the rings that cycle produced.
+   *
+   * A cycle yields **more than one ring** when a bridge splits it, and none at all when it was
+   * nothing but a bridge excursion.
+   */
+  readonly rings: readonly (readonly FittedRing[])[][];
   /** Per graph edge. */
   readonly edges: readonly FittedEdge[];
 }
@@ -418,28 +430,92 @@ export function fitFaces(
     return { points: [...edge.points].reverse(), ids: [...edge.ids].reverse() };
   };
 
+  const unfitted = (half: number): readonly Vector2[] => {
+    const points = graph.edges[half >> 1]!.points;
+    return (half & 1) === 0 ? points : [...points].reverse();
+  };
+
+  /*
+    Taking the bridges out of a cycle is a **graph** operation, not a linear one.
+
+    Two cases look identical in the walk and need opposite handling. Skip a plain stub — out and
+    straight back — and the boundary either side of it is *contiguous*, so the ring carries on. Skip
+    the stalk of a lollipop, a room on the end of a stub, and the boundary either side of it is
+    *not*: what was one hole around a building-plus-lollipop becomes two, one round each. A linear
+    scan cutting at every omitted half-edge gets the first case wrong; one that never cuts gets the
+    second wrong. Both were tried, and the second is what a real map exposed — the exterior's outline
+    running across the map to unrelated vertices and skipping long stretches of wall.
+
+    What settles it: after the bridges are removed, every node has as many kept half-edges arriving
+    as leaving, because an excursion always comes back. So the kept half-edges decompose into closed
+    loops, and following unused departures from each arrival finds them — Hierholzer's walk. A stub
+    rejoins its two sides at the shared node; a lollipop's stalk does not, because the loop closes
+    before it reaches the stalk again.
+
+    Areas are unaffected either way, which is what the sweep asserts: a slit encloses nothing, so
+    splitting only redistributes the same total across more rings.
+  */
   const rings = faces.map((face) =>
     face.cycles.map((cycle) => {
-      const points: Vector2[] = [];
-      const ids: number[] = [];
-      for (const half of cycle.halfEdges) {
-        if (omit.has(half >> 1)) continue;
-        const chain = oriented(half);
-        // The shared node belongs to one step only, however many half-edges meet at it.
-        for (let i = points.length === 0 ? 0 : 1; i < chain.points.length; i++) {
-          points.push(chain.points[i]!);
-          ids.push(chain.ids[i]!);
-        }
+      const kept = cycle.halfEdges.filter((half) => !omit.has(half >> 1));
+      if (kept.length === 0) return [];
+
+      // Departures from each node, in the order the walk met them, with a pointer into each list.
+      const departures = new Map<number, number[]>();
+      for (const half of kept) {
+        const from = originNode(graph, half);
+        const list = departures.get(from);
+        if (list) list.push(half);
+        else departures.set(from, [half]);
       }
-      if (points.length > 1) {
-        const first = points[0]!;
-        const last = points[points.length - 1]!;
-        if (first.x === last.x && first.y === last.y) {
-          points.pop();
-          ids.pop();
+      const taken = new Set<number>();
+      const nextFrom = (node: number): number | null => {
+        const list = departures.get(node);
+        if (!list) return null;
+        for (const half of list) if (!taken.has(half)) return half;
+        return null;
+      };
+
+      const out: FittedRing[] = [];
+      for (const first of kept) {
+        if (taken.has(first)) continue;
+
+        const points: Vector2[] = [];
+        const ids: number[] = [];
+        const raw: Vector2[] = [];
+        let half: number | null = first;
+
+        while (half !== null) {
+          taken.add(half);
+          const chain = oriented(half);
+          // The shared node belongs to one step only, however many half-edges meet at it.
+          for (let i = points.length === 0 ? 0 : 1; i < chain.points.length; i++) {
+            points.push(chain.points[i]!);
+            ids.push(chain.ids[i]!);
+          }
+          const source = unfitted(half);
+          for (let i = raw.length === 0 ? 0 : 1; i < source.length; i++) raw.push(source[i]!);
+
+          half = nextFrom(targetNode(graph, half));
         }
+
+        if (points.length > 1) {
+          const head = points[0]!;
+          const tail = points[points.length - 1]!;
+          if (head.x === tail.x && head.y === tail.y) {
+            points.pop();
+            ids.pop();
+          }
+        }
+        if (raw.length > 1) {
+          const head = raw[0]!;
+          const tail = raw[raw.length - 1]!;
+          if (head.x === tail.x && head.y === tail.y) raw.pop();
+        }
+        if (points.length > 0) out.push({ points, ids, raw });
       }
-      return { points, ids };
+
+      return out;
     }),
   );
 

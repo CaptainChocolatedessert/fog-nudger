@@ -320,17 +320,21 @@ function assemble(
         }
       }
 
-      const fitted = fittedRings[index]![cycleIndex]!;
-      // A ring small against the tolerance collapses to two points and stops being a shape at all,
-      // which for a region means the room vanishes. Vertices are the cheap thing here and a room is
-      // not, so the original is kept instead.
-      if (fitted.points.length < MIN_RING_POINTS) {
-        preserved += 1;
-        rings.push([...cycle.points]);
-        ringIds.push(null);
-      } else {
-        rings.push(fitted.points);
-        ringIds.push(fitted.ids);
+      // A cycle yields more than one ring when a bridge splits it: removing a stalk from a
+      // boundary genuinely disconnects it, so one hole around a building-plus-lollipop becomes two.
+      for (const fitted of fittedRings[index]![cycleIndex]!) {
+        // A ring small against the tolerance collapses to two points and stops being a shape at
+        // all, which for a region means the room vanishes. Vertices are the cheap thing here and a
+        // room is not, so the unfitted ring is kept instead.
+        if (fitted.points.length < MIN_RING_POINTS) {
+          if (fitted.raw.length < MIN_RING_POINTS) continue;
+          preserved += 1;
+          rings.push([...fitted.raw]);
+          ringIds.push(null);
+        } else {
+          rings.push(fitted.points);
+          ringIds.push(fitted.ids);
+        }
       }
 
       // This ring is emitted, so every edge it walks is represented in the scene by it — except the
