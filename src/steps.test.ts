@@ -143,23 +143,11 @@ describe("a step's groups", () => {
 });
 
 describe("the four axes are declared independently", () => {
-  it("does not let the step be recovered from the stage", () => {
-    // The reading stage is spread across the ink, walls and view steps. If this ever collapsed to
-    // one step per stage, the step axis would have become a synonym for the cascade — and the
-    // accordion would be renaming the panel's tabs rather than describing what the GM is doing.
-    const byStage = new Map<string, Set<StepId>>();
-    for (const name of ALL_NAMES) {
-      const stage = PARAMETER_STAGE[name];
-      byStage.set(stage, (byStage.get(stage) ?? new Set()).add(PARAMETER_STEP[name]));
-    }
-    expect([...byStage.values()].some((steps) => steps.size > 1)).toBe(true);
-  });
-
   it("does not let the stage be recovered from the step", () => {
-    // The View group holds the overlay's opacity, which is a reading-stage control, beside the
-    // proposal fill and outline, which are adjusting ones. Reading a stage off a step would put a
-    // stage-three control into the reading stage's cache invalidation — the failure the two-axis
-    // split exists to prevent, one axis later.
+    // The Regions step holds the two deriving controls beside the two that decide how a proposal is
+    // drawn, which are adjusting ones. Reading a stage off a step would put a stage-three control
+    // into the reading stage's cache invalidation - the failure the two-axis split exists to
+    // prevent, one axis later.
     const byStep = new Map<StepId, Set<string>>();
     for (const name of ALL_NAMES) {
       const step = PARAMETER_STEP[name];
@@ -167,6 +155,45 @@ describe("the four axes are declared independently", () => {
     }
     expect([...byStep.values()].some((stages) => stages.size > 1)).toBe(true);
   });
+
+  it("does not let the kind be recovered from the step", () => {
+    // Both steps that have controls hold a pipeline one and a display one: the ink colour and opacity
+    // sit with the threshold, and the proposal fill sits with the smallest room. Deciding on release
+    // what a slider costs by looking at which section it was drawn in is exactly the conflation the
+    // kind axis exists to prevent, and this is what keeps the two from quietly becoming synonyms.
+    const byStep = new Map<StepId, Set<string>>();
+    for (const name of ALL_NAMES) {
+      const step = PARAMETER_STEP[name];
+      byStep.set(step, (byStep.get(step) ?? new Set()).add(PARAMETER_KIND[name]));
+    }
+    expect([...byStep.values()].some((kinds) => kinds.size > 1)).toBe(true);
+  });
+
+  it("does not let the post-reading boundary be recovered from the step", () => {
+    // The Ink step spans it: the threshold feeds the reading, the stroke-width filter is composed on
+    // top of it. So the step a control is drawn in says nothing about which half of the reading cache
+    // it touches, which is the boundary that can be *wrong* rather than merely useless.
+    const byStep = new Map<StepId, Set<boolean>>();
+    for (const name of ALL_NAMES) {
+      const step = PARAMETER_STEP[name];
+      byStep.set(step, (byStep.get(step) ?? new Set()).add(isPostReading(name)));
+    }
+    expect([...byStep.values()].some((sides) => sides.size > 1)).toBe(true);
+  });
+
+  /*
+    Not asserted: that the *step* cannot be recovered from the stage.
+
+    It could be, today. Every reading control is in Ink and everything after it is in Regions, so a
+    lookup from stage to step would happen to work - and it did not on 2026-08-29 before the sections
+    were reorganised, when the View group held a reading control beside two adjusting ones.
+
+    That is the point of not asserting it. Which direction happens to be a function is a fact about
+    twelve parameters and moves whenever the sections do; a test demanding it would fail the next time
+    the UI is rearranged and would be teaching the wrong lesson when it did. What has to hold is that
+    neither is *read from* the other, and what is pinned for that is the three directions above plus
+    totality below - the properties that stay true however the steps are cut.
+  */
 
   it("declares all four axes totally, so none has to fall back on another", () => {
     // The reason a missing declaration is dangerous rather than merely untidy: the only way to

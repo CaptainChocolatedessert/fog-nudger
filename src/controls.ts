@@ -75,13 +75,23 @@ export interface Control {
 }
 
 /**
- * Every control, in stage order.
+ * Every control, in the order a GM meets them.
  *
  * One list rather than one per surface: which stage a control belongs to is read from the stage
  * declaration in `settings.ts`, which is the same declaration the pipeline's cache invalidation
  * uses. Two lists would be two places to disagree about what a knob invalidates.
+ *
+ * **Order is presentation and nothing else**, and it is the only ordering a step has: each step
+ * draws its controls in this order, so a control that should be met first is declared first. The two
+ * that decide how a step's own layer is *drawn* lead their steps, because looking at the thing comes
+ * before tuning it.
  */
 export const CONTROLS: readonly Control[] = [
+  {
+    name: "inkOpacity",
+    label: "Overlay opacity",
+    hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
+  },
   {
     name: "sauvolaK",
     label: "Ink threshold",
@@ -137,6 +147,16 @@ export const CONTROLS: readonly Control[] = [
       value <= 0 ? "repair every break" : `${Math.round(value)}px along the ink`,
   },
   {
+    name: "fillOpacity",
+    label: "Proposal fill",
+    hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
+  },
+  {
+    name: "strokeSquares",
+    label: "Proposal outline",
+    hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
+  },
+  {
     name: "minRoomSquares",
     // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a
     // linear track the default sits 1.6% along and the rest of the slider chooses between absurd
@@ -157,20 +177,5 @@ export const CONTROLS: readonly Control[] = [
       inkWidth === null
         ? "trace once for a figure"
         : `${(value * inkWidth).toFixed(1)}px of a ${inkWidth.toFixed(1)}px ink width`,
-  },
-  {
-    name: "inkOpacity",
-    label: "Overlay opacity",
-    hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
-  },
-  {
-    name: "fillOpacity",
-    label: "Proposal fill",
-    hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
-  },
-  {
-    name: "strokeSquares",
-    label: "Proposal outline",
-    hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
   },
 ];

@@ -37,7 +37,6 @@ import {
 } from "../steps";
 import { resetHints, settingRow } from "./settingRows";
 import { invalidate, setActiveLayers, setDrag } from "./shell";
-import { renderSwatches } from "./view";
 
 /**
  * Which step is open. Not stored in the scene: it is where the GM is looking, not a setting, and a
@@ -58,11 +57,24 @@ let open: StepId = workspaceSteps()[0]?.id ?? "ink";
  */
 let touched = false;
 
-/** Anything a step draws in its body beyond the rows built from its parameters. */
-const content = new Map<StepId, (body: HTMLElement) => void>();
+/**
+ * Anything a step draws in its body beyond the rows built from its parameters.
+ *
+ * Two places, because the two things that exist want opposite ends. The map picker and the colour
+ * swatches are *what you look at first* in their steps; an action that writes to the scene belongs
+ * after the controls that decide what it would write. One slot would have put "Stage these" above
+ * the sliders that shape the thing being staged.
+ */
+const content = new Map<StepId, { readonly top?: Render; readonly bottom?: Render }>();
 
-export function registerStepContent(id: StepId, render: (body: HTMLElement) => void): void {
-  content.set(id, render);
+type Render = (body: HTMLElement) => void;
+
+export function registerStepContent(
+  id: StepId,
+  render: Render,
+  place: "top" | "bottom" = "top",
+): void {
+  content.set(id, { ...content.get(id), [place]: render });
 }
 
 /** Move to a step, unless the GM has already chosen one. */
@@ -90,7 +102,7 @@ function stepBody(step: Step): HTMLElement {
   blurb.innerHTML = step.blurb;
   body.append(blurb);
 
-  content.get(step.id)?.(body);
+  content.get(step.id)?.top?.(body);
 
   for (const control of ungroupedControls(step)) {
     body.append(settingRow(control));
@@ -107,6 +119,8 @@ function stepBody(step: Step): HTMLElement {
       body.append(settingRow(control));
     }
   }
+
+  content.get(step.id)?.bottom?.(body);
 
   return body;
 }
@@ -182,13 +196,7 @@ export function renderPanel(): void {
     blurb.innerHTML = persistent.blurb;
     view.append(heading, blurb);
 
-    // The swatches sit above the rows, because the colour is the thing a GM reaches for first when
-    // the ink is invisible against the map.
-    const swatches = document.createElement("div");
-    swatches.className = "swatches";
-    swatches.id = "swatches";
-    view.append(swatches);
-    renderSwatches();
+    content.get(persistent.id)?.top?.(view);
 
     for (const control of ungroupedControls(persistent)) {
       view.append(settingRow(control));

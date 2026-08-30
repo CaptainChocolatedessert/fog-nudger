@@ -38,7 +38,7 @@ import { CONTROLS, type Control } from "./controls";
 import type { SettingName } from "./settings";
 
 /** Every step that exists today. Six are designed; the rest arrive with the code that needs them. */
-export type StepId = "map" | "ink" | "walls" | "regions" | "view";
+export type StepId = "map" | "ink" | "regions" | "view";
 
 /**
  * What the canvas can draw over the map.
@@ -125,13 +125,24 @@ export const STEPS: readonly Step[] = [
   {
     id: "ink",
     title: "Ink",
-    blurb: "Separating marks from paper, shading and background.",
-    // The breaks ride here rather than in a step of their own, because a repair *invents ink* and so
-    // belongs to the ink picture — and because this control is provisional: the repair moves onto the
-    // wall graph and this version retires with it, so nothing should be arranged around it.
+    blurb: "What the trace calls a mark, and which marks it keeps.",
+    /*
+      One step, three questions in series, and the ink layer answers all three.
+
+      Walls was a step of its own until 2026-08-29 (user). Its two controls are ink *filters* \u2014 they
+      decide which marks survive, not what a wall is \u2014 so what they change is the same picture the
+      threshold changes, judged the same way. A step is a mode, and there was never a mode here: the
+      canvas, the drag and the layers were identical. The name returns as a step when it has a
+      skeleton to paint, which is what a wall actually is.
+    */
     layers: ["ink", "breaks"],
     drag: "pan",
     groups: [
+      {
+        title: "Walls",
+        blurb: "Filtering those marks down to linework. Both go far past useful, so the edge is findable.",
+        parameters: ["minStrokeInkWidths", "minIslandPx"],
+      },
       {
         title: "Breaks in the linework",
         blurb:
@@ -141,22 +152,6 @@ export const STEPS: readonly Step[] = [
         parameters: ["gapFillPx", "gapTravelPx"],
       },
     ],
-  },
-  {
-    id: "walls",
-    title: "Walls",
-    blurb: "Filtering those marks down to linework.",
-    /*
-      Shows the breaks as well as the ink, which is a deliberate exception to "each step shows its
-      own thing".
-
-      The minimum stroke width is the one control here that can **sever a wall**, and a severed wall
-      is a break. So this step is the likeliest manufacturer of the very thing the rings warn about,
-      and hiding them here would remove the warning from exactly the place it is earned. It stops
-      being an exception the moment this step paints a skeleton instead.
-    */
-    layers: ["ink", "breaks"],
-    drag: "pan",
   },
   {
     id: "regions",
@@ -178,7 +173,10 @@ export const STEPS: readonly Step[] = [
   {
     id: "view",
     title: "View",
-    blurb: "How the ink and the proposals are drawn. Changes nothing the pipeline computes.",
+    blurb:
+      "Empty, for now. What was here \u2014 the ink colour and opacity, the proposal fill and outline \u2014 " +
+      "went to the steps that draw the thing each one describes. This is where a control that is " +
+      "genuinely about the whole surface would go.",
     layers: [],
     drag: "pan",
     persistent: true,
@@ -192,18 +190,21 @@ export const STEPS: readonly Step[] = [
  * both surfaces, which is a control a GM cannot reach and nothing to say it is missing.
  */
 export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
+  // How the ink is drawn sits with the ink, and how a proposal is drawn sits with the proposals
+  // (user, 2026-08-29). They were a View group of their own while the partition existed only in the
+  // scene; now that both are drawn on this canvas, a control that changes one belongs beside it.
+  inkOpacity: "ink",
   sauvolaK: "ink",
   blurSigma: "ink",
   sauvolaRadiusPx: "ink",
+  minStrokeInkWidths: "ink",
+  minIslandPx: "ink",
   gapFillPx: "ink",
   gapTravelPx: "ink",
-  minStrokeInkWidths: "walls",
-  minIslandPx: "walls",
+  fillOpacity: "regions",
+  strokeSquares: "regions",
   minRoomSquares: "regions",
   simplifyInkWidths: "regions",
-  inkOpacity: "view",
-  fillOpacity: "view",
-  strokeSquares: "view",
 };
 
 export function findStep(id: StepId): Step | undefined {

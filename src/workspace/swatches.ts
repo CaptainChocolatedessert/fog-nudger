@@ -1,15 +1,19 @@
 /**
- * The View group: how the overlay is drawn, not what it says.
+ * The ink colour: a row of swatches and a picker, at the top of the Ink step.
  *
- * **Persistent rather than a step.** Navigating away from the thing you are tuning in order to
- * recolour it is absurd, so the view controls must never be somewhere you go — which is why they sit
- * beside the reading controls rather than behind a tab of their own. It carries a `Step`'s shape
- * because the rendering is identical; what makes it different is that it is never *entered*.
+ * It sat in a View group of its own until 2026-08-29, and moved for the reason that emptied that
+ * group: a control that decides how a layer is *drawn* belongs beside the controls that decide what
+ * is in it. The colour is the first thing a GM reaches for when the overlay is invisible against a
+ * particular map, which is why it leads the step rather than trailing it.
  *
- * Nothing here changes a single pixel of what the pipeline computed, which is why every control in
- * it is declared `display` and none of them touch the mask cache. The swatches are the one piece of
- * the group that is not a slider: the ink colour is the only setting that is not a number, so it
- * sits outside the parameter machinery entirely and needs its own row of buttons.
+ * It is not a slider and cannot be a `settingRow`: the colour is the one setting that is not a
+ * number, so it sits outside the parameter machinery entirely and needs its own row of buttons.
+ *
+ * ## Why a spread of hues plus both extremes of neutral
+ *
+ * The only thing that makes a colour good here is contrast against a particular map — red vanishes
+ * on red stonework and shouts on a grey plan, and only the GM can see which they have. Six is enough
+ * to find something workable on any map in one click, with the picker there for the rest.
  */
 
 import { DEFAULT_SETTINGS, normaliseColour } from "../settings";
@@ -41,10 +45,9 @@ function setInkColour(colour: string): void {
   recolourInk();
 }
 
-export function renderSwatches(): void {
-  const container = document.getElementById("swatches");
-  if (!container) return;
-  container.replaceChildren();
+export function renderSwatches(body: HTMLElement): void {
+  const container = document.createElement("div");
+  container.className = "swatches";
 
   for (const swatch of INK_SWATCHES) {
     const button = document.createElement("button");
@@ -68,4 +71,5 @@ export function renderSwatches(): void {
   picker.addEventListener("input", () => setInkColour(picker.value));
   picker.addEventListener("change", () => void persistSettings());
   container.append(picker);
+  body.append(container);
 }

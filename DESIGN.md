@@ -734,7 +734,11 @@ conflated.
 2. **Ink** — threshold, blur, detail window, and the break repair under its own sub-heading. (Was 1a
    plus the breaks.) The repair rides here rather than in a step of its own because it **invents
    ink**, and because it is provisional: step F retires it, so nothing is arranged around it.
-3. **Walls** — minimum stroke width, smallest ink island; spur pruning joins them. (Was 1b.)
+3. **Walls** — **folded into Ink as a sub-heading, 2026-08-29 (user), and it returns at step C.**
+   Its two controls are ink *filters*: they decide which marks survive, not what a wall is, so they
+   change the same picture the threshold changes and are judged the same way. A step is a mode, and
+   there was no mode here — same canvas, same drag, same layers. The name comes back as a step when
+   it has a **skeleton** to paint, which is what a wall actually is; spur pruning joins it then.
 4. **Edit walls** — suppression, ink painting and line editing. **Not built, and deliberately not
    created early to hold the gap repair**: this is the first step where a drag paints, and there is
    nothing to paint with yet.
@@ -743,10 +747,18 @@ conflated.
    not the main event.
 6. **Doors** — a stub, and probably permanently (§3).
 
-Plus a **View** group that is persistent rather than a step — ink colour and opacity, proposal fill and
-outline. The argument is the one already made for putting overlay opacity beside the reading controls:
-navigating away from the thing you are tuning in order to recolour it is absurd, so view controls must
-never be somewhere you go.
+Plus a **View** group that is persistent rather than a step. It held the ink colour and opacity and
+the proposal fill and outline — and it is **empty as of 2026-08-29 (user)**, kept as a stub.
+
+The argument that put those four together was that navigating away from the thing you are tuning in
+order to recolour it is absurd. That argument survives; what changed is what satisfies it. Each of
+those controls decides how **one step's own layer** is drawn, and every one of those layers is now
+drawn on this canvas — so the shortest distance from the thing to its appearance is *the same
+section*, not a group below all of them. They lead their steps, because looking at the thing comes
+before tuning it.
+
+What the stub is for: a control that is genuinely about the whole surface rather than about one
+step's layer. None exists yet.
 
 **An exclusive accordion — revised 2026-08-29 (user), from tabs.** Each step paints something
 different on the canvas *and* gives a drag a different meaning — pan in 1, 2, 3 and 5; a brush in 4 —

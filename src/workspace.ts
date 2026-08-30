@@ -43,6 +43,7 @@ import { registerBreaksLayer } from "./workspace/layers/breaks";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
+import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { onReading } from "./workspace/reading";
 import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
@@ -74,9 +75,12 @@ onStepOpen("regions", watchRegions);
 // The one step whose body is not built from parameters: choosing a map is a list of what the scene
 // holds, not a number to turn.
 registerStepContent("map", renderMapPicker);
-// The one action on this surface that writes to the scene, at the end of the step that judges what
+// The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
+// particular map is change the colour, and it is not a number so it cannot be a row.
+registerStepContent("ink", renderSwatches);
+// The one action on this surface that writes to the scene, at the *end* of the step that judges what
 // would be written.
-registerStepContent("regions", renderStageAction);
+registerStepContent("regions", renderStageAction, "bottom");
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after
 // the layers, so a layer that could not take a reading stops this too.
