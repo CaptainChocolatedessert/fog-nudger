@@ -116,7 +116,14 @@ async function derive(): Promise<void> {
     walls = outcome.run.walls;
     raster = outcome.run.raster;
     stale = false;
-    lastSummary = `${regions.length} region${regions.length === 1 ? "" : "s"}`;
+    // The wall count belongs here as much as the region count: they are staged together, and when
+    // the lines were being drawn invisibly there was nothing on this surface that could say so.
+    const segments = walls.reduce((total, wall) => total + Math.max(0, wall.points.length - 1), 0);
+    lastSummary =
+      `${regions.length} region${regions.length === 1 ? "" : "s"}` +
+      (walls.length === 0
+        ? " · no separate walls"
+        : ` · ${walls.length} wall${walls.length === 1 ? "" : "s"} in ${segments} segments`);
     say(lastSummary);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
   } catch (error) {

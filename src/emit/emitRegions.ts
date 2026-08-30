@@ -422,13 +422,14 @@ export async function removeOurs(): Promise<string> {
 
 /** Only ours. The GM's fog — 419 hand-drawn items in this project's own test scene — is not ours. */
 /**
- * The colour staged wall lines are drawn in.
+ * The colour staged wall lines are drawn in, matching the workspace preview's core colour.
  *
- * Fixed rather than cycled like the proposal fills: a wall is one kind of thing, and what a GM is
- * judging here is where it runs, not which wall it is. Distinct from the six proposal colours so a
- * line over a fill still reads as a line.
+ * Saturated rather than wall-coloured, and for a reason found in a room: a wall line is a
+ * centreline, so it lies exactly on the map's own linework and anything dark is invisible on every
+ * wall it describes. Fixed rather than cycled like the proposal fills — a wall is one kind of thing,
+ * and what a GM is judging is where it runs. Accepting swaps it for the scene's own fog styling.
  */
-const WALL_COLOUR = "#111111";
+const WALL_COLOUR = "#ff2020";
 
 /** Split a list into batches of at most `size`. */
 function chunk<T>(items: readonly T[], size: number): T[][] {

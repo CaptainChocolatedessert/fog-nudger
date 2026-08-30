@@ -41,11 +41,21 @@ import { addPainter, type Painter } from "../shell";
 const MIN_STROKE_PX = 1;
 
 /**
- * Staged wall lines are drawn in this, matching the colour the emit path stages them in.
+ * Staged wall lines, drawn in the colour the emit path stages them in.
  *
- * Fixed rather than cycled: a wall is one kind of thing, and what is being judged is where it runs.
+ * **Cased, and that is not decoration.** A wall line is a centreline, so by construction it lies
+ * exactly on top of the map's own linework — and the first version drew it near-black, which made it
+ * invisible on every wall it described. Reported from a room as "no stubs or bridges showing", when
+ * they were all being drawn. A saturated core over a light casing reads on dark ink and on pale
+ * paper alike, which is the only pair of backgrounds a wall is ever drawn against.
+ *
+ * Fixed rather than cycled like the proposal fills: a wall is one kind of thing, and what is being
+ * judged is where it runs.
  */
-const WALL_COLOUR = "#111111";
+const WALL_COLOUR = "#ff2020";
+const WALL_CASING = "#ffffff";
+/** Screen pixels. A hairline over busy map art is not a wall a GM can judge. */
+const WALL_WIDTH_PX = 2;
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const regions = currentRegions();
@@ -102,7 +112,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const walls = currentWalls();
   if (walls.length > 0) {
     context.globalAlpha = 1;
-    context.strokeStyle = WALL_COLOUR;
+    context.lineCap = "round";
     context.beginPath();
     for (const wall of walls) {
       wall.points.forEach((point, at) => {
@@ -112,6 +122,12 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
         else context.lineTo(x, y);
       });
     }
+    // One path, stroked twice: the casing first, then the core over it.
+    context.strokeStyle = WALL_CASING;
+    context.lineWidth = WALL_WIDTH_PX + 2;
+    context.stroke();
+    context.strokeStyle = WALL_COLOUR;
+    context.lineWidth = WALL_WIDTH_PX;
     context.stroke();
   }
 
