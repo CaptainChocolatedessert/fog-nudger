@@ -85,17 +85,19 @@ describe("maskFingerprint", () => {
     }
   });
 
-  it("does NOT change for a skeleton-only parameter, which is what makes a prune cheap", () => {
+  it("does NOT change for a graph-only parameter, which is what makes a prune cheap", () => {
     /*
       The exclusion this rests on, stated as a property.
 
-      Spur pruning is a reading-stage pipeline parameter — it will feed the emit path once faces come
-      from the graph — but today it changes only a view drawn over the ink. Leaving it in the mask
-      fingerprint would throw away a cached mask and spend 690ms arriving at a byte-identical one.
+      Spur pruning and the weld radius are reading-stage pipeline parameters, and since step D they
+      do feed the emit path — the faces are the graph's. What they still do not touch is the **mask**.
+      Leaving them in the mask fingerprint would throw away a cached mask and spend 690ms arriving at
+      a byte-identical one.
 
-      It is safe **only** while nothing derived from the mask depends on it, which is why the
-      declaration is an opt-in list with an end date rather than a rule. When step D makes faces from
-      the graph, this test is the one that has to be deleted first.
+      This test was written expecting to be deleted at step D. It was not, and the reason is worth
+      keeping: the record had conflated "decides what is emitted" with "changes the mask". What had
+      to change was the *dispatch* — a graph change now invalidates the derived regions as well —
+      not this exclusion.
     */
     const base = maskFingerprint(DEFAULT_SETTINGS);
     for (const name of ALL_NAMES) {
@@ -105,7 +107,7 @@ describe("maskFingerprint", () => {
     }
   });
 
-  it("keeps every skeleton-only parameter in the reading stage and out of the reading itself", () => {
+  it("keeps every graph-only parameter in the reading stage and out of the reading itself", () => {
     // Filed anywhere else it would be reached by a different recompute path and the exclusion above
     // would be silently wrong. Post-reading as well, since a parameter that fed binarisation could
     // not possibly leave the mask unchanged.
@@ -204,8 +206,8 @@ describe("readingFingerprint", () => {
     /*
       A post-reading parameter that *nothing* noticed would be a setting the GM could change with no
       effect at all, silently. Two ways to be noticed now: the mask fingerprint, for everything the
-      ink is composed from, or the skeleton-only declaration, for the one that changes a view drawn
-      over it. Being in neither is the failure.
+      ink is composed from, or the graph-only declaration, for the ones that change the graph the
+      faces come from. Being in neither is the failure.
     */
     for (const name of ALL_NAMES) {
       if (!isPostReading(name)) continue;

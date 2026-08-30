@@ -113,13 +113,18 @@ export function setControlsLive(next: boolean): void {
  */
 export function recomputeFor(names: readonly SettingName[]): void {
   const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
-  // Skeleton-only first, and exclusively: a prune costs a walk of the branches where a re-read costs
-  // 690ms and would produce an identical mask. `SKELETON_ONLY` is what makes that safe, and it says
-  // there when it stops being.
+  // Graph-only first: pruning a spur or welding a junction costs a branch walk and a face traversal
+  // where a re-read costs 690ms and would produce an identical mask. `GRAPH_ONLY` is what makes that
+  // safe.
   const rest = pipeline.filter((name) => !isSkeletonOnly(name));
-  if (pipeline.some(isSkeletonOnly)) invalidateSkeleton();
+  const graphChanged = pipeline.some(isSkeletonOnly);
+  if (graphChanged) invalidateSkeleton();
+
   if (rest.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
-  else if (rest.length > 0) invalidateRegions();
+  // A graph change now invalidates the partition as well, because the faces *are* the graph's
+  // (step D). It did not have to before, when the skeleton was a view that emitted nothing — and
+  // that is the whole of what step D changed here.
+  else if (rest.length > 0 || graphChanged) invalidateRegions();
   invalidate();
 }
 

@@ -157,6 +157,16 @@ export const CONTROLS: readonly Control[] = [
     },
   },
   {
+    name: "weldRadiusPx",
+    label: "Weld junctions",
+    hint: "Thinning leaves a crossroads as a <b>cluster</b> of junction pixels rather than one crossing, and nothing else removes the stubby links between them. This collapses skeleton ends within the distance into a single node. Too high and it welds a doorway shut, or a short wall into nothing — watch for one node where there should be two.",
+    derive: (value, { pxPerSquare }) => {
+      if (value <= 0) return "off — clusters kept";
+      if (pxPerSquare === null) return `${Math.round(value)}px`;
+      return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
+    },
+  },
+  {
     name: "fillOpacity",
     label: "Proposal fill",
     hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",

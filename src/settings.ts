@@ -176,6 +176,22 @@ export interface TraceSettings {
    * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
    */
   readonly spurPrunePx: number;
+  /**
+   * How far apart two ends of the skeleton may be and still count as one node, in raster pixels.
+   *
+   * **What it is for:** thinning leaves a junction as a *cluster* of junction pixels one or two
+   * apart rather than a single crossing, and the stubby chains between them survive every other
+   * cleanup — spur pruning refuses them because both ends are junctions, and collinear merging
+   * refuses them because they are not path pixels. Welding endpoints within a radius is the only
+   * thing that removes them, and without it a crossroads arrives as a fistful of tiny edges.
+   *
+   * **What it costs, stated:** it is the same operation as closing a gap, so a radius that reaches
+   * across a doorway welds the doorway shut, and a radius longer than a short wall welds that wall
+   * into nothing. Neither announces itself in the linework, which is why the Walls step draws the
+   * *graph* — nodes and edges — rather than the skeleton's pixels. One node where there should be
+   * two is the thing to look for.
+   */
+  readonly weldRadiusPx: number;
   readonly minRoomSquares: number;
   /**
    * Simplification tolerance, as a fraction of the measured ink width.
@@ -258,6 +274,10 @@ export const DEFAULT_SETTINGS: Settings = {
     // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
     // skeleton as thinning produced it, hairs and all.
     spurPrunePx: 0,
+    // Three pixels, which is the sibling project's own default and was tuned against maps of
+    // exactly this kind. Not off by default, unlike every other correction here: without it a
+    // junction is a cluster rather than a crossing, and the graph is wrong rather than untidy.
+    weldRadiusPx: 3,
     minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
@@ -318,6 +338,9 @@ export const SETTING_LIMITS = {
   // stub and will eat walls whole, which is the same deliberate over-reach the ink filters have and
   // is defensible for the same reason: the skeleton is drawn, so it is visible rather than silent.
   spurPrunePx: { min: 0, max: 60, step: 1 },
+  // Reaches past useful at the top end, like the filters above it, and the failure it produces
+  // there is a doorway welded shut. Visible in the Walls step, which draws the graph.
+  weldRadiusPx: { min: 0, max: 12, step: 1 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -361,6 +384,7 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   gapFillPx: "read",
   gapTravelPx: "read",
   spurPrunePx: "read",
+  weldRadiusPx: "read",
   minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
@@ -409,6 +433,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   gapFillPx: "pipeline",
   gapTravelPx: "pipeline",
   spurPrunePx: "pipeline",
+  weldRadiusPx: "pipeline",
   minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
@@ -462,8 +487,9 @@ export function writeParameter(
  */
 export function maskFingerprint(settings: Settings): string {
   return readingParameters()
-    // The skeleton-only ones are excluded, which is what stops a prune costing a re-read. See
-    // `SKELETON_ONLY` for why that is safe today and when it stops being.
+    // The graph-only ones are excluded, which is what stops a prune or a weld costing a re-read.
+    // They change the faces, not the mask, and `GRAPH_ONLY` says why that distinction survived
+    // step D when the record expected it to disappear.
     .filter((name) => !isSkeletonOnly(name))
     .map((name) => `${name}=${readParameter(settings, name)}`)
     .join(",");
@@ -493,26 +519,36 @@ const POST_READING: readonly SettingName[] = [
   "gapFillPx",
   "gapTravelPx",
   "spurPrunePx",
+  "weldRadiusPx",
 ];
 
 /**
- * Parameters that feed **only the skeleton view**, and therefore nothing the mask is used for.
+ * Parameters that change the wall **graph** but not the ink mask.
  *
- * A third recompute target, and a deliberately temporary one. The skeleton is drawn over the ink and
- * emits nothing (step C), so changing how hard it is pruned costs a prune and not a re-read — while
- * every other reading-stage parameter costs the whole 690ms. Leaving it out of the mask fingerprint
- * is what makes that true rather than merely intended.
+ * The third recompute target. This was `SKELETON_ONLY` when the skeleton was a view that emitted
+ * nothing, and the record said it would have to empty at step D, when faces started coming from the
+ * graph. **That was half right, and deleting the list would have been the wrong correction.**
  *
- * **It has an end date.** When faces are derived from the graph rather than from the mask (step D),
- * pruning starts deciding what gets emitted and this list empties — loudly, because the parameter
- * then joins the mask fingerprint and a stale mask stops being possible. Declared as an opt-in list
- * for exactly that reason: the safe default for anything new is to invalidate everything.
+ * What is true is narrower than it looked. The mask fingerprint answers one question — would these
+ * settings produce a different *mask* — and pruning a spur or welding a junction does not touch the
+ * mask at all. It changes the graph, and therefore the faces. So the list stays out of the
+ * fingerprint, correctly, and what changes at step D is the **dispatch**: a change here used to
+ * invalidate only the skeleton view, and must now invalidate the derived regions as well, because
+ * they are the graph's faces. `recomputeFor` is where that lives.
+ *
+ * The cost this saves is real: a prune sweep costs a branch walk and a face traversal rather than
+ * re-binarising the map or recomposing the ink.
  */
-const SKELETON_ONLY: readonly SettingName[] = ["spurPrunePx"];
+const GRAPH_ONLY: readonly SettingName[] = ["spurPrunePx", "weldRadiusPx"];
 
-/** Whether a parameter changes only the skeleton. Exported for the recompute dispatch and the tests. */
+/**
+ * Whether a parameter changes the graph without changing the mask.
+ *
+ * Exported for the recompute dispatch and the tests. Keeps its old name so nothing has to be renamed
+ * twice; what it means has narrowed rather than moved.
+ */
 export function isSkeletonOnly(name: SettingName): boolean {
-  return SKELETON_ONLY.includes(name);
+  return GRAPH_ONLY.includes(name);
 }
 
 /** Every reading-stage pipeline parameter, in declaration order. */
@@ -609,6 +645,7 @@ export function normaliseSettings(raw: unknown): Settings {
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
       spurPrunePx: clamp(trace.spurPrunePx, "spurPrunePx", t.spurPrunePx),
+      weldRadiusPx: clamp(trace.weldRadiusPx, "weldRadiusPx", t.weldRadiusPx),
       minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,

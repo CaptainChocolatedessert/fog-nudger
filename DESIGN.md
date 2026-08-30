@@ -550,6 +550,118 @@ If it is discarded, the pillar emits as a line loop — blocks sight, and the ro
 artwork shows. One knob, both behaviours, and it is the knob that already means "how small a thing
 counts".
 
+### Faces come from the graph itself, not from a raster of it — settled 2026-08-30 (user)
+
+Step D was first specified as "rasterise the graph, label, trace contours" — reuse of four trusted
+components with a different input. **That is wrong, and the user's objection is the one that settles
+it: the vector output is what we want in the end, so a raster route produces the geometry twice.**
+Worse than twice — the two copies disagree.
+
+A raster trace gives a staircase boundary which is then simplified. The wall lines step E emits come
+from fitting the skeleton's own pixel chains. Those are two independent approximations of one
+centreline and they do not land on the same points. That breaks the read-back scheme outright: it
+requires a room and the stub wall meeting it to **carry the same vertex id at the shared corner**, and
+matches ids exactly with no epsilon. Two items can only share an id if they share a point.
+
+A second failure is independent of the first. Under the partition, two adjacent rooms had boundaries a
+wall width apart, so simplifying each ring separately was harmless. Under the graph they are
+**coincident**, and independent simplification makes them disagree by up to the tolerance — opening a
+sliver between two rooms that share a wall. **Simplification therefore moves from per-ring to
+per-edge**: each graph edge is fitted once, and both faces carry the identical point list. That is a
+graph operation with no expression in the raster route.
+
+**What the raster is still good for is topology, not geometry**, and it keeps exactly that role. The
+labelling supplies face identity and the area check, and contributes no emitted geometry at all. That
+is the acceptable kind of twice: one geometry plus one invariant.
+
+#### Why the arrangement is safe here
+
+Face traversal is normally feared because arrangement code has to **compute intersections** between
+float segments, where a single mis-sorted half-edge merges two rooms — this project's worst outcome.
+**We compute none.** The skeleton is already a planar embedding: nodes exist only where pixels are
+adjacent, which is exact integer work, and the traversal is combinatorial rather than geometric. The
+one residual geometric decision is the angular sort of half-edges at a node, and it is only close when
+two edges leave a node at nearly the same heading — which is the case the weld radius has already
+removed.
+
+#### Prior art: the sibling solved graph building, and one of its rules binds us
+
+`../W - cartographers-fog/` turns a thinned skeleton into strokes, and its four rules come in turn from
+the author's own `VTT_Maps`. Three transfer as they stand:
+
+- **Walk the skeleton into pixel chains running node to node**, a node being any pixel whose degree is
+  not 2. Interior pixels are marked as consumed so a chain is not traced again from its far end; node
+  pixels are never marked, because several chains legitimately share one.
+- **Weld chain endpoints within a small radius into a single node** — union-find over a hash grid,
+  radius 3px there. This is the junction-cluster fix, and nothing else does it: thinning leaves junction
+  pixels one or two apart, and the stubby chains between them survive stub pruning (both ends are
+  junctions) and collinear merging (they are not degree-2) alike.
+- **Drop chains that begin and end inside the same welded node** before anything looks at degree, or
+  those stubs inflate the node's degree and the real edges never join through it.
+
+The fourth is where we **must** diverge. The sibling then merges chains *through* nodes to recover long
+strokes, because a stroke drawn as one line has to wobble as one line. Merging where exactly two ends
+meet is right for us as well — such a node is not a junction, so those chains are one edge. But its
+optional `joinThroughJunctions`, pairing the straightest continuations through a crossroads, is
+**forbidden here rather than merely defaulted off**: merging two edges through a degree-3 node destroys
+the incidence the faces are read from.
+
+**One ordering constraint of the sibling's does not apply to us.** It counts degree as a raw
+8-neighbour count and therefore depends on welding running *before* pruning — otherwise a pixel sitting
+one row off a straight line reads as a junction and leaves a nub on the wall for every spur removed. We
+already pay for the crossing number in spur pruning, having hit that same bug independently, so our
+order is the natural one: thin, prune, chain, weld.
+
+#### The steps
+
+0. **Paint the raster border into the skeleton first.** Without it the graph's outer face is unbounded
+   and has no polygon, so the map's exterior — 74.9% of the test map, and something §4 decided to emit
+   rather than identify — could not be produced at all. With a one-pixel frame the exterior becomes an
+   ordinary bounded face whose outer ring is the frame and whose holes are the buildings, exactly what
+   the labelling gives today. Exactly one face is then unbounded, the one outside the frame, and it is
+   discarded by having no interior at all.
+1. **Chain and weld** into a graph of nodes and edges, each edge carrying its full pixel chain.
+2. **Faces by half-edge traversal.** Two half-edges per edge; at each node sort them by outgoing angle;
+   walk by taking the next one clockwise on each arrival. Every cycle is a face.
+3. **Tie each face to a raster label during the traversal.** For each half-edge, sample the pixel one
+   step to its left at the chain's midpoint: that is the label of the face the cycle bounds. One trick,
+   three jobs — it identifies faces, it separates an outer ring from a hole, and it resolves nesting.
+   A room drawn wholly inside a hall is a separate connected component whose outer cycle reports the
+   *hall's* label, so the hole attaches to the right face with no containment test anywhere.
+4. **The area check, kept exact and sharpened.** Run it before fitting, while a cycle still carries one
+   vertex per skeleton pixel. The old identity does not hold as written, because the boundary now runs
+   *through* the wall pixels rather than around them. A lattice identity restores it exactly:
+
+   > **A = I + S/2 + h − 1**, where **A** is the summed signed area of the face's cycles, **I** the
+   > raster label's pixel count, **S** the total number of steps in those cycles, and **h** the number
+   > of holes.
+
+   **Plain Pick's theorem does not work here, and the failure was found before any code was written.**
+   Pick counts *distinct* boundary lattice points and requires a simple polygon, and a face containing a
+   **bridge** has neither: the stub is walked out and back, so it is a slit and its pixels are visited
+   twice. On a 2×2 square with a one-pixel slit, plain Pick gives 3.5 against a true area of 4. Counting
+   **steps** rather than distinct points is what fixes it, because a slit pixel is then counted twice,
+   which is exactly the correction the derivation needs. Verified numerically on three shapes — a plain
+   room, an annulus, and a room containing a free-floating stub. Since bridges are the whole point of
+   the pivot, an invariant that broke on them would have been inapplicable precisely where it is needed.
+5. **Fit once, per edge.** Douglas–Peucker over each edge's chain with both node endpoints pinned.
+   Vertex ids attach here.
+6. **Faces out**, with the edge-to-face incidence the bridge criterion needs. The smallest-room filter
+   is unchanged.
+
+#### Two consequences, recorded because they are easy to inherit wrongly
+
+- **The weld radius is a new control that can be wrong.** Too large and it merges two genuinely distinct
+  junctions, closing a doorway. §8 requires a visual channel for such a control, and the Walls step
+  currently draws *skeleton pixels*, which cannot show it. It must draw the **graph** — nodes as marks,
+  edges distinguishable — so that a wrongly welded junction is visible as one node where there should
+  be two.
+- **The simplification cap loses its reason and needs a new one.** Today the tolerance is capped below
+  half the ink width, which is what stops a boundary crossing the centre of a wall into the next room.
+  Under the graph the boundary *is* the centre of the wall, and both faces move together, so that
+  particular sliver cannot open. A cap may still be wanted — cutting a corner across a doorway is the
+  new risk — but it must be re-derived rather than inherited.
+
 ### The document and its rendering — settled 2026-08-29 (user)
 
 **Our wall graph is the document. The scene is a rendering of it.** Emitted items are an output, not
@@ -1738,10 +1850,17 @@ and into the next room. A **centreline** that drifts by the same amount is still
 leaves the ink at a full width. So the same risk tolerates about twice the simplification, which is where
 part of §4's expected size saving comes from.
 
-Two things do not change. Half-wall coverage still must not ride on the tolerance — under the graph it
-needs no parameter at all, so this is easier to honour rather than harder. And the *region* simplification
-that produces the emitted faces is still bounded the old way, because a face boundary is still a region
-boundary whatever produced it.
+Half-wall coverage still must not ride on the tolerance — under the graph it needs no parameter at all,
+so this is easier to honour rather than harder.
+
+**Corrected 2026-08-30: the second "does not change" was wrong.** It read that the *region*
+simplification producing the emitted faces is still bounded the old way, because a face boundary is
+still a region boundary whatever produced it. Under the re-planned step D there is no separate region
+simplification at all — a face boundary is assembled from **edges fitted once each**, so it *is* the
+centreline simplification above, and the old bound's stated reason does not apply to it. The half-ink-
+width cap has to be re-derived on its own terms rather than inherited; the risk it now guards is a
+corner cut across a doorway, not an edge crossing into the next room. Until that is done the cap stays
+where it is, because it is conservative in the safe direction.
 
 ### The two failure modes are not equally bad
 
@@ -1881,8 +2000,23 @@ It is also the one check that runs against shapes no hand-written fixture will e
 16 holes, 5 of them nested inside the largest region — and nested holes containing regions is precisely
 where a parenting bug lives.
 
-**It survives §4's revision**, because faces are still derived by the same labelling and tracing, just
-from a rasterised wall graph instead of the ink mask.
+**It survives §4's revision, but in a changed form — 2026-08-30.** The earlier claim here was that
+faces are still derived by the same labelling and tracing, just from a rasterised wall graph. That
+route is dropped: faces now come from walking the graph, so there is no contour tracer on this path to
+check. What replaces it keeps the essential property — one quantity computed twice by unrelated routes.
+A face's cycles, before any fitting, are lattice polygons whose vertices are skeleton pixel centres, so
+an exact lattice identity is available: **A = I + S/2 + h − 1**, where A is the summed signed area of
+the face's cycles, I the labelling's pixel count for it, S the total steps walked, and h the number of
+holes. The area comes from the polygon, the interior count from the labelling, and the step count from
+the traversal — three quantities from three unrelated routes, where the old check coupled two. It fails
+loudly on the same class of bug: winding direction, a hole attached to the wrong face, a half-edge
+walked the wrong way.
+
+**Not plain Pick's theorem**, which was the first proposal and is wrong here. Pick counts *distinct*
+boundary points and needs a simple polygon; a face containing a bridge is a slit region whose stub
+pixels are walked twice, and Pick under-counts it — 3.5 against a true 4 on the smallest example.
+Counting **steps** counts a slit pixel twice, which is exactly the correction required. Caught by
+working the example rather than by a failing test, which is the cheaper end of §8's own rule.
 
 **One honest caveat, and it is this document's own rule turned on the check itself:** as far as anyone
 has recorded, **it has never failed**. The difference from the coverage line that lied is structural —
@@ -2729,9 +2863,16 @@ a rewrite. **Nothing about it has been seen on a real map yet** — that is the 
   fingerprint and a sweep costs a walk of the branches rather than 690ms. It stops being safe at step
   D, when faces come from the graph; the tests that pin it say so.
 
-**D. Faces from the graph.** Rasterise the graph, label, trace contours — reusing the existing
-labelling, contour tracing, area check and simplification with a different input. Half-wall reveal
-falls out with no parameter.
+**D. Faces from the graph — re-planned 2026-08-30 (user), and the raster route is dropped.** The
+original wording was "rasterise the graph, label, trace contours". That produces the emitted geometry
+twice, in two copies that disagree — full argument in §4 under "Faces come from the graph itself, not
+from a raster of it". Instead: chain and weld the skeleton into a graph, walk its faces by half-edge
+traversal, tie each face to a raster label as you go, check areas by Pick's theorem while the cycles
+are still pixel chains, and fit each edge **once** so both faces sharing it carry identical points.
+The raster labelling stays in as the checker, not the producer. Half-wall reveal still falls out with
+no parameter. Two things it changes: the **weld radius** is a new control that needs the Walls step to
+draw the *graph* rather than the skeleton, and the **simplification cap** loses its stated reason and
+needs a new one.
 
 **E. Emit.** Fog shapes for the faces, lines for the uncovered edges by the bridge criterion (§4),
 vertex ids in metadata, exact matching on read-back.

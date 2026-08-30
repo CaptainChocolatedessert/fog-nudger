@@ -70,17 +70,16 @@ import { countInk } from "./trace/binarize";
 import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { applyGapFill, findGaps, type GapFinding } from "./trace/gaps";
-import { labelSpace } from "./trace/label";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
-import { contourStats, describeContours, traceRegions } from "./trace/contours";
-import { doubleSignedArea, type Ring } from "./geometry/ring";
+import { describeAreaCheck } from "./trace/faces";
 import {
-  describeSimplification,
-  simplifyRegions,
-  simplifyStats,
-  COMMAND_CAP,
-} from "./trace/simplify";
+  coveredArea,
+  deriveGraphRegions,
+  describeGraphRegions,
+} from "./trace/graphRegions";
+import type { Ring } from "./geometry/ring";
+import { COMMAND_CAP } from "./trace/simplify";
 
 /**
  * Beyond this the world bounds are not a scaled copy of the image and a uniform placement is wrong.
@@ -1030,29 +1029,101 @@ export async function runTrace(
     mapId,
   } = mask;
 
-  // ## Fill and label
+  // ## From ink to faces, by way of the wall graph
   //
-  // The space, not the ink, and 4-connected so the ink is 8-connected — the pairing that stops two
-  // rooms leaking into each other through a one-pixel diagonal. Nothing here classifies a region as
-  // interior or exterior; the outside is labelled and will be emitted like anything else.
-  const labelStarted = performance.now();
-  const minArea = Math.max(1, Math.round(settings.trace.minRoomSquares * pxPerSquare ** 2));
-  const labelled = labelSpace(inkMask, { minArea });
+  // Step D. The regions are the **faces of the skeleton's arrangement**, not the space between the
+  // strokes, so a face boundary is the wall's centreline: half-wall reveal is true by construction
+  // and a stub wall survives instead of being deleted for separating nothing.
+  //
+  // The labelling inside is still 4-connected space against 8-connected linework — the pairing that
+  // stops two rooms leaking into each other through a one-pixel diagonal — and it still supplies the
+  // area check. What it no longer supplies is geometry.
+  const inkWidth = reading.inkWidth ?? pxPerSquare * 0.1;
+  if (reading.inkWidth === null) {
+    devLog(
+      "warn",
+      `trace: no ink width to denominate simplification in, so the tolerance falls back to ` +
+        `${inkWidth.toFixed(1)}px from the grid. The half-wall safety bound is not being checked ` +
+        `against anything measured.`,
+    );
+  }
 
-  // Held for the point probe, which needs the labelling as well as the mask and therefore cannot be
-  // served by the mask cache alone. Re-deriving it costs the better part of a second, which is fine
-  // once and not fine for a control whose whole value is asking about one spot and then another.
+  const minArea = Math.max(1, Math.round(settings.trace.minRoomSquares * pxPerSquare ** 2));
+  const tolerance = settings.trace.simplifyInkWidths * inkWidth;
+  const safeTolerance = inkWidth / 2;
+
+  const derived = deriveGraphRegions(inkMask, {
+    spurPrunePx: settings.trace.spurPrunePx,
+    weldRadiusPx: settings.trace.weldRadiusPx,
+    minArea,
+    tolerance,
+    maxTolerance: MAX_SIMPLIFY_INK_WIDTHS * inkWidth,
+  });
+  const labelled = derived.labelled;
+
+  // Held for the point probe, which needs the partition as well as the mask and therefore cannot be
+  // served by the mask cache alone. The mask is the **ink**, so "is this ink?" still answers about
+  // the linework; the labelling is the graph's, so "which region?" answers about the faces that were
+  // actually emitted.
   lastRun = { rawField, mask: inkMask, labelled, placement, pxPerSquare, name: mapName };
-  const labelMs = Math.round(performance.now() - labelStarted);
 
   const stats = censusStats(labelled, { pxPerSquare });
 
   devLog(
     "info",
-    `trace: labelled in ${labelMs}ms — minimum region ${minArea}px ` +
-      `(${settings.trace.minRoomSquares} of a grid square at ${pxPerSquare.toFixed(1)} px/square)`,
+    `trace: graph — thinned ${derived.thinning.before} ink pixels to ${derived.thinning.after} in ` +
+      `${derived.thinning.passes} passes; pruned ${derived.pruning.removed} spurs ` +
+      `(${derived.pruning.pixels} px) at ${settings.trace.spurPrunePx}px; ` +
+      `${derived.graph.stats.chains} chains welded at ${settings.trace.weldRadiusPx}px into ` +
+      `${derived.graph.nodes.length} nodes and ${derived.graph.edges.length} edges ` +
+      `(${derived.graph.stats.dropped} junction clusters dropped, ` +
+      `${derived.graph.stats.merged} joins through path nodes, ` +
+      `${derived.graph.stats.orphans} orphaned pixels)`,
+  );
+  if (derived.graph.stats.orphans > 0) {
+    devLog(
+      "warn",
+      `trace: ${derived.graph.stats.orphans} skeleton pixels were claimed by no chain. The walk ` +
+        `stepped over them, which loses linework without saying which. Expected to be zero.`,
+    );
+  }
+
+  devLog(
+    "info",
+    `trace: ${describeGraphRegions(derived)}`,
   );
   devLog("info", `trace: census — ${describeCensus(stats)}`);
+
+  // ## The area check
+  //
+  // Two stages compute the same quantity by unrelated routes and must agree exactly. Under the
+  // graph it is a lattice identity — area = interior points + steps / 2 + holes - 1 — where the
+  // interior count comes from the labelling, the step count from the traversal, and the area from
+  // the polygon. **Not** plain Pick's theorem, which under-counts a face containing a bridge.
+  devLog("info", `trace: ${describeAreaCheck(derived.faces)}`);
+  if (derived.faces.exact !== derived.faces.checked) {
+    devLog(
+      "error",
+      `trace: ${derived.faces.checked - derived.faces.exact} faces enclose a different area than ` +
+        `the labelling says they hold. The geometry does not describe the regions it claims to, ` +
+        `and nothing downstream of this is worth reading.`,
+    );
+  }
+  if (derived.faces.disagreements > 0) {
+    devLog(
+      "error",
+      `trace: ${derived.faces.disagreements} half-edges disagreed about which face they bound. One ` +
+        `step to the right of a half-edge is either the face or the skeleton, never another face, ` +
+        `so this means the traversal took a wrong turn at a junction.`,
+    );
+  }
+  if (derived.faces.unlabelled !== 1) {
+    devLog(
+      "warn",
+      `trace: ${derived.faces.unlabelled} cycles had no interior at all. Exactly one is expected — ` +
+        `the unbounded face outside the border frame — so anything else is a degenerate sliver.`,
+    );
+  }
 
   // The merge signal, spelled out rather than left for a reader to reconstruct. With the exterior
   // kept, the largest region is normally the outside and its share being big is correct — so the
@@ -1067,173 +1138,102 @@ export async function runTrace(
     );
   }
 
-  // ## Boundary tracing
+  // ## Bridges — walls no face boundary covers
   //
-  // Corners rather than pixel centres, so two rooms either side of a wall meet it from opposite
-  // faces and neither claims half a pixel of it. The area check is the one exact tie between this
-  // stage and the last: every region's ring areas must sum to the pixel count that produced it.
-  const traceStarted = performance.now();
-  const traced = traceRegions(labelled, inkMask);
-  const traceMs = Math.round(performance.now() - traceStarted);
-  const contours = contourStats(labelled, traced);
-
-  devLog("info", `trace: traced in ${traceMs}ms — ${describeContours(contours)}`);
-
-  if (contours.areaMismatches > 0) {
-    devLog(
-      "error",
-      `trace: ${contours.areaMismatches} regions traced to a boundary enclosing a different area ` +
-        `than the region holds. The geometry does not describe the regions it claims to, and ` +
-        `nothing downstream of this is worth reading.`,
-    );
-  }
+  // An edge with the same face on both sides. Step E emits these as lines; nothing here does, so
+  // for now they are reported rather than drawn. A map with none has no free-standing linework at
+  // all, which on a hand-drawn dungeon would itself be worth a second look.
+  devLog(
+    "info",
+    `trace: ${derived.bridges} of ${derived.graph.edges.length} edges are bridges — walls with the ` +
+      `same face on both sides, which no region boundary can cover. These are what step E will ` +
+      `emit as lines; nothing emits them yet.`,
+  );
 
   // ## What is left uncovered, which is the only way to answer "why is there a gap"
   //
-  // The emitted shapes are disjoint — regions do not overlap, and a filled hole belongs to exactly
-  // the one region that encloses it — so their total area is the sum of the traced areas, exactly.
-  // Everything else in the raster is uncovered.
-  //
-  // Uncovered space should be **almost all ink**. When a GM reports a gap that is not ink, this line
-  // is what says whether the gap is ours at all: if uncovered barely exceeds the ink, then every
-  // piece of floor is under a shape and whatever they are looking at is either on a layer above
-  // ours or is not on the map image we traced.
-  const coveredArea = traced.reduce((total, region) => total + region.tracedArea, 0);
+  // The faces tile the framed raster, so their total is very nearly the whole of it — short by the
+  // half-pixel each boundary runs inside the wall, plus whatever the minimum-area filter dropped.
+  const coveredPixels = coveredArea(derived.regions);
   const rasterArea = plan.width * plan.height;
-  const uncoveredShare = rasterArea > 0 ? 1 - coveredArea / rasterArea : 0;
-  // Bare floor is measured, not inferred. Every surviving region is emitted whole, so the only
-  // floor left uncovered is what the minimum-area filter discarded and no filled hole swallowed.
-  const swallowedFloor = traced.reduce((total, region) => total + region.filledHoleFloorArea, 0);
-  const bareFloor = Math.max(0, labelled.discardedArea - swallowedFloor);
-  const bareSquares = pxPerSquare > 0 ? bareFloor / pxPerSquare ** 2 : 0;
+  const bareSquares = pxPerSquare > 0 ? derived.discardedArea / pxPerSquare ** 2 : 0;
   devLog(
     "info",
-    `trace: emitted shapes cover ${((coveredArea / rasterArea) * 100).toFixed(1)}% of the raster ` +
-      `(${(uncoveredShare * 100).toFixed(1)}% uncovered, against ${(chosenCoverage * 100).toFixed(1)}% ink); ` +
-      `the minimum-area filter discarded ${labelled.discarded} regions holding ` +
-      `${labelled.discardedArea} px, of which filled holes swallowed ${swallowedFloor} px — ` +
-      `leaving ${bareFloor} px (${bareSquares.toFixed(2)} grid squares) of floor bare.`,
+    `trace: emitted shapes cover ${((coveredPixels / rasterArea) * 100).toFixed(1)}% of the raster ` +
+      `(against ${(chosenCoverage * 100).toFixed(1)}% ink); the minimum-area filter discarded ` +
+      `${derived.discarded} faces holding ${derived.discardedArea} px ` +
+      `(${bareSquares.toFixed(2)} grid squares), and filled ${derived.filledHoles} holes that ` +
+      `enclosed nothing surviving.`,
   );
-  if (bareFloor > 0) {
+  if (derived.discardedArea > 0) {
     // Named as a real defect rather than a rounding remark. Every one of these pixels is a patch of
     // map inside a room the GM will reveal, showing through untouched — which is exactly what gets
     // reported as "an unfilled pocket".
     devLog(
       "warn",
       `trace: ${bareSquares.toFixed(2)} grid squares of floor are covered by nothing. These are ` +
-        `regions below the ${settings.trace.minRoomSquares}-square minimum that no filled hole reached — a ` +
-        `feature whose ink joins a wall is not enclosed by anything, so the containment fill never ` +
-        `sees it. Lowering the minimum is the direct lever, and §5's bias favours it: a spurious ` +
-        `region costs a click, a bare patch is a visible defect.`,
-    );
-  }
-
-  // Holes are now kept only where they enclose a surviving region, so every one of these is a
-  // region nested inside another — a vault inside a room, or a room cluster inside the outside. The
-  // largest region is excluded because its holes are the ordinary case; anywhere else, a nested
-  // region is unusual enough to be worth seeing, and it is also the only remaining way a hole can
-  // show through as bare map.
-  const pocketSquares: number[] = [];
-  for (const region of traced.slice(1)) {
-    for (const ring of region.rings) {
-      const area = doubleSignedArea(ring) / 2;
-      if (area < 0 && pxPerSquare > 0) pocketSquares.push(-area / pxPerSquare ** 2);
-    }
-  }
-  pocketSquares.sort((a, b) => a - b);
-  if (pocketSquares.length === 0) {
-    devLog(
-      "info",
-      "trace: no regions nested inside any region but the largest — no bare map inside a room",
-    );
-  } else {
-    const at = (share: number) => pocketSquares[Math.floor(pocketSquares.length * share)] ?? 0;
-    devLog(
-      "info",
-      `trace: ${pocketSquares.length} holes kept inside regions other than the largest — each one ` +
-        `encloses a region that will be revealed separately, so the ink around it stays bare. ` +
-        `Sizes in grid squares: min ${pocketSquares[0]!.toFixed(2)}, median ${at(0.5).toFixed(2)}, ` +
-        `max ${pocketSquares[pocketSquares.length - 1]!.toFixed(2)}.`,
+        `faces below the ${settings.trace.minRoomSquares}-square minimum whose hole was kept ` +
+        `because something else inside it survived. Lowering the minimum is the direct lever, and ` +
+        `§5's bias favours it: a spurious region costs a click, a bare patch is a visible defect.`,
     );
   }
 
   // ## Simplification
   //
-  // Denominated in ink width, which is what makes the bound statable: the boundary moves by at most
-  // the tolerance, so under half an ink width it cannot cross the centre of a wall.
-  const inkWidth = reading.inkWidth ?? pxPerSquare * 0.1;
-  if (reading.inkWidth === null) {
-    devLog(
-      "warn",
-      `trace: no ink width to denominate simplification in, so the tolerance falls back to ` +
-        `${inkWidth.toFixed(1)}px from the grid. The half-wall safety bound is not being checked ` +
-        `against anything measured.`,
-    );
-  }
-
-  const simplifyStarted = performance.now();
-  const tolerance = settings.trace.simplifyInkWidths * inkWidth;
-  const safeTolerance = inkWidth / 2;
-  const simplified = simplifyRegions(traced, {
-    tolerance,
-    maxTolerance: MAX_SIMPLIFY_INK_WIDTHS * inkWidth,
-  });
-  const simplifyMs = Math.round(performance.now() - simplifyStarted);
-  const simplification = simplifyStats(simplified);
+  // **Per edge, not per ring** — two faces sharing a wall are assembled from the same fitted points,
+  // so they cannot drift apart and open a sliver between rooms. Escalation is therefore global: when
+  // anything exceeds the command cap the tolerance rises for the whole map, because a region
+  // escalated on its own would stop matching its neighbours along their shared walls.
+  const totalVertices = derived.regions.reduce((total, region) => total + region.vertices, 0);
+  const totalCommands = derived.regions.reduce((total, region) => total + region.commands, 0);
+  const preserved = derived.regions.reduce((total, region) => total + region.preservedRings, 0);
+  const overCap = derived.regions.filter((region) => region.overCap);
 
   devLog(
     "info",
-    `trace: simplified in ${simplifyMs}ms — tolerance ${tolerance.toFixed(2)}px ` +
-      `(${settings.trace.simplifyInkWidths} of a ${inkWidth.toFixed(1)}px ink width; the bound that stops a ` +
-      `boundary crossing a wall is ${safeTolerance.toFixed(2)}px)`,
+    `trace: simplified to ${totalVertices} vertices in ${totalCommands} commands at ` +
+      `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyInkWidths} of a ` +
+      `${inkWidth.toFixed(1)}px ink width, escalated ${derived.escalations} times for the whole ` +
+      `map); ${preserved} rings kept unfitted because fitting would have collapsed them`,
   );
-  devLog("info", `trace: ${describeSimplification(simplification)}`);
+  if (derived.tolerance > safeTolerance) {
+    devLog(
+      "warn",
+      `trace: the tolerance escalated to ${derived.tolerance.toFixed(2)}px, past the ` +
+        `${safeTolerance.toFixed(2)}px half-ink-width bound. Under the graph that bound guards a ` +
+        `corner cut across a doorway rather than an edge crossing into the next room — the old ` +
+        `reason no longer applies and the new one has not been derived. Treat it as unverified.`,
+    );
+  }
 
-  // The regions most likely to be a problem at emit time, listed rather than summarised. Which
-  // region escalated matters more than how many did: one enormous outside is expected, and a room
-  // in the list is a map far noisier than this pipeline is tuned for.
-  const heaviest = [...simplified].sort((a, b) => b.commands - a.commands).slice(0, 5);
+  const heaviest = [...derived.regions].sort((a, b) => b.commands - a.commands).slice(0, 5);
   if (heaviest.length > 0) {
     devLog(
       "info",
       `trace: heaviest items — ` +
         heaviest
-          .map(
-            (region) =>
-              `#${region.id} ${region.commands} cmds / ${region.rings.length} rings` +
-              (region.escalations > 0 ? ` @${region.tolerance.toFixed(1)}px` : ""),
-          )
+          .map((region) => `#${region.id} ${region.commands} cmds / ${region.rings.length} rings`)
           .join(", "),
     );
   }
 
-  const pastBound = simplified.filter((region) => region.tolerance > safeTolerance);
-  if (pastBound.length > 0) {
+  if (overCap.length > 0) {
     devLog(
       "warn",
-      `trace: ${pastBound.length} regions had to be simplified past half the ink width to fit ` +
-        `the command cap (${pastBound.map((region) => `#${region.id}`).join(", ")}). Their ` +
-        `boundaries may cross the middle of a wall. This is expected for the outside, which wraps ` +
-        `every room on the map; a room in that list is not expected.`,
-    );
-  }
-
-  if (simplification.overCap > 0) {
-    devLog(
-      "warn",
-      `trace: ${simplification.overCap} regions still exceed the ${COMMAND_CAP}-command cap at ` +
+      `trace: ${overCap.length} regions still exceed the ${COMMAND_CAP}-command cap at ` +
         `the ceiling tolerance and could not be emitted as they stand. Splitting them is not the ` +
         `remedy — the join becomes a wall across a room — so this is either far noisier ink than ` +
         `expected or a region that has merged into something enormous.`,
     );
   }
 
+
   // ## World placement
   //
   // The last stage before anything could be seen, and the one nothing pure can fully check. The
   // arithmetic is testable and is; that raster (0,0) is the world box's minimum corner is a claim
   // about Owlbear's conventions, and a flip or a transpose would satisfy every number below.
-  const placed = placeRegions(simplified, placement);
+  const placed = placeRegions(derived.regions, placement);
   const filled = placedBounds(placed);
 
   if (!filled) {
@@ -1299,13 +1299,15 @@ export async function runTrace(
       pxPerSquare > 0 ? region.area / pxPerSquare ** 2 : 0,
     ]),
   );
-  const regions: TracedRegion[] = simplified.map((region, index) => ({
+  const regions: TracedRegion[] = derived.regions.map((region, index) => ({
     id: region.id,
     placed: placed[index]!,
     rings: region.rings,
     squares: squaresById.get(region.id) ?? 0,
     commands: region.commands,
-    tolerance: region.tolerance,
+    // One tolerance for the whole map now, since fitting is per edge and two faces sharing a wall
+    // have to be fitted the same way.
+    tolerance: derived.tolerance,
     overCap: region.overCap,
   }));
 
@@ -1316,8 +1318,8 @@ export async function runTrace(
     `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
     (reading.inkWidth === null ? "" : ` ~${reading.inkWidth.toFixed(1)}px wide`) +
     `, ${stats.count} regions (${stats.roomSized} room-sized)` +
-    `, ${simplification.vertices} vertices in ${simplification.commands} commands` +
-    (simplification.overCap > 0 ? ` (${simplification.overCap} OVER CAP)` : "") +
+    `, ${totalVertices} vertices in ${totalCommands} commands` +
+    (overCap.length > 0 ? ` (${overCap.length} OVER CAP)` : "") +
     `, ${elapsed}ms`;
 
   return {

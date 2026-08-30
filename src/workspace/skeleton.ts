@@ -28,6 +28,7 @@ import { describeError } from "../describeError";
 import type { BinaryMask } from "../trace/binarize";
 import { pruneSpurs } from "../trace/spurs";
 import { thin } from "../trace/thinning";
+import { buildWallGraph, type WallGraph } from "../trace/wallGraph";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { onReading } from "./reading";
 import { currentSettings } from "./settingsState";
@@ -41,12 +42,24 @@ let source: BinaryMask | null = null;
 let thinned: BinaryMask | null = null;
 /** What the layer draws: thinned, then pruned to the current setting. */
 let current: BinaryMask | null = null;
+/**
+ * The graph built from it, which is what the faces are actually made of.
+ *
+ * Drawn as well as the pixels, and that is the point: the weld radius is a control that can be
+ * wrong — too large and it merges two genuinely distinct junctions, closing a doorway — and nothing
+ * in the skeleton's pixels would show it. One node where there should be two does.
+ */
+let graph: WallGraph | null = null;
 
 let watching = false;
 let stale = true;
 
 export function currentSkeleton(): BinaryMask | null {
   return current;
+}
+
+export function currentGraph(): WallGraph | null {
+  return graph;
 }
 
 export function skeletonShowing(): boolean {
@@ -89,10 +102,15 @@ function rebuild(reuseThinned = false): void {
       );
     }
 
-    const budget = currentSettings().trace.spurPrunePx;
+    const settings = currentSettings().trace;
+    const budget = settings.spurPrunePx;
     const started = performance.now();
     const pruned = pruneSpurs(thinned, budget);
     current = pruned.mask;
+
+    const graphStarted = performance.now();
+    graph = buildWallGraph(current, settings.weldRadiusPx);
+    const graphMs = Math.round(performance.now() - graphStarted);
     stale = false;
     requests.fulfil(generation);
     invalidate();
@@ -104,10 +122,18 @@ function rebuild(reuseThinned = false): void {
         `${pruned.rounds} rounds, ${Math.round(performance.now() - started)}ms — ` +
         `${skeletonPixels} skeleton pixels at budget ${budget}px`,
     );
+    devLog(
+      "info",
+      `workspace: graph — ${graph.stats.chains} chains welded at ${settings.weldRadiusPx}px into ` +
+        `${graph.nodes.length} nodes and ${graph.edges.length} edges in ${graphMs}ms ` +
+        `(${graph.stats.dropped} junction clusters dropped, ${graph.stats.merged} joins through ` +
+        `path nodes, ${graph.stats.orphans} orphaned pixels)`,
+    );
     say(
-      budget <= 0
+      (budget <= 0
         ? `${skeletonPixels} skeleton pixels, unpruned`
-        : `${skeletonPixels} skeleton pixels · ${pruned.removed} spurs pruned`,
+        : `${skeletonPixels} skeleton pixels · ${pruned.removed} spurs pruned`) +
+        ` · ${graph.nodes.length} nodes, ${graph.edges.length} edges`,
     );
   } catch (error) {
     const detail = describeError(error);
