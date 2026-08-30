@@ -163,9 +163,13 @@ export async function stageRegions(): Promise<string> {
   //
   // A stub hanging into a room is the usual case. These go out as `LINE` items, which is what
   // Dynamic Fog's own wall mode builds and the only item type with no interior to reveal.
+  // The scene's own fog stroke width, which is what Dynamic Fog's wall mode reads and what these
+  // lines will carry once accepted. Staged at the same width so what the GM judges is the wall they
+  // are going to get: accepting then changes only the layer, the colour and the visibility.
+  const fogStroke = await OBR.scene.fog.getStrokeWidth();
   const { lines, dropped } = stageWallLines(
     run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed, ids: wall.ids })),
-    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: Math.max(1, stroke) },
+    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: Math.max(1, fogStroke) },
   );
   if (dropped > 0) {
     devLog("warn", `emit: dropped ${dropped} zero-length wall segments — nothing to select there`);
@@ -285,6 +289,8 @@ async function acceptWallLines(): Promise<number> {
   );
   if (staged.length === 0) return 0;
 
+  // Re-read rather than trusted from staging: a GM can change the scene's fog styling between
+  // proposing and accepting, and an accepted wall should match the scene it lands in.
   const [colour, width] = await Promise.all([
     OBR.scene.fog.getColor(),
     OBR.scene.fog.getStrokeWidth(),
@@ -363,6 +369,8 @@ export async function returnToStaging(): Promise<string> {
             draft.layer = "DRAWING";
             draft.visible = false;
             draft.style.strokeColor = WALL_COLOUR;
+            // The width is left alone: it is the fog stroke width both staged and accepted, so a
+            // demoted proposal still shows the wall at the size it would be.
           }
         }),
       "return walls to staging",
