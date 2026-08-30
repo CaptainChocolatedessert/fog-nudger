@@ -233,7 +233,7 @@ export function setPendingEdit(pending: boolean): void {
   pendingEdit = pending;
 }
 
-/** The map's name, in the panel. Passes to the map step when step 1 is built. */
+/** The map's name, at the top of the workspace's controls. Set by the map source when one loads. */
 export function setMapName(text: string): void {
   if (mapNameLine) mapNameLine.textContent = text;
 }

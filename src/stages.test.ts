@@ -68,8 +68,8 @@ describe("the stage declaration", () => {
 
   it("keeps the stages in cascade order", () => {
     // The order is the cascade: reading destroys deriving and adjusting, deriving destroys
-    // adjusting. Everything numbered in the panel reads this array, so reversing it would renumber
-    // the tabs without changing what they do.
+    // adjusting. The cache invalidation and the workspace's recompute-on-release both read this
+    // array, so reversing it would change what a slider destroys without changing what it says.
     expect(STAGES).toEqual(["read", "derive", "adjust"]);
   });
 });
