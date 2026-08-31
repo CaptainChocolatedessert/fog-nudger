@@ -30,6 +30,14 @@ Thumbs.db
 # Project docs live in README.md and DESIGN.md.
 CLAUDE.md
 
+# In-progress code review. Internal like CLAUDE.md, and deleted once it is worked through rather
+# than published — it is a list of this repository's own defects, written to be acted on and thrown
+# away. It was untracked but not ignored, which is one `git add -A` away from being neither.
+REVIEW.md
+
+# Scratch notes kept at the repository root. Anything belonging to the project goes in DESIGN.md.
+W - tools brainstorming.txt
+
 # Logs
 *.log
 npm-debug.log*
