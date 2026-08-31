@@ -28,6 +28,8 @@ import { describeError } from "../describeError";
 import type { BinaryMask } from "../trace/binarize";
 import { pruneSpurs } from "../trace/spurs";
 import { thin } from "../trace/thinning";
+import { resolveFaces } from "../trace/faces";
+import { labelSpace } from "../trace/label";
 import { buildWallGraph, type WallGraph } from "../trace/wallGraph";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { onReading } from "./reading";
@@ -108,8 +110,23 @@ function rebuild(reuseThinned = false): void {
     const pruned = pruneSpurs(thinned, budget);
     current = pruned.mask;
 
+    /*
+      The graph is cleaned before it is drawn, exactly as the derivation cleans it.
+
+      Building it is not enough. A junction cluster leaves sub-pixel faces, and removing them merges
+      nodes and joins edges — so the raw graph and the one the regions are actually made of are not
+      the same graph. On this project's test map that is 762 nodes against 59. Drawing the raw one
+      put marks on screen for junctions that do not exist downstream, which is the preview lying
+      about the thing this step exists to judge.
+
+      The labelling is the cost: `resolveFaces` needs it to tell a sliver from a face. It is the same
+      pass the derivation runs and lands around thirty milliseconds on a map-sized raster, against
+      the sixty-odd that thinning already costs here.
+    */
     const graphStarted = performance.now();
-    graph = buildWallGraph(current);
+    const built = buildWallGraph(current);
+    const resolved = resolveFaces(built, labelSpace(built.framed, { minArea: 0 }));
+    graph = resolved.graph;
     const graphMs = Math.round(performance.now() - graphStarted);
     stale = false;
     requests.fulfil(generation);
@@ -124,9 +141,10 @@ function rebuild(reuseThinned = false): void {
     );
     devLog(
       "info",
-      `workspace: graph — ${graph.stats.chains} chains into ${graph.nodes.length} nodes and ` +
-        `${graph.edges.length} edges in ${graphMs}ms (${graph.stats.merged} joins through path ` +
-        `nodes, ${graph.stats.orphans} orphaned pixels)`,
+      `workspace: graph — ${built.stats.chains} chains into ${built.nodes.length} nodes and ` +
+        `${built.edges.length} edges, then ${resolved.sliversRemoved} sub-pixel slivers removed in ` +
+        `${resolved.rounds} rounds leaving ${graph.nodes.length} nodes and ${graph.edges.length} ` +
+        `edges, ${graphMs}ms (${graph.stats.orphans} orphaned pixels)`,
     );
     say(
       (budget <= 0
