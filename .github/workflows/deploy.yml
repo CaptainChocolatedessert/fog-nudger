@@ -17,14 +17,23 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # Queued runs may be skipped; a run that is already deploying may NOT be cancelled. Cancelling
+  # `deploy-pages` part-way is a documented route to a Pages deployment that never completes, and
+  # this project has already spent two ten-minute hangs on a different cause of the same symptom.
+  # The cost is that a superseded push finishes deploying anyway, so a correction can take an extra
+  # thirty seconds to take effect. GitHub's own Pages starter workflow sets this to false.
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Observed at 27s. The default is six hours, which is what a hang costs when nobody is watching.
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      # `node-version` is the Node this project is BUILT with, and is unrelated to the runtime each
+      # action declares for itself. Vite needs ^20.19 || >=22.12; 22 resolves to the latest 22.x.
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -34,17 +43,26 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+          # NOT optional, and the failure is silent. From v4 this action excludes dotfiles from the
+          # artifact (`--exclude=.[^/]*` in its tar step), and `dist/.nojekyll` is the only one we
+          # have. It is belt-and-braces while Pages builds from Actions — the artifact is served
+          # directly and Jekyll never runs — but it is load-bearing again the moment the source is
+          # ever switched back to a branch, which is not a thing to rediscover by losing files.
+          include-hidden-files: true
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Observed at 11s. This is the job that has hung before — twice, for ten minutes each, with a
+    # green build and no error — so a cap here turns silence into a reported failure.
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
