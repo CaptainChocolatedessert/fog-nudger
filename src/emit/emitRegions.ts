@@ -100,6 +100,36 @@ export function forgetPushed(): void {
 }
 
 /**
+ * Whether the GM has asked the write in flight to stop.
+ *
+ * ## Cooperative, and between batches only
+ *
+ * A push is a sequence of `addItems` calls, and an in-flight one cannot be aborted — so this is a
+ * flag the batch loops read *before starting the next chunk*, not an interruption. "Stopped" always
+ * means some shapes were written and the rest were not, and the loops report exactly where they got
+ * to.
+ *
+ * ## Why there is no rollback
+ *
+ * A push deletes our previous items **before** it writes the replacements, so by the time a write is
+ * slow enough to want out of, the old fog is already gone. There is nothing to roll back *to*: undoing
+ * the partial write reaches an empty fog layer, which in Owlbear hides the whole map. And undoing is
+ * itself more writes through the connection that is already slow, at the moment the GM has said they
+ * want out — an escape hatch that can stall is not one.
+ *
+ * So a stop leaves the partial set and says so. That is not permanent: every item carries our
+ * namespace key, and the next push deletes all of ours before writing, so it is cleaned up by the
+ * next push rather than needing to be cleaned up now. `forgetPushed()` is called on the way out, so
+ * that next push is not skipped by a fingerprint describing a result the scene only partly holds.
+ */
+let stopRequested = false;
+
+/** Ask the write in flight to stop at the next batch boundary. */
+export function requestPushStop(): void {
+  stopRequested = true;
+}
+
+/**
  * Trace the scene's map and put the result on the fog layer, replacing whatever we put there before.
  *
  * ## One operation, because the scene was never the working state
@@ -129,6 +159,9 @@ export function forgetPushed(): void {
  * the whole of the fix.*
  */
 export async function pushToFog(fingerprint?: string): Promise<string> {
+  // Cleared here rather than by the caller: a stop belongs to one push, and a request that arrived
+  // while nothing was running must not silently abort the next one.
+  stopRequested = false;
   if (!(await OBR.scene.isReady())) return "No scene open — nothing to trace.";
 
   const outcome = await runTrace();
@@ -220,6 +253,14 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
 
   let written = 0;
   for (const [index, batch] of batches.entries()) {
+    if (stopRequested) {
+      devLog("warn", `emit: stopped at the GM's request after ${written} of ${shapes.length} shapes`);
+      forgetPushed();
+      return (
+        `Stopped at your request after ${written} of ${shapes.length} regions. The map is partly ` +
+        `fogged — push again to finish, which replaces all of it.`
+      );
+    }
     const items = batch.map(fogShapeItem);
     try {
       await writeWithBackoff(() => OBR.scene.items.addItems(items), `batch ${index + 1}`);
@@ -249,6 +290,17 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
   // pacing is also the kind of asymmetry that gets copied into the third.
   const wallBatches = [...chunk(lines, BATCH_LIMITS.maxItems)];
   for (const [index, batch] of wallBatches.entries()) {
+    if (stopRequested) {
+      devLog(
+        "warn",
+        `emit: stopped at the GM's request after ${written} shapes and ${walls} wall segments`,
+      );
+      forgetPushed();
+      return (
+        `Stopped at your request: ${written} regions are on the map and ${walls} of ` +
+        `${lines.length} wall segments. Push again to finish, which replaces all of it.`
+      );
+    }
     try {
       await writeWithBackoff(
         () => OBR.scene.items.addItems(batch.map(wallLineItem)),

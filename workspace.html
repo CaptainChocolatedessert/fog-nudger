@@ -296,6 +296,23 @@
         color: #14162a;
         font-weight: 600;
       }
+      /*
+        The way out of a slow scene write, revealed only once one is slow.
+
+        Closing waits for the write so the fog layer cannot be left half-replaced, which means the
+        sheet is up and unresponsive to Escape for as long as the write takes. On a large map that
+        is a couple of seconds and reads as working; if it stalls, it reads as a hang. This is the
+        fourth exit — the probe's rule is that this surface must never become a cell — and it is
+        hidden until there is a stall to escape, because a permanently visible "exit anyway" invites
+        being pressed on every ordinary close.
+      */
+      button.chip.urgent {
+        border-color: rgba(255, 212, 121, 0.75);
+        color: #ffd479;
+      }
+      #exit-anyway[hidden] {
+        display: none;
+      }
 
       /*
         The state of the mask, and the one thing on this page that must never be quietly absent.
@@ -375,6 +392,7 @@
         <button class="chip" id="fit" title="Fit the whole map">Fit</button>
         <button class="chip" id="toggle-panel" title="Hide the controls">Controls</button>
         <button class="chip" id="close">Close (Esc)</button>
+        <button class="chip urgent" id="exit-anyway" hidden>Exit anyway</button>
       </div>
 
       <p id="state">Starting…</p>

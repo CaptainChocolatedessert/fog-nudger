@@ -447,25 +447,45 @@ window.addEventListener("resize", () => {
  */
 let onClose: (() => Promise<void>) | null = null;
 
-export function setCloseAction(action: () => Promise<void>): void {
+/**
+ * How to ask that action to give up, for the escape hatch below.
+ *
+ * Registered rather than imported, for the same reason as `onClose` itself: the shell must not know
+ * that leaving means writing to the scene, so it certainly must not know how to stop a scene write.
+ * What it knows is that the way out may be waiting on something, and that the something can be asked
+ * to stop. Optional — a close action with no way to give up is a legitimate one, and then the button
+ * simply never has anything to call.
+ */
+let onCloseStop: (() => void) | null = null;
+
+export function setCloseAction(action: () => Promise<void>, stop?: () => void): void {
   onClose = action;
+  onCloseStop = stop ?? null;
 }
 
 /**
- * How long the sheet will wait for the push before letting itself go anyway.
+ * How long a scene write may run before the sheet offers a way out of it.
  *
- * A full push on the test map is a couple of seconds, so this is generous rather than tight. It
- * exists because of what an opaque full-screen modal is: the probe established three independent
- * exits precisely so this surface could never become a cell, and making the close wait on a scene
- * write reintroduces that risk for the duration of the write. If a batch *hangs* rather than fails,
- * that duration is unbounded — so the wait is capped and the cap is the thing keeping the promise
- * the probe made.
+ * A full push on the test map is a couple of seconds, which reads as working. Past this it reads as
+ * a hang, so the sheet says what is happening and reveals **Exit anyway** — the fourth exit, and the
+ * reason the wait needs no arbitrary cap.
  *
- * The cost, stated: when the timer wins, the modal goes while a write is still in flight, which is
- * the truncated-scene outcome this whole change exists to avoid. Rare and logged is a different
- * thing from routine and silent, which is what dismissing first gave us.
+ * **An earlier version dismissed automatically at twelve seconds.** That decides for the GM, and it
+ * decides wrong in both directions: it gives up on a write that was about to land, and it makes a
+ * GM who wants out wait twelve seconds for it. A button they can see is the same guarantee — the
+ * probe's rule is that this surface must never become a cell — without either.
  */
-const PUSH_ON_CLOSE_TIMEOUT_MS = 12_000;
+const SLOW_PUSH_NOTICE_MS = 4_000;
+
+/**
+ * How long to let a stopped push unwind before going anyway.
+ *
+ * The stop is cooperative: the batch loops check it *between* chunks, so a stop lands at the next
+ * boundary rather than at once, and an `addItems` call already in flight runs to completion. That
+ * is normally one call. If the connection is the thing that is stuck, waiting for it would make the
+ * escape hatch stall too — which is the one thing it must not do.
+ */
+const STOP_GRACE_MS = 2_000;
 
 /**
  * Leave, after the scene write finishes.
@@ -497,23 +517,52 @@ async function close(): Promise<void> {
   devLog("info", "workspace: closing");
 
   if (onClose) {
-    let timer = 0;
-    const capped = new Promise<"timeout">((resolve) => {
-      timer = window.setTimeout(() => resolve("timeout"), PUSH_ON_CLOSE_TIMEOUT_MS);
-    });
     // Caught rather than trusted. `pushOnClose` does not reject today, but the way out of an opaque
     // sheet must not depend on that staying true of whatever is registered here.
     const pushing = onClose().catch((error: unknown) => {
       devLog("error", "workspace: the close action threw", describeError(error));
     });
 
-    const outcome = await Promise.race([pushing, capped]);
-    window.clearTimeout(timer);
-    if (outcome === "timeout") {
+    let bailed = false;
+    const bailedOut = new Promise<"bailed">((resolve) => {
+      exitAnyway = () => {
+        bailed = true;
+        onCloseStop?.();
+        say("stopping the write…", "working");
+        resolve("bailed");
+      };
+    });
+
+    const notice = window.setTimeout(() => {
+      say("still writing to the scene — Exit anyway leaves it partly done", "working");
+      offerExitAnyway();
+    }, SLOW_PUSH_NOTICE_MS);
+
+    await Promise.race([pushing, bailedOut]);
+    window.clearTimeout(notice);
+    // Disarmed whatever happened, so the button cannot reach a push that is no longer running. It
+    // stays visible for the instant before the modal goes, which is correct: it *was* available.
+    exitAnyway = null;
+
+    if (bailed) {
+      /*
+        Give the stop a moment to land, then go regardless.
+
+        Waiting for `pushing` outright would hand the stall back the power to trap the sheet, which
+        is what this button exists to take away. Not waiting at all would tear the iframe down
+        mid-call, which is the fault the whole close-time wait was built to fix. A short grace is the
+        honest middle: normally the loop returns at the next batch boundary well inside it.
+      */
+      const unwound = await Promise.race([
+        pushing.then(() => true),
+        new Promise<false>((resolve) => window.setTimeout(() => resolve(false), STOP_GRACE_MS)),
+      ]);
       devLog(
-        "warn",
-        `workspace: the push was still running after ${PUSH_ON_CLOSE_TIMEOUT_MS}ms — letting the ` +
-          "sheet go with the write in flight, so the fog layer may be incomplete",
+        unwound ? "info" : "warn",
+        unwound
+          ? "workspace: the push stopped cleanly at the GM's request"
+          : `workspace: the push had not stopped ${STOP_GRACE_MS}ms after being asked — leaving ` +
+            "with a write still in flight, so the fog layer may be incomplete",
       );
     }
   }
@@ -523,6 +572,21 @@ async function close(): Promise<void> {
     devLog("error", "workspace: could not close itself", describeError(error));
   });
 }
+
+/**
+ * The escape hatch, armed only while a close is waiting on a write.
+ *
+ * Null the rest of the time so the button cannot be pressed into a push that is not running — it is
+ * hidden then too, but a hidden button and a dead one are different guarantees.
+ */
+let exitAnyway: (() => void) | null = null;
+
+function offerExitAnyway(): void {
+  const button = document.getElementById("exit-anyway");
+  if (button instanceof HTMLButtonElement) button.hidden = false;
+}
+
+document.getElementById("exit-anyway")?.addEventListener("click", () => exitAnyway?.());
 
 document.getElementById("close")?.addEventListener("click", () => void close());
 document.getElementById("fit")?.addEventListener("click", fitMap);

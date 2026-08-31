@@ -39,6 +39,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
+import { requestPushStop } from "./emit/emitRegions";
 import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
 import { registerBreaksLayer } from "./workspace/layers/breaks";
 import { registerInkLayer } from "./workspace/layers/ink";
@@ -96,8 +97,14 @@ registerStepContent("regions", renderPushAction, "bottom");
   — and closing is the moment the GM has stopped changing it. The button above is for the other case,
   updating a table mid-session without giving up the surface. Registered as a hook so the shell,
   which owns the way out, does not have to know that leaving means emitting.
+
+  The second argument is how to give up on it. A push deletes our old fog before writing the new, so
+  the sheet has to stay up until the write lands or the layer can be left half-replaced -- which
+  means a stalled write would hold a GM on an opaque sheet. `requestPushStop` is what the shell's
+  Exit anyway button calls, and it lives here rather than in the shell for the same reason
+  `pushOnClose` does: the shell owns the way out and must not know what leaving writes.
 */
-setCloseAction(pushOnClose);
+setCloseAction(pushOnClose, requestPushStop);
 
 /*
   "What is here?" is a click on the map now, in every step.
