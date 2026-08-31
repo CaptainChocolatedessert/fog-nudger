@@ -39,6 +39,36 @@ import { key } from "../namespace";
 /** Marks a wall line as ours. A separate key from the regions', so the two can be handled apart. */
 export const WALL_KEY = key("wall");
 
+/**
+ * How wide a wall line is emitted, as a share of the scene's own fog stroke width.
+ *
+ * **Thin, because the width is the sliver.** Dynamic Fog strokes the item at this width and takes
+ * the outline, so a line W wide yields two walls W apart with a band between them that can be seen
+ * into from neither side. On a free-standing wall that band is the wall's own thickness — a dark
+ * stripe where the map has a wall, which reads correctly — but there is no reason for it to be as
+ * wide as the fog stroke, and the GM asked for thinner.
+ *
+ * **Not zero, and this is the one place zero is genuinely unsafe.** A closed shape has its own
+ * boundary to stroke at any width, which is why accepted shapes drop their outline entirely. An open
+ * `LINE` has no interior and no boundary of its own: its stroke is the only thing giving it extent,
+ * so stroking it at zero leaves nothing for Dynamic Fog to turn into a wall. The failure would be
+ * silent and would only show at the table, as sight passing through a wall.
+ *
+ * **The cost, stated:** a thinner line is harder to see and harder to hit when selecting, and DF's
+ * own wall mode uses the full fog stroke width, presumably for exactly that reason. Judging these is
+ * the workspace preview's job, where they are drawn cased at a legible width whatever this is; but
+ * once step G puts editing on them, this trade is worth revisiting with a GM's hand on it.
+ */
+export const WALL_STROKE_SHARE = 0.25;
+
+/** Below this a line is too thin to hit, whatever the scene's fog stroke is set to. */
+export const MIN_WALL_STROKE = 0.5;
+
+/** The width a wall line is emitted at, from the scene's fog stroke width. */
+export function wallStrokeWidth(fogStrokeWidth: number): number {
+  return Math.max(MIN_WALL_STROKE, fogStrokeWidth * WALL_STROKE_SHARE);
+}
+
 export interface WallProvenance {
   /** Which run produced this item. A timestamp, because its job is to be read beside a log. */
   readonly run: string;

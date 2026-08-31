@@ -81,6 +81,27 @@ export const PROPOSAL_COLOURS = [
 export const STAGED_FILL_OPACITY = 0.22;
 export const ACCEPTED_FILL_OPACITY = 1;
 
+/**
+ * The outline an accepted fog shape carries: **none**.
+ *
+ * Dynamic Fog derives its walls by *stroking* the item's path at `style.strokeWidth` and taking the
+ * outline — `WallHelpers.drawingToPolylines`. So a shape with an outline W wide puts one wall at its
+ * boundary minus W/2 and another at plus W/2, and the band between them can be seen into from
+ * neither side. Two adjacent rooms share a centreline, so each was revealing only to centreline
+ * − W/2: the half-wall reveal the whole wall-graph pivot was for, coming up short at both edges.
+ *
+ * **And W was the proposal-outline setting** — a review affordance, there so a GM can tell one
+ * proposal from the next, silently deciding where sight is blocked. The same shape of mistake as
+ * `fillOpacity`, which is why both are corrected at the same moment: on promotion, when the shape
+ * stops being a proposal and starts being geometry.
+ *
+ * **Zero rather than merely small, and that rests on a measurement**: step 1 found `strokeWidth`
+ * free, including zero, with a zero-stroke shape producing exactly as many walls as a stroked one.
+ * A closed path has its own boundary to stroke, so there is something there at any width. An open
+ * `LINE` does not, which is why the wall lines keep a real width — see `wallLines.ts`.
+ */
+export const ACCEPTED_STROKE_WIDTH = 0;
+
 export interface RegionProvenance {
   /** Which run produced this item. A timestamp, because its job is to be read beside a log. */
   readonly run: string;

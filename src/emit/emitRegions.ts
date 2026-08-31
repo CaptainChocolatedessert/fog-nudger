@@ -43,13 +43,14 @@ import { runTrace } from "../pipeline";
 import { readSettings } from "../settingsStore";
 import {
   ACCEPTED_FILL_OPACITY,
+  ACCEPTED_STROKE_WIDTH,
   planBatches,
   REGION_KEY,
   stageShapes,
   totalCommands,
   type FogShapeSpec,
 } from "./fogShapes";
-import { stageWallLines, WALL_KEY, type WallLineSpec } from "./wallLines";
+import { stageWallLines, wallStrokeWidth, WALL_KEY, type WallLineSpec } from "./wallLines";
 
 /**
  * Compile-time assertion that the numbers mirrored in `geometry/ring` still match the SDK's enum.
@@ -169,7 +170,7 @@ export async function stageRegions(): Promise<string> {
   const fogStroke = await OBR.scene.fog.getStrokeWidth();
   const { lines, dropped } = stageWallLines(
     run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed, ids: wall.ids })),
-    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: Math.max(1, fogStroke) },
+    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: wallStrokeWidth(fogStroke) },
   );
   if (dropped > 0) {
     devLog("warn", `emit: dropped ${dropped} zero-length wall segments — nothing to select there`);
@@ -220,6 +221,10 @@ export async function stageRegions(): Promise<string> {
  *   appear on arrival and did not exist a moment earlier.
  * - **`fillOpacity` to 1** — required, not aesthetic. Below 1 a fog shape leaves a translucent tint
  *   of the fog colour over ground the party has revealed, for players as well as the GM.
+ * - **`strokeWidth` to 0** — also required rather than aesthetic, for the same shape of reason.
+ *   Dynamic Fog strokes the item's path at this width and takes the outline as its wall geometry,
+ *   so an outline W wide puts walls at the boundary ± W/2 with an unreachable band between. See
+ *   `ACCEPTED_STROKE_WIDTH`.
  * - **`visible` to TRUE — corrected 2026-08-30, and this one was load-bearing after all.**
  *
  *   It was false, "matching what Owlbear's own fog tool produces", and the record noted at the time
@@ -256,6 +261,10 @@ export async function acceptStaged(): Promise<string> {
             // accepted at false is a cleared region, which is why every room came back revealed.
             draft.visible = true;
             draft.style.fillOpacity = ACCEPTED_FILL_OPACITY;
+            // The outline goes with the proposal it belonged to. Dynamic Fog offsets its walls by
+            // exactly this, so leaving it on would put them half an outline either side of the
+            // boundary and shorten the half-wall reveal at both edges.
+            draft.style.strokeWidth = ACCEPTED_STROKE_WIDTH;
           }
         }),
       "accept",
@@ -306,7 +315,7 @@ async function acceptWallLines(): Promise<number> {
           // only whether the line is drawn — not whether it becomes a wall.
           draft.visible = true;
           draft.style.strokeColor = colour;
-          draft.style.strokeWidth = width;
+          draft.style.strokeWidth = wallStrokeWidth(width);
         }
       }),
     "accept walls",
@@ -331,7 +340,9 @@ export async function returnToStaging(): Promise<string> {
 
   // The GM's current staged opacity, not the one the shapes were emitted with. Demoting is how a
   // proposal comes back for another look, so it should come back looking the way proposals look now.
-  const stagedOpacity = (await readSettings()).review.fillOpacity;
+  const review = (await readSettings()).review;
+  const stagedOpacity = review.fillOpacity;
+  const stagedStroke = Math.max(0, (await OBR.scene.grid.getDpi()) * review.strokeSquares);
   const accepted = await OBR.scene.items.getItems<Path>(
     (item) => REGION_KEY in item.metadata && item.layer === "FOG" && isPath(item),
   );
@@ -348,6 +359,9 @@ export async function returnToStaging(): Promise<string> {
             // exactly why accepting had it wrong.
             draft.visible = false;
             draft.style.fillOpacity = stagedOpacity;
+            // The outline comes back with it — a proposal a GM cannot tell from its neighbour is
+            // not a proposal. Nothing derives walls from a `DRAWING` item, so it costs nothing here.
+            draft.style.strokeWidth = stagedStroke;
           }
         }),
       "return to staging",

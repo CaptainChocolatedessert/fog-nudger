@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { stageWallLines, type PlacedWall } from "./wallLines";
+import { stageWallLines, wallStrokeWidth, type PlacedWall } from "./wallLines";
 
 const OPTIONS = {
   run: "2026-08-30T00:00:00.000Z",
@@ -77,5 +77,21 @@ describe("wall lines", () => {
   it("emits nothing for a wall with a single point", () => {
     const { lines } = stageWallLines([{ edge: 0, points: [{ x: 1, y: 1 }], ids: [0] }], OPTIONS);
     expect(lines).toHaveLength(0);
+  });
+});
+
+describe("the emitted stroke width", () => {
+  it("is a quarter of the scene's fog stroke, because the width is the sliver", () => {
+    // Dynamic Fog strokes the item at this width and takes the outline, so a line W wide yields two
+    // walls W apart with an unreachable band between them.
+    expect(wallStrokeWidth(8)).toBe(2);
+  });
+
+  it("never reaches zero, which is the one place zero is unsafe", () => {
+    // A closed shape has its own boundary to stroke at any width. An open LINE does not: its stroke
+    // is the only thing giving it extent, so stroking it at zero leaves nothing to become a wall,
+    // and the failure would be silent until sight passed through a wall at the table.
+    expect(wallStrokeWidth(0)).toBeGreaterThan(0);
+    expect(wallStrokeWidth(0.1)).toBeGreaterThan(0);
   });
 });
