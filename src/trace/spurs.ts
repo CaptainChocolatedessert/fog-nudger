@@ -115,7 +115,19 @@ export function pruneSpurs(skeleton: BinaryMask, maxLength: number): PruningResu
   let rounds = 0;
 
   for (;;) {
-    const doomed: number[] = [];
+    /*
+      A set rather than a list, and that is a counting fix rather than a deletion one.
+
+      A branch attached to a wall has one free end. A **free-floating fragment** short enough to
+      prune has two, so it was walked from both: `removed` went up twice and `pixels` gained its
+      length twice. Deletion was always right — it is deferred to the end of the round and writing 0
+      twice is writing 0 — so only the numbers were wrong. On a three-pixel isolated run: `removed`
+      2, `pixels` 6, three pixels actually deleted.
+
+      Skipping an end already condemned this round is what makes it once. Two spurs off the same
+      junction are unaffected: `walk` stops *before* the junction, so their paths never overlap.
+    */
+    const doomed = new Set<number>();
     rounds += 1;
 
     for (let index = 0; index < data.length; index++) {
@@ -124,17 +136,18 @@ export function pruneSpurs(skeleton: BinaryMask, maxLength: number): PruningResu
       // control quietly do the ink-island filter's job with a different number on it.
       if (neighboursOf(data, width, height, index).length === 0) continue;
       if (crossings(data, width, height, index) !== 1) continue;
+      if (doomed.has(index)) continue;
 
       const branch = walk(data, width, height, index, maxLength);
       if (branch) {
         removed += 1;
-        doomed.push(...branch);
+        for (const pixel of branch) doomed.add(pixel);
       }
     }
 
-    if (doomed.length === 0) break;
+    if (doomed.size === 0) break;
     for (const index of doomed) data[index] = 0;
-    pixels += doomed.length;
+    pixels += doomed.size;
   }
 
   return { mask: { width, height, data }, removed, pixels, rounds };

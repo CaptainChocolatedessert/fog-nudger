@@ -140,6 +140,31 @@ describe("pruneSpurs", () => {
     expect(result.removed).toBe(0);
   });
 
+  it("counts a free-floating fragment once, not once per end", () => {
+    /*
+      A branch attached to a wall has one free end; a fragment floating on its own has two, so it
+      used to be walked from both — `removed` 2 and `pixels` 6 for the three pixels below, which
+      actually delete once each. The mask was always right, because deletion is deferred to the end
+      of the round and writing 0 twice is writing 0. The numbers a GM reads were not.
+
+      Isolated fragments are the island filter's business, so this fires only on what that filter
+      left behind — which is exactly the case where a count is being consulted to decide whether to
+      reach for it.
+    */
+    const fragment = maskFromRows([
+      "........",
+      "........",
+      "..###...",
+      "........",
+      "........",
+    ]);
+    const result = pruneSpurs(fragment, 5);
+
+    expect(result.removed).toBe(1);
+    expect(result.pixels).toBe(3);
+    expect(rows(result.mask).join("")).not.toContain("#");
+  });
+
   it("reports pixels as well as branches, since one long spur is not two short ones", () => {
     const result = pruneSpurs(maskFromRows(wallWithBoth), 6);
     expect(result.removed).toBe(2);

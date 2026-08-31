@@ -106,8 +106,12 @@ export function thin(mask: BinaryMask): ThinningResult {
       }
     }
 
-    passes += 1;
+    // Counted only when the pass did something. The increment used to sit above this break, so the
+    // final no-op pass — the one that proves nothing more can be deleted — was counted as work. The
+    // figure is one a record reasons from ("11 passes, which is half the widest stroke"), so an
+    // off-by-one in it is an off-by-one in the reasoning.
     if (!changed) break;
+    passes += 1;
 
     // Rebuilt from the survivors rather than spliced: a pass that deletes a third of the skeleton
     // would otherwise leave the list carrying the other two thirds plus every hole in it.

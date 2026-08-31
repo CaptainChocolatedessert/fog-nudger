@@ -216,7 +216,12 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
   }
 
   let walls = 0;
-  for (const batch of chunk(lines, BATCH_LIMITS.maxItems)) {
+  // `.entries()` for the same reason the shape loop above has an index: the pause is between
+  // batches, not after each one, and this loop used to pause after the last as well — 120ms spent
+  // at the end of every push waiting to be polite to nobody. Two loops side by side with different
+  // pacing is also the kind of asymmetry that gets copied into the third.
+  const wallBatches = [...chunk(lines, BATCH_LIMITS.maxItems)];
+  for (const [index, batch] of wallBatches.entries()) {
     try {
       await writeWithBackoff(
         () => OBR.scene.items.addItems(batch.map(wallLineItem)),
@@ -232,7 +237,7 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
       );
     }
     walls += batch.length;
-    await pause(BATCH_PAUSE_MS);
+    if (index < wallBatches.length - 1) await pause(BATCH_PAUSE_MS);
   }
 
   lastPushed = fingerprint ?? null;

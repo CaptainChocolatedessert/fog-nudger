@@ -189,6 +189,27 @@ describe("thin", () => {
     expect(result.passes).toBeGreaterThan(0);
   });
 
+  it("counts the passes that did something, and there are half the stroke width of them", () => {
+    /*
+      Two things at once, and the second is why the first is worth pinning.
+
+      `passes += 1` used to sit above the `if (!changed) break`, so the terminating pass — the one
+      that proves nothing more can be deleted — was counted as work. Every reported figure was one
+      too many, including the "11 passes" in the record, which is 10.
+
+      And the relationship the record states informally — "half the widest stroke" — is exact:
+      floor(w / 2). Pinning it makes the claim checkable rather than a remembered impression, and it
+      is the thing that would have caught the off-by-one, since `passes > 0` cannot.
+    */
+    for (const width of [3, 5, 7, 9]) {
+      const rows = [".".repeat(14)];
+      for (let i = 0; i < width; i++) rows.push("." + "#".repeat(12) + ".");
+      rows.push(".".repeat(14));
+
+      expect(thin(maskFromRows(rows)).passes, `stroke ${width}px`).toBe(Math.floor(width / 2));
+    }
+  });
+
   it("does nothing to an empty mask", () => {
     const empty = maskFromRows(["....", "....", "...."]);
     const result = thin(empty);
