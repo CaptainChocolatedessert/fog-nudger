@@ -102,6 +102,25 @@ export const ACCEPTED_FILL_OPACITY = 1;
  */
 export const ACCEPTED_STROKE_WIDTH = 0;
 
+/**
+ * The layer an emitted item lands on, and whether it is visible there.
+ *
+ * **Declared beside the other two emission constants because all four are one decision**, and
+ * because splitting them once already cost a round trip: when staging was removed, the promotion
+ * step that used to set the layer and visibility went with it, and the item builders were left
+ * writing proposals onto `DRAWING` while everything around them said fog. Nothing caught it — the
+ * builders touch the SDK, so no headless test reaches them — and the first sign was a GM saying the
+ * shapes had been staged rather than put on the map.
+ *
+ * `FOG` is the promotion itself: Dynamic Fog filters on layer plus type, so walls appear on arrival.
+ *
+ * `visible: true` is **not** "can this be seen". On the fog layer it is the difference between a
+ * shape that *is* fog and one that has been cleared — see the note on `acceptStaged`'s successor in
+ * `emitRegions.ts`. Emitting at false is what made every room come back revealed.
+ */
+export const EMITTED_LAYER = "FOG" as const;
+export const EMITTED_VISIBLE = true;
+
 export interface RegionProvenance {
   /** Which run produced this item. A timestamp, because its job is to be read beside a log. */
   readonly run: string;

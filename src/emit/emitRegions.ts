@@ -1,14 +1,21 @@
 /**
- * Roadmap step 8, SDK half — the three gestures that put traced regions in front of a GM.
+ * The SDK half — putting traced regions and walls into the scene, and taking them out again.
  *
- * **Stage** runs the pipeline and writes proposals to the `DRAWING` layer. **Accept** promotes them
- * to `FOG`, which is where they become fog and where Dynamic Fog starts deriving walls from them.
- * **Return to staging** is accept's exact inverse, keeping the items and every hand edit on them.
- * **Remove** deletes ours and touches nothing else.
+ * **Push** runs the pipeline, clears what we put there last time, and writes the result onto the
+ * `FOG` layer. **Remove** deletes ours and touches nothing else. That is the whole surface: staging,
+ * accepting and returning to staging are gone (`DESIGN.md` §4), because the workspace judges a
+ * partition without writing anything and the scene is a rendering rather than working state.
  *
- * Everything about *what* a shape is lives next door in `fogShapes.ts`, where it can be tested.
- * What lives here is the part no test in this repository can reach: the calls themselves, and the
- * handling of what Owlbear says back.
+ * Everything about *what* an item is lives next door in `fogShapes.ts` and `wallLines.ts`, where it
+ * can be tested. What lives here is the part no test in this repository can reach: the calls
+ * themselves, and the handling of what Owlbear says back.
+ *
+ * **That untestable boundary has already bitten once.** Removing staging deleted the promotion step
+ * that set the layer and the visibility, and the item builders below were left writing to `DRAWING`
+ * while everything around them said fog. It shipped, and a GM found it. The four values an emitted
+ * item must carry — layer, visibility, fill opacity, stroke width — are now declared together in
+ * `fogShapes.ts` rather than spelled out here, so the next such edit has one place to miss instead
+ * of four.
  *
  * ## Throttle and refusal are not the same failure, and this is where that matters
  *
@@ -16,13 +23,6 @@
  * and retrying it is a hang. They arrive through the same channel and read alike (DESIGN.md §7), so
  * every write here asks which it was before deciding what to do. A refused batch stops the run and
  * says so; a throttled one waits and tries again.
- *
- * ## Staging a second time is refused rather than merged
- *
- * Emitting over an existing set would double every region, and deciding *which* of the two to keep
- * is the re-run question — a product decision (DESIGN.md §10) that step 9 owns and that a first
- * emit path has no business answering quietly. So this refuses and says how many of ours are
- * already there, and the remedy is the explicit remove.
  */
 
 import OBR, { buildLine, buildPath, Command, type Item } from "@owlbear-rodeo/sdk";
@@ -34,6 +34,8 @@ import { runTrace } from "../pipeline";
 import {
   ACCEPTED_FILL_OPACITY,
   ACCEPTED_STROKE_WIDTH,
+  EMITTED_LAYER,
+  EMITTED_VISIBLE,
   planBatches,
   REGION_KEY,
   stageShapes,
@@ -312,14 +314,9 @@ function pause(ms: number): Promise<void> {
  * One wall segment, built the way Dynamic Fog's own wall mode builds one.
  *
  * A `LINE` rather than anything with an interior, because Owlbear reads a fog item's interior as
- * revealable ground and a wall must reveal nothing. Staged on `DRAWING` in the review colour like
- * every other proposal; `acceptStaged` moves it to `FOG`.
- *
- * **`visible: false`, deliberately unlike Dynamic Fog's wall mode**, which leaves the default of
- * true. Ours are staged before they are accepted, and a visible staged item leaks the map's layout
- * to players during prep — the same reasoning the fog shapes already follow. The conservative
- * direction: if it turns out a hidden line yields no wall, the failure is a missing wall the GM can
- * see is missing, where the other way round is a leak nobody notices.
+ * revealable ground and a wall must reveal nothing. Onto `FOG` at the scene's own fog colour, so it
+ * is indistinguishable from a wall a GM drew by hand — and at zero width, so the two walls Dynamic
+ * Fog derives from it coincide on the centreline rather than straddling it.
  */
 function wallLineItem(line: WallLineSpec): Item {
   return buildLine()
@@ -329,8 +326,8 @@ function wallLineItem(line: WallLineSpec): Item {
     .strokeColor(line.colour)
     .strokeOpacity(1)
     .strokeWidth(line.strokeWidth)
-    .layer("DRAWING")
-    .visible(false)
+    .layer(EMITTED_LAYER)
+    .visible(EMITTED_VISIBLE)
     .name(line.name)
     .metadata({ [WALL_KEY]: line.provenance })
     .build();
@@ -348,10 +345,10 @@ function fogShapeItem(shape: FogShapeSpec): Item {
     .strokeColor(shape.colour)
     .strokeOpacity(1)
     .strokeWidth(shape.strokeWidth)
-    .layer("DRAWING")
-    // Not optional. With this true, players see the proposals and the dungeon's layout leaks during
-    // prep; with it false the GM sees them ghosted and can still select and edit them.
-    .visible(false)
+    .layer(EMITTED_LAYER)
+    // On the fog layer this is not "can it be seen" — it is the difference between a shape that is
+    // fog and one that has been cleared. See `EMITTED_VISIBLE`.
+    .visible(EMITTED_VISIBLE)
     .position(shape.position)
     .name(shape.name)
     .metadata({ [REGION_KEY]: shape.provenance })
