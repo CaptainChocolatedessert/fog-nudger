@@ -14,6 +14,16 @@ import { describe, expect, it } from "vitest";
 
 import devManifest from "../public/manifest.dev.json";
 import manifest from "../public/manifest.json";
+import pkg from "../package.json";
+/**
+ * The same constant `vite.config.ts` uses for `base`, imported rather than restated.
+ *
+ * A copy here would make this a comparison between two duplicates of the value: renaming the
+ * repository and updating the Vite config would leave the manifests and this test agreeing on a
+ * stale prefix, the suite green, and every path in the published site a 404 — which is precisely
+ * the failure the path test below is named for.
+ */
+import { PAGES_BASE } from "./pagesBase";
 
 /**
  * Owlbear refuses a longer one — reported by a room on 2026-08-22, when the dev build's 139
@@ -28,8 +38,6 @@ const MAX_DESCRIPTION = 128;
 
 /** Deliberate slack. A description sitting one character under a hard limit is not a passing test. */
 const COMFORTABLE_DESCRIPTION = 115;
-
-const SUBPATH = "/fog-nudger/";
 
 const manifests = [
   ["manifest.json", manifest],
@@ -57,8 +65,15 @@ describe.each(manifests)("%s", (_name, subject) => {
       subject.action.icon,
       subject.action.popover,
     ]) {
-      expect(path.startsWith(SUBPATH)).toBe(true);
+      expect(path.startsWith(PAGES_BASE)).toBe(true);
     }
+  });
+
+  it("carries the package's version, so a room and a commit name the same build", () => {
+    // Three hand-maintained copies of one number. The two manifests are kept in step with each
+    // other by the drift test below; nothing tied either to package.json, so the version Owlbear
+    // shows could sit a release behind the source with no way to notice from inside a room.
+    expect(subject.version).toBe(pkg.version);
   });
 
   it("declares both icons, which are different fields for different surfaces", () => {

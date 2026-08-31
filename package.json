@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=22.12"
+  },
   "description": "Trace walls out of a map image for Owlbear Rodeo's dynamic fog, then nudge them into place",
   "scripts": {
     "dev": "vite",
