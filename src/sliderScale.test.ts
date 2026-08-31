@@ -4,8 +4,15 @@ import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "./sliderScale";
 import { DEFAULT_SETTINGS, readParameter, SETTING_LIMITS, type SettingName } from "./settings";
 
 const linear = { min: 0, max: 1, step: 0.02 };
-/** The smallest-room threshold: three orders of magnitude, and every useful value near the bottom. */
-const log = SETTING_LIMITS.minRoomSquares;
+/**
+ * A log-scaled range: three orders of magnitude with every useful value near the bottom.
+ *
+ * Declared here rather than taken from `SETTING_LIMITS` because no shipping control is log-scaled
+ * any more — the smallest-room threshold was the only one, and it was removed. The scale itself is
+ * still worth keeping tested: it is pure, round-tripping is what stops a setting being rewritten
+ * merely by opening a panel, and the next control that needs it should find it working.
+ */
+const log = { min: 0.002, max: 6, step: 0.01 };
 
 describe("toSlider", () => {
   it("puts the ends at the ends", () => {

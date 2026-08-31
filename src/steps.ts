@@ -229,7 +229,6 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   spurPrunePx: "walls",
   fillOpacity: "regions",
   strokeSquares: "regions",
-  minRoomSquares: "regions",
   simplifyInkWidths: "regions",
 };
 

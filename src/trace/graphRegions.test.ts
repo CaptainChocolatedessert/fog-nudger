@@ -5,7 +5,6 @@ import { coveredArea, deriveGraphRegions, type GraphRegionOptions } from "./grap
 
 const BASE: GraphRegionOptions = {
   spurPrunePx: 0,
-  minArea: 0,
   tolerance: 0.5,
   maxTolerance: 4,
 };
@@ -139,13 +138,24 @@ describe("regions derived from the wall graph", () => {
     }
   });
 
-  it("drops a face below the minimum and says how much it dropped", () => {
-    const generous = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
-    const strict = deriveGraphRegions(maskFromRows(TWO_ROOMS), { ...BASE, minArea: 100 });
+  it("emits every face that holds any map, with no size threshold at all", () => {
+    /*
+      The smallest-room control is gone (user, 2026-08-30). It deleted a *region* when what is
+      usually wrong is a *wall*, and removing a sliver by deleting the wall that made it is exact and
+      local where removing it by area is neither — so it belongs to the wall editing rather than to a
+      slider here.
 
-    expect(strict.regions.length).toBeLessThan(generous.regions.length);
-    expect(strict.discarded).toBeGreaterThan(0);
-    expect(strict.discardedArea).toBeGreaterThan(0);
+      What replaces it is an invariant, not a threshold: a face with no interior pixels holds no map,
+      so there is nothing there to reveal.
+    */
+    const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
+    const labelled = new Set(result.labelled.regions.map((region) => region.id));
+
+    for (const face of result.faces.faces) {
+      const emitted = result.regions.some((region) => region.id === face.label);
+      expect(emitted, `face ${face.label} with ${face.interior} px`).toBe(face.interior > 0);
+      expect(labelled.has(face.label)).toBe(face.interior > 0);
+    }
   });
 
   it("escalates the tolerance globally, so shared walls cannot come apart", () => {

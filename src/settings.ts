@@ -176,7 +176,6 @@ export interface TraceSettings {
    * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
    */
   readonly spurPrunePx: number;
-  readonly minRoomSquares: number;
   /**
    * Simplification tolerance, as a fraction of the measured ink width.
    *
@@ -258,7 +257,6 @@ export const DEFAULT_SETTINGS: Settings = {
     // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
     // skeleton as thinning produced it, hairs and all.
     spurPrunePx: 0,
-    minRoomSquares: 0.1,
     simplifyInkWidths: 0.25,
   },
   review: {
@@ -297,7 +295,6 @@ export const SETTING_LIMITS = {
   minStrokeInkWidths: { min: 0, max: 3, step: 0.05 },
   // Same reasoning: the top end should be able to erase a map's decoration and then its walls.
   minIslandPx: { min: 0, max: 300, step: 1 },
-  minRoomSquares: { min: 0.002, max: 6, step: 0.01 },
   // Capped below the half-ink-width bound that stops a boundary crossing a wall. A GM cannot be
   // given a control whose top end silently merges rooms.
   simplifyInkWidths: { min: 0.02, max: 0.45, step: 0.01 },
@@ -361,7 +358,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   gapFillPx: "read",
   gapTravelPx: "read",
   spurPrunePx: "read",
-  minRoomSquares: "derive",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
@@ -409,7 +405,6 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   gapFillPx: "pipeline",
   gapTravelPx: "pipeline",
   spurPrunePx: "pipeline",
-  minRoomSquares: "pipeline",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
   strokeSquares: "display",
@@ -619,7 +614,6 @@ export function normaliseSettings(raw: unknown): Settings {
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
       spurPrunePx: clamp(trace.spurPrunePx, "spurPrunePx", t.spurPrunePx),
-      minRoomSquares: clamp(trace.minRoomSquares, "minRoomSquares", t.minRoomSquares),
       simplifyInkWidths: clamp(
         trace.simplifyInkWidths,
         "simplifyInkWidths",
@@ -663,7 +657,7 @@ export function describeSettings(settings: Settings): string {
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusPx}px, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
     `min island ${trace.minIslandPx}px, ` +
-    `min room ${trace.minRoomSquares} sq, simplify ${trace.simplifyInkWidths} ink widths; ` +
+    `simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `breaks ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")

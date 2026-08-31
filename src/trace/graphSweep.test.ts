@@ -76,7 +76,6 @@ describe("the graph derivation over generated linework", () => {
         */
         const result = deriveGraphRegions(randomInk(width, height, rng(seed), runs), {
           spurPrunePx: 0,
-          minArea: 0,
           tolerance: 0,
           maxTolerance: 0,
         });
@@ -145,7 +144,6 @@ describe("the graph derivation over generated linework", () => {
     for (let seed = 1; seed <= 200; seed++) {
       removed += deriveGraphRegions(randomInk(40, 30, rng(seed), 22), {
         spurPrunePx: 0,
-        minArea: 0,
         tolerance: 0.5,
         maxTolerance: 4,
       }).sliversRemoved;

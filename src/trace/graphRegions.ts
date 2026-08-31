@@ -18,16 +18,15 @@
  * cap, the tolerance rises for the whole map and every edge is refitted. The cost is stated: one
  * enormous region can coarsen every other one. In exchange, no two faces can disagree about a wall.
  *
- * ## The smallest-room filter, and what happens to a hole
+ * ## No size threshold, and what happens to a hole
  *
- * A face below the minimum is not emitted. A hole is kept only when the face on the other side of it
- * survives, which is the same containment rule the region-first pipeline used and for the same
- * reason: a hole's area includes the wall around whatever is inside it, so a size test on a hole
- * means something different from a size test on a room.
+ * Every face holding any map is emitted; the smallest-room control is gone (user, 2026-08-30). The
+ * only thing dropped is a face with **no interior pixels**, which is not a threshold but an
+ * invariant: there is nothing there to reveal.
  *
- * **Stated limitation:** containment is checked one step across, not transitively. A discarded face
- * that itself contains a surviving one leaves its hole filled. Nothing on the test map produces that
- * shape, and the honest fix is a containment walk rather than a bigger threshold.
+ * The containment rule for holes survives and now almost never fires — a hole is kept unless the
+ * face on the other side of it holds no map. Its old caveat, that containment was checked one step
+ * across rather than transitively, stops mattering for the same reason.
  *
  * Pure: no DOM, no SDK.
  */
@@ -50,8 +49,6 @@ import { buildWallGraph, type WallGraph } from "./wallGraph";
 export interface GraphRegionOptions {
   /** Longest dead-end branch to prune from the skeleton, in pixels walked. Zero is off. */
   readonly spurPrunePx: number;
-  /** Smallest face kept, in pixels. */
-  readonly minArea: number;
   /** Douglas–Peucker tolerance in raster pixels. */
   readonly tolerance: number;
   /** Ceiling the tolerance may escalate to. */
@@ -96,8 +93,8 @@ export interface GraphRegionResult {
   readonly regions: readonly GraphRegion[];
   /** The skeleton the graph came from, before the border frame was painted on. */
   readonly skeleton: BinaryMask;
+  /** Faces holding no map at all — sub-pixel slivers. There is no size threshold any more. */
   readonly discarded: number;
-  readonly discardedArea: number;
   /**
    * Edges with the same face on both sides — the bridge criterion, which step E turns into lines.
    *
@@ -149,11 +146,6 @@ export interface GraphRegionResult {
   readonly pruning: { readonly removed: number; readonly pixels: number; readonly rounds: number };
 }
 
-/** Pixels a face covers, from its doubled signed area. */
-function faceArea(face: GraphFace): number {
-  return face.doubleArea / 2;
-}
-
 export function deriveGraphRegions(
   ink: BinaryMask,
   options: GraphRegionOptions,
@@ -188,17 +180,28 @@ export function deriveGraphRegions(
   const sliverRounds = resolved.rounds;
   const faceMs = performance.now() - faceStarted;
 
+  /*
+    Every face that holds any map at all is emitted. There is no size threshold.
+
+    **The smallest-room control is gone** (user, 2026-08-30). It was a blunt instrument standing in
+    for judgement the GM is better placed to make once the walls are editable: what it deleted was a
+    *region*, when what is usually wrong is a *wall*. Removing a sliver by deleting the wall that
+    made it is exact, local, and something a GM can see; removing it by area is none of those.
+
+    **It also resolves a defect this record carried for weeks.** A discarded face was never turned
+    into ink — it was simply not emitted, so it stayed permanently unrevealable and showed as bare
+    map inside a revealed room unless a filled hole happened to reach it. Nothing is discarded now,
+    so there is no bare map.
+
+    What remains is not a threshold but an invariant: **a face with no interior pixels holds no map**,
+    so there is nothing there to reveal and nothing to emit. Those are the sub-pixel slivers a
+    junction cluster leaves where no bounding edge was free of interior pixels to delete.
+  */
   const survives = new Set<number>();
   let discarded = 0;
-  let discardedArea = 0;
   for (const face of faces.faces) {
-    if (faceArea(face) >= options.minArea) survives.add(face.label);
-    else {
-      discarded += 1;
-      // The labelling's pixel count rather than the polygon's area, so the figure means the same
-      // thing as every other area in the census.
-      discardedArea += face.interior;
-    }
+    if (face.interior > 0) survives.add(face.label);
+    else discarded += 1;
   }
 
   // Carried out with the survivors only, so the census and the probe describe what was emitted.
@@ -206,7 +209,8 @@ export function deriveGraphRegions(
     ...labelled,
     regions: labelled.regions.filter((region) => survives.has(region.id)),
     discarded,
-    discardedArea,
+    // Always zero, and not by accident: a face is only ever dropped for holding no pixels.
+    discardedArea: 0,
   };
 
   // Which face sits on the other side of a cycle, so the hole rule has something to ask.
@@ -255,7 +259,6 @@ export function deriveGraphRegions(
     regions: built.regions.map((region) => ({ ...region, overCap: region.commands > cap })),
     skeleton: pruned.mask,
     discarded,
-    discardedArea,
     bridges,
     uncoveredEdges: built.uncovered,
     degenerateCycles: built.degenerateCycles,
@@ -310,7 +313,8 @@ function assemble(
       }
 
       if (cycleIndex > 0) {
-        // A hole. Kept only when the face on its far side survived the minimum.
+        // A hole. Kept only when the face on its far side is emitted — which, with no size
+        // threshold left, means only when that face holds no map at all.
         const inside = cycle.halfEdges
           .map((half) => faceOfHalfEdge.get(half ^ 1))
           .filter((label): label is number => label !== undefined && label !== face.label);

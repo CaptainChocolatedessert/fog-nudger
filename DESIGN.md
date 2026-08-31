@@ -798,6 +798,30 @@ for the crossing number where it belongs, so our order is the natural one: thin,
   particular sliver cannot open. A cap may still be wanted — cutting a corner across a doorway is the
   new risk — but it must be re-derived rather than inherited.
 
+### The smallest room control is gone, and zero-width walls work — 2026-08-30 (user)
+
+**Every face holding any map is emitted, and there is no size threshold.** The smallest-room control
+deleted a *region* when what is usually wrong is a *wall*. Removing a sliver by deleting the wall that
+made it is exact, local, and something a GM can see happen; removing it by area is none of those. The
+judgement moves to the wall editing of step G, which the workspace now has somewhere to show.
+
+What remains is an invariant rather than a threshold: a face with **no interior pixels** holds no map,
+so there is nothing there to reveal. Those are the sub-pixel slivers a junction cluster leaves where
+no bounding edge was free of interior pixels to delete.
+
+**This closes the "bare map inside a revealed room" defect**, which this record has carried since the
+first staging run. A discarded face was never turned into ink — it was simply not emitted, so it
+stayed permanently unrevealable and showed through as untouched map. Nothing is discarded now, so
+there is no mechanism for it.
+
+**And zero-width emission is measured, not assumed.** Accepted shapes drop their outline and accepted
+wall lines carry no stroke at all; Dynamic Fog derives its walls by stroking the item at
+`style.strokeWidth`, so at zero the two walls it derives coincide *on* the centreline. Confirmed in a
+room: lighting a wall from both sides reveals everything with no fog line down it, and the walls still
+block sight. A zero-width `LINE` therefore does yield a wall — Skia's stroker returns something usable
+at zero rather than nothing, which was the open risk. Tiny rendering artefacts sit on the division,
+visible only under a deliberately garish fog colour, and are accepted as cosmetic.
+
 ### The document and its rendering — settled 2026-08-29 (user)
 
 **Our wall graph is the document. The scene is a rendering of it.** Emitted items are an output, not

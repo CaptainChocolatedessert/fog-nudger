@@ -1073,13 +1073,11 @@ export async function runTrace(
     );
   }
 
-  const minArea = Math.max(1, Math.round(settings.trace.minRoomSquares * pxPerSquare ** 2));
   const tolerance = settings.trace.simplifyInkWidths * inkWidth;
   const safeTolerance = inkWidth / 2;
 
   const derived = deriveGraphRegions(inkMask, {
     spurPrunePx: settings.trace.spurPrunePx,
-    minArea,
     tolerance,
     maxTolerance: MAX_SIMPLIFY_INK_WIDTHS * inkWidth,
   });
@@ -1177,31 +1175,21 @@ export async function runTrace(
 
   // ## What is left uncovered, which is the only way to answer "why is there a gap"
   //
-  // The faces tile the framed raster, so their total is very nearly the whole of it — short by the
-  // half-pixel each boundary runs inside the wall, plus whatever the minimum-area filter dropped.
+  // The faces tile the framed raster, so their total is very nearly the whole of it — short only by
+  // the half-pixel each boundary runs inside the wall.
+  //
+  // **There is no bare floor to report any more.** With the smallest-room control gone, every face
+  // holding any map is emitted, and the only faces dropped hold none. The warning that used to live
+  // here — grid squares of floor covered by nothing, showing through as bare map inside a revealed
+  // room — described a defect that no longer has a mechanism.
   const coveredPixels = coveredArea(derived.regions);
   const rasterArea = plan.width * plan.height;
-  const bareSquares = pxPerSquare > 0 ? derived.discardedArea / pxPerSquare ** 2 : 0;
   devLog(
     "info",
     `trace: emitted shapes cover ${((coveredPixels / rasterArea) * 100).toFixed(1)}% of the raster ` +
-      `(against ${(chosenCoverage * 100).toFixed(1)}% ink); the minimum-area filter discarded ` +
-      `${derived.discarded} faces holding ${derived.discardedArea} px ` +
-      `(${bareSquares.toFixed(2)} grid squares), and filled ${derived.filledHoles} holes that ` +
-      `enclosed nothing surviving.`,
+      `(against ${(chosenCoverage * 100).toFixed(1)}% ink); ${derived.discarded} faces held no map ` +
+      `at all and were dropped, and ${derived.filledHoles} holes enclosed nothing emitted.`,
   );
-  if (derived.discardedArea > 0) {
-    // Named as a real defect rather than a rounding remark. Every one of these pixels is a patch of
-    // map inside a room the GM will reveal, showing through untouched — which is exactly what gets
-    // reported as "an unfilled pocket".
-    devLog(
-      "warn",
-      `trace: ${bareSquares.toFixed(2)} grid squares of floor are covered by nothing. These are ` +
-        `faces below the ${settings.trace.minRoomSquares}-square minimum whose hole was kept ` +
-        `because something else inside it survived. Lowering the minimum is the direct lever, and ` +
-        `§5's bias favours it: a spurious region costs a click, a bare patch is a visible defect.`,
-    );
-  }
 
   // ## Simplification
   //

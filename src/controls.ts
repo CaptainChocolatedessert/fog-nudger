@@ -167,19 +167,6 @@ export const CONTROLS: readonly Control[] = [
     hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
   },
   {
-    name: "minRoomSquares",
-    // Logarithmic: three orders of magnitude, with everything a GM will pick near the bottom. On a
-    // linear track the default sits 1.6% along and the rest of the slider chooses between absurd
-    // values.
-    scale: "log",
-    label: "Smallest room",
-    hint: "Anything smaller is discarded, and shows as bare map unless something swallows it. Low is safer: a spurious region costs one click, a bare patch is a visible defect.",
-    derive: (value, { pxPerSquare }) =>
-      pxPerSquare === null
-        ? "trace once for a figure"
-        : `${Math.round(value * pxPerSquare * pxPerSquare)} px, ${(Math.sqrt(value) * pxPerSquare).toFixed(0)} px across`,
-  },
-  {
     name: "simplifyInkWidths",
     label: "Edge simplification",
     hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",

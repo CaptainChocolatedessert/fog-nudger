@@ -25,11 +25,11 @@ describe("normaliseSettings", () => {
     // A number input can be typed into, and a stored value can come from an older version. Clamping
     // keeps the pipeline runnable; rejecting would throw away the GM's other four settings.
     const high = normaliseSettings({
-      trace: { blurSigma: 999, minRoomSquares: -4 },
+      trace: { blurSigma: 999, sauvolaK: -4 },
       review: { fillOpacity: 8 },
     });
     expect(high.trace.blurSigma).toBe(SETTING_LIMITS.blurSigma.max);
-    expect(high.trace.minRoomSquares).toBe(SETTING_LIMITS.minRoomSquares.min);
+    expect(high.trace.sauvolaK).toBe(SETTING_LIMITS.sauvolaK.min);
     expect(high.review.fillOpacity).toBe(1);
   });
 
@@ -91,7 +91,7 @@ describe("isDefault and describeSettings", () => {
 
   it("names every trace parameter, so a run can be read beside its settings", () => {
     const line = describeSettings(DEFAULT_SETTINGS);
-    for (const part of ["blur", "k ", "window", "min room", "simplify"]) {
+    for (const part of ["blur", "k ", "window", "min stroke", "simplify"]) {
       expect(line).toContain(part);
     }
   });
