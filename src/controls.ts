@@ -158,13 +158,13 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "fillOpacity",
-    label: "Proposal fill",
-    hint: "Low keeps the map readable underneath. The partition is carried by the colour changes and the outlines, not by the fill.",
+    label: "Preview fill",
+    hint: "How the partition is drawn <b>here</b>, and nowhere else &mdash; an emitted fog shape is always fully opaque, or revealed ground keeps a tint of the fog colour. Low keeps the map readable underneath.",
   },
   {
     name: "strokeSquares",
-    label: "Proposal outline",
-    hint: "In grid squares. Free — outline width does not affect the walls Dynamic Fog derives.",
+    label: "Preview outline",
+    hint: "In grid squares, and <b>only here</b>. An emitted shape carries no outline at all: Dynamic Fog offsets its walls by exactly that width, so an outline would push them half of one either side of the boundary.",
   },
   {
     name: "simplifyInkWidths",

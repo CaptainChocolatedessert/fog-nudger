@@ -25,22 +25,12 @@
  * already there, and the remedy is the explicit remove.
  */
 
-import OBR, {
-  buildLine,
-  buildPath,
-  Command,
-  isLine,
-  isPath,
-  type Item,
-  type Line,
-  type Path,
-} from "@owlbear-rodeo/sdk";
+import OBR, { buildLine, buildPath, Command, type Item } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
 import { describeError, isRateLimited } from "../describeError";
 import { PathOp, type PathCommandLike } from "../geometry/ring";
 import { runTrace } from "../pipeline";
-import { readSettings } from "../settingsStore";
 import {
   ACCEPTED_FILL_OPACITY,
   ACCEPTED_STROKE_WIDTH,
@@ -52,7 +42,6 @@ import {
 } from "./fogShapes";
 import {
   ACCEPTED_WALL_STROKE,
-  stagedWallStroke,
   stageWallLines,
   WALL_KEY,
   type WallLineSpec,
@@ -89,35 +78,70 @@ const BATCH_PAUSE_MS = 120;
 const RETRY_BACKOFF_MS = [250, 750, 2_000] as const;
 
 /**
- * Trace the scene's map and stage the result as proposals on the `DRAWING` layer.
+ * What the scene last received, so a look-and-close does not rewrite every fog item in it.
  *
- * Nothing here can affect play. A staged item is invisible to players, renders in its own colour
- * for the GM, and derives zero walls — inert by construction rather than by our being careful,
- * which is what makes a first run in a real room a safe thing to do.
+ * The map's identity plus the settings that produced the result. Held in memory rather than in
+ * scene metadata deliberately: it is an optimisation, and the safe direction when it is lost is to
+ * push again. Stale in the other direction is not possible, because anything that changes the
+ * result also changes this string.
  */
-export async function stageRegions(): Promise<string> {
-  if (!(await OBR.scene.isReady())) return "No scene open — nothing to trace.";
+let lastPushed: string | null = null;
 
-  const existing = await ourItems();
-  if (existing.length > 0) {
-    return (
-      `${existing.length} of our shapes are already in this scene. Remove them first — ` +
-      `replacing them without losing hand edits is step 9's problem, not this button's.`
-    );
-  }
+/** Whether pushing now would write anything different from what is already there. */
+export function pushWouldChange(fingerprint: string): boolean {
+  return lastPushed !== fingerprint;
+}
+
+/** Forget what was pushed, so the next close writes whatever the settings now say. */
+export function forgetPushed(): void {
+  lastPushed = null;
+}
+
+/**
+ * Trace the scene's map and put the result on the fog layer, replacing whatever we put there before.
+ *
+ * ## One operation, because the scene was never the working state
+ *
+ * There is no staging layer any more (user, 2026-08-30). Proposals on `DRAWING`, accepting, going
+ * back to staging and applying appearance are all gone, and with them the refusal to emit over an
+ * existing set — which had been standing in for "step 9's problem", choosing which copy survives.
+ * The answer is that there is only ever one copy: the wall graph is the document and the scene is a
+ * rendering of it, so a re-run replaces rather than accumulates.
+ *
+ * What made staging redundant is the workspace. Judging a partition used to require writing a few
+ * hundred shapes into the scene and looking; it now costs opening a step. The layer that existed so
+ * a first run could not affect play was answering a question nobody has to ask any more.
+ *
+ * **The trade, stated:** a hand edit to one of our fog items does not survive the next push. That is
+ * the point rather than a regression — what you see is the current state — but it does mean the
+ * workspace is now the only place to edit, which leans on step G harder than the old design did.
+ *
+ * ## Old first, then new
+ *
+ * Ours are deleted before the replacements are written (user, 2026-08-30). The alternative was
+ * writing first so the map is never briefly unfogged, and it was rejected on the better argument: a
+ * fog layer holding nothing fogs everything, so the gap is safe, while overlapping duplicates of
+ * every shape on the map are a state nothing else here is designed for.
+ *
+ * *If a push is ever seen to flash the map visible, that premise is wrong and inverting the order is
+ * the whole of the fix.*
+ */
+export async function pushToFog(fingerprint?: string): Promise<string> {
+  if (!(await OBR.scene.isReady())) return "No scene open — nothing to trace.";
 
   const outcome = await runTrace();
   if (!outcome.ok) return outcome.message;
   const { run } = outcome;
 
-  const review = (await readSettings()).review;
-  const stroke = Math.max(0, run.dpi * review.strokeSquares);
   const runId = new Date().toISOString();
   const { shapes, skipped } = stageShapes(run.regions, {
     run: runId,
     mapId: run.mapId,
-    strokeWidth: stroke,
-    fillOpacity: review.fillOpacity,
+    // The values an emitted shape must carry, not a review preference. Full opacity or revealed
+    // ground keeps a tint of the fog colour; no outline or Dynamic Fog offsets its walls by half of
+    // one either side of the boundary. Both are explained where they are declared.
+    fillOpacity: ACCEPTED_FILL_OPACITY,
+    strokeWidth: ACCEPTED_STROKE_WIDTH,
   });
 
   if (skipped.length > 0) {
@@ -129,325 +153,94 @@ export async function stageRegions(): Promise<string> {
     );
   }
 
-  if (shapes.length === 0) {
-    return "Traced, but nothing was emittable — see dev.log.";
-  }
-
-  const batches = planBatches(shapes, BATCH_LIMITS);
-  devLog(
-    "info",
-    `emit: staging ${shapes.length} shapes (${totalCommands(shapes)} commands) in ` +
-      `${batches.length} batches, run ${runId}`,
-  );
-
-  let written = 0;
-  for (const [index, batch] of batches.entries()) {
-    const items = batch.map(stagedItem);
-    try {
-      await writeWithBackoff(() => OBR.scene.items.addItems(items), `batch ${index + 1}`);
-    } catch (error) {
-      // Partial output is left in the scene rather than rolled back. Undoing it would be another
-      // batch of writes through the same limiter that just refused one, and the GM can see what
-      // landed and remove it deliberately. Saying how far it got is the part that matters.
-      const detail = describeError(error);
-      console.error(`Fog Nudger — staging failed after ${written} shapes: ${detail}`);
-      devLog("error", `emit: stopped after ${written} of ${shapes.length} shapes — ${detail}`);
-      return (
-        `Stopped after ${written} of ${shapes.length} shapes: ${detail}. ` +
-        `What landed is still in the scene — remove it before trying again.`
-      );
-    }
-    written += batch.length;
-    // Pacing ahead of the limiter rather than only reacting to it. A backoff recovers from a
-    // throttle; a pause makes hitting one less likely in the first place, and the difference at
-    // prep time is a couple of seconds nobody is waiting on.
-    if (index < batches.length - 1) await pause(BATCH_PAUSE_MS);
-  }
-
-  devLog("info", `emit: staged ${written} shapes on the DRAWING layer`);
-
-  // ## The walls no shape's boundary covers
-  //
-  // A stub hanging into a room is the usual case. These go out as `LINE` items, which is what
-  // Dynamic Fog's own wall mode builds and the only item type with no interior to reveal.
-  // The scene's own fog stroke width, which is what Dynamic Fog's wall mode reads and what these
-  // lines will carry once accepted. Staged at the same width so what the GM judges is the wall they
-  // are going to get: accepting then changes only the layer, the colour and the visibility.
-  const fogStroke = await OBR.scene.fog.getStrokeWidth();
+  const fogColour = await OBR.scene.fog.getColor();
   const { lines, dropped } = stageWallLines(
     run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed, ids: wall.ids })),
-    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: stagedWallStroke(fogStroke) },
+    { run: runId, mapId: run.mapId, colour: fogColour, strokeWidth: ACCEPTED_WALL_STROKE },
   );
   if (dropped > 0) {
     devLog("warn", `emit: dropped ${dropped} zero-length wall segments — nothing to select there`);
   }
 
-  let walls = 0;
-  if (lines.length > 0) {
-    devLog(
-      "info",
-      `emit: staging ${lines.length} wall segments from ${run.walls.length} uncovered edges`,
-    );
-    for (const batch of chunk(lines, BATCH_LIMITS.maxItems)) {
-      try {
-        await writeWithBackoff(
-          () => OBR.scene.items.addItems(batch.map(stagedLine)),
-          `wall batch`,
-        );
-      } catch (error) {
-        const detail = describeError(error);
-        devLog("error", `emit: stopped after ${walls} of ${lines.length} wall segments — ${detail}`);
-        return (
-          `Staged ${written} proposals, then stopped after ${walls} of ${lines.length} wall ` +
-          `segments: ${detail}. What landed is still in the scene.`
-        );
-      }
-      walls += batch.length;
-      await pause(BATCH_PAUSE_MS);
-    }
-    devLog("info", `emit: staged ${walls} wall segments on the DRAWING layer`);
+  if (shapes.length === 0 && lines.length === 0) {
+    return "Traced, but nothing was emittable — see dev.log.";
   }
 
+  // Ours go before the replacements arrive. See the note above on why this order.
+  const existing = await ourItems();
+  if (existing.length > 0) {
+    try {
+      await writeWithBackoff(
+        () => OBR.scene.items.deleteItems(existing.map((item) => item.id)),
+        "clear",
+      );
+    } catch (error) {
+      const detail = describeError(error);
+      devLog("error", `emit: could not clear ${existing.length} of our items — ${detail}`);
+      return `Could not clear the previous run: ${detail}. Nothing new was written.`;
+    }
+    devLog("info", `emit: cleared ${existing.length} of our items before writing`);
+  }
+
+  const batches = planBatches(shapes, BATCH_LIMITS);
+  devLog(
+    "info",
+    `emit: pushing ${shapes.length} shapes (${totalCommands(shapes)} commands) in ` +
+      `${batches.length} batches, run ${runId}`,
+  );
+
+  let written = 0;
+  for (const [index, batch] of batches.entries()) {
+    const items = batch.map(fogShapeItem);
+    try {
+      await writeWithBackoff(() => OBR.scene.items.addItems(items), `batch ${index + 1}`);
+    } catch (error) {
+      // Partial output is left in the scene rather than rolled back. Undoing it would be another
+      // batch of writes through the same limiter that just refused one, and the GM can see what
+      // landed. Saying how far it got is the part that matters.
+      const detail = describeError(error);
+      console.error(`Fog Nudger — push failed after ${written} shapes: ${detail}`);
+      devLog("error", `emit: stopped after ${written} of ${shapes.length} shapes — ${detail}`);
+      forgetPushed();
+      return (
+        `Stopped after ${written} of ${shapes.length} shapes: ${detail}. ` +
+        `The scene holds a partial result — push again once the cause is dealt with.`
+      );
+    }
+    written += batch.length;
+    // Pacing ahead of the limiter rather than only reacting to it. A backoff recovers from a
+    // throttle; a pause makes hitting one less likely in the first place.
+    if (index < batches.length - 1) await pause(BATCH_PAUSE_MS);
+  }
+
+  let walls = 0;
+  for (const batch of chunk(lines, BATCH_LIMITS.maxItems)) {
+    try {
+      await writeWithBackoff(
+        () => OBR.scene.items.addItems(batch.map(wallLineItem)),
+        "wall batch",
+      );
+    } catch (error) {
+      const detail = describeError(error);
+      devLog("error", `emit: stopped after ${walls} of ${lines.length} wall segments — ${detail}`);
+      forgetPushed();
+      return (
+        `Pushed ${written} regions, then stopped after ${walls} of ${lines.length} wall ` +
+        `segments: ${detail}. The scene holds a partial result.`
+      );
+    }
+    walls += batch.length;
+    await pause(BATCH_PAUSE_MS);
+  }
+
+  lastPushed = fingerprint ?? null;
+  devLog("info", `emit: pushed ${written} shapes and ${walls} wall segments onto the FOG layer`);
   return (
-    `${run.summary}. Staged ${written} proposals` +
+    `${run.summary}. On the map: ${written} regions` +
     (walls > 0 ? ` and ${walls} wall segments` : "") +
     (skipped.length > 0 ? `, skipped ${skipped.length} over the cap` : "") +
-    `. Coloured, GM-only, no walls — neighbouring regions differ so the partition is visible.`
+    `.`
   );
-}
-
-/**
- * Accept the staged proposals: move ours from `DRAWING` onto `FOG`.
- *
- * A property update rather than a delete-and-recreate, so ids survive and hundreds of items are one
- * call. Three properties change together because staged and accepted want different values for each,
- * and all three were measured in a room (DESIGN.md §4):
- *
- * - **layer to `FOG`** — the promotion itself. Dynamic Fog filters on layer plus type, so walls
- *   appear on arrival and did not exist a moment earlier.
- * - **`fillOpacity` to 1** — required, not aesthetic. Below 1 a fog shape leaves a translucent tint
- *   of the fog colour over ground the party has revealed, for players as well as the GM.
- * - **`strokeWidth` to 0** — also required rather than aesthetic, for the same shape of reason.
- *   Dynamic Fog strokes the item's path at this width and takes the outline as its wall geometry,
- *   so an outline W wide puts walls at the boundary ± W/2 with an unreachable band between. See
- *   `ACCEPTED_STROKE_WIDTH`.
- * - **`visible` to TRUE — corrected 2026-08-30, and this one was load-bearing after all.**
- *
- *   It was false, "matching what Owlbear's own fog tool produces", and the record noted at the time
- *   that this was *not known to be load-bearing* because the step-1 probe had used `visible: true`
- *   and those shapes "behaved correctly as fog". Changing it on cosmetic grounds without
- *   re-measuring was the mistake: a room reported that every accepted room came back **revealed**
- *   rather than fogged.
- *
- *   On the `FOG` layer `visible` is not "can this be seen" — it is the difference between a shape
- *   that **is** fog and one that has been cleared. The SDK has no other flag for it, which is why
- *   there appeared to be no way to emit a shape that stays fogged. There is: this one.
- *
- *   The flag therefore means different things on the two layers. On `DRAWING` false is what keeps a
- *   staged proposal from leaking the layout to players, and staging still sets it false.
- *
- * The magenta is left alone deliberately: fog rendering ignores an item's colour, so it costs
- * nothing, and demoting back to `DRAWING` restores the marking with no extra bookkeeping.
- */
-export async function acceptStaged(): Promise<string> {
-  if (!(await OBR.scene.isReady())) return "No scene open.";
-
-  const staged = await OBR.scene.items.getItems<Path>(
-    (item) => REGION_KEY in item.metadata && item.layer === "DRAWING" && isPath(item),
-  );
-  if (staged.length === 0) return "Nothing of ours staged on the drawing layer.";
-
-  try {
-    await writeWithBackoff(
-      () =>
-        OBR.scene.items.updateItems<Path>(staged, (drafts) => {
-          for (const draft of drafts) {
-            draft.layer = "FOG";
-            // **`visible` is the hide/reveal flag on a fog item.** See the note above: a shape
-            // accepted at false is a cleared region, which is why every room came back revealed.
-            draft.visible = true;
-            draft.style.fillOpacity = ACCEPTED_FILL_OPACITY;
-            // The outline goes with the proposal it belonged to. Dynamic Fog offsets its walls by
-            // exactly this, so leaving it on would put them half an outline either side of the
-            // boundary and shorten the half-wall reveal at both edges.
-            draft.style.strokeWidth = ACCEPTED_STROKE_WIDTH;
-          }
-        }),
-      "accept",
-    );
-  } catch (error) {
-    const detail = describeError(error);
-    console.error(`Fog Nudger — accepting staged shapes failed: ${detail}`);
-    return `Could not accept: ${detail}`;
-  }
-
-  const walls = await acceptWallLines();
-
-  devLog("info", `emit: accepted ${staged.length} proposals onto the FOG layer`);
-  return (
-    `Accepted ${staged.length}${walls > 0 ? ` and ${walls} wall segments` : ""}. They are fog now ` +
-    `— if Dynamic Fog is installed, give it a moment and expect roughly two walls per contour.`
-  );
-}
-
-/**
- * Promote the staged wall lines with the shapes, taking the scene's own fog styling on the way.
- *
- * Dynamic Fog's wall mode reads `OBR.scene.fog.getColor()` and `getStrokeWidth()` when it builds a
- * line, so an accepted wall of ours matches one a GM drew by hand. Staged, they are in the review
- * colour instead, because during review they are something to look at rather than something to
- * match.
- */
-async function acceptWallLines(): Promise<number> {
-  const staged = await OBR.scene.items.getItems<Line>(
-    (item) => WALL_KEY in item.metadata && item.layer === "DRAWING" && isLine(item),
-  );
-  if (staged.length === 0) return 0;
-
-  // The colour is re-read rather than trusted from staging: a GM can change the scene's fog styling
-  // between proposing and accepting, and an accepted wall should match the scene it lands in. The
-  // width does not come from the scene at all — see `ACCEPTED_WALL_STROKE`.
-  const colour = await OBR.scene.fog.getColor();
-
-  await writeWithBackoff(
-    () =>
-      OBR.scene.items.updateItems<Line>(staged, (drafts) => {
-        for (const draft of drafts) {
-          draft.layer = "FOG";
-          // Matching Dynamic Fog's own wall mode, which leaves the default of true. Its wall
-          // reactor filters on layer and type alone and never reads `visible`, so this decides
-          // only whether the line is drawn — not whether it becomes a wall.
-          draft.visible = true;
-          draft.style.strokeColor = colour;
-          // Zero, so Dynamic Fog's two derived walls coincide on the centreline and each side
-          // reveals up to it — the party seeing half the wall as drawn, from either side, rather
-          // than a band of fog down the middle of it. See `ACCEPTED_WALL_STROKE`.
-          draft.style.strokeWidth = ACCEPTED_WALL_STROKE;
-        }
-      }),
-    "accept walls",
-  );
-  devLog("info", `emit: accepted ${staged.length} wall segments onto the FOG layer`);
-  return staged.length;
-}
-
-/**
- * Send accepted shapes back to staging: ours from `FOG` onto `DRAWING`.
- *
- * The exact inverse of accepting, and it costs nothing extra because the shapes never stopped being
- * magenta — fog rendering ignores an item's own colour, so the marking survived promotion unused and
- * is simply visible again on arrival. That was the reason §4 chose to leave the colour in place.
- *
- * Worth having as its own gesture rather than telling a GM to remove and re-run. A re-run recomputes
- * the geometry and destroys any hand edits made since; demoting keeps the items, their ids, and
- * every nudge. The two look similar from the panel and are not remotely the same operation.
- */
-export async function returnToStaging(): Promise<string> {
-  if (!(await OBR.scene.isReady())) return "No scene open.";
-
-  // The GM's current staged opacity, not the one the shapes were emitted with. Demoting is how a
-  // proposal comes back for another look, so it should come back looking the way proposals look now.
-  const review = (await readSettings()).review;
-  const stagedOpacity = review.fillOpacity;
-  const stagedStroke = Math.max(0, (await OBR.scene.grid.getDpi()) * review.strokeSquares);
-  const demotedFogStroke = await OBR.scene.fog.getStrokeWidth();
-  const accepted = await OBR.scene.items.getItems<Path>(
-    (item) => REGION_KEY in item.metadata && item.layer === "FOG" && isPath(item),
-  );
-  if (accepted.length === 0) return "Nothing of ours on the fog layer.";
-
-  try {
-    await writeWithBackoff(
-      () =>
-        OBR.scene.items.updateItems<Path>(accepted, (drafts) => {
-          for (const draft of drafts) {
-            draft.layer = "DRAWING";
-            // Back to a GM-only proposal: on `DRAWING`, false is what keeps players from seeing the
-            // layout during prep. The same flag means different things on the two layers, which is
-            // exactly why accepting had it wrong.
-            draft.visible = false;
-            draft.style.fillOpacity = stagedOpacity;
-            // The outline comes back with it — a proposal a GM cannot tell from its neighbour is
-            // not a proposal. Nothing derives walls from a `DRAWING` item, so it costs nothing here.
-            draft.style.strokeWidth = stagedStroke;
-          }
-        }),
-      "return to staging",
-    );
-  } catch (error) {
-    const detail = describeError(error);
-    console.error(`Fog Nudger — returning shapes to staging failed: ${detail}`);
-    return `Could not return to staging: ${detail}`;
-  }
-
-  const walls = await OBR.scene.items.getItems<Line>(
-    (item) => WALL_KEY in item.metadata && item.layer === "FOG" && isLine(item),
-  );
-  if (walls.length > 0) {
-    await writeWithBackoff(
-      () =>
-        OBR.scene.items.updateItems<Line>(walls, (drafts) => {
-          for (const draft of drafts) {
-            draft.layer = "DRAWING";
-            draft.visible = false;
-            draft.style.strokeColor = WALL_COLOUR;
-            // Back to a width that can be seen and selected. Accepted these are zero-width, which
-            // is correct geometry and invisible in the Outliner.
-            draft.style.strokeWidth = stagedWallStroke(demotedFogStroke);
-          }
-        }),
-      "return walls to staging",
-    );
-  }
-
-  devLog("info", `emit: returned ${accepted.length} shapes to the DRAWING layer`);
-  return (
-    `Returned ${accepted.length} to staging. They are proposals again — no walls, no fog — and ` +
-    `every hand edit is still on them.`
-  );
-}
-
-/**
- * Re-apply the current appearance settings to the shapes already staged.
- *
- * Without this, changing how proposals look would mean removing and re-tracing — which recomputes
- * every region and is the one thing the two-stage split exists to keep separate. Appearance is a
- * stage-two question, so it must be answerable without touching stage one.
- *
- * Only staged items, never accepted ones: an accepted shape is fog, and fog below full opacity
- * leaves a tint over ground the party has revealed.
- */
-export async function restyleStaged(): Promise<string> {
-  if (!(await OBR.scene.isReady())) return "No scene open.";
-
-  const review = (await readSettings()).review;
-  const dpi = await OBR.scene.grid.getDpi();
-  const stroke = Math.max(0, dpi * review.strokeSquares);
-
-  const staged = await OBR.scene.items.getItems<Path>(
-    (item) => REGION_KEY in item.metadata && item.layer === "DRAWING" && isPath(item),
-  );
-  if (staged.length === 0) return "Nothing of ours staged to restyle.";
-
-  try {
-    await writeWithBackoff(
-      () =>
-        OBR.scene.items.updateItems<Path>(staged, (drafts) => {
-          for (const draft of drafts) {
-            draft.style.fillOpacity = review.fillOpacity;
-            draft.style.strokeWidth = stroke;
-          }
-        }),
-      "restyle",
-    );
-  } catch (error) {
-    const detail = describeError(error);
-    console.error(`Fog Nudger — restyling staged shapes failed: ${detail}`);
-    return `Could not restyle: ${detail}`;
-  }
-
-  devLog("info", `emit: restyled ${staged.length} staged shapes`);
-  return `Restyled ${staged.length} proposals.`;
 }
 
 /** Delete every item this pipeline created, and nothing else. */
@@ -473,16 +266,6 @@ export async function removeOurs(): Promise<string> {
 }
 
 /** Only ours. The GM's fog — 419 hand-drawn items in this project's own test scene — is not ours. */
-/**
- * The colour staged wall lines are drawn in, matching the workspace preview's core colour.
- *
- * Saturated rather than wall-coloured, and for a reason found in a room: a wall line is a
- * centreline, so it lies exactly on the map's own linework and anything dark is invisible on every
- * wall it describes. Fixed rather than cycled like the proposal fills — a wall is one kind of thing,
- * and what a GM is judging is where it runs. Accepting swaps it for the scene's own fog styling.
- */
-const WALL_COLOUR = "#ff2020";
-
 /** Split a list into batches of at most `size`. */
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
@@ -538,7 +321,7 @@ function pause(ms: number): Promise<void> {
  * direction: if it turns out a hidden line yields no wall, the failure is a missing wall the GM can
  * see is missing, where the other way round is a leak nobody notices.
  */
-function stagedLine(line: WallLineSpec): Item {
+function wallLineItem(line: WallLineSpec): Item {
   return buildLine()
     .startPosition({ x: 0, y: 0 })
     .endPosition(line.end)
@@ -553,7 +336,7 @@ function stagedLine(line: WallLineSpec): Item {
     .build();
 }
 
-function stagedItem(shape: FogShapeSpec): Item {
+function fogShapeItem(shape: FogShapeSpec): Item {
   return buildPath()
     .commands(toSdkCommands(shape.commands))
     // Even-odd, so an inner ring cuts a hole whichever way it winds — which retires winding

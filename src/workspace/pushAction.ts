@@ -1,0 +1,113 @@
+/**
+ * "Put on the map" — the one button on this surface that writes to the scene, and the close hook.
+ *
+ * The Regions step ends with it because that is where the partition is judged, and judging it is
+ * what makes writing it a sensible next move.
+ *
+ * ## Closing pushes, and the button is for not having to close
+ *
+ * The scene is a rendering of the wall graph, so it should say what the graph currently says. Closing
+ * the workspace is the natural moment for that: the GM has stopped tuning. The button exists for the
+ * other case — a mid-session change a table is waiting on, made without giving up the surface.
+ *
+ * ## Only when something changed
+ *
+ * Opening the workspace to glance at something and closing it must not rewrite every fog item in the
+ * scene. A fingerprint of the map and the settings that produced the result decides, and it is held
+ * in memory: losing it means pushing once more than necessary, which is the safe direction.
+ *
+ * ## It re-runs the trace rather than emitting what is on screen
+ *
+ * The preview holds region rings and could be turned into shapes here. It must not be: the emit path
+ * has rules of its own — the command cap, the batching, the provenance stamped into each item — and
+ * a second route into the scene would be a second implementation of them, drifting quietly until a
+ * room disagreed with a preview. `pushToFog` runs the same `runTrace` the preview ran, against a
+ * mask that is still cached, so the cost is the deriving half rather than a fresh read.
+ *
+ * ## The settings are written first, and awaited
+ *
+ * `pushToFog` reads scene metadata, and the workspace's sliders write there on release without
+ * waiting. Pushing a moment after letting go of a slider would otherwise emit the value before it.
+ * One `await` closes that window.
+ */
+
+import { devLog } from "../devlog";
+import { describeError } from "../describeError";
+import { pushToFog, pushWouldChange } from "../emit/emitRegions";
+import { readNominatedMapId } from "../map/mapImage";
+import { controlsLive } from "./settingRows";
+import { currentSettings, persistSettings } from "./settingsState";
+import { say } from "./shell";
+
+/**
+ * What the scene would receive, as one string.
+ *
+ * The map plus every setting, rather than only the ones that reach the emitted geometry. Over-broad
+ * on purpose and for the same reason the mask fingerprint is: a missed entry here means a stale
+ * scene reported as current, and an extra one costs a push nobody minded.
+ */
+async function fingerprint(): Promise<string> {
+  const map = await readNominatedMapId();
+  return `${map ?? "none"}|${JSON.stringify(currentSettings())}`;
+}
+
+/** Push, unless the scene already holds exactly this. Called on the way out. */
+export async function pushOnClose(): Promise<void> {
+  if (!controlsLive()) return;
+  const mark = await fingerprint();
+  if (!pushWouldChange(mark)) {
+    devLog("info", "workspace: closing with nothing to push — the scene already says this");
+    return;
+  }
+
+  try {
+    await persistSettings();
+    const message = await pushToFog(mark);
+    devLog("info", `workspace: pushed on close — ${message}`);
+  } catch (error) {
+    // Never rethrow: the way out of an opaque full-screen sheet cannot depend on a scene write.
+    const detail = describeError(error);
+    devLog("error", "workspace: pushing on close failed", detail);
+    console.error("Fog Nudger — pushing on close failed", error);
+  }
+}
+
+export function renderPushAction(body: HTMLElement): void {
+  const actions = document.createElement("div");
+  actions.className = "step-actions";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chip";
+  button.textContent = "Put on the map";
+  button.disabled = !controlsLive();
+
+  const note = document.createElement("p");
+  note.className = "sub";
+  note.textContent =
+    "Replaces what we put in the scene before with what is on screen now. Closing the workspace " +
+    "does the same thing, so this is only needed to update the table without stopping work.";
+
+  button.addEventListener("click", () => {
+    // Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for
+    // a second click to land and write a second copy of everything.
+    button.disabled = true;
+    say("putting it on the map…", "working");
+    void persistSettings()
+      .then(fingerprint)
+      .then((mark) => pushToFog(mark))
+      .then((message) => say(message))
+      .catch((error: unknown) => {
+        const detail = describeError(error);
+        say(`could not write to the scene: ${detail}`, "bad");
+        devLog("error", "workspace: push failed", detail);
+        console.error("Fog Nudger — push failed", error);
+      })
+      .finally(() => {
+        button.disabled = !controlsLive();
+      });
+  });
+
+  actions.append(button);
+  body.append(actions, note);
+}

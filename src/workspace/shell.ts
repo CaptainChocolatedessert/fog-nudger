@@ -412,13 +412,30 @@ window.addEventListener("resize", () => {
 // Chrome
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * What to do on the way out, registered by the composition root.
+ *
+ * The shell knows the workspace is closing; it does not know that closing means writing the result
+ * to the scene. Kept as a hook so nothing here has to import the emit path.
+ */
+let onClose: (() => Promise<void>) | null = null;
+
+export function setCloseAction(action: () => Promise<void>): void {
+  onClose = action;
+}
+
 function close(): void {
   if (closing) return;
   closing = true;
   devLog("info", "workspace: closing");
+
+  // The modal is dismissed first and the write follows. Waiting for a scene write before letting
+  // the sheet go would leave a GM staring at an opaque surface that has stopped responding, and
+  // this one takes seconds on a large map. The iframe survives long enough to finish.
   void OBR.modal.close(WORKSPACE_ID).catch((error: unknown) => {
     devLog("error", "workspace: could not close itself", describeError(error));
   });
+  void onClose?.();
 }
 
 document.getElementById("close")?.addEventListener("click", close);

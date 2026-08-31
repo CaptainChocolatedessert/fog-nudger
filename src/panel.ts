@@ -37,10 +37,7 @@ import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeC
 import { dryRun } from "./pipeline";
 import { openWorkspace } from "./workspace/workspaceControl";
 import {
-  acceptStaged,
   removeOurs,
-  restyleStaged,
-  returnToStaging,
 } from "./emit/emitRegions";
 
 
@@ -137,15 +134,12 @@ OBR.onReady(async () => {
   const buttons = [
     wireButton("dry-run", dryRun),
     wireButton("open-workspace", openWorkspace),
-    wireButton("accept", acceptStaged),
-    wireButton("unaccept", returnToStaging),
     wireButton("remove", removeOurs),
     wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
     wireButton("workspace-probe-bare", () => openWorkspaceProbe("bare")),
     wireButton("workspace-probe-framed", () => openWorkspaceProbe("framed")),
     wireButton("workspace-probe-close", closeWorkspaceProbe),
-    wireButton("restyle", restyleStaged),
   ];
 
   try {

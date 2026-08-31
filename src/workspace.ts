@@ -50,10 +50,10 @@ import { loadNominatedMap } from "./workspace/mapSource";
 import { onReading } from "./workspace/reading";
 import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
-import { renderStageAction } from "./workspace/stageAction";
+import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { loadSettings } from "./workspace/settingsState";
-import { onMapClick, say, start } from "./workspace/shell";
+import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 
 installDevLog("workspace");
 
@@ -87,7 +87,17 @@ registerStepContent("map", renderMapPicker);
 registerStepContent("ink", renderSwatches);
 // The one action on this surface that writes to the scene, at the *end* of the step that judges what
 // would be written.
-registerStepContent("regions", renderStageAction, "bottom");
+registerStepContent("regions", renderPushAction, "bottom");
+
+/*
+  Closing writes the result to the scene.
+
+  There is no staging layer any more, so the scene is simply a rendering of what the workspace holds
+  — and closing is the moment the GM has stopped changing it. The button above is for the other case,
+  updating a table mid-session without giving up the surface. Registered as a hook so the shell,
+  which owns the way out, does not have to know that leaving means emitting.
+*/
+setCloseAction(pushOnClose);
 
 /*
   "What is here?" is a click on the map now, in every step.

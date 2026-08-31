@@ -928,6 +928,50 @@ tool. The differences that matter:
   landed. Costs nothing since we emit paths, and it confirms the positioning semantics world
   placement (§9 step 7) depends on.
 
+### Superseded: staging is gone, and the scene is written directly — 2026-08-30 (user)
+
+**There is one operation now: push.** Delete our old fog items, emit the current result onto `FOG`.
+No proposals, no accept, no back-to-staging, no apply-appearance, and no refusal to write over an
+existing set. It happens when the workspace closes, and on a button inside it for a mid-session
+update that leaves the GM still working.
+
+**What made staging redundant is the workspace.** The staging layer existed because judging a
+partition meant writing a few hundred shapes into the scene and looking at them, and because a first
+run had to be unable to affect play. Judging now costs opening a step, on a surface that draws the
+partition and the walls exactly as they will be emitted. The layer was answering a question nobody
+has to ask any more.
+
+**This finishes a decision §4 already made.** The wall graph is the document and the scene is a
+rendering of it; staging was the last place still treating the scene as working state. It also
+answers what the refusal to stage over an existing set was standing in for — "step 9's problem",
+choosing which copy survives. There is only ever one copy.
+
+**The trade, stated plainly.** A hand edit to one of our fog items does not survive the next push.
+That is the point rather than a regression — what the GM sees is the current state — but it means
+the workspace is the *only* place to edit, which leans on step G harder than the old design did.
+Accepted on a second argument as well (user): Owlbear has no polyline continuity between line
+segments, so editing our output there would have been poor whatever we did.
+
+**Old first, then new.** Ours are deleted before the replacements are written. The alternative —
+writing first, so the map is never briefly unfogged — was considered and rejected on the better
+argument: a fog layer holding nothing fogs everything, so the gap is safe, while overlapping
+duplicates of every shape on the map is a state nothing else here is designed for. *If a push is ever
+seen to flash the map visible, that premise is wrong and inverting the order is the whole of the fix.*
+
+**Closing pushes only when something changed.** Opening the workspace to glance at something must not
+rewrite every fog item on the way out. The fingerprint is the map plus every setting, held in memory:
+losing it costs one unnecessary push, which is the safe direction.
+
+**Two controls stopped describing anything emitted.** Proposal fill and proposal outline are
+*preview* fill and outline now — an emitted shape is fully opaque and carries no stroke at all, both
+for reasons that are about geometry rather than taste.
+
+**The vertex ids stay, with an end date on the question.** Their consumer was reading a scene back to
+tell a separated join from a deliberate one, and a scene that is purely output has no such consumer
+until step G. They are cheap to emit and impossible to add retroactively, so they stay — but
+**reconsider whether they earn their place once the editing tools exist** (user, 2026-08-30). The
+likeliest honest answer is that they matter only for recovering from lost metadata.
+
 ### Review by staging on another layer — settled 2026-08-06
 
 **Fog shapes ignore their own colour.** They render in the scene's fog colour whatever the item
