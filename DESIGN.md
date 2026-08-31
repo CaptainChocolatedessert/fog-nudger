@@ -3135,6 +3135,34 @@ transitional:
 Uncommon does not mean droppable: the pixel repair is the only tool that can act before the graph
 exists, and there is no vector expression of "this line across the scan is not a wall".
 
+**What the graph half actually buys, stated precisely.** The pixel repair's travel test — are these
+two banks the same wall, measured *along the ink* — is an approximation of a graph distance, computed
+with a bounded flood because there was no graph to ask. With one, the question is the shortest path
+between two nodes: cheap, exact, and with no budget to run out of. **The guessed-break state goes
+with it** — the empty ring drawn when the flood ran out of budget, which this record notes has never
+actually been observed.
+
+**And repairing before thinning is not merely earlier, it is different.** Ink mended before the
+skeleton exists becomes *one* stroke with one centreline. The same mend made on the graph afterwards
+leaves two edges that happen to meet. That is a second reason the pixel tool cannot be folded into
+the graph one.
+
+**Two questions to settle before F is built, and both point at G.**
+
+- **What a graph repair writes.** The pixel repair invents ink, so a re-run reproduces it from the
+  same settings. A graph repair adds an **edge** — and now that the scene is a rendering rather than
+  working state, that edge must live in our durable inputs or it dies on the next push. That is the
+  same storage question G has to answer for additions and deletions, so the representation should be
+  decided once rather than twice.
+- **Automatic or a gesture.** The pixel repair is a threshold, off by default. A graph repair could
+  be the same — pair every pair of ends closer than N along the graph — or it could be a GM clicking
+  two ends. Given the standing rule that nothing writes into a GM's work unasked, and that G supplies
+  click-two-things anyway, **the gesture version may make the automatic one unnecessary**.
+
+Taken together: F is smaller than this record implies once G exists, and awkward before it. The
+ordering F-then-G is worth revisiting rather than inherited.
+
+
 **G. Vector editing.** Additions and deletions as durable inputs; a move implies the freeze point (§4).
 
 *Deferred deliberately, not forgotten:* **doors** stay with Dynamic Fog (§3 — door subtraction is
