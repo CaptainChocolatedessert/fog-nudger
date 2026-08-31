@@ -20,8 +20,20 @@
  * - **Luminance**, which settles "is this actually white" objectively rather than by eye through two
  *   layers of tint.
  * - **Ink or not**, from the same mask that was labelled.
- * - **Which region**, or that it is ink, or that it is space the minimum-area filter discarded —
- *   three outcomes that look identical on screen and have completely different causes.
+ * - **Which face**, including for ink — see below. Outcomes that look identical on screen and have
+ *   completely different causes.
+ *
+ * ## Ink is usually covered now, and this module said the opposite for weeks
+ *
+ * Under the region-first partition, regions were the space *between* the strokes, so an ink pixel
+ * was by construction outside every region and "it is ink, so nothing covers it" was correct. Under
+ * the wall graph a face boundary is the wall's **centreline**, so about half of every wall's
+ * thickness lies inside the face on each side of it. Most ink a GM probes is now covered, and this
+ * is the diagnostic they reach for when something looks wrong — so the old answer was expensive.
+ *
+ * The fix is to look the label up **even when the point is ink**. The labelling handed in is of the
+ * *framed skeleton*, so an ink pixel carries a face label unless it is one of the thinned centreline
+ * pixels themselves, which are the boundary rather than the interior of either neighbour.
  *
  * Pure: no DOM, no SDK.
  */
@@ -32,19 +44,31 @@ import type { LabelledSpace } from "./label";
 
 export type PointKind =
   | "outside-raster"
-  /** Ink in the chosen mask, so never a region and never covered by one. */
+  /**
+   * Ink in the chosen mask — which says nothing about whether it is covered.
+   *
+   * Read `region` alongside it: non-zero means this ink is inside that face, which is the ordinary
+   * case for anything but the centreline itself.
+   */
   | "ink"
   /**
    * Not ink, and nothing more can be said yet: no partition has been derived in this frame.
    *
-   * The honest answer while the GM is still on the reading steps, where the labelling that separates
-   * a kept region from a discarded one has not been run. Saying "discarded" there would be inventing
-   * a verdict from the absence of one.
+   * The honest answer while the GM is still on the reading steps, where the labelling has not been
+   * run. Inventing a verdict from the absence of one is the failure this case exists to avoid.
    */
   | "space"
-  /** Space, but a component too small to keep — it has no shape of its own. */
-  | "discarded"
-  /** Part of a surviving region, and therefore under that region's emitted shape. */
+  /**
+   * Not ink, and carrying no face label.
+   *
+   * **Was `"discarded"`, and that name described a control that no longer exists.** It meant a
+   * region below the minimum area; the smallest-room filter is gone, and every space labelling in
+   * the pipeline now runs at `minArea: 0`. What is left is the one-pixel border frame painted round
+   * the raster by `frameSkeleton`, which is skeleton without being ink — a rare probe target, but a
+   * real one, and it deserves an answer that is true.
+   */
+  | "unlabelled"
+  /** Not ink, and inside a face that is emitted as its own shape. */
   | "region";
 
 export interface PointReading {
@@ -53,7 +77,12 @@ export interface PointReading {
   readonly kind: PointKind;
   /** 0–1, from the field the binariser actually read. `null` outside the raster. */
   readonly luminance: number | null;
-  /** The surviving region's id, or 0. */
+  /**
+   * The face this pixel is inside, or 0.
+   *
+   * **Meaningful for `"ink"` as well as `"region"`**, which is the whole of the correction above: 0
+   * against ink means the pixel is on the centreline, not that nothing covers it.
+   */
   readonly region: number;
 }
 
@@ -79,20 +108,26 @@ export function readPoint(
 
   const i = py * mask.width + px;
   const luminance = field.data[i] ?? 0;
-  if (mask.data[i] === 1) return { x: px, y: py, kind: "ink", luminance, region: 0 };
+  const ink = mask.data[i] === 1;
 
-  if (!labelled) return { x: px, y: py, kind: "space", luminance, region: 0 };
+  // No partition to consult. The ink verdict is still worth reporting; the coverage question is not
+  // answerable, and saying anything about it here would be inventing one.
+  if (!labelled) {
+    return { x: px, y: py, kind: ink ? "ink" : "space", luminance, region: 0 };
+  }
 
+  /*
+    The label is looked up for ink too, and that is the correction this module needed.
+
+    It used to short-circuit here and report `region: 0` for every ink pixel without ever consulting
+    the labelling — correct when regions were the space between the strokes, and wrong the moment a
+    face boundary became the wall's centreline. The labelling is of the framed skeleton, so an ink
+    pixel is unlabelled only when it is a centreline pixel itself.
+  */
   const region = labelled.labels[i] ?? 0;
-  return {
-    x: px,
-    y: py,
-    // Space with no label is space the minimum-area filter dropped. It is not ink and it is not a
-    // region, and on screen it is indistinguishable from both.
-    kind: region === 0 ? "discarded" : "region",
-    luminance,
-    region,
-  };
+  if (ink) return { x: px, y: py, kind: "ink", luminance, region };
+
+  return { x: px, y: py, kind: region === 0 ? "unlabelled" : "region", luminance, region };
 }
 
 /**
@@ -101,32 +136,43 @@ export function readPoint(
  * Says something in every case including the dull one, and the dull one here — "it is a region" —
  * is the most informative of the lot, because it means the gap being reported is not a gap at all.
  */
-export function describePoint(reading: PointReading, pxPerSquare: number): string {
+export function describePoint(reading: PointReading): string {
   const at = `raster (${reading.x}, ${reading.y})`;
   const tone =
     reading.luminance === null ? "" : ` luminance ${reading.luminance.toFixed(3)}`;
+
+  /** The binariser verdict, which is worth shouting about only when the tone contradicts it. */
+  const inkTone =
+    reading.luminance !== null && reading.luminance > 0.8
+      ? ` That luminance is nearly white, which a local threshold should not call ink — if this is ` +
+        `a flat area rather than fine linework, the binariser is wrong here.`
+      : ` It is dark enough for that to be the expected answer.`;
 
   switch (reading.kind) {
     case "outside-raster":
       return `${at} is outside the map image entirely — the point did not land on the traced map.`;
     case "ink":
+      if (reading.region === 0) {
+        return (
+          `${at}${tone} is INK and lies on the centreline itself, which is the boundary between two ` +
+          `faces rather than the interior of either.${inkTone}`
+        );
+      }
       return (
-        `${at}${tone} is INK, so it is not part of any region and nothing covers it. ` +
-        (reading.luminance !== null && reading.luminance > 0.8
-          ? `That luminance is nearly white, which a local threshold should not call ink — if this ` +
-            `is a flat area rather than fine linework, the binariser is wrong here.`
-          : `It is dark enough for that to be the expected answer.`)
+        `${at}${tone} is INK, and it sits inside face ${reading.region} — a face boundary is the ` +
+        `wall's centreline, so about half a wall's thickness is inside the room beside it. This ` +
+        `point IS covered.${inkTone}`
       );
     case "space":
       return (
         `${at}${tone} is not ink. Whether it survives as a region is a deriving-stage question, ` +
         `and nothing has been derived yet — open Regions to find out.`
       );
-    case "discarded":
+    case "unlabelled":
       return (
-        `${at}${tone} is floor, but its region was below the minimum area ` +
-        `(${(1 / pxPerSquare ** 2).toFixed(4)} squares per pixel) and was discarded, so no shape ` +
-        `covers it unless a filled hole swallowed it.`
+        `${at}${tone} is not ink and carries no face label. Under the graph that means the border ` +
+        `frame painted round the raster, not a region that was filtered out — there is no size ` +
+        `filter any more.`
       );
     case "region":
       return (

@@ -288,20 +288,18 @@ let lastReading: {
  */
 export function probeMapFraction(u: number, v: number): string {
   if (lastRun) {
-    const { rawField, mask, labelled, pxPerSquare, name } = lastRun;
+    const { rawField, mask, labelled, name } = lastRun;
     const line = describePoint(
       readPoint(rawField, mask, labelled, u * mask.width, v * mask.height),
-      pxPerSquare,
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
   }
 
   if (lastReading) {
-    const { rawField, mask, pxPerSquare, name } = lastReading;
+    const { rawField, mask, name } = lastReading;
     const line = describePoint(
       readPoint(rawField, mask, null, u * mask.width, v * mask.height),
-      pxPerSquare,
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
@@ -320,16 +318,13 @@ export function probeMapFraction(u: number, v: number): string {
 export function probeWorldPoint(x: number, y: number): string {
   if (!lastRun) return "Nothing traced yet in this session — run a trace first, then probe.";
 
-  const { rawField, mask, labelled, placement, pxPerSquare, name } = lastRun;
+  const { rawField, mask, labelled, placement, name } = lastRun;
   const rasterX =
     placement.unitsPerPixelX === 0 ? 0 : (x - placement.origin.x) / placement.unitsPerPixelX;
   const rasterY =
     placement.unitsPerPixelY === 0 ? 0 : (y - placement.origin.y) / placement.unitsPerPixelY;
 
-  const line = describePoint(
-    readPoint(rawField, mask, labelled, rasterX, rasterY),
-    pxPerSquare,
-  );
+  const line = describePoint(readPoint(rawField, mask, labelled, rasterX, rasterY));
   devLog("info", `probe: world (${x.toFixed(0)}, ${y.toFixed(0)}) on "${name}" — ${line}`);
   return line;
 }
