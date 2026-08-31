@@ -3,6 +3,15 @@
 # 256x256 RGBA PNG, which is the size and format Dynamic Fog's working manifest uses and the one the
 # sibling project confirmed renders in Owlbear's extensions list. Structured like the sibling's logo
 # too — a bordered plate with the action glyph centred on it — so the two extensions read as a pair.
+#
+# Run with `powershell`, NOT `pwsh`. System.Drawing resolves under .NET Framework, which is what
+# Windows PowerShell 5.1 loads; on PowerShell 7 it is the separate System.Drawing.Common package and
+# unsupported off Windows entirely. See the invocation at the bottom of this file.
+#
+# Nothing checks that the committed PNGs match what this script would produce today. That drift is
+# accepted rather than solved: the check cannot run in CI, because GDI+ is not available on the
+# Ubuntu runner, and the alternative — dropping the committed binaries — leaves two files nobody can
+# adjust or explain. If the glyph is edited here, re-run and commit both PNGs in the same change.
 Add-Type -AssemblyName System.Drawing
 
 function New-Logo {
@@ -41,8 +50,8 @@ function New-Logo {
     $g.FillPath($borderBrush, $outer)
     $g.FillPath($plateBrush, $inner)
 
-    # The glyph is authored in the action icon's 24-unit box. Scaled into the plate and nudged so its
-    # drawn extents sit centred rather than its nominal box, which they are not the same thing.
+    # The glyph is authored in the action icon's 24-unit box. Scaled into the plate and nudged so
+    # that its drawn extents sit centred rather than its nominal box, which are not the same thing.
     $scale = 6.6
     $offset = ($size - 24 * $scale) / 2
     $shiftX = -0.85

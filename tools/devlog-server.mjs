@@ -40,11 +40,27 @@ import { fileURLToPath } from "node:url";
 // Must stay in step with the ENDPOINT in src/devlog.ts.
 const PORT = 9998;
 const LOG_FILE = fileURLToPath(new URL("../dev.log", import.meta.url));
-const MAX_BODY_BYTES = 1_000_000;
+/**
+ * A runaway-payload guard, in CHARACTERS.
+ *
+ * Named for bytes until 2026-08-31 and compared against `body.length`, which counts UTF-16 code
+ * units — so the limit it enforced was never the one its name claimed. Renamed rather than
+ * converted: the number is an order-of-magnitude guard against a client looping, and which unit it
+ * counts does not matter as long as the name does not lie about it.
+ */
+const MAX_BODY_CHARS = 1_000_000;
 
 const server = createServer((req, res) => {
   // The extension iframe is on a different origin from this receiver, so the POST is a
   // cross-origin request and needs both the preflight answer and the header below.
+  //
+  // `*` rather than the allow-list `vite.config.ts` uses for the dev server, and the asymmetry is
+  // deliberate rather than an oversight — do not "fix" it to match. Vite's default refuses
+  // cross-origin reads because a page visited while developing could otherwise read the dev
+  // server's *responses*. This server has no responses to read: it binds 127.0.0.1, answers 204
+  // with an empty body, and never returns anything about the log. The worst a hostile page can do
+  // is append a line to a gitignored dev file, and narrowing the header would not stop that anyway,
+  // since the extension's own origin varies with the room.
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
@@ -57,10 +73,18 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // Decode as UTF-8 across the whole stream rather than per chunk. Without this each `chunk` is a
+  // Buffer and `body += chunk` calls toString() on it independently, so a multi-byte character
+  // split across a TCP segment boundary is decoded as two invalid fragments and arrives as
+  // replacement characters. The log is full of em dashes, arrows and multiplication signs, and the
+  // result would read as a garbled message rather than as a transport fault — in the one channel
+  // this project uses to diagnose everything else. setEncoding holds the partial sequence over.
+  req.setEncoding("utf8");
+
   let body = "";
   req.on("data", (chunk) => {
     body += chunk;
-    if (body.length > MAX_BODY_BYTES) req.destroy();
+    if (body.length > MAX_BODY_CHARS) req.destroy();
   });
 
   req.on("end", async () => {
