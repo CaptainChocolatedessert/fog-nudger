@@ -382,7 +382,10 @@ export function describeGraphRegions(result: GraphRegionResult): string {
       : `area check FAILED on ${faces.checked - faces.exact} of ${faces.checked}`;
   return (
     `${result.regions.length} faces from ${graph.nodes.length} nodes and ${graph.edges.length} ` +
-    `edges (${result.discarded} below the minimum, ${result.bridges} bridges, ` +
+    // "held no map", not "below the minimum": there is no size threshold any more. A face is left
+    // out only when it has zero interior pixels, which is a sub-pixel sliver rather than a room
+    // somebody filtered away.
+    `edges (${result.discarded} faces held no map, ${result.bridges} bridges, ` +
     `${result.sliversRemoved} slivers removed in ${result.sliverRounds} rounds, ` +
     `${result.filledHoles} holes filled); ${exact}; tolerance ${result.tolerance.toFixed(2)}px ` +
     `after ${result.escalations} escalations; thin ${Math.round(timings.thinMs)}ms, ` +

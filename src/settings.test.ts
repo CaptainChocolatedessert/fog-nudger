@@ -90,9 +90,35 @@ describe("isDefault and describeSettings", () => {
   });
 
   it("names every trace parameter, so a run can be read beside its settings", () => {
+    /*
+      The list is every key of `TraceSettings`, and it is checked twice over.
+
+      This test was named "every" while checking five of the nine, which is how spur pruning went
+      missing from the summary: the `minRoomSquares` term was removed when that control was deleted
+      and `spurPrunePx` was never added in its place, so the one control that can erode the whole
+      graph at its top end was absent from the line a log reader sees, with nothing failing.
+
+      The value check is what makes a *missing* term fail rather than only a renamed one. A term
+      dropped from the string takes its number with it, and a number that appears nowhere in the
+      summary is a setting the log cannot report.
+    */
     const line = describeSettings(DEFAULT_SETTINGS);
-    for (const part of ["blur", "k ", "window", "min stroke", "simplify"]) {
-      expect(line).toContain(part);
+    for (const part of ["blur", "k ", "window", "min stroke", "min island", "prune", "simplify"]) {
+      expect(line, `no "${part}" in: ${line}`).toContain(part);
     }
+    // The breaks term is one phrase covering two settings, and it collapses to "off" at the
+    // default because reporting a travel distance for a repair that is not running is noise.
+    expect(line).toContain("breaks off");
+  });
+
+  it("reports the break settings once the repair is actually on", () => {
+    // The other half of the conditional above, which the default line cannot reach. Without this
+    // the two gap settings are absent from every assertion in the suite.
+    const on = normaliseSettings({ trace: { gapFillPx: 12, gapTravelPx: 40 } });
+    const line = describeSettings(on);
+
+    expect(line).toContain("breaks up to 12px");
+    expect(line).toContain("travel 40px");
+    expect(line).not.toContain("breaks off");
   });
 });

@@ -657,6 +657,9 @@ export function describeSettings(settings: Settings): string {
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusPx}px, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
     `min island ${trace.minIslandPx}px, ` +
+    // Spur pruning belongs in the summary more than most: it is the one control here that can erode
+    // the entire graph at its top end, and it went missing when the smallest-room term was removed.
+    `prune ${trace.spurPrunePx}px, ` +
     `simplify ${trace.simplifyInkWidths} ink widths; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `breaks ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +

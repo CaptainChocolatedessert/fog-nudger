@@ -1103,6 +1103,19 @@ export async function runTrace(
         `stepped over them, which loses linework without saying which. Expected to be zero.`,
     );
   }
+  if (derived.sliversLeft > 0) {
+    // Reported rather than merely counted, because it is never harmless: a surviving sub-pixel face
+    // is emitted as a shape enclosing nothing, and the area check will have failed on its
+    // neighbours. Two ways to reach it — the round cap, or a sliver with no bounding edge free of
+    // interior pixels to delete — and the log cannot tell them apart, so it names both.
+    devLog(
+      "warn",
+      `trace: ${derived.sliversLeft} sub-pixel faces could not be removed after ` +
+        `${derived.sliverRounds} rounds — either the round cap was reached or none of their ` +
+        `bounding edges was free of interior pixels. They emit as shapes enclosing nothing; read ` +
+        `the area check below, which will have failed on the faces beside them.`,
+    );
+  }
 
   devLog(
     "info",
