@@ -69,20 +69,6 @@ export const WALL_KEY = key("wall");
  */
 export const ACCEPTED_WALL_STROKE = 0;
 
-/**
- * The stroke a *staged* wall line carries, from the scene's own fog stroke width.
- *
- * Deliberately not the accepted width, which reverses a decision made an hour earlier — and the
- * reason it reverses is that the accepted width stopped being a number. When it was the scene's fog
- * stroke, staging at the same value was what let a GM judge the wall they would get. A constant zero
- * has no geometry to judge, and a zero-width line in the scene is invisible and unselectable, so a
- * staged line keeps a width that can be seen and hit. Position is identical either way, and position
- * is the whole of what review is for.
- */
-export function stagedWallStroke(fogStrokeWidth: number): number {
-  return Math.max(1, fogStrokeWidth);
-}
-
 export interface WallProvenance {
   /** Which run produced this item. A timestamp, because its job is to be read beside a log. */
   readonly run: string;

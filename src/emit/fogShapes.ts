@@ -68,17 +68,16 @@ export const PROPOSAL_COLOURS = [
 ] as const;
 
 /**
- * Staged fill opacity — low, so the map art stays readable underneath.
+ * The fill an emitted fog shape carries: **full**, and required rather than aesthetic.
  *
- * Was 0.5, which is what step 1 placed and judged against six shapes on open ground. At two hundred
- * shapes tiling a whole map it is a wash. What carries the partition now is the difference between
- * neighbouring colours and the stroke between them, and the fill only has to tint.
+ * A fog shape below full opacity leaves a translucent tint of the fog colour over ground the party
+ * has already revealed, for players as well as the GM. Owlbear's own fog tool sets 1.
  *
- * Promotion raises it to 1, and *that* value is **required** rather than aesthetic: a fog shape
- * below full opacity leaves a translucent tint of the fog colour over ground the party has already
- * revealed, for players as well as the GM. Owlbear's own fog tool sets 1.
+ * A `STAGED_FILL_OPACITY` of 0.22 sat beside this, from when proposals were staged on the drawing
+ * layer at low opacity and *promoted* to fog. Staging is gone and nothing read it but its own test.
+ * The low fill it described still exists — it is how the **preview** draws the partition on the
+ * workspace canvas — but that is a review setting and lives with the preview.
  */
-export const STAGED_FILL_OPACITY = 0.22;
 export const ACCEPTED_FILL_OPACITY = 1;
 
 /**

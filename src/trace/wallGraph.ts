@@ -341,11 +341,7 @@ function assembleGraph(
     }
   }
 
-  const merged = mergeThroughPathNodes(
-    chains,
-    clusterOf,
-    chains.map(() => false),
-  );
+  const merged = mergeThroughPathNodes(chains, clusterOf);
 
   const nodeIndex = new Map<string, number>();
   const nodes: WallNode[] = [];
@@ -386,11 +382,9 @@ function assembleGraph(
 function mergeThroughPathNodes(
   chains: readonly (readonly Vector2[])[],
   clusterOf: readonly number[],
-  dropped: readonly boolean[],
 ): { edges: Vector2[][]; merged: number } {
   const atNode = new Map<number, number[]>();
   chains.forEach((_, edge) => {
-    if (dropped[edge]) return;
     for (const end of [0, 1] as const) {
       const flat = edge * 2 + end;
       const key = clusterOf[flat]!;
@@ -413,9 +407,6 @@ function mergeThroughPathNodes(
   }
 
   const used = new Uint8Array(chains.length);
-  dropped.forEach((skip, edge) => {
-    if (skip) used[edge] = 1;
-  });
   const edges: Vector2[][] = [];
 
   const run = (startEdge: number, startEnd: 0 | 1): Vector2[] => {

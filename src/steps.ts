@@ -166,8 +166,9 @@ export const STEPS: readonly Step[] = [
     id: "walls",
     title: "Walls",
     blurb:
-      "The centreline of every piece of linework, one pixel wide. <b>This is the graph the regions " +
-      "below are made of</b> \u2014 a face boundary is a centreline, so pruning here changes the partition.",
+      "The <b class='skeleton-key'>centreline</b> of every piece of linework, one pixel wide. " +
+      "<b>This is the graph the regions below are made of</b> \u2014 a face boundary is a centreline, so " +
+      "pruning here changes the partition.",
     /*
       The skeleton over the ink, which is the only pairing that answers the question.
 

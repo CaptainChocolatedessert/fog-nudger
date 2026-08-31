@@ -4,11 +4,14 @@ import { PathOp, type Ring } from "../geometry/ring";
 import type { PlacedRegion } from "../map/placeRegions";
 import { NAMESPACE } from "../namespace";
 import {
+  ACCEPTED_FILL_OPACITY,
+  ACCEPTED_STROKE_WIDTH,
+  EMITTED_LAYER,
+  EMITTED_VISIBLE,
   planBatches,
   REGION_KEY,
   PROPOSAL_COLOURS,
   stageShapes,
-  STAGED_FILL_OPACITY,
   totalCommands,
   type FogShapeSpec,
   type StageableRegion,
@@ -92,10 +95,14 @@ describe("stageShapes", () => {
     expect(shape!.name).toBe("Fog Nudger — region 1 (4.3 sq)");
   });
 
-  it("stages below full opacity, which promotion later raises", () => {
-    const [shape] = stageShapes([region()], options).shapes;
-    expect(shape!.fillOpacity).toBe(STAGED_FILL_OPACITY);
-    expect(shape!.fillOpacity).toBeLessThan(1);
+  it("carries the fill and stroke it was given, rather than deciding them", () => {
+    // What replaced "stages below full opacity, which promotion later raises". That test compared
+    // the shape's fillOpacity against STAGED_FILL_OPACITY while the fixture *passed in* the same
+    // number, through a function that only copies it — so it held whatever the module did. Staging
+    // is gone; the values themselves are pinned in their own block below.
+    const [shape] = stageShapes([region()], { ...options, fillOpacity: 0.7, strokeWidth: 9 }).shapes;
+    expect(shape!.fillOpacity).toBe(0.7);
+    expect(shape!.strokeWidth).toBe(9);
   });
 
   it("gives consecutive regions different colours", () => {
@@ -139,6 +146,28 @@ describe("stageShapes", () => {
     const result = stageShapes([region({ placed: placed([]) })], options);
     expect(result.shapes).toEqual([]);
     expect(result.skipped).toEqual([]);
+  });
+});
+
+describe("the four values an emitted item must carry", () => {
+  /*
+    Pass 7's item 2.1. These four are declared together in `fogShapes.ts` because the last edit near
+    them shipped a defect a GM had to find: removing staging deleted the promotion step that set the
+    layer and the visibility, and the builders were left writing to `DRAWING` while every comment
+    around them said fog.
+
+    `CLAUDE.md` said no test could reach them, "the builders import the SDK". That is true of the
+    builders and false of the constants — this module imports no SDK, which is why this file can
+    import it at all. Only the `buildPath`/`buildLine` calls in `emitRegions.ts` are out of reach.
+
+    This does not stop the builders drifting from the constants. Nothing here can. It turns three
+    values nobody would notice changing into three that fail a test.
+  */
+  it("puts them on the fog layer, visible, opaque and unstroked", () => {
+    expect(EMITTED_LAYER, "a DRAWING item derives no walls and fogs nothing").toBe("FOG");
+    expect(EMITTED_VISIBLE, "on FOG, false means cleared rather than hidden").toBe(true);
+    expect(ACCEPTED_FILL_OPACITY, "below 1 tints revealed ground for players").toBe(1);
+    expect(ACCEPTED_STROKE_WIDTH, "Dynamic Fog strokes the outline; a width is the sliver").toBe(0);
   });
 });
 

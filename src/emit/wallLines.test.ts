@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  ACCEPTED_WALL_STROKE,
-  stagedWallStroke,
-  stageWallLines,
-  type PlacedWall,
-} from "./wallLines";
+import { ACCEPTED_WALL_STROKE, stageWallLines, type PlacedWall } from "./wallLines";
 
 const OPTIONS = {
   run: "2026-08-30T00:00:00.000Z",
@@ -93,9 +88,6 @@ describe("the emitted stroke width", () => {
     expect(ACCEPTED_WALL_STROKE).toBe(0);
   });
 
-  it("is visible while staged, because a zero-width line cannot be selected", () => {
-    // Position is what review is for, and position is identical either way.
-    expect(stagedWallStroke(8)).toBe(8);
-    expect(stagedWallStroke(0)).toBeGreaterThan(0);
-  });
+  // "is visible while staged, because a zero-width line cannot be selected" was here, exercising
+  // `stagedWallStroke`. Staging is gone and nothing but that test called it, so both went.
 });
