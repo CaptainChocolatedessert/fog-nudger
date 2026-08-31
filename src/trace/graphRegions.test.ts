@@ -172,6 +172,42 @@ describe("regions derived from the wall graph", () => {
     expect(result.tolerance).toBeGreaterThan(0.1);
   });
 
+  it("keeps a hole because of what is inside it, and fills none of these", () => {
+    /*
+      The containment rule, which `contours.test.ts` was the only place asserting until it was
+      deleted with the region-first tracer.
+
+      Its two cases there were "keep a hole around a region that survives, however small" and "fill
+      the same hole once the region inside it has been discarded". The second cannot be built any
+      more: there is no minimum-area filter, so nothing gets discarded by size, and a face is left
+      out only when it holds **zero interior pixels** — which by construction no pixel can probe
+      into. So the rule survives with one branch reachable, and what is asserted is the reachable
+      one: every hole in an emitted region corresponds to a face that is itself emitted.
+
+      Stated as a cost rather than dressed up: the fill branch is untested because producing it needs
+      a sub-pixel sliver fixture, and none of these fixtures has one. `filledHoles` is asserted zero
+      here so that a change which starts filling holes on ordinary maps fails rather than passing
+      quietly.
+    */
+    for (const [name, rows] of [
+      ["two rooms", TWO_ROOMS],
+      ["room with a stub", ROOM_WITH_STUB],
+    ] as const) {
+      const result = deriveGraphRegions(maskFromRows(rows), BASE);
+      expect(result.filledHoles, `${name}: holes filled`).toBe(0);
+
+      const emitted = new Set(result.regions.map((region) => region.id));
+      for (const face of result.faces.faces) {
+        for (let cycle = 1; cycle < face.cycles.length; cycle += 1) {
+          // A hole's cycle is walked the other way round, so the face it belongs to is one of the
+          // emitted ones — this is the containment relation, read off the traversal rather than
+          // recomputed by a point-in-polygon test of our own.
+          expect(emitted.has(face.label), `${name}: face ${face.label} has a hole`).toBe(true);
+        }
+      }
+    }
+  });
+
   it("covers the raster it was given", () => {
     const rows = TWO_ROOMS;
     const result = deriveGraphRegions(maskFromRows(rows), BASE);

@@ -402,6 +402,40 @@ one has traced a map with a prominent pillar.
 That is the stub argument one topology up, and the containment rule cannot simply be relaxed: keeping
 every hole would make a wall ring around every speck of ink in a room.
 
+##### Why a hole is never decided by size — rescued from `contours.ts` before it was deleted
+
+The region-first tracer carried this argument in its module comment, and the file went on 2026-08-31
+once nothing referenced it. The rule survives the pivot; so does the reason, and the reason is the
+part that would be expensive to learn twice.
+
+Keeping a hole **when it is large enough** was the first rule, on the reasoning that anything too
+small to be a region is too small to be a hole. It does not hold, and a GM found the symptom before
+the reasoning was re-examined:
+
+> **A region's area is its own pixels, while a hole's area is everything its ring encloses** — the
+> thing inside, *plus the ink ring around it*.
+
+They are different quantities, so one threshold cannot govern both. Equal thresholds leave a band
+where a feature is too small to survive as a region and its hole is too big to fill, and every
+decorative feature in that band showed through as a white pocket — **44 of them on the test map**.
+
+Raising the threshold is worse than leaving it: a hole big enough to clear a room-sized cutoff can
+contain a *surviving* region, and a region covering another region means revealing one reveals the
+other, which is the merge failure this design biases hardest against. On the test map 156 of 269
+regions were under a grid square, so that was not a remote case. Containment cannot make that
+mistake and needs no threshold at all.
+
+**Live relevance, stated honestly:** under the wall graph there is no minimum-area filter at all, so
+the band cannot open and the hole rule almost never fires — a hole is kept unless the face beyond it
+holds no map. This is kept as the answer to a question that will be asked again the first time
+somebody proposes a size threshold anywhere near a hole.
+
+*The same file also recorded the diagonal-pinch turn rule — that where two pixels of one region touch
+only at a corner, the tracer must turn hard, because space is 4-connected and the polygon must not
+contradict the labelling that produced it. That decision is still live and still tested, one stage
+along: `label.test.ts` pins the labelling side and `wallGraph.test.ts`'s staircase fixture pins the
+chain walk's equivalent.*
+
 #### The real argument is parameter *coupling*, not parameter count
 
 Lines do not remove parameters. Spur pruning replaces the pullback; the gap threshold survives almost

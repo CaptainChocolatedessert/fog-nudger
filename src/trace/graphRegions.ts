@@ -2,7 +2,9 @@
  * Regions from the wall graph — the deriving half of step D, end to end.
  *
  * Ink in, simplified rings out, by way of the skeleton rather than the space between the strokes.
- * The chain is thin, prune, chain-and-weld, label, walk the faces, filter, fit.
+ * The chain is thin, prune, chain, label, walk the faces, remove the slivers, fit. **Nothing welds**
+ * — that was the sibling's fix for junction clusters, it moves points, and it is forbidden here;
+ * `wallGraph.ts` carries the measurement that killed it.
  *
  * ## Two things here differ from the region-first pipeline, and both are forced
  *
@@ -17,6 +19,31 @@
  * own would no longer match its neighbour along the wall between them. So when anything is over the
  * cap, the tolerance rises for the whole map and every edge is refitted. The cost is stated: one
  * enormous region can coarsen every other one. In exchange, no two faces can disagree about a wall.
+ *
+ * ## Meeting the cap by simplifying harder, never by splitting
+ *
+ * Carried here from `simplify.ts` when its per-region path was deleted, because it is a rule this
+ * project must not lose rather than a note about an implementation.
+ *
+ * Splitting an oversized region into two adjacent shapes is the obvious remedy and the sharpest trap
+ * in the design: Dynamic Fog derives a wall from every shape boundary, so the join becomes **a wall
+ * across the middle of a room**. So the tolerance rises and everything is refitted from the original
+ * edges — which keeps the displacement bound stated against the tolerance actually ended at, rather
+ * than against the sum of every rung of the ladder.
+ *
+ * Escalation stops at a ceiling, and anything still over the cap is **reported rather than fixed**
+ * (`overCap`, which the emit path turns into a skip). Emitting it would fail at the SDK boundary;
+ * splitting it would put a wall through a room; crushing it to fit would produce a room shaped like
+ * nothing on the map. Naming it is the honest option, and the count is the signal that either the ink
+ * is far noisier than expected or two rooms have merged into something enormous.
+ *
+ * **The exterior is not special-cased, though it could be.** There is no room outside to clip and
+ * nobody out there to cut off, so it could take a much looser tolerance than any room — and it gets
+ * none, because the pipeline deliberately does not know which face the exterior is. The ladder covers
+ * it anyway and without a guess: only a region with an enormous boundary escalates, the exterior's
+ * boundary wraps every room on the map, and an ordinary room never comes close to the cap. The
+ * exterior ends up loosely simplified because it is large, not because something decided it was
+ * outside.
  *
  * ## No size threshold, and what happens to a hole
  *
