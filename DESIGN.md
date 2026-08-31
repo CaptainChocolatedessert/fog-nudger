@@ -3113,14 +3113,27 @@ no parameter. Two things it changes: the **weld radius** is a new control that n
 draw the *graph* rather than the skeleton, and the **simplification cap** loses its stated reason and
 needs a new one.
 
-**E. Emit.** Fog shapes for the faces, lines for the uncovered edges by the bridge criterion (§4),
-vertex ids in metadata, exact matching on read-back.
+**E. BUILT 2026-08-30.** Fog shapes for the faces, lines for the uncovered edges by the bridge
+criterion (§4), vertex ids in metadata. Read-back matching is deferred: a scene that is purely output
+has no consumer for it until G. Staging went with it — see "Superseded: staging is gone" above.
 
-**F. The gap repair moves onto the graph** — endpoint pairing and graph distance replacing the closing,
-the bank grouping, the bounded flood and the guessed-break state. It **retires** the pixel repair
-rather than joining it: that one is confirmed working in a room (2026-08-29) and is expected to be
-deprecated the moment this lands, so it stays with the reading controls in the meantime and gets no
-further investment.
+**F. The gap repair gains a graph half — it does NOT retire the pixel one (user, 2026-08-30).** This
+said the vector repair would replace the pixel repair outright, and that is wrong. A **scanner
+artefact** settles it: a thin light line running across a scanned map breaks linework in *pixel*
+space, before any skeleton exists, and no amount of endpoint pairing on a graph can see a break the
+graph does not have — the ink is severed, so the graph is severed, and the two ends may be nowhere
+near each other. That is a pixel problem and it wants a pixel fix.
+
+So the two are **different tools for different faults**, and the split is principled rather than
+transitional:
+
+- **Pixel repair** — the ink is wrong. Scanner lines, dropout, a stroke the binariser lost. It runs
+  before thinning, so what it mends becomes one wall rather than two.
+- **Graph repair** — the ink is right and the *skeleton* is broken, or the map itself has a gap a GM
+  wants closed. Endpoint pairing and graph distance, which are exact where a closing is a guess.
+
+Uncommon does not mean droppable: the pixel repair is the only tool that can act before the graph
+exists, and there is no vector expression of "this line across the scan is not a wall".
 
 **G. Vector editing.** Additions and deletions as durable inputs; a move implies the freeze point (§4).
 
