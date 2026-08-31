@@ -165,7 +165,34 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
   }
 
   if (shapes.length === 0 && lines.length === 0) {
-    return "Traced, but nothing was emittable — see dev.log.";
+    /*
+      Returning BEFORE the delete below, so the scene keeps whatever the last push put there.
+
+      The message has to say that, because "nothing was emittable" is true about the write and a GM
+      reads it as "so the scene is as I left it". What the scene actually holds is fog derived from
+      an *earlier* set of settings, which may look nothing like what is on screen — the tool has
+      quietly stopped being a rendering of the current graph, and the old wording did not say so.
+
+      Leaving it rather than clearing it is the deliberate half. Reaching zero shapes *and* zero
+      lines takes something degenerate — a broken or tiny map image, an empty raster — so it is an
+      accident rather than an intent, and an empty fog layer hides the whole map. Clearing would
+      answer a mistake by destroying the GM's working fog, on the way out of a workspace that now
+      pushes when it closes.
+
+      `lastPushed` is deliberately NOT cleared. It records the last *successful* push and the scene
+      still holds exactly that, so the fingerprint is accurate: if the GM returns to those settings
+      and closes, skipping the push is correct. The error paths below call `forgetPushed()` because
+      they leave the scene partially written and therefore unknown; this path leaves it known.
+    */
+    devLog(
+      "warn",
+      "emit: nothing was emittable, so the scene still holds the previous run's fog — it no longer " +
+        "matches the settings on screen",
+    );
+    return (
+      "Traced, but there was nothing to put on the map. The scene was left as it was, so it still " +
+      "holds the previous run — see dev.log."
+    );
   }
 
   // Ours go before the replacements arrive. See the note above on why this order.
