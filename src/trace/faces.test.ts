@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { fitFaces, resolveFaces, type GraphFace } from "./faces";
+import { buildFaces, describeAreaCheck, fitFaces, resolveFaces, type GraphFace } from "./faces";
 import { maskFromRows } from "./fixtures";
-import { labelSpace } from "./label";
+import { labelSpace, type LabelledSpace } from "./label";
 import { buildWallGraph, type WallGraph } from "./wallGraph";
 
 /**
@@ -185,25 +185,107 @@ describe("faces from the wall graph", () => {
     expect(result.faces.some((face) => face.interior === 1)).toBe(true);
   });
 
-  it("reports a corrupted ring as a failure", () => {
-    const { result } = facesOf(ROOM);
-    const room = faceOfArea(result.faces, 32);
+});
 
-    // Push the rightmost vertex one pixel further right. The shape still renders perfectly
-    // plausibly, which is the whole reason this check exists — and it must no longer balance.
-    const corrupted = [...room.cycles[0]!.points];
-    let rightmost = 0;
-    corrupted.forEach((point, index) => {
-      if (point.x > corrupted[rightmost]!.x) rightmost = index;
-    });
-    corrupted[rightmost] = { x: corrupted[rightmost]!.x + 1, y: corrupted[rightmost]!.y };
-    let doubled = 0;
-    for (let i = 0; i < corrupted.length; i++) {
-      const a = corrupted[i]!;
-      const b = corrupted[(i + 1) % corrupted.length]!;
-      doubled += a.x * b.y - b.x * a.y;
+/**
+ * Making the area check FAIL, which nothing had ever done.
+ *
+ * `CLAUDE.md`'s standing rules say to treat a clean diagnostic as evidence about the *diagnostic*
+ * until it has failed at least once, and name this one as owing exactly this test. A version of it
+ * existed and did not do the job: it copied a face's points, moved a vertex, recomputed the shoelace
+ * sum **in the test**, and asserted the answer had changed. No production code saw the corruption,
+ * so it asserted that moving a corner of a square changes its area — true with `buildFaces` deleted.
+ *
+ * ## Corrupting the labelling, not the ring
+ *
+ * The check compares two numbers reached by unrelated routes: the polygon area the traversal walked,
+ * and the pixel count the labelling holds for the same face. Feeding `buildFaces` a doctored ring is
+ * awkward — the rings are what it produces, not what it takes — but the labelling *is* an input, and
+ * moving one region's pixel count by one breaks the identity for exactly that face and nothing else.
+ * The topology is untouched: same `labels` array, so the same cycles are walked and assigned to the
+ * same faces. Only the arithmetic stops balancing.
+ *
+ * That is the right corruption to inject, because it is the shape of the real thing. The two defects
+ * this check caught on a real map were both a face coming up a pixel or two short — a stranded
+ * skeleton pixel, and a sliver enclosing half a lattice square. Neither was visible in the picture,
+ * which is the whole reason the check exists rather than somebody looking.
+ */
+describe("the area check", () => {
+  /** The labelling `buildFaces` expects, with one region's pixel count moved by `delta`. */
+  function withRegionArea(
+    labelled: LabelledSpace,
+    id: number,
+    delta: number,
+  ): LabelledSpace {
+    return {
+      ...labelled,
+      regions: labelled.regions.map((region) =>
+        region.id === id ? { ...region, area: region.area + delta } : region,
+      ),
+    };
+  }
+
+  const parts = () => {
+    const graph = graphOf(ROOM);
+    return { graph, labelled: labelSpace(graph.framed, { minArea: 0 }) };
+  };
+
+  it("passes on the untouched fixture, so the failures below mean something", () => {
+    const { graph, labelled } = parts();
+    const result = buildFaces(graph, labelled);
+
+    expect(result.checked).toBeGreaterThan(0);
+    expect(result.exact).toBe(result.checked);
+    expect(describeAreaCheck(result)).toContain("area check exact");
+  });
+
+  it("REPORTS A FAILURE when a face's pixel count is off by one", () => {
+    const { graph, labelled } = parts();
+    const target = labelled.regions[0]!.id;
+    const result = buildFaces(graph, withRegionArea(labelled, target, 1));
+
+    // The count the log reads, and the flag on the face itself.
+    expect(result.exact).toBe(result.checked - 1);
+    const broken = result.faces.find((face) => face.label === target);
+    expect(broken, `no face carries label ${target}`).toBeDefined();
+    expect(broken!.exact).toBe(false);
+    expect(broken!.doubleArea).not.toBe(broken!.expectedDoubleArea);
+  });
+
+  it("blames only the face that was corrupted", () => {
+    // A check that went red across the board on a single bad pixel count would still be reporting a
+    // failure, and would be useless for finding which face to look at.
+    const { graph, labelled } = parts();
+    const target = labelled.regions[0]!.id;
+    const result = buildFaces(graph, withRegionArea(labelled, target, 1));
+
+    for (const face of result.faces) {
+      expect(face.exact, `face ${face.label}`).toBe(face.label !== target);
     }
-    expect(doubled).not.toBe(room.expectedDoubleArea);
+  });
+
+  it("fails in both directions, since an undercount is as wrong as an overcount", () => {
+    const { graph, labelled } = parts();
+    const target = labelled.regions[0]!.id;
+    for (const delta of [1, -1, 7]) {
+      const result = buildFaces(graph, withRegionArea(labelled, target, delta));
+      expect(result.exact, `delta ${delta}`).toBe(result.checked - 1);
+    }
+  });
+
+  it("says FAILED in the line that goes to the log", () => {
+    /*
+      The string is the finding. `CLAUDE.md`'s rule is "if it ever says FAILED, stop; nothing
+      downstream is real" — so the wording is what that rule is written against, and a check that
+      detected the fault while reporting it as exact would be worse than no check at all.
+    */
+    const { graph, labelled } = parts();
+    const target = labelled.regions[0]!.id;
+    const line = describeAreaCheck(buildFaces(graph, withRegionArea(labelled, target, 1)));
+
+    expect(line).toContain("area check FAILED");
+    expect(line).toContain(`1 of ${buildFaces(graph, labelled).checked} faces`);
+    expect(line).not.toContain("exact");
   });
 });
 
