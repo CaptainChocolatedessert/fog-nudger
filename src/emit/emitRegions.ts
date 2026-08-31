@@ -50,7 +50,13 @@ import {
   totalCommands,
   type FogShapeSpec,
 } from "./fogShapes";
-import { stageWallLines, wallStrokeWidth, WALL_KEY, type WallLineSpec } from "./wallLines";
+import {
+  ACCEPTED_WALL_STROKE,
+  stagedWallStroke,
+  stageWallLines,
+  WALL_KEY,
+  type WallLineSpec,
+} from "./wallLines";
 
 /**
  * Compile-time assertion that the numbers mirrored in `geometry/ring` still match the SDK's enum.
@@ -170,7 +176,7 @@ export async function stageRegions(): Promise<string> {
   const fogStroke = await OBR.scene.fog.getStrokeWidth();
   const { lines, dropped } = stageWallLines(
     run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed, ids: wall.ids })),
-    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: wallStrokeWidth(fogStroke) },
+    { run: runId, mapId: run.mapId, colour: WALL_COLOUR, strokeWidth: stagedWallStroke(fogStroke) },
   );
   if (dropped > 0) {
     devLog("warn", `emit: dropped ${dropped} zero-length wall segments — nothing to select there`);
@@ -298,12 +304,10 @@ async function acceptWallLines(): Promise<number> {
   );
   if (staged.length === 0) return 0;
 
-  // Re-read rather than trusted from staging: a GM can change the scene's fog styling between
-  // proposing and accepting, and an accepted wall should match the scene it lands in.
-  const [colour, width] = await Promise.all([
-    OBR.scene.fog.getColor(),
-    OBR.scene.fog.getStrokeWidth(),
-  ]);
+  // The colour is re-read rather than trusted from staging: a GM can change the scene's fog styling
+  // between proposing and accepting, and an accepted wall should match the scene it lands in. The
+  // width does not come from the scene at all — see `ACCEPTED_WALL_STROKE`.
+  const colour = await OBR.scene.fog.getColor();
 
   await writeWithBackoff(
     () =>
@@ -315,7 +319,10 @@ async function acceptWallLines(): Promise<number> {
           // only whether the line is drawn — not whether it becomes a wall.
           draft.visible = true;
           draft.style.strokeColor = colour;
-          draft.style.strokeWidth = wallStrokeWidth(width);
+          // Zero, so Dynamic Fog's two derived walls coincide on the centreline and each side
+          // reveals up to it — the party seeing half the wall as drawn, from either side, rather
+          // than a band of fog down the middle of it. See `ACCEPTED_WALL_STROKE`.
+          draft.style.strokeWidth = ACCEPTED_WALL_STROKE;
         }
       }),
     "accept walls",
@@ -343,6 +350,7 @@ export async function returnToStaging(): Promise<string> {
   const review = (await readSettings()).review;
   const stagedOpacity = review.fillOpacity;
   const stagedStroke = Math.max(0, (await OBR.scene.grid.getDpi()) * review.strokeSquares);
+  const demotedFogStroke = await OBR.scene.fog.getStrokeWidth();
   const accepted = await OBR.scene.items.getItems<Path>(
     (item) => REGION_KEY in item.metadata && item.layer === "FOG" && isPath(item),
   );
@@ -383,8 +391,9 @@ export async function returnToStaging(): Promise<string> {
             draft.layer = "DRAWING";
             draft.visible = false;
             draft.style.strokeColor = WALL_COLOUR;
-            // The width is left alone: it is the fog stroke width both staged and accepted, so a
-            // demoted proposal still shows the wall at the size it would be.
+            // Back to a width that can be seen and selected. Accepted these are zero-width, which
+            // is correct geometry and invisible in the Outliner.
+            draft.style.strokeWidth = stagedWallStroke(demotedFogStroke);
           }
         }),
       "return walls to staging",

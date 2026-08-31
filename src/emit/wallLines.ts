@@ -40,33 +40,47 @@ import { key } from "../namespace";
 export const WALL_KEY = key("wall");
 
 /**
- * How wide a wall line is emitted, as a share of the scene's own fog stroke width.
+ * The stroke an accepted wall line carries: **none**, and this is an experiment.
  *
- * **Thin, because the width is the sliver.** Dynamic Fog strokes the item at this width and takes
- * the outline, so a line W wide yields two walls W apart with a band between them that can be seen
- * into from neither side. On a free-standing wall that band is the wall's own thickness — a dark
- * stripe where the map has a wall, which reads correctly — but there is no reason for it to be as
- * wide as the fog stroke, and the GM asked for thinner.
+ * Dynamic Fog strokes the item at `style.strokeWidth` and takes the outline, so the width is the
+ * distance between the two walls it derives — and the band between them can be seen into from
+ * neither side.
  *
- * **Not zero, and this is the one place zero is genuinely unsafe.** A closed shape has its own
- * boundary to stroke at any width, which is why accepted shapes drop their outline entirely. An open
- * `LINE` has no interior and no boundary of its own: its stroke is the only thing giving it extent,
- * so stroking it at zero leaves nothing for Dynamic Fog to turn into a wall. The failure would be
- * silent and would only show at the table, as sight passing through a wall.
+ * **The earlier reasoning here was wrong** (user, 2026-08-30). It said that band was the wall's own
+ * thickness and read correctly as a dark stripe where the map has a wall. It does not: the party
+ * should see **half the wall as drawn** from each side, meeting at the centreline. A band of fog W
+ * wide down the middle of a wall is not the wall, it is a strip of the map nobody can ever see, and
+ * it is unrelated to how thick the wall was actually drawn.
  *
- * **The cost, stated:** a thinner line is harder to see and harder to hit when selecting, and DF's
- * own wall mode uses the full fog stroke width, presumably for exactly that reason. Judging these is
- * the workspace preview's job, where they are drawn cased at a legible width whatever this is; but
- * once step G puts editing on them, this trade is worth revisiting with a GM's hand on it.
+ * At zero the two derived walls coincide *on* the centreline, each side reveals up to it, and the
+ * whole drawn wall is visible between them. That is the same thing accepted shapes do, so every
+ * emitted item ends up with its walls exactly on the centreline — one rule rather than two.
+ *
+ * **What is unmeasured, and it is the reason this is called an experiment.** A closed path has its
+ * own boundary to stroke at any width, which is why zero is settled for shapes — step 1 measured it.
+ * An open `LINE` has no interior and no boundary of its own, so what Skia's stroker returns at width
+ * zero is genuinely unknown: possibly the line itself, which would give one wall exactly where it is
+ * wanted, and possibly nothing, which would give no wall at all.
+ *
+ * **If it is nothing, the failure is silent** — no error, no warning, just sight passing through a
+ * free-standing wall. So it wants looking at in a room before it is trusted: reveal a room with a
+ * stub in it and check that the stub still blocks. Raising this to a small positive number is the
+ * whole of the fix if it does not.
  */
-export const WALL_STROKE_SHARE = 0.25;
+export const ACCEPTED_WALL_STROKE = 0;
 
-/** Below this a line is too thin to hit, whatever the scene's fog stroke is set to. */
-export const MIN_WALL_STROKE = 0.5;
-
-/** The width a wall line is emitted at, from the scene's fog stroke width. */
-export function wallStrokeWidth(fogStrokeWidth: number): number {
-  return Math.max(MIN_WALL_STROKE, fogStrokeWidth * WALL_STROKE_SHARE);
+/**
+ * The stroke a *staged* wall line carries, from the scene's own fog stroke width.
+ *
+ * Deliberately not the accepted width, which reverses a decision made an hour earlier — and the
+ * reason it reverses is that the accepted width stopped being a number. When it was the scene's fog
+ * stroke, staging at the same value was what let a GM judge the wall they would get. A constant zero
+ * has no geometry to judge, and a zero-width line in the scene is invisible and unselectable, so a
+ * staged line keeps a width that can be seen and hit. Position is identical either way, and position
+ * is the whole of what review is for.
+ */
+export function stagedWallStroke(fogStrokeWidth: number): number {
+  return Math.max(1, fogStrokeWidth);
 }
 
 export interface WallProvenance {

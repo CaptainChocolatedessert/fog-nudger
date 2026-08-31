@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { stageWallLines, wallStrokeWidth, type PlacedWall } from "./wallLines";
+import {
+  ACCEPTED_WALL_STROKE,
+  stagedWallStroke,
+  stageWallLines,
+  type PlacedWall,
+} from "./wallLines";
 
 const OPTIONS = {
   run: "2026-08-30T00:00:00.000Z",
@@ -81,17 +86,16 @@ describe("wall lines", () => {
 });
 
 describe("the emitted stroke width", () => {
-  it("is a quarter of the scene's fog stroke, because the width is the sliver", () => {
-    // Dynamic Fog strokes the item at this width and takes the outline, so a line W wide yields two
-    // walls W apart with an unreachable band between them.
-    expect(wallStrokeWidth(8)).toBe(2);
+  it("is zero once accepted, so the derived walls sit on the centreline", () => {
+    // Dynamic Fog strokes the item at this width and takes the outline, so the width is the gap
+    // between the two walls it derives. At zero they coincide and each side reveals up to the
+    // centreline — the party seeing half the wall as drawn, rather than a band of fog down it.
+    expect(ACCEPTED_WALL_STROKE).toBe(0);
   });
 
-  it("never reaches zero, which is the one place zero is unsafe", () => {
-    // A closed shape has its own boundary to stroke at any width. An open LINE does not: its stroke
-    // is the only thing giving it extent, so stroking it at zero leaves nothing to become a wall,
-    // and the failure would be silent until sight passed through a wall at the table.
-    expect(wallStrokeWidth(0)).toBeGreaterThan(0);
-    expect(wallStrokeWidth(0.1)).toBeGreaterThan(0);
+  it("is visible while staged, because a zero-width line cannot be selected", () => {
+    // Position is what review is for, and position is identical either way.
+    expect(stagedWallStroke(8)).toBe(8);
+    expect(stagedWallStroke(0)).toBeGreaterThan(0);
   });
 });
