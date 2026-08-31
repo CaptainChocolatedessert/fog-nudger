@@ -51,7 +51,18 @@ async function fingerprint(): Promise<string> {
   return `${map ?? "none"}|${JSON.stringify(currentSettings())}`;
 }
 
-/** Push, unless the scene already holds exactly this. Called on the way out. */
+/**
+ * Push, unless the scene already holds exactly this. Called on the way out, and **awaited**.
+ *
+ * The shell keeps the sheet up until this resolves, so the seconds a large map takes are seconds a
+ * GM is looking at an opaque surface. Hence the status line: it has to be evidently working rather
+ * than frozen.
+ *
+ * **The status is said after the fingerprint check, not before**, and that ordering is the whole of
+ * requirement 4. Opening the workspace to glance at something and closing it is the common case, and
+ * it pushes nothing — announcing "putting it on the map…" and then vanishing would put a flicker on
+ * every close that did no work, which reads as the tool doing something it did not do.
+ */
 export async function pushOnClose(): Promise<void> {
   if (!controlsLive()) return;
   const mark = await fingerprint();
@@ -60,13 +71,17 @@ export async function pushOnClose(): Promise<void> {
     return;
   }
 
+  say("putting it on the map…", "working");
   try {
     await persistSettings();
     const message = await pushToFog(mark);
     devLog("info", `workspace: pushed on close — ${message}`);
   } catch (error) {
-    // Never rethrow: the way out of an opaque full-screen sheet cannot depend on a scene write.
+    // Never rethrow: the way out of an opaque full-screen sheet cannot depend on a scene write. The
+    // shell catches too, so this is belt-and-braces rather than the only guard — but it is the one
+    // that keeps the failure attributable, since the shell cannot say what was being written.
     const detail = describeError(error);
+    say(`could not write to the scene: ${detail}`, "bad");
     devLog("error", "workspace: pushing on close failed", detail);
     console.error("Fog Nudger — pushing on close failed", error);
   }

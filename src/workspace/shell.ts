@@ -94,6 +94,27 @@ let activeLayers: readonly LayerId[] = [];
 let view: View = { scale: 1, x: 0, y: 0 };
 let mapImage: HTMLImageElement | null = null;
 let dirty = true;
+
+/**
+ * The GM has asked to leave, so nothing new may start.
+ *
+ * Set the moment `close()` is entered, and read by every work cycle — the reading, the derive, the
+ * skeleton — through `isClosing()`, so a recompute in flight abandons its result rather than
+ * painting onto a surface that is going away. Also the re-entry guard: pressing Escape twice must
+ * not start two pushes, and two concurrent pushes would each delete-then-write, which is the worst
+ * state reachable in this code.
+ */
+let leaving = false;
+
+/**
+ * The modal is actually being dismissed, which is a later moment than `leaving`.
+ *
+ * These were one flag until the close started waiting for the push. Waiting wants the sheet to stay
+ * *alive* while the write runs — repainting, resizing, showing a status line — and wants the work
+ * cycles stopped. One flag could not express both: with it set, `frameLoop` returns and the canvas
+ * holds its last frame, so the sheet would sit there frozen for the seconds the push takes, which is
+ * indistinguishable from having crashed. Only `frameLoop` reads this narrower one.
+ */
 let closing = false;
 
 /**
@@ -152,8 +173,14 @@ export function setView(next: View): void {
   dirty = true;
 }
 
+/**
+ * Whether the GM has asked to leave, for the work cycles.
+ *
+ * Deliberately reports `leaving` rather than `closing`: a cycle that started before the close and
+ * lands during the push must still abandon its result, even though the sheet is still on screen.
+ */
 export function isClosing(): boolean {
-  return closing;
+  return leaving;
 }
 
 function draw(): void {
@@ -424,21 +451,80 @@ export function setCloseAction(action: () => Promise<void>): void {
   onClose = action;
 }
 
-function close(): void {
-  if (closing) return;
-  closing = true;
+/**
+ * How long the sheet will wait for the push before letting itself go anyway.
+ *
+ * A full push on the test map is a couple of seconds, so this is generous rather than tight. It
+ * exists because of what an opaque full-screen modal is: the probe established three independent
+ * exits precisely so this surface could never become a cell, and making the close wait on a scene
+ * write reintroduces that risk for the duration of the write. If a batch *hangs* rather than fails,
+ * that duration is unbounded — so the wait is capped and the cap is the thing keeping the promise
+ * the probe made.
+ *
+ * The cost, stated: when the timer wins, the modal goes while a write is still in flight, which is
+ * the truncated-scene outcome this whole change exists to avoid. Rare and logged is a different
+ * thing from routine and silent, which is what dismissing first gave us.
+ */
+const PUSH_ON_CLOSE_TIMEOUT_MS = 12_000;
+
+/**
+ * Leave, after the scene write finishes.
+ *
+ * **The order used to be the other way round** — dismiss the modal, then start the push — on the
+ * reasoning that a GM should not be left staring at a sheet that has stopped responding. The
+ * comment claimed "the iframe survives long enough to finish", which was an assumption and never a
+ * measurement. It matters because `pushToFog` deletes our existing fog items *before* it writes the
+ * replacements: right for a push that completes, since a fog layer holding nothing fogs everything,
+ * and a half-written layer if the iframe goes first. Worse, `pushOnClose` never rethrows and logs
+ * through a fire-and-forget shim, so a push killed by teardown left no trace distinguishable from
+ * one that never started.
+ *
+ * So the sheet stays up, says what it is doing, and dismisses when the write lands. Decided by the
+ * user (2026-08-30): a visibly slow close is preferred over any risk of a half-written fog layer.
+ * The status line is not shown here — `pushOnClose` decides whether there is anything to push and
+ * says so itself, so glancing and closing stays instant with no spurious flicker.
+ *
+ * **The cost, and it is the one to watch in a room.** For as long as the write runs, Escape and the
+ * close button do nothing: the `leaving` guard swallows them, deliberately, because two concurrent
+ * pushes would each delete-then-write. So the GM cannot abandon a slow push, and the timeout below
+ * is the only thing that ends it. `#state` is a sibling of `#panel` rather than a child, so the
+ * message stays visible even with the controls hidden — which is what keeps the wait legible rather
+ * than looking like a hang.
+ */
+async function close(): Promise<void> {
+  if (leaving) return;
+  leaving = true;
   devLog("info", "workspace: closing");
 
-  // The modal is dismissed first and the write follows. Waiting for a scene write before letting
-  // the sheet go would leave a GM staring at an opaque surface that has stopped responding, and
-  // this one takes seconds on a large map. The iframe survives long enough to finish.
+  if (onClose) {
+    let timer = 0;
+    const capped = new Promise<"timeout">((resolve) => {
+      timer = window.setTimeout(() => resolve("timeout"), PUSH_ON_CLOSE_TIMEOUT_MS);
+    });
+    // Caught rather than trusted. `pushOnClose` does not reject today, but the way out of an opaque
+    // sheet must not depend on that staying true of whatever is registered here.
+    const pushing = onClose().catch((error: unknown) => {
+      devLog("error", "workspace: the close action threw", describeError(error));
+    });
+
+    const outcome = await Promise.race([pushing, capped]);
+    window.clearTimeout(timer);
+    if (outcome === "timeout") {
+      devLog(
+        "warn",
+        `workspace: the push was still running after ${PUSH_ON_CLOSE_TIMEOUT_MS}ms — letting the ` +
+          "sheet go with the write in flight, so the fog layer may be incomplete",
+      );
+    }
+  }
+
+  closing = true;
   void OBR.modal.close(WORKSPACE_ID).catch((error: unknown) => {
     devLog("error", "workspace: could not close itself", describeError(error));
   });
-  void onClose?.();
 }
 
-document.getElementById("close")?.addEventListener("click", close);
+document.getElementById("close")?.addEventListener("click", () => void close());
 document.getElementById("fit")?.addEventListener("click", fitMap);
 document.getElementById("toggle-panel")?.addEventListener("click", (event) => {
   panel?.classList.toggle("hidden");
@@ -451,7 +537,7 @@ document.getElementById("toggle-panel")?.addEventListener("click", (event) => {
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
-    close();
+    void close();
   }
 });
 
@@ -464,7 +550,9 @@ window.addEventListener("keydown", (event) => {
  * silently.
  */
 function claimKeyboard(attempt = 0): void {
-  if (closing || document.hasFocus() || attempt > 30) return;
+  // `leaving`, not `closing`: once the GM has asked to go there is nothing left to claim the
+  // keyboard for, even though the sheet stays up while the push runs.
+  if (leaving || document.hasFocus() || attempt > 30) return;
   try {
     window.focus();
     if (surface instanceof HTMLElement) surface.focus({ preventScroll: true });
