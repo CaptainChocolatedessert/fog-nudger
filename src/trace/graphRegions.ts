@@ -88,13 +88,6 @@ export interface GraphRegion {
   /** The face's label in the skeleton's labelling. */
   readonly id: number;
   readonly rings: readonly Ring[];
-  /**
-   * Vertex ids per ring, in the same order as its points.
-   *
-   * `null` where a ring was kept unfitted to stop it collapsing: those points come from the pixel
-   * chain rather than the fitted edges, so there is nothing meaningful to label them with.
-   */
-  readonly ringIds: readonly (readonly number[] | null)[];
   readonly commands: number;
   /** Area the face covers, in pixels, measured before fitting. */
   readonly area: number;
@@ -324,8 +317,6 @@ function assemble(
 
   kept.forEach((face, index) => {
     const rings: Ring[] = [];
-    /** Vertex ids per ring, or null for a ring kept unfitted and therefore without them. */
-    const ringIds: (readonly number[] | null)[] = [];
     let preserved = 0;
     let verticesBefore = 0;
 
@@ -361,10 +352,8 @@ function assemble(
           if (fitted.raw.length < MIN_RING_POINTS) continue;
           preserved += 1;
           rings.push([...fitted.raw]);
-          ringIds.push(null);
         } else {
           rings.push(fitted.points);
-          ringIds.push(fitted.ids);
         }
       }
 
@@ -381,7 +370,6 @@ function assemble(
     regions.push({
       id: face.label,
       rings,
-      ringIds,
       commands: commandCount(rings),
       area: face.doubleArea / 2,
       preservedRings: preserved,

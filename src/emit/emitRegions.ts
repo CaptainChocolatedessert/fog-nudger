@@ -190,7 +190,7 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
 
   const fogColour = await OBR.scene.fog.getColor();
   const { lines, dropped } = stageWallLines(
-    run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed, ids: wall.ids })),
+    run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed })),
     { run: runId, mapId: run.mapId, colour: fogColour, strokeWidth: ACCEPTED_WALL_STROKE },
   );
   if (dropped > 0) {

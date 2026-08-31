@@ -342,16 +342,14 @@ export function describeAreaCheck(result: GraphFaces): string {
   return notes.length === 0 ? head : `${head} — ${notes.join(", ")}`;
 }
 
-/** A fitted polyline and the id of each of its points, which travel together everywhere. */
+/** A fitted polyline: one edge of the graph, simplified. */
 export interface FittedEdge {
   readonly points: readonly Vector2[];
-  readonly ids: readonly number[];
 }
 
-/** A ring's geometry with the vertex id of each point, in the same order. */
+/** A ring's geometry, assembled from the fitted edges around one cycle. */
 export interface FittedRing {
   readonly points: readonly Vector2[];
-  readonly ids: readonly number[];
   /**
    * The same ring before fitting, one point per skeleton pixel.
    *
@@ -384,16 +382,24 @@ export interface FittedFaces {
  *
  * Douglas–Peucker pins both endpoints, so nodes are never moved or removed.
  *
- * ## Vertex ids
+ * ## Vertex ids were here, and were removed — 2026-08-31
  *
- * Every fitted point carries an integer id. A node's id is its index in the graph, so two edges
- * meeting there agree by construction; an edge's surviving interior points get ids of their own from
- * a separate range. Grouping emitted items by id reconstructs the graph — and, more to the point,
- * tells a join that has come apart from two ends that were never joined, which geometry alone
- * cannot: a doorway is two ends deliberately close and deliberately separate.
+ * Every fitted point used to carry an integer id, so that grouping emitted items by id would
+ * reconstruct the graph and tell a join that had come apart from two ends never joined — a doorway
+ * being two ends deliberately close and deliberately separate, which geometry alone cannot
+ * distinguish.
  *
- * **Stable within one emitted set, not across runs.** The ids are graph indices, and any change to
- * the reading rebuilds the graph and renumbers everything.
+ * They went because **the scene never has to be read back** (user, 2026-08-31). Everything that
+ * determines the graph is durable: the settings and the nominated map live in scene metadata, which
+ * survives closing the workspace, reloading the room, and disabling the extension. Everything else
+ * is derived, and the derivation is a pure function of those inputs — so the graph is always one
+ * re-run away, and reconstructing it from emitted geometry answers a question nobody needs to ask.
+ *
+ * **What would bring them back**, so a future session can tell: storing hand edits *as scene items*
+ * rather than as durable inputs. That is the one arrangement where the scene becomes the source of
+ * truth for something the pipeline did not derive, and it is explicitly rejected — a hand edit to
+ * our fog is meant not to survive the next push. Steps F and G add edits; while those live in
+ * metadata beside the settings, ids stay unnecessary.
  *
  * ## Bridges are left out of the rings
  *
@@ -413,21 +419,14 @@ export function fitFaces(
   /** Edges to leave out of the rings — the bridges. Their geometry is emitted separately. */
   omit: ReadonlySet<number> = new Set(),
 ): FittedFaces {
-  let nextId = graph.nodes.length;
-  const edges: FittedEdge[] = graph.edges.map((edge) => {
-    const points = simplifyPolyline(edge.points, tolerance);
-    const ids = points.map((_, index) => {
-      if (index === 0) return edge.a;
-      if (index === points.length - 1) return edge.b;
-      return nextId++;
-    });
-    return { points, ids };
-  });
+  const edges: FittedEdge[] = graph.edges.map((edge) => ({
+    points: simplifyPolyline(edge.points, tolerance),
+  }));
 
   const oriented = (half: number): FittedEdge => {
     const edge = edges[half >> 1]!;
     if ((half & 1) === 0) return edge;
-    return { points: [...edge.points].reverse(), ids: [...edge.ids].reverse() };
+    return { points: [...edge.points].reverse() };
   };
 
   const unfitted = (half: number): readonly Vector2[] => {
@@ -481,7 +480,6 @@ export function fitFaces(
         if (taken.has(first)) continue;
 
         const points: Vector2[] = [];
-        const ids: number[] = [];
         const raw: Vector2[] = [];
         let half: number | null = first;
 
@@ -491,7 +489,6 @@ export function fitFaces(
           // The shared node belongs to one step only, however many half-edges meet at it.
           for (let i = points.length === 0 ? 0 : 1; i < chain.points.length; i++) {
             points.push(chain.points[i]!);
-            ids.push(chain.ids[i]!);
           }
           const source = unfitted(half);
           for (let i = raw.length === 0 ? 0 : 1; i < source.length; i++) raw.push(source[i]!);
@@ -502,17 +499,14 @@ export function fitFaces(
         if (points.length > 1) {
           const head = points[0]!;
           const tail = points[points.length - 1]!;
-          if (head.x === tail.x && head.y === tail.y) {
-            points.pop();
-            ids.pop();
-          }
+          if (head.x === tail.x && head.y === tail.y) points.pop();
         }
         if (raw.length > 1) {
           const head = raw[0]!;
           const tail = raw[raw.length - 1]!;
           if (head.x === tail.x && head.y === tail.y) raw.pop();
         }
-        if (points.length > 0) out.push({ points, ids, raw });
+        if (points.length > 0) out.push({ points, raw });
       }
 
       return out;

@@ -19,16 +19,18 @@
  * **The cost, stated:** a fitted polyline of n points becomes n − 1 items. A wall is therefore
  * several items in the Outliner rather than one, and a GM nudging one segment moves only that
  * segment. In exchange nothing depends on undefined behaviour in someone else's renderer, and a
- * two-point item cannot have a vertex inserted into it — which is the degradation mode the vertex
- * ids otherwise have to detect.
+ * two-point item cannot have a vertex inserted into it.
  *
- * ## Vertex ids
+ * ## Vertex ids were here, and were removed — 2026-08-31
  *
- * Each segment carries the ids of its two ends. The junction where a stub meets a wall is one graph
- * node, so it is the same id in the room's ring and in the stub's first segment; grouping emitted
- * items by id reconstructs the graph. A free tip is an id used once, which is what tells a stub from
- * a doorway — two ends deliberately close and deliberately separate, which geometry alone cannot
- * distinguish.
+ * Each segment used to carry the ids of its two ends, so that grouping emitted items by id would
+ * reconstruct the graph: a stub's junction is the same id in the room's ring and in the stub's first
+ * segment, and a free tip is an id used once, which is what told a stub from a doorway.
+ *
+ * The scheme is gone because **the scene never has to be read back** — everything the graph is
+ * derived from lives in scene metadata and survives everything the scene survives, so the graph is
+ * always one re-run away. `faces.ts` carries the full reasoning and, more usefully, what would bring
+ * the ids back.
  *
  * Pure: no DOM, no SDK.
  */
@@ -77,8 +79,6 @@ export interface WallProvenance {
   readonly edge: number;
   /** Where along that edge, so the segments of one wall have an order. */
   readonly segment: number;
-  /** The vertex ids of this segment's two ends, in order. */
-  readonly vertices: readonly [number, number];
 }
 
 /** Everything needed to build one line item, expressed without the SDK's types. */
@@ -92,17 +92,16 @@ export interface WallLineSpec {
   readonly strokeWidth: number;
 }
 
-/** One wall, placed in world coordinates, with a vertex id per point. */
+/** One wall, placed in world coordinates. */
 export interface PlacedWall {
   readonly edge: number;
   readonly points: readonly Point[];
-  readonly ids: readonly number[];
 }
 
 export interface WallLineOptions {
   readonly run: string;
   readonly mapId: string;
-  /** Review colour, while these are staged on the drawing layer and meant to be looked at. */
+  /** The colour to emit at. The push takes the scene's own fog colour, so ours match a GM's. */
   readonly colour: string;
   /** In world units. */
   readonly strokeWidth: number;
@@ -141,7 +140,6 @@ export function stageWallLines(
           map: options.mapId,
           edge: wall.edge,
           segment: i,
-          vertices: [wall.ids[i - 1]!, wall.ids[i]!],
         },
         colour: options.colour,
         strokeWidth: options.strokeWidth,

@@ -17,7 +17,6 @@ const STUB: PlacedWall = {
     { x: 20, y: 10 },
     { x: 20, y: 25 },
   ],
-  ids: [3, 41, 42],
 };
 
 describe("wall lines", () => {
@@ -35,19 +34,22 @@ describe("wall lines", () => {
     expect(lines[1]!.end).toEqual({ x: 0, y: 15 });
   });
 
-  it("carries the vertex ids of each segment's ends", () => {
-    const { lines } = stageWallLines([STUB], OPTIONS);
+  it("keeps consecutive segments meeting at exactly the point they share", () => {
+    /*
+      Two tests here asserted vertex IDS until 2026-08-31 -- that each segment carried the ids of its
+      two ends, so a wall cut into items could be reassembled by grouping on them. The scheme went
+      because the scene is never read back: everything the graph is derived from lives in scene
+      metadata, so the graph is always one re-run away.
 
-    // The junction id is on the first segment, so the wall is joined to whatever ring also carries
-    // it. The last id belongs to nothing else, which is what makes this a stub and not a doorway.
-    expect(lines[0]!.provenance.vertices).toEqual([3, 41]);
-    expect(lines[1]!.provenance.vertices).toEqual([41, 42]);
-  });
-
-  it("keeps consecutive segments sharing the id at the point they meet", () => {
-    // What lets a wall be reassembled from its segments after it has been cut into items.
+      The geometry those ids were evidence for is still asserted. One segment's end is the next
+      segment's start, exactly, which is what "cut into items" has to mean.
+    */
     const { lines } = stageWallLines([STUB], OPTIONS);
-    expect(lines[0]!.provenance.vertices[1]).toBe(lines[1]!.provenance.vertices[0]);
+    const firstEnd = {
+      x: lines[0]!.position.x + lines[0]!.end.x,
+      y: lines[0]!.position.y + lines[0]!.end.y,
+    };
+    expect(firstEnd).toEqual(lines[1]!.position);
   });
 
   it("names each segment for the wall it came from, and in order", () => {
@@ -67,7 +69,6 @@ describe("wall lines", () => {
         { x: 5, y: 5 },
         { x: 9, y: 5 },
       ],
-      ids: [1, 2, 3],
     };
     const { lines, dropped } = stageWallLines([degenerate], OPTIONS);
     expect(dropped).toBe(1);
@@ -75,7 +76,7 @@ describe("wall lines", () => {
   });
 
   it("emits nothing for a wall with a single point", () => {
-    const { lines } = stageWallLines([{ edge: 0, points: [{ x: 1, y: 1 }], ids: [0] }], OPTIONS);
+    const { lines } = stageWallLines([{ edge: 0, points: [{ x: 1, y: 1 }] }], OPTIONS);
     expect(lines).toHaveLength(0);
   });
 });

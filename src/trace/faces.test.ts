@@ -184,7 +184,6 @@ describe("faces from the wall graph", () => {
     // And the inner box's own interior is a face in its own right.
     expect(result.faces.some((face) => face.interior === 1)).toBe(true);
   });
-
 });
 
 /**
@@ -306,8 +305,10 @@ describe("fitting the faces", () => {
     expect(new Set(roomRing.points.map((p) => `${p.x},${p.y}`))).toEqual(
       new Set(bandHole.points.map((p) => `${p.x},${p.y}`)),
     );
-    // And the same vertex ids, which is what makes a join reconstructible rather than inferred.
-    expect(new Set(roomRing.ids)).toEqual(new Set(bandHole.ids));
+    // The vertex ids that used to be asserted here went on 2026-08-31 -- the scene is never read
+    // back, so nothing consumed them. What made the join reconstructible is still true and still
+    // checked: both faces are assembled from the SAME fitted edge, so the points are identical
+    // rather than merely close, which is what the set comparison above says.
   });
 
   it("splits a ring in two when a bridge between them is dropped", () => {

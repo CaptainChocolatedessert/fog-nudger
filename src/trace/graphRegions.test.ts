@@ -98,22 +98,29 @@ describe("regions derived from the wall graph", () => {
     expect(result.uncoveredEdges).toHaveLength(result.bridges);
   });
 
-  it("gives the stub's line the room's own vertex id where they meet", () => {
-    // What makes the graph reconstructible from the scene: the junction is one id, carried by the
-    // room's ring and by the stub's line alike. Geometry alone could not tell that join from a
-    // doorway, which is two ends deliberately close and deliberately separate.
+  it("puts the stub's line exactly on the room's boundary where they meet", () => {
+    /*
+      This asserted vertex IDS until 2026-08-31 -- that the junction was one id carried by both the
+      room's ring and the stub's line, so grouping emitted items by id would reconstruct the graph.
+      The ids went because the scene is never read back: everything the graph is derived from lives
+      in scene metadata, so a graph is always one re-run away.
+
+      What the ids were evidence FOR is still true and is what is asserted now. The junction point is
+      shared exactly, because both come from the same fitted edge -- and the stub's free tip is on no
+      ring, which is what distinguishes a stub from a doorway. Exact rather than within a tolerance:
+      anything we emit is exact by construction, and an epsilon here would flag every doorway.
+    */
     const result = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
     const room = result.regions.find((region) => region.rings.length === 1);
     const stub = result.uncoveredEdges[0];
+    expect(room).toBeDefined();
     expect(stub).toBeDefined();
 
-    const ringIds = new Set(room!.ringIds[0]!);
-    const shared = stub!.ids.filter((id) => ringIds.has(id));
-    expect(shared, "exactly one end of the stub is on the room's boundary").toHaveLength(1);
+    const onRing = new Set(room!.rings[0]!.map((point) => `${point.x},${point.y}`));
+    const ends = [stub!.points[0]!, stub!.points[stub!.points.length - 1]!];
+    const shared = ends.filter((point) => onRing.has(`${point.x},${point.y}`));
 
-    // ...and the free tip belongs to nothing else, which is what says it is a stub and not a doorway.
-    const tip = stub!.ids[stub!.ids.length - 1] === shared[0] ? stub!.ids[0] : stub!.ids.at(-1);
-    expect(ringIds.has(tip!)).toBe(false);
+    expect(shared, "exactly one end of the stub is on the room's boundary").toHaveLength(1);
   });
 
   it("keeps a stub wall, which is the whole reason for the pivot", () => {

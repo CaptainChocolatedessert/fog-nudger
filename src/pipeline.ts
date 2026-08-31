@@ -390,7 +390,6 @@ export interface TracedWall {
   readonly placed: readonly Point[];
   readonly points: readonly Vector2[];
   /** A vertex id per point. Shared with any region ring that meets this wall at a node. */
-  readonly ids: readonly number[];
 }
 
 export interface TraceRun {
@@ -1325,7 +1324,6 @@ export async function runTrace(
   const walls: TracedWall[] = derived.uncoveredEdges.map((edge, index) => ({
     edge: index,
     points: edge.points,
-    ids: edge.ids,
     placed: edge.points.map((point) => toWorldPoint(placement, point.x, point.y)),
   }));
 
