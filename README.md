@@ -3,15 +3,18 @@
 An [Owlbear Rodeo](https://www.owlbear.rodeo/) extension: **trace a map image into the fog regions
 you reveal room by room.**
 
-> **Pre-release.** The pipeline runs end to end and has been run on a real map: it reads the scene's
-> map image, finds the enclosed regions, traces and simplifies their boundaries, places them, and
-> stages the result as editable proposals. Placement is confirmed correct. **What is still unproven
-> is whether the partition it finds is the one a GM wants** — that is judged by looking, and the
-> looking has barely started.
+> **Pre-release.** The pipeline runs end to end and has been run on real maps: it reads the scene's
+> map image, reads the linework into a graph of wall centrelines, derives the enclosed regions as
+> the faces of that graph, fits their boundaries and places them on the map. Placement is confirmed
+> correct. **What is still unproven is whether the partition it finds is the one a GM wants** — that
+> is judged by looking, and the looking has barely started.
 >
-> Proposals are staged on the drawing layer, coloured so neighbouring regions differ, invisible to
-> players, and producing no walls at all — so a run cannot affect play whatever it gets wrong. They
-> become fog only when you accept them, and going back to staging undoes that without losing edits.
+> Everything is reviewed *before* it is written. A full-screen workspace draws the map, the ink it
+> read, the wall centrelines it found and the regions it would produce, so a partition can be judged
+> and the settings tuned without touching the scene. Putting it on the map is then one deliberate
+> action, and it replaces whatever the previous run left — so the tool owns its own fog and nothing
+> else, but a hand edit to those shapes does not survive the next run. Editing belongs in the
+> workspace, and the tools for it are still being built.
 
 ## The idea
 
@@ -23,17 +26,22 @@ But the map already shows where the rooms are — they are drawn on it, in ink. 
 turn the ink into the regions, which changes the job from *drawing* them to *correcting* them.
 
 **One artifact, two payoffs.** Those same shapes are what
-[Dynamic Fog](https://extensions.owlbear.rodeo/dynamic-fog) derives its walls from. So the output is
-a complete manual fog-of-war map on vanilla Owlbear with nothing else installed, and line-of-sight
-occlusion for free the moment Dynamic Fog is present. Dynamic Fog is a bonus, not a requirement, and
-nothing extra is emitted for it.
+[Dynamic Fog](https://extensions.owlbear.rodeo/dynamic-fog) derives its walls from — it strokes their
+boundary and takes the outline. So the output is a complete manual fog-of-war map on vanilla Owlbear
+with nothing else installed, and line-of-sight occlusion for free the moment Dynamic Fog is present.
+Dynamic Fog is a bonus, not a requirement.
+
+The one exception is a free-standing wall — a stub off a corner, a pillar, a barrier across a room —
+which separates no two regions and so appears on no region's boundary. Those are emitted as plain
+lines, which have no interior and therefore reveal nothing on their own. On vanilla Owlbear they are
+inert; with Dynamic Fog they are walls.
 
 ## Why "nudger" and not "extractor"
 
 Automatic extraction will never be perfect on a hand-drawn map. Doors, arches, curtains, windows,
 secret passages and rubble all read as ink, and none of them means "solid wall". So the output is a
-**proposal**: reviewable, editable piece by piece, and rejectable in pieces without discarding the
-rest.
+**proposal**: something you look at and correct before it goes anywhere near the scene, rather than
+an answer you are asked to trust.
 
 A tool that gets a GM most of the way in one click and lets them fix the remainder is a large win.
 A tool that claims to be finished and is wrong in three places nobody notices is worse than
