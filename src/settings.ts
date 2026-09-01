@@ -313,7 +313,11 @@ export const SETTING_LIMITS = {
   // get sealed, which is what makes the middle of the track feel like a choice. No measurement can
   // separate a doorway from a severed wall — both are a break of some width — so where that line
   // falls is the GM's to decide, and the control has to reach far enough for them to decide it.
-  gapFillPx: { min: 0, max: 80, step: 1 },
+  // Stepped in twos because the value is halved and rounded to a closing radius, so consecutive
+  // odd and even settings produce the identical repair. A step of one would give 81 stops for 41
+  // outcomes, and which half of the clicks did nothing would depend on parity rather than on
+  // anything visible — an unresponsive slider on the one control whose whole use is being swept.
+  gapFillPx: { min: 0, max: 80, step: 2 },
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
   // the repair; the bottom end repairs every break that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },

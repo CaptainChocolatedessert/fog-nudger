@@ -153,7 +153,7 @@ export interface GapLabels {
 
 /** One break, as the surface needs to draw it. */
 export interface GapMark {
-  /** Centre of the channel, in raster pixels. */
+  /** Centre of the channel's bounding box — the same box `span` measures — in raster pixels. */
   readonly x: number;
   readonly y: number;
   /** The longer side of the channel's bounding box, in raster pixels. */
@@ -538,8 +538,6 @@ function floodFromFirstGroup(
 
 /** Where to draw the mark, how big the thing it is marking is, and whether it was repaired. */
 function describe(pixels: readonly number[], width: number, filled: boolean): GapMark {
-  let sumX = 0;
-  let sumY = 0;
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -548,18 +546,22 @@ function describe(pixels: readonly number[], width: number, filled: boolean): Ga
   for (const index of pixels) {
     const x = index % width;
     const y = (index - x) / width;
-    sumX += x;
-    sumY += y;
     if (x < minX) minX = x;
     if (x > maxX) maxX = x;
     if (y < minY) minY = y;
     if (y > maxY) maxY = y;
   }
 
+  // The bounding box's centre, not the centroid. `span` is that box's longer side and the ring is
+  // drawn from both, so a centroid would put the ring off-centre from the thing sizing it. A merged
+  // channel is L-shaped or forked — and merging is the normal case as the radius rises — which is
+  // exactly where a centroid can land outside the channel altogether, ringing sound ink while the
+  // repair sits at the ring's edge. Neither measure guarantees a point inside a concave channel;
+  // this one at least agrees with the radius.
   const area = pixels.length;
   return {
-    x: sumX / area,
-    y: sumY / area,
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
     span: Math.max(maxX - minX + 1, maxY - minY + 1),
     area,
     filled,

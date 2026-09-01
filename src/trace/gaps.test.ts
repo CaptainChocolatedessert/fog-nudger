@@ -239,6 +239,48 @@ describe("findGaps", () => {
     expect(found.marks.map((mark) => mark.x)).toEqual([3.5, 10.5]);
   });
 
+  it("puts an elbowed channel's mark at the centre of the box its span measures", () => {
+    // Two L-shaped walls one pixel apart, so the channel between them turns a corner. That is what
+    // a *merged* channel looks like, and merging is the normal case as the width rises — so this is
+    // the shape the mark has to survive, not a compact break.
+    //
+    // The mark and `span` are read together: the surface draws a ring centred on x/y and sized from
+    // span. The centroid of this channel is (8.4, 7.4), pulled towards the longer arm and away from
+    // the box it is being sized against. The box's own centre is (10, 9), which is what a ring
+    // concentric with its radius needs. Neither point is inside a channel this concave, and nothing
+    // cheap would be — the claim here is only that the two halves of the mark agree.
+    const found = findGaps(
+      maskFromRows([
+        "####################",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#....##########....#",
+        "#....#.............#",
+        "#....#.########....#",
+        "#....#.#...........#",
+        "#....#.#...........#",
+        "#....#.#...........#",
+        "#....#.#...........#",
+        "#....#.#...........#",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "####################",
+      ]),
+      NEAR,
+    );
+    expect(found.marks).toHaveLength(1);
+    const [mark] = found.marks;
+    // Nine along the top arm, six down the side: columns 6 to 14, rows 6 to 12.
+    expect(mark!.area).toBe(15);
+    expect(mark!.span).toBe(9);
+    expect(mark!.x).toBeCloseTo(10, 5);
+    expect(mark!.y).toBeCloseTo(9, 5);
+  });
+
   it("labels the marked channels and nothing else", () => {
     const found = findGaps(maskFromRows(BROKEN_WALL), NEAR);
     const lit: number[] = [];
