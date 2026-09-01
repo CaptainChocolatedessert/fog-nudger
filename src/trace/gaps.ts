@@ -83,6 +83,22 @@
  * So the fill adds the pixels of **marked breaks** and nothing else. A dead end is never filled,
  * which costs nothing: a dead end connects nothing to anything, so sealing it could not have helped.
  *
+ * **The claim above is per CHANNEL, and that is weaker than it first reads.** The verdict is one per
+ * channel and applies to all of its pixels, and channels *merge* as the radius rises. So a doorway
+ * narrow enough for the closing to reach — which is a channel like any other — can merge with a
+ * nearby genuine break into a single channel, fail the travel test because of the break, and be
+ * filled along with it. The very outcome this section argues the design prevents is reachable that
+ * way, and a future session reading the argument alone would not know to look for it.
+ *
+ * What keeps it honest is that it is **not silent**: the merged channel carries a ring and its
+ * invented pixels are painted purple at full alpha, so a GM on the Breaks step sees purple lying
+ * across their doorway. That is the visual channel §8 demands, and it is the reason the fill is drawn
+ * at full alpha rather than tinted down with the ink.
+ *
+ * Not fixed rather than not noticed: splitting a channel at its pinch points before deciding would
+ * re-introduce the unstable mark set that a room already rejected — marks that appear and vanish as
+ * the radius moves, with a repair that a *lower* setting allowed becoming impossible at a higher one.
+ *
  * ## Both settings are in raster pixels
  *
  * Stage one stays close to the raster (`DESIGN.md` §5, as amended). Denominating these in measured
@@ -158,6 +174,14 @@ export interface GapOptions {
    * most eager the detector gets.
    */
   readonly travelPx: number;
+  /**
+   * Total flood work allowed, in pixel visits. Defaults to `FLOOD_BUDGET`.
+   *
+   * Overridable only so a test can reach the exhausted state on a fixture small enough to read —
+   * the same arrangement `graphRegions.ts` uses for its command cap. Nothing in the UI sets it: it is
+   * a guard against a pathological map, not a control.
+   */
+  readonly floodBudget?: number;
 }
 
 export interface GapFinding {
@@ -188,6 +212,26 @@ export interface GapFinding {
  *
  * A channel marked this way is **not** filled, whatever the fill radius is. Marking on a guess is a
  * warning; inventing ink on a guess is not.
+ *
+ * ## It is spent across the whole call and does not renew, which has three consequences
+ *
+ * None of these was documented, and the second is the one that matters.
+ *
+ * - **The budget can go slightly negative.** The check sits at the top of the depth loop, so a flood
+ *   overshoots by at most one frontier expansion. Harmless, and clamped at zero below so that
+ *   "exhausted" is a state arrived at deliberately rather than through a negative number.
+ * - **Once it is spent, every remaining channel exhausts at depth zero** — the first bank group is at
+ *   least one pixel, so the very first check fails. Those channels are marked `GAP_OPEN` and never
+ *   filled, without a single step of flood having been walked. So exhaustion does not degrade the
+ *   answer gradually; it converts every channel after it into a guess.
+ * - **Channel order therefore decides which ones get a real answer.** The scan is raster order, so on
+ *   a map that exhausts the budget the top is examined properly and the bottom is guessed, with
+ *   nothing in the output saying where the line fell.
+ *
+ * **This is why the `GAP_OPEN` state is not a candidate for deletion.** The record had it as a state
+ * never observed, and therefore possibly machinery for a case that does not happen. It is reachable in
+ * bulk: a map with hundreds of through-channels at a high travel setting spends 40M and guesses the
+ * rest.
  */
 const FLOOD_BUDGET = 40_000_000;
 
@@ -223,7 +267,7 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
   let filledCount = 0;
   let filledArea = 0;
   let budgetHits = 0;
-  let budget = FLOOD_BUDGET;
+  let budget = options.floodBudget ?? FLOOD_BUDGET;
 
   const pixels: number[] = [];
   const banks: number[] = [];
@@ -248,7 +292,10 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
       options.travelPx,
       budget,
     );
-    budget -= spent.visited;
+    // Clamped rather than allowed to go negative. A flood overshoots the remaining budget by at
+    // most one frontier expansion, so this subtracts more than was left; the behaviour is identical
+    // either way, and zero makes "exhausted" a state the code says rather than one it implies.
+    budget = Math.max(0, budget - spent.visited);
     if (spent.exhausted) budgetHits += 1;
     if (spent.allReached) continue;
 

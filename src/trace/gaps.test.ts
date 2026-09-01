@@ -25,7 +25,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
-import { findGaps, GAP_FILLED, GAP_NONE } from "./gaps";
+import { findGaps, GAP_FILLED, GAP_NONE, GAP_OPEN } from "./gaps";
 
 /** Seals breaks up to two pixels; treats ink more than six pixels apart along itself as separate. */
 const NEAR = { widthPx: 2, travelPx: 6 };
@@ -371,6 +371,36 @@ describe("findGaps, repairing", () => {
       expect(found.filled > 0).toBe(repairedPixels > 0);
       expect(found.marks.filter((m) => m.filled)).toHaveLength(found.filled);
     }
+  });
+
+  it("marks a break it could not examine, and refuses to fill it", () => {
+    /*
+      The guessed-break state, which nothing in this suite could reach until the flood budget became
+      injectable — `GAP_OPEN` appeared in no test at all, and `budgetHits` was only ever asserted to
+      be zero.
+
+      It matters because it is the one place the design's central invariant is *deliberately* one-
+      sided. A channel whose flood ran out was never proved broken, so it carries a mark and no fill:
+      marking on a guess is a warning, inventing ink on a guess is not. The record had this state down
+      as never observed and therefore possibly deletable; it is reachable in bulk, because the budget
+      is spent across the whole call and once it is gone every remaining channel exhausts at depth
+      zero.
+
+      A budget of 1 is spent by the first channel's first frontier, so the break here is guessed
+      rather than measured. `BROKEN_WALL` rather than the cracked ring only because that fixture is
+      module-scoped and this block cannot see the other one.
+    */
+    const found = findGaps(maskFromRows(BROKEN_WALL), { ...NEAR, floodBudget: 1 });
+
+    expect(found.budgetHits).toBeGreaterThan(0);
+    expect(found.marks.length, "a guess is still marked").toBeGreaterThan(0);
+    expect(found.marks.every((mark) => !mark.filled), "and never filled").toBe(true);
+    expect(found.filled).toBe(0);
+    expect(found.filledArea).toBe(0);
+
+    const values = new Set(found.labels.data);
+    expect(values.has(GAP_OPEN), "painted as an open break").toBe(true);
+    expect(values.has(GAP_FILLED), "and nothing painted as repaired").toBe(false);
   });
 
   it("does not repair a dead end", () => {
