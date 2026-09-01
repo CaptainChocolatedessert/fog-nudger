@@ -330,14 +330,30 @@ export function probeWorldPoint(x: number, y: number): string {
 }
 
 /**
- * Raster pixels per grid square from the last run, or null before one.
+ * Raster pixels per grid square from the last reading, or null before one.
  *
- * So the panel can show a setting in a unit the GM can feel — "0.25 squares" means nothing until it
- * also says "27 px across". Null before the first trace, because until then there is no map and the
+ * So a control can show a setting in a unit the GM can feel — "0.25 squares" means nothing until it
+ * also says "27 px across". Null before the first reading, because until then there is no map and the
  * conversion would be invented.
+ *
+ * **Read from the mask cache rather than from `lastRun`, for the same reason `lastInkWidth` is.**
+ * `pxPerSquare` is a field of the reading stage, so it is known as soon as a reading lands — and
+ * reading it from `lastRun` meant it was null until a *full trace* had run, which in a fresh
+ * workspace session means until the GM opens Regions. Two of the three derived readouts in stage one
+ * were therefore less informative than the third for no reason anyone had stated: the stroke-width
+ * readout said "under ~6px goes (ink is 5.7px)" while the break and prune readouts said only "12px",
+ * both of them dropping their "of a square" clause on a null.
+ *
+ * **Zero is treated as null, and that is not defensiveness.** `pxPerSquare` is computed as
+ * `squaresAcross > 0 ? plan.width / squaresAcross : 0`, so a scene with no usable grid legitimately
+ * produces 0 — and a readout that guards on `=== null` and then divides turns that into the literal
+ * string "Infinity" beside a slider. `Measured`'s own doc says both fields are nullable so that a
+ * control cannot report a guess in the voice of a measurement; a zero is a worse version of the same
+ * thing, because it survives the guard.
  */
 export function lastPixelsPerSquare(): number | null {
-  return lastRun ? lastRun.pxPerSquare : null;
+  const measured = cachedMask?.pxPerSquare ?? null;
+  return measured !== null && measured > 0 ? measured : null;
 }
 
 /**
@@ -860,10 +876,31 @@ async function resolveMask(
   if (!source) {
     cachedReading = null;
     cachedMask = null;
+    // The previous map's reading must not go on answering probes for a map that failed to load.
+    lastReading = null;
+    lastRun = null;
     return null;
   }
 
   cachedReading = source;
+  /*
+    A new mask means the partition that went with the old one is no longer what is on screen.
+
+    `lastRun` holds a whole trace — raw field, composed mask, labelling, placement — and the point
+    probe prefers it unconditionally, falling back to `lastReading` only when it is null. It was
+    assigned at the end of `runTrace` and never cleared, so after the first trace of a session it
+    never was null: a GM who opened Regions, went back to Ink, moved the threshold and then clicked
+    the map got an answer computed from the superseded mask and the superseded partition, while the
+    screen showed the new ink. Nothing said so, because `describePoint` returns whole sentences that
+    name no run and no settings.
+
+    Clearing it here is enough because `runTrace` calls this function and assigns `lastRun`
+    afterwards, so a full trace re-establishes it in the same call. One case does not reach here at
+    all: changing `spurPrunePx` alters the graph and therefore the labelling without recomposing the
+    ink, so this short-circuits on the mask cache above. That case always goes through `runTrace` —
+    it is a Regions-step recompute — which overwrites `lastRun` anyway.
+  */
+  lastRun = null;
   cachedMask = composeInk(source, settings, maskPrint);
   return { stage: cachedMask, readingReused, maskReused: false };
 }
