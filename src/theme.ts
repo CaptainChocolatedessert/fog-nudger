@@ -22,6 +22,20 @@
  * default standing, and the way to get that wrong is to emit the key with an empty or `undefined`
  * value — which does not fall back to the default, it blanks it.
  *
+ * **That invariant holds on the first application only.** Omitting a key leaves whatever is already
+ * on the element, which is the stylesheet's default the first time and the *previous theme's* value
+ * every time after. Unobservable today, since the SDK's `Theme` makes every field required, so the
+ * omission only happens on a payload that is wrong anyway; the one-line fix if it is ever wanted is
+ * `removeProperty` for keys not in the returned record.
+ *
+ * ## The panel's stylesheet, and only the panel's
+ *
+ * `panel.ts` is the sole caller. **The workspace applies no theme at all** and hard-codes every
+ * colour, which is deliberate rather than an omission: it is a drawing surface, and a fixed neutral
+ * ground is what the ink colours and the six-colour partition cycle were chosen against — a palette
+ * that moved with the host would move what those read against. The cost, stated: a GM running
+ * Owlbear in light mode gets a dark full-screen sheet.
+ *
  * ## Why it takes `unknown`
  *
  * The theme arrives from the parent frame as a structured clone. Nothing in this process

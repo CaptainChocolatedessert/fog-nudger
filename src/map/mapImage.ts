@@ -120,7 +120,15 @@ export async function listMapImages(): Promise<MapImageSummary[]> {
     .sort((a, b) => zIndexOf(maps, a.id) - zIndexOf(maps, b.id));
 }
 
-/** An item's stacking position, or zero if it has vanished between the query and the sort. */
+/**
+ * An item's stacking position, or zero if it is not in the list.
+ *
+ * The `?? 0` cannot fire: `maps` is the in-memory array the summaries were derived from rather
+ * than a re-query, so every id is present by construction. It said "vanished between the query and
+ * the sort", which describes a race this cannot have. Kept because a total function here is worth
+ * more than the branch costs, and it is a `find` inside a sort comparator either way — quadratic
+ * in the number of maps in a scene, which is a number in the single digits.
+ */
 function zIndexOf(maps: readonly ImageItem[], id: string): number {
   return maps.find((map) => map.id === id)?.zIndex ?? 0;
 }
@@ -209,8 +217,10 @@ export async function resolveTraceMap(): Promise<ImageItem | null> {
   if (chosenId) {
     const chosen = maps.find((map) => map.id === chosenId);
     if (chosen) return chosen;
-    // The nominated image is gone - deleted, or the choice was made in another scene. Fall through
-    // to the largest rather than tracing nothing.
+    // The nominated image is gone: deleted, or this scene was duplicated from one that carried the
+    // metadata. **Not** "the choice was made in another scene", which this used to say — the
+    // nomination lives in *scene* metadata, so it cannot leak between scenes. Falling through to
+    // the largest rather than tracing nothing is right whatever the cause.
     devLog("warn", `map: the nominated map ${chosenId.slice(0, 8)} is not in this scene`);
   }
 

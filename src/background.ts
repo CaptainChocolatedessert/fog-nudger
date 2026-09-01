@@ -5,6 +5,11 @@
  * when a scene opens, and nothing else. It began as build order step 0 — prove the extension loads
  * in a real room and prove the dev log round-trips — and the probes it once announced as landing
  * next have landed, answered their questions and been retired.
+ *
+ * "Inert" with one asterisk, stated rather than left to be found: the two SDK calls below feed
+ * `devLog`, which compiles to nothing in a production build, so a deployed client makes two round
+ * trips per session for no effect. Negligible, and the alternative — gating them on
+ * `import.meta.env.DEV` — puts a build-mode branch in the one file whose job is to be simple.
  */
 
 import OBR from "@owlbear-rodeo/sdk";
