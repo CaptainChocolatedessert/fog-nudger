@@ -1,12 +1,12 @@
 /**
- * The regions layer: the partition, drawn as the GM will see it staged.
+ * The regions layer: the partition, drawn as the push will write it.
  *
  * ## Why it is drawn here at all
  *
- * Until now the only way to look at a partition was to *stage* it — write a few hundred shapes into
- * the scene, look, and remove them. That made the one question this project cannot answer by
- * reasoning (is this a partition a GM actually wants?) cost a scene write every time it was asked.
- * Here it costs opening a step.
+ * The only way to look at a partition used to be to *stage* it — write a few hundred shapes into the
+ * scene, look, and remove them. That made the one question this project cannot answer by reasoning
+ * (is this a partition a GM actually wants?) cost a scene write every time it was asked. Here it
+ * costs opening a step, which is what made staging redundant and then deleted.
  *
  * ## Vectors, not a bitmap
  *
@@ -18,11 +18,15 @@
  * ## The same six colours, cycled the same way
  *
  * Neighbouring regions differ so the partition is what you see, rather than one colour over full
- * coverage, which is a wash. The palette is the emit path's own, so the preview and the staged
- * shapes are the same picture. *Cosmetic caveat:* staging skips a region that is over the command
- * cap, and a skipped region shifts the colours of everything after it. Nothing has ever been over
- * the cap on a real map, and the alternative — teaching this layer the emit path's skip rule — would
- * be a second implementation of it.
+ * coverage, which is a wash. The palette is the emit path's own — though note what that does and does
+ * not buy: preview and scene are one picture by **geometry**, not by colour, because a fog item's
+ * colour is not rendered as fog. The palette is a preview affordance that the emit path happens to
+ * share.
+ *
+ * *Cosmetic caveat:* the push skips a region over the command cap, and a skipped region shifts the
+ * colours of everything after it. Nothing has ever been over the cap on a real map, and the
+ * alternative — teaching this layer the emit path's skip rule — would be a second implementation of
+ * it.
  */
 
 import { PROPOSAL_COLOURS } from "../../emit/fogShapes";

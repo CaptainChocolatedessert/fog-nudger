@@ -69,7 +69,7 @@ void _pathOpsMatchSdk;
  * payload. What the real ceilings are is not known — the sibling measured the *item* cap by
  * bisection and never had cause to find where a write starts being refused for size, because it
  * never wrote a quarter of a million numbers at once. Expect these to move once a real map has been
- * staged, and change one at a time.
+ * pushed, and change one at a time.
  */
 const BATCH_LIMITS = { maxItems: 24, maxCommands: 20_000 } as const;
 
@@ -351,7 +351,6 @@ export async function removeOurs(): Promise<string> {
   return `Removed ${ours.length}. Nothing the GM drew was touched.`;
 }
 
-/** Only ours. The GM's fog — 419 hand-drawn items in this project's own test scene — is not ours. */
 /** Split a list into batches of at most `size`. */
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
@@ -359,6 +358,7 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
+/** Only ours. The GM's fog — 419 hand-drawn items in this project's own test scene — is not ours. */
 function ourItems(): Promise<Item[]> {
   return OBR.scene.items.getItems(
     (item) => REGION_KEY in item.metadata || WALL_KEY in item.metadata,

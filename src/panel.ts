@@ -2,10 +2,11 @@
  * The action popover: what acts on the *scene*, and nothing else.
  *
  * Every control a GM turns is a step on the workspace now. What is left here is the button that
- * opens it, the three that move staged items around, and the diagnostics — and what those have in
- * common is that they are about a scene rather than about a picture. A full-screen sheet over the
- * map is the one place you cannot watch Owlbear draw the result, which is exactly what accepting a
- * set of proposals asks you to do.
+ * opens it, removing what we put in the scene, and the diagnostics — and what those have in common is
+ * that they are about a scene rather than about a picture.
+ *
+ * **This used to list three buttons for moving staged items around.** Staging is gone: there is one
+ * operation, push, and the workspace both judges the partition and triggers the write.
  *
  * **The three stage tabs went with the controls.** They carried a cascade that is still real and
  * still declared — reading destroys deriving, deriving destroys adjusting — but a cascade is a

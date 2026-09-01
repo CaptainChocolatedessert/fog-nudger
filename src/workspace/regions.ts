@@ -32,7 +32,7 @@ const requests = new MaskRequests();
 let inFlight = false;
 let regions: readonly TracedRegion[] = [];
 /** The walls that emit as lines rather than as part of a ring. Drawn with them, or the preview
- * would show fewer walls than staging writes. */
+ * would show fewer walls than the push writes. */
 let walls: readonly TracedWall[] = [];
 /** The raster the rings are in, which is what the painter scales by. */
 let raster: { readonly width: number; readonly height: number } | null = null;

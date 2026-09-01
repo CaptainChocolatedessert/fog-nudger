@@ -1,12 +1,16 @@
 /**
  * The skeleton: thinning the ink to centrelines, and pruning the hairs off them.
  *
- * ## A view, and only a view — step C
+ * ## This IS the graph the regions are made of — step D onwards
  *
- * Nothing here is emitted and nothing downstream reads it: the regions are still derived from the
- * ink mask. That is the whole point of building it in this order. Spur density and stub survival on
- * a real hand-drawn map are what reasoning cannot settle, and finding out this way costs a view
- * rather than a rewrite of the emit path.
+ * It was a view and only a view when step C built it: nothing downstream read it, and the regions
+ * came from the ink mask. Step D changed that. The faces are this graph's faces, so **spur pruning
+ * here reshapes the partition**, and what is drawn on screen is the thing being emitted rather than
+ * a preview of a decision made elsewhere.
+ *
+ * Building it as a view first was still right, and the reason is worth keeping: spur density and
+ * stub survival on a real hand-drawn map are what reasoning cannot settle, and finding out cost a
+ * view rather than a rewrite of the emit path.
  *
  * ## Two costs, split, because only one of them is expensive
  *
@@ -47,9 +51,12 @@ let current: BinaryMask | null = null;
 /**
  * The graph built from it, which is what the faces are actually made of.
  *
- * Drawn as well as the pixels, and that is the point: the weld radius is a control that can be
- * wrong — too large and it merges two genuinely distinct junctions, closing a doorway — and nothing
- * in the skeleton's pixels would show it. One node where there should be two does.
+ * Drawn as well as the pixels, and it is worth saying why now that the control it was built for is
+ * gone. The weld radius merged nearby chain ends onto a shared node, and its failure — two genuinely
+ * distinct junctions becoming one, closing a doorway — was invisible in the skeleton's pixels and
+ * obvious in its nodes. Welding was deleted for moving points, so nothing needs that channel any
+ * more. The marks stay because a picture of where the graph thinks its junctions are is worth having
+ * while judging a skeleton, which is a weaker claim than the one they were built on.
  */
 let graph: WallGraph | null = null;
 

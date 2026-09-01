@@ -1,9 +1,9 @@
 /**
  * The skeleton layer: centrelines over the ink they came from.
  *
- * Drawn as a bitmap rather than paths, because that is what it is — a one-pixel-wide mask, not a set
- * of polylines. Turning it into vectors is step D's job and it needs decisions this view exists to
- * inform; rasterising it here is honest about the fact that it is still pixels.
+ * Drawn as a bitmap rather than paths, because at this point in the chain that is what it is — a
+ * one-pixel-wide mask. Step D turns it into vectors *downstream* of here, and the Regions step draws
+ * those; rasterising it here is honest about the fact that what this step shows is still pixels.
  *
  * ## A colour that is not the ink's
  *
@@ -63,10 +63,11 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
 /**
  * The graph's nodes, as marks in **screen** space.
  *
- * This is the visual channel the weld radius owes under §8. A radius large enough to merge two
- * genuinely distinct junctions — closing a doorway, or welding a short wall into nothing — changes
- * nothing about the skeleton's own pixels, so the pixels cannot show it. The node marks can: one
- * where there should be two.
+ * Built as the visual channel the weld radius owed under §8: a radius large enough to merge two
+ * genuinely distinct junctions — closing a doorway — changed nothing about the skeleton's own pixels,
+ * so only the nodes could show it. **Welding was deleted for moving points**, so nothing is relying
+ * on that channel now. These stay on the weaker justification that a picture of where the graph
+ * thinks its junctions are is worth having while judging a skeleton.
  *
  * Screen-space rather than map-space, for the same reason the break rings are: a node is a single
  * pixel with a whole map on the canvas, and a mark that scales with the zoom is invisible at exactly

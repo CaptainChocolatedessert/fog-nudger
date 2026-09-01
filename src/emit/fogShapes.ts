@@ -5,30 +5,41 @@
  * from a node test, because its index reads `window.location.search` at module load. So every
  * *decision* lives here and only the call itself lives next door.
  *
- * ## Proposals are staged on `DRAWING`, not written to `FOG`
+ * ## Everything is written straight to `FOG`, and the four values below are why this section exists
  *
- * Settled in a room in step 1 and recorded in DESIGN.md §4. Fog shapes ignore their own colour, so
- * a proposal sitting on the `FOG` layer cannot be marked as a proposal by appearance — which killed
- * the cheapest review model this project ever considered. Staging is better than the thing it
- * replaced:
+ * **This described staging until 2026-08-31, and the drift shipped a defect.** Proposals used to be
+ * written to `DRAWING` at low opacity and *promoted* to `FOG` on accept. Removing staging deleted
+ * the promotion step — which was where the layer and the visibility were set — and left the builders
+ * writing to `DRAWING` while every comment around them, including this one, said fog. A GM found it.
  *
- * - On `DRAWING` an item **does** render in its own colour, so a proposal is visibly distinct.
- * - With `visible: false` the **GM sees it ghosted and players do not see it at all**, so a staging
- *   run does not leak the dungeon's layout during prep. That flag is not optional.
- * - A ghosted staged item is still selectable and editable, so the GM can nudge it.
- * - Staged items derive **zero** walls, because Dynamic Fog filters on the `FOG` layer. A proposal
- *   is inert by construction rather than by our being careful, and that is what makes a first run
- *   in a real room safe whatever it gets wrong.
+ * So the four values an emitted item must carry are declared **together**, below, rather than spelled
+ * out at the call site: layer, visibility, fill opacity, stroke width. The next edit of this kind has
+ * one place to miss instead of four, and `fogShapes.test.ts` pins all four.
  *
- * Accepting is then a property update rather than a re-emission — layer to `FOG`, `fillOpacity` to
- * 1 — so ids survive and sixty items are one call rather than sixty. The magenta is deliberately
- * left in place, so demoting restores the marking with no extra bookkeeping.
+ * Each of the four is load-bearing and none is aesthetic:
+ *
+ * - **`FOG`**, because Dynamic Fog filters on the layer. An item on `DRAWING` derives no walls and
+ *   fogs nothing — which was the property that made staging *safe*, and is exactly what makes it
+ *   wrong now.
+ * - **`visible: true`**, because on the fog layer that flag is not "can this be seen". It is the
+ *   difference between a shape that **is** fog and one that has been cleared. At `false` every
+ *   accepted room came back revealed, which is how this was found.
+ * - **Full opacity**, because below it a fog shape leaves a translucent tint of the fog colour over
+ *   ground the party has already revealed.
+ * - **No stroke**, because Dynamic Fog strokes the boundary and takes the outline, so a width is the
+ *   gap between the two walls it derives — a band of map nobody can ever see.
+ *
+ * One thing carried over from the staging design, because it is still true and still surprising: a
+ * fog shape **ignores its own colour**. Marking an emitted item by appearance is not available, which
+ * is why the review colours live on the workspace canvas instead.
  *
  * ## Provenance is load-bearing, not decoration
  *
- * Accept, remove and re-run all have to find exactly our items and never the GM's, and a GM's scene
- * may already hold hundreds of hand-drawn fog shapes — this project's own test scene has 419. So
- * every item carries one namespaced key, and every operation filters on it.
+ * A push and a remove both have to find exactly our items and never the GM's, and a GM's scene may
+ * already hold hundreds of hand-drawn fog shapes — this project's own test scene has 419. So every
+ * item carries one namespaced key, and every operation filters on it. It is also what makes a
+ * partial write self-healing: whatever a stopped push left behind is ours, and the next push deletes
+ * all of ours before writing.
  *
  * Pure: no DOM, no SDK.
  */
@@ -49,9 +60,10 @@ export const REGION_KEY = key("region");
  * nothing for a fill to contrast against and the map read as one flat tint. The partition, which is
  * the only thing a GM is being asked to judge, was invisible.
  *
- * Ignored entirely by fog rendering, which is what makes this free: an accepted shape keeps whatever
- * colour it was given and renders in the scene's fog colour regardless, so demoting brings the
- * marking back with no bookkeeping.
+ * **Ignored entirely by fog rendering**, which is worth knowing for two reasons. It is what makes
+ * assigning a colour free — an emitted shape renders in the scene's fog colour whatever we set. And
+ * it means the palette is a *preview* affordance: the workspace canvas draws the partition in these
+ * colours, and the scene does not. Preview and scene are one picture by geometry, not by colour.
  *
  * *Assigned by region index, which is a heuristic and not a graph colouring.* Two adjacent regions
  * can land on the same colour. Doing it properly needs a region-adjacency graph the pipeline does
@@ -91,8 +103,9 @@ export const ACCEPTED_FILL_OPACITY = 1;
  *
  * **And W was the proposal-outline setting** — a review affordance, there so a GM can tell one
  * proposal from the next, silently deciding where sight is blocked. The same shape of mistake as
- * `fillOpacity`, which is why both are corrected at the same moment: on promotion, when the shape
- * stops being a proposal and starts being geometry.
+ * `fillOpacity`, which is why both are declared here as emission constants rather than taken from a
+ * review setting. That pairing used to happen at promotion time; with staging gone there is no later
+ * moment to correct them in, which is exactly why they are constants.
  *
  * **Zero rather than merely small, and that rests on a measurement**: step 1 found `strokeWidth`
  * free, including zero, with a zero-stroke shape producing exactly as many walls as a stroked one.
@@ -111,11 +124,13 @@ export const ACCEPTED_STROKE_WIDTH = 0;
  * builders touch the SDK, so no headless test reaches them — and the first sign was a GM saying the
  * shapes had been staged rather than put on the map.
  *
- * `FOG` is the promotion itself: Dynamic Fog filters on layer plus type, so walls appear on arrival.
+ * `FOG` is what makes an item fog at all: Dynamic Fog filters on layer plus type, so walls appear on
+ * arrival.
  *
  * `visible: true` is **not** "can this be seen". On the fog layer it is the difference between a
- * shape that *is* fog and one that has been cleared — see the note on `acceptStaged`'s successor in
- * `emitRegions.ts`. Emitting at false is what made every room come back revealed.
+ * shape that *is* fog and one that has been **cleared**. Emitting at false is what made every room
+ * come back revealed, and the SDK expresses it nowhere else: `Item` carries only `visible`, and
+ * `OBR.scene.fog`'s `filled` is scene-wide styling.
  */
 export const EMITTED_LAYER = "FOG" as const;
 export const EMITTED_VISIBLE = true;
