@@ -20,10 +20,16 @@
  * directions, and which one dominates on a given map is not predictable. At native resolution
  * neither is introduced.
  *
- * The cost side also inverts. The sibling's downscale paid for *thinning* — iterative and expensive
- * per pixel — and thinning is precisely the stage this project dropped (DESIGN.md §5). Fill and
- * label is a couple of passes. And this runs GM-only, once per map, at prep time, where a slow
- * answer is entirely affordable.
+ * **The cost side does NOT invert, and this paragraph claimed it did.** The argument was that the
+ * sibling's downscale bought *thinning*, and that thinning was precisely the stage this project had
+ * dropped. Thinning came back at step C on 2026-08-29, measured at 428ms on the test map and the
+ * most expensive stage after the reading, so a larger raster genuinely costs more — roughly
+ * linearly in pixels, since Zhang–Suen iterates a list of surviving ink pixels.
+ *
+ * So the decision rests on the benefit leg alone, and **the graph pivot strengthens it**: the
+ * centreline of a resampled stroke is not the centreline of the drawn one, and centrelines are now
+ * the emitted geometry rather than an intermediate. The time is a cost, stated as one, and it is
+ * affordable for a different reason — this runs GM-only, once per map, at prep time.
  *
  * ## So the cap here is about memory, not time
  *

@@ -50,8 +50,6 @@ export interface MapRaster {
   readonly pixels: PixelImage;
   readonly bounds: WorldBounds;
   readonly plan: RasterPlan;
-  /** Scene grid size in world units, for reporting density. */
-  readonly dpi: number;
 }
 
 /** A `MAP`-layer image as the panel needs to show it. */
@@ -246,15 +244,6 @@ export async function resolveTraceMap(): Promise<ImageItem | null> {
 }
 
 /**
- * Load a map image and read its pixels.
- *
- * At native resolution unless the megapixel budget bites — see `rasterPlan.ts` for why that budget
- * is about memory rather than time, and why downscaling is the thing to avoid here.
- *
- * @returns `null` if the image cannot be loaded or its pixels cannot be read. Both are reported,
- * since either would otherwise surface as a dry run that simply never says anything.
- */
-/**
  * The scene's grid size in world units.
  *
  * Exposed separately from `loadMapRaster` because the trace cache needs it *before* deciding
@@ -266,11 +255,21 @@ export async function readGridDpi(): Promise<number> {
   return await OBR.scene.grid.getDpi();
 }
 
+/**
+ * Load a map image and read its pixels.
+ *
+ * At native resolution unless the megapixel budget bites — see `rasterPlan.ts` for why that budget
+ * is about memory rather than time, and why downscaling is the thing to avoid here.
+ *
+ * @returns `null` if the image cannot be loaded or its pixels cannot be read. Both are reported,
+ * since either would otherwise surface as a dry run that simply never says anything.
+ */
 export async function loadMapRaster(map: ImageItem): Promise<MapRaster | null> {
-  const [bounds, dpi] = await Promise.all([
-    OBR.scene.items.getItemBounds([map.id]),
-    OBR.scene.grid.getDpi(),
-  ]);
+  // Bounds only. This used to fetch the grid dpi alongside and carry it on the result, and nothing
+  // ever read it: the one caller destructures pixels, plan and bounds, and the dpi it needs it has
+  // already got from `readGridDpi` before deciding whether to load anything at all. A populated
+  // field with no consumer is one the next reader assumes something consumes.
+  const bounds = await OBR.scene.items.getItemBounds([map.id]);
 
   let source: HTMLImageElement;
   try {
@@ -305,7 +304,6 @@ export async function loadMapRaster(map: ImageItem): Promise<MapRaster | null> {
     pixels,
     bounds: { min: bounds.min, max: bounds.max },
     plan,
-    dpi,
   };
 }
 

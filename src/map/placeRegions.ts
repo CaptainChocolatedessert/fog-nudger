@@ -24,14 +24,19 @@
  * `SHAPE`, which is positioned from its corner instead. So something has to choose where each
  * item's origin sits, and the choice is not free.
  *
- * The centre of the region's own bounding box, for two reasons of unequal strength. The solid one
- * is that command magnitudes stay small and symmetric about zero, so a number that looks wrong in a
- * log is obviously wrong rather than being a small perturbation of a large world coordinate. The
- * weaker one, and it is **reasoning rather than measurement**: an item's `rotation` and `scale`
- * almost certainly pivot about its `position`, so a GM rotating a proposed region would swing it
- * about its own middle rather than about a distant shared origin. That has not been checked in a
- * room and should be, since it is the difference between a nudging tool that behaves and one that
- * flings a closet across the map.
+ * The centre of the region's own bounding box, for two reasons of unequal strength. The solid one,
+ * and the one that still applies, is that command magnitudes stay small and symmetric about zero,
+ * so a number that looks wrong in a log is obviously wrong rather than being a small perturbation
+ * of a large world coordinate.
+ *
+ * The second is **historical, and its prediction was confirmed**. It ran: an item's `rotation` and
+ * `scale` almost certainly pivot about its `position`, so a GM rotating a proposed region would
+ * swing it about its own middle rather than about a distant shared origin. A room checked it —
+ * rotation does pivot about the bounding-box centre, which is what regions are anchored on. What
+ * has gone is the scenario: staging was removed on 2026-08-30, so there is no proposed region for a
+ * GM to rotate, the scene is written directly, and a hand edit does not survive the next push. Kept
+ * written down rather than deleted, because it becomes live again the moment step G lets a GM move
+ * anything.
  *
  * ## What cannot be verified here
  *

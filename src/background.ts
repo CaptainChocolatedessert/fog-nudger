@@ -1,10 +1,10 @@
 /**
  * Headless entry point. Owlbear loads this via manifest `background_url`.
  *
- * Build order step 0 scope, and no more: prove the extension loads in a real room and prove the
- * dev log round-trips. The probe that answers how a wall is written (DESIGN.md §4, Q1/Q2) lands
- * next, deliberately separately — if the skeleton and the probe arrive together, a silent room
- * cannot say which of the two failed.
+ * **Deliberately inert, and still is.** It labels its surface, says the extension loaded and says
+ * when a scene opens, and nothing else. It began as build order step 0 — prove the extension loads
+ * in a real room and prove the dev log round-trips — and the probes it once announced as landing
+ * next have landed, answered their questions and been retired.
  */
 
 import OBR from "@owlbear-rodeo/sdk";

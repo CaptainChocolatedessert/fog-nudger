@@ -98,12 +98,19 @@ export function aspectMismatch(
 }
 
 /**
- * How far a single width-derived scale would have pushed the raster's bottom edge.
+ * How far a single width-derived scale would have pushed the raster's bottom edge, **in world
+ * units**.
  *
- * The mismatch above is a *ratio*; this is the same disagreement as a *displacement*, which is the
- * form that can be compared against the width of the linework. The sibling's record has the two
- * being confused: a mismatch dismissed as "one percent, negligible" was nearly eight pixels on a
- * map whose walls were three wide.
+ * The mismatch above is a *ratio*; this is the same disagreement as a *displacement*. The sibling's
+ * record has the two being confused: a mismatch dismissed as "one percent, negligible" was nearly
+ * eight pixels on a map whose walls were three wide.
+ *
+ * **The unit matters, and this doc used to walk into the very confusion it warns about.** It said
+ * the displacement is "the form that can be compared against the width of the linework". It is not,
+ * not directly: the ink width is in **raster pixels** and this is in world units, and on the test
+ * map one raster pixel is about 2.94 world units — so a drift of 6 read as pixels is really about
+ * two. To put it beside a measured ink width, divide by `unitsPerPixelY`; that quotient is the
+ * drift in raster pixels, and it is the comparable number.
  *
  * Read it as how much work the per-axis scaling is doing on this map, not as an error left behind.
  * A non-zero value is expected on any map nudged out of proportion to line up with the grid.

@@ -80,9 +80,14 @@ export function describeError(value: unknown, depth = 0): string {
 /**
  * The `name` Owlbear gave a rejection, unwrapped from its envelope, or `""` if there is none.
  *
- * Exists for the one distinction DESIGN.md §7 insists on making at every write site: a rate limit
- * is temporary and giving up on it loses data, while a validation or size failure is permanent and
- * retrying it forever is a hang. Those arrive through the same channel and look alike in a message.
+ * Its live consumer is `isRateLimited`, directly below, and that is the whole of it — no write site
+ * calls this. The doc used to say it "exists for the one distinction DESIGN.md §7 insists on making
+ * at every write site", which invites a reader to go looking for callers that are not there. The
+ * distinction is real and *is* made, at the one place that makes it: the emit path retries when
+ * `isRateLimited` says throttle and rethrows otherwise. A rate limit is temporary and giving up on
+ * it loses data; a validation or size failure is permanent and retrying it forever is a hang. What
+ * this function contributes is the unwrapping, because those arrive through the same channel and
+ * look alike in a message.
  */
 export function errorName(value: unknown, depth = 0): string {
   if (value instanceof Error) return value.name;
