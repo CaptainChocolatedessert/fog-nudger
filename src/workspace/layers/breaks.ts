@@ -20,7 +20,7 @@ import { paintGaps, parseColour } from "../../overlay/maskImage";
 import type { GapFinding, GapMark } from "../../trace/gaps";
 import { bitmapFrom, type Bitmap } from "../bitmap";
 import { maskShowing, onReading } from "../reading";
-import { addPainter, type Painter } from "../shell";
+import { addPainter, say, type Painter } from "../shell";
 
 /**
  * The colour a repaired break is drawn in — and it is the only ink on this surface the map does not
@@ -33,9 +33,9 @@ import { addPainter, type Painter } from "../shell";
  *
  * There were briefly two colours — purple for a break found, green for one repaired — when finding
  * and repairing were separate controls. With one control everything found is repaired, so there is
- * one state and one colour. The **second** colour survives only for the one case that is genuinely
- * different: a break the search could not finish examining is ringed and *not* filled, so it shows
- * as an empty ring. Marking on a guess is a warning; inventing ink on a guess is not.
+ * one colour, and the second *state* is drawn by withholding it: a break the search could not
+ * finish examining gets no fill at all and a **dashed** ring. Marking on a guess is a warning;
+ * inventing ink on a guess is not, and neither is drawing ink that was not invented.
  *
  * **Fixed rather than a swatch row**, unlike the ink colour, and the reason the ink colour is
  * adjustable applies here too: no colour is readable on every map. The ring is what carries the
@@ -78,27 +78,37 @@ let marks: readonly GapMark[] = [];
  * The layer is allocated lazily. A map with no breaks does not pay for a second full-resolution
  * RGBA buffer.
  */
-function paintBreaks(gaps: GapFinding): void {
+function paintBreaks(gaps: GapFinding): boolean {
   marks = gaps.marks;
   if (gaps.marks.length === 0) {
     // Cleared rather than left stale. A repaint that kept the previous reading's layer would draw
     // breaks the current settings do not have, which is the blanking rule one derivation down.
     painted = null;
-    return;
+    return true;
   }
 
   const colour = parseColour(GAP_COLOUR);
-  if (!colour) return;
+  if (!colour) return true;
 
-  // Both states get the same colour: an unrepaired break has no pixels to paint, only a ring.
-  const buffer = paintGaps(gaps.labels, colour, colour, painted?.buffer);
+  // `null` for the open state, which is what `paintGaps` was built to take. This passed `colour`
+  // for both until 2026-09-01, on the premise that an unrepaired break has no pixels to paint. It
+  // has all of them: the search writes GAP_OPEN over the whole channel exactly as it writes
+  // GAP_FILLED, and only the *ink* is left alone. So a break the flood never examined was drawn as
+  // a solid block indistinguishable from ink the repair actually invented — the picture claiming an
+  // invention the mask had not made, which is the one thing §8 forbids on this surface.
+  const buffer = paintGaps(gaps.labels, null, colour, painted?.buffer);
   const bitmap = bitmapFrom(buffer, gaps.labels.width, gaps.labels.height, painted);
   if (!bitmap) {
     painted = null;
     devLog("error", "workspace: could not allocate the break overlay");
-    return;
+    // On the state line as well as in the log, matching the ink layer. This layer exists to warn,
+    // and a warning that fails quietly is the failure the surface was built to prevent — the log is
+    // explicitly not a channel to the GM. The rings still draw; see the painter.
+    say("could not allocate the break fill — rings only", "bad");
+    return false;
   }
   painted = bitmap;
+  return true;
 }
 
 /**
@@ -114,17 +124,37 @@ function paintBreaks(gaps: GapFinding): void {
 const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight }) => {
   // Over the ink and at full alpha. The breaks come from the same reading as the ink, so the mask's
   // own freshness gate covers them.
-  if (!painted || !maskShowing()) return;
-  context.drawImage(painted.canvas, view.x, view.y, drawWidth, drawHeight);
+  if (!maskShowing() || marks.length === 0) return;
+
+  // The fill is optional and the rings are not. A layer that could not allocate its buffer used to
+  // return here and take the rings with it, which removed the warning entirely and said so only in
+  // the log. The rings cost a loop over `marks` and no memory at all.
+  if (painted) context.drawImage(painted.canvas, view.x, view.y, drawWidth, drawHeight);
+
+  // The marks are in the **trace's raster**, which is the map's own pixels only while the map fits
+  // the memory budget — `planRaster` divides by an integer factor above 16 megapixels. `view.scale`
+  // converts map pixels to screen pixels, so using it here drew every ring at a fraction of its
+  // distance from the map's corner on a large map, while the fill underneath stayed correct because
+  // `drawImage` stretches the whole buffer onto the same rectangle. The regions and skeleton layers
+  // already take their scale this way; this one predated them.
+  const rasterWidth = painted?.canvas.width ?? 0;
+  const rasterHeight = painted?.canvas.height ?? 0;
+  const scaleX = rasterWidth > 0 ? drawWidth / rasterWidth : view.scale;
+  const scaleY = rasterHeight > 0 ? drawHeight / rasterHeight : view.scale;
 
   for (const mark of marks) {
-    const cx = view.x + mark.x * view.scale;
-    const cy = view.y + mark.y * view.scale;
-    const radius = Math.max(RING_MIN_RADIUS, (mark.span * view.scale) / 2 + RING_PADDING);
+    const cx = view.x + mark.x * scaleX;
+    const cy = view.y + mark.y * scaleY;
+    const radius = Math.max(RING_MIN_RADIUS, (mark.span * scaleX) / 2 + RING_PADDING);
     if (cx + radius < 0 || cy + radius < 0 || cx - radius > width || cy - radius > height) {
       continue;
     }
 
+    // Dashed for a break the flood never examined. With the fill correctly withheld for those, the
+    // ring is the only thing carrying them at all, and at map scale it is the only thing carrying
+    // any of them — a few invented pixels are sub-pixel with a whole map on screen. Solid means
+    // "repaired, and here is what was added"; dashed means "found, not proved, nothing written".
+    context.setLineDash(mark.filled ? [] : [6, 5]);
     context.beginPath();
     context.arc(cx, cy, radius, 0, Math.PI * 2);
     context.lineWidth = 4;
@@ -134,12 +164,11 @@ const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight })
     context.strokeStyle = GAP_COLOUR;
     context.stroke();
   }
+  context.setLineDash([]);
 };
 
 /** Wire the layer up. Registered after the ink, which is what puts invented pixels over read ones. */
 export function registerBreaksLayer(): void {
   addPainter("breaks", paint);
-  onReading((result) => {
-    paintBreaks(result.gaps);
-  });
+  onReading((result) => paintBreaks(result.gaps));
 }

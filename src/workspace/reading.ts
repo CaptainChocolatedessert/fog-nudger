@@ -116,12 +116,15 @@ function sayReading(): void {
     repair width grows, so it moves around for reasons that have nothing to do with the map getting
     better or worse — which is the fact that collapsed the two-slider design.
   */
-  const breaks = gapTotal === 1 ? "1 break" : `${gapTotal} breaks`;
+  // `gapTotal` is every mark and `gapFilled` is the subset repaired, so the counts have to be named
+  // separately when they differ. This read "5 breaks repaired, 2 not examined" for five found and
+  // three repaired — stating five repaired, and implying a total of seven.
+  const found = gapTotal === 1 ? "1 break" : `${gapTotal} breaks`;
   const unrepaired = gapTotal - gapFilled;
   sayIfSettled(
     unrepaired > 0
-      ? `${ink} · ${breaks} repaired, ${unrepaired} not examined`
-      : `${ink} · ${breaks} repaired`,
+      ? `${ink} · ${found}, ${gapFilled} repaired, ${unrepaired} not examined`
+      : `${ink} · ${found} repaired`,
   );
 }
 
