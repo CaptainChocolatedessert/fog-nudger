@@ -770,7 +770,13 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
     );
     // The number that says whether this went too far. The wall network should be one island running
     // most of the map; if the largest survivor is room-sized instead, the linework has been cut up.
-    if (pxPerSquare > 0 && islands.largestKeptSpan < plan.width * 0.25) {
+    //
+    // **Not gated on `pxPerSquare`**, which it was until 2026-08-31. The comparison is a span in
+    // raster pixels against a raster width in raster pixels and never mentions the grid — the gate had
+    // drifted from the *info* line above, which does use it for an "of a square" clause. A scene whose
+    // grid reports zero was therefore suppressing a warning that the linework had been cut into
+    // pieces: a clean diagnostic that was evidence about the diagnostic.
+    if (islands.largestKeptSpan < plan.width * 0.25) {
       devLog(
         "warn",
         `trace: the largest surviving ink island spans only ${islands.largestKeptSpan}px of a ` +
