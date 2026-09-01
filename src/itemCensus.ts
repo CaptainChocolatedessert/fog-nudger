@@ -68,6 +68,16 @@ export interface LabelledParent {
  *
  * Anything attached to something we do not recognise is counted separately: a GM's own hand-drawn
  * fog produces walls too, and folding those into ours would inflate the numbers invisibly.
+ *
+ * ## Counted per LABEL, not per id — and that is now used deliberately
+ *
+ * Two parents sharing a label collapse into one entry. That reads as a bug against the paragraph
+ * above, and it was one while every caller passed unique labels. It is now the mechanism the census
+ * uses on a pushed map: hundreds of regions with a per-item split is a line nobody can read, which
+ * is the failure of reporting a total wearing a different hat, so `fogProbe.ts` passes the *kind*
+ * as the label above a threshold and gets `region×N, wall×M`. Below it, labels are unique and the
+ * per-item promise holds. **If a caller needs per-item counts with colliding labels, it has to
+ * disambiguate them before calling** — do not "fix" this to key by id without changing that caller.
  */
 export function attributeByParent(
   derived: readonly AttachedItem[],
