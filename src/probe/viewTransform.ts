@@ -51,6 +51,11 @@ export const MIN_SCALE = 0.02;
 export const MAX_SCALE = 32;
 
 export function clampScale(scale: number, min = MIN_SCALE, max = MAX_SCALE): number {
+  // NaN survives `Math.min`/`Math.max` untouched, and a NaN scale is unrecoverable by navigation:
+  // `zoomAbout`'s equal-scale early return never fires, because `NaN === NaN` is false, so every
+  // later zoom recomputes NaN offsets and `panBy` adds to NaN. The map stops drawing and nothing
+  // says why. `min` rather than 1, because the range is caller-supplied and 1 may be outside it.
+  if (!Number.isFinite(scale)) return min;
   return Math.min(max, Math.max(min, scale));
 }
 
@@ -96,15 +101,32 @@ export function fitToViewport(content: Size, viewport: Size, padding = 0): View 
  *
  * Takes the corners in either order, since which of them is the minimum depends on Owlbear's
  * conventions rather than on ours.
+ *
+ * ## It assumes the content is axis-aligned with the world, and that is not checked
+ *
+ * The rectangle between two transformed corners is the content's extent only when nothing is
+ * rotated. A **rotated** map's bounding box is strictly larger than the image on *both* axes, so
+ * both ratios come out too large in the same direction and the averaging below cancels nothing — the
+ * surface opens at the wrong scale and the wrong offset, with the ink misregistered against the map
+ * under it. Registration by construction does not save it: map and mask are wrong together, against
+ * Owlbear's idea of where the map is.
+ *
+ * Nothing here can detect that, because a rotation is not visible in two corner positions.
+ * `viewportSettle.ts` states the same assumption for its own two-point transform; this file did not.
+ * Whether an Owlbear map image can be rotated at all is **unestablished** — the fix, if it is ever
+ * wanted, belongs to the caller: read the item's rotation and fall back to a fit when it is
+ * non-zero, losing the no-jump property rather than opening misregistered.
  */
 export function viewFromScreenRect(a: Vec, b: Vec, content: Size): View {
-  if (content.width <= 0 || content.height <= 0) return { scale: 1, x: 0, y: 0 };
+  // Written as `!(x > 0)` rather than `x <= 0` so a NaN takes the fallback: `NaN <= 0` is false, and
+  // a NaN corner from `transformPoint` would otherwise pass straight through into a NaN view.
+  if (!(content.width > 0) || !(content.height > 0)) return { scale: 1, x: 0, y: 0 };
 
   const left = Math.min(a.x, b.x);
   const top = Math.min(a.y, b.y);
   const width = Math.abs(a.x - b.x);
   const height = Math.abs(a.y - b.y);
-  if (width <= 0 || height <= 0) return { scale: 1, x: 0, y: 0 };
+  if (!(width > 0) || !(height > 0)) return { scale: 1, x: 0, y: 0 };
 
   // The two axes should agree; averaging rather than picking one means a small disagreement shows
   // as a slight misfit either side instead of a whole edge hanging off.
@@ -164,6 +186,13 @@ export function zoomAbout(
  * gesture feel different on two machines.
  */
 export function wheelFactor(deltaY: number, stepPercent: number, inverted = false): number {
+  // A zero delta is not a zoom in either direction. Without this, the sign test below reads zero as
+  // "not zooming in" and returns `1 / step` — a zoom **out** for an event that asked for nothing.
+  // Reachable: `classifyWheel` sends every non-pixel-mode event here without looking at `deltaY`, so
+  // a purely horizontal wheel in line or page mode (a tilt wheel, a horizontal scroll wheel) zoomed
+  // the map out a full notch. Returning the identity makes `zoomAbout`'s equal-scale early return
+  // fire, so the view is untouched rather than recomputed to the same numbers.
+  if (deltaY === 0) return 1;
   const step = 1 + Math.max(0, stepPercent) / 100;
   const zoomingIn = inverted ? deltaY > 0 : deltaY < 0;
   return zoomingIn ? step : 1 / step;

@@ -151,6 +151,19 @@ describe("viewFromScreenRect", () => {
       y: 0,
     });
   });
+
+  it("takes the fallback on a NaN corner rather than building a NaN view", () => {
+    // The guards were written `<= 0`, and `NaN <= 0` is false — so a NaN from `transformPoint`
+    // passed both of them and produced `{ scale: NaN, x: NaN }`, which navigation cannot recover
+    // from. Written `!(x > 0)` now, which is the same test for every number except this one.
+    const fallback = { scale: 1, x: 0, y: 0 };
+    expect(viewFromScreenRect({ x: NaN, y: 0 }, { x: 100, y: 80 }, { width: 10, height: 10 })).toEqual(
+      fallback,
+    );
+    expect(viewFromScreenRect({ x: 0, y: 0 }, { x: 100, y: 80 }, { width: NaN, height: 10 })).toEqual(
+      fallback,
+    );
+  });
 });
 
 describe("panBy", () => {
@@ -181,6 +194,15 @@ describe("wheelFactor", () => {
     // Otherwise a scroll down and up leaves the view slightly changed, which reads as drift.
     expect(wheelFactor(-100, 35) * wheelFactor(100, 35)).toBeCloseTo(1, 9);
   });
+
+  it("does nothing at all on a zero delta", () => {
+    // Reachable, and it used to zoom OUT a full notch. `classifyWheel` sends every non-pixel-mode
+    // event here without looking at deltaY, so a purely horizontal wheel in line or page mode — a
+    // tilt wheel, a horizontal scroll wheel — arrived with deltaY 0, read as "not zooming in", and
+    // got `1 / step`. The identity multiplier is what makes `zoomAbout` leave the view alone.
+    expect(wheelFactor(0, 12)).toBe(1);
+    expect(wheelFactor(0, 12, true)).toBe(1);
+  });
 });
 
 describe("clampScale", () => {
@@ -188,6 +210,16 @@ describe("clampScale", () => {
     expect(clampScale(1000)).toBe(MAX_SCALE);
     expect(clampScale(0.0001)).toBe(MIN_SCALE);
     expect(clampScale(1.5)).toBe(1.5);
+  });
+
+  it("does not let a non-finite scale through", () => {
+    // `Math.min(max, Math.max(min, NaN))` is NaN, and a NaN scale is unrecoverable by navigation:
+    // `zoomAbout`'s equal-scale early return never fires because `NaN === NaN` is false, so every
+    // later gesture recomputes NaN offsets. The map stops drawing and nothing says why.
+    expect(clampScale(NaN)).toBe(MIN_SCALE);
+    expect(clampScale(Infinity)).toBe(MIN_SCALE);
+    expect(clampScale(-Infinity)).toBe(MIN_SCALE);
+    expect(clampScale(NaN, 0.5, 4)).toBe(0.5);
   });
 });
 

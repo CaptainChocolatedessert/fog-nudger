@@ -303,6 +303,17 @@ export async function openOnOwlbearsView(bounds: {
       OBR.viewport.transformPoint(bounds.min),
       OBR.viewport.transformPoint(bounds.max),
     ]);
+    // **Unhandled, and stated rather than left to be found: a rotated map.** The two corners give a
+    // world-axis-aligned rectangle, which is the image's extent only when nothing is rotated — a
+    // rotated image's bounding box is larger than the image on *both* axes, so the two ratios
+    // `viewFromScreenRect` averages are both too large and the averaging cancels nothing. The sheet
+    // would open at the wrong scale and offset, with the ink misregistered against the map beneath
+    // it, and drawing them in one canvas does not save it: they are wrong together.
+    //
+    // The honest fix belongs here rather than in the transform: read the item's rotation and call
+    // `fitMap()` when it is non-zero, giving up the no-jump property rather than opening wrong.
+    // **Not done, because the premise is unchecked** — whether an Owlbear MAP image can be rotated
+    // at all is not established, and the bounds we are handed come from the item's own box.
     setView(viewFromScreenRect(a, b, { width: image.naturalWidth, height: image.naturalHeight }));
   } catch (error) {
     devLog("warn", "workspace: could not inherit Owlbear's view, fitting instead", describeError(error));
