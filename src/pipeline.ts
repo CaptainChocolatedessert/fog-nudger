@@ -939,6 +939,18 @@ export interface MaskForOverlay {
   readonly gaps: GapFinding;
   readonly bounds: WorldBounds;
   readonly mapName: string;
+  /**
+   * The map image's URL, from the same resolution the mask was read through.
+   *
+   * Carried here rather than left for the surface to fetch, and that is the point of it. The
+   * workspace used to call `resolveTraceMap()` a second time purely to get this — a second scene
+   * query per map load, and a second *answer*, which need not be the first one: a nomination
+   * changing between the two calls (a GM clicking another row while the first is still loading, or
+   * another client writing the metadata) drew map B under a mask read from map A. The whole claim of
+   * this surface is that the map and the mask agree by construction, and that was the one place they
+   * were fetched independently.
+   */
+  readonly mapUrl: string;
   /** Whether this run recomputed the mask or reused the cached one, for the log. */
   readonly reused: boolean;
   /** Whether the expensive half was reused even though the mask was not. */
@@ -1004,6 +1016,10 @@ export async function maskForOverlay(
     gaps: resolved.stage.gaps,
     bounds: resolved.stage.bounds,
     mapName: resolved.stage.name,
+    // From `map`, the item this call resolved, rather than from the cached stage: a cache hit means
+    // the same map by identity, but the URL is the one thing about an item that can be reissued
+    // without its identity changing, and this is the copy that is certainly current.
+    mapUrl: map.image.url,
     reused: resolved.maskReused,
     readingReused: resolved.readingReused,
   };

@@ -12,10 +12,21 @@
  * image is then loaded by URL and the view is placed when it arrives. Nothing waits for the image
  * before publishing the reading, because the mask is drawn over the map rather than into it — the
  * surface simply has nothing to draw until the picture is there.
+ *
+ * **The URL comes off the reading**, not from a second scene query. That is what makes the picture
+ * and the mask provably the same item rather than two independent answers to "which map is
+ * nominated" — see `MaskForOverlay.mapUrl`.
+ *
+ * ## What this does NOT guard, stated
+ *
+ * There is no generation scheme here, where `reading.ts` and `regions.ts` both have one. Two map
+ * changes inside one image load race, and whichever `onload` fires last wins — which need not be
+ * the map chosen last. It needs two clicks inside a single image fetch, so it is rare rather than
+ * impossible, and the cost of getting it wrong is a picture from the wrong map under a correct
+ * mask, which is visible. Recorded rather than fixed.
  */
 
 import { devLog } from "../devlog";
-import { resolveTraceMap } from "../map/mapImage";
 import { advanceTo } from "./accordion";
 import { adoptReading, takeReading } from "./reading";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
@@ -54,7 +65,16 @@ export async function loadNominatedMap(opening = false): Promise<void> {
     say("the map image would not load", "bad");
     devLog("error", "workspace: the map image failed to load");
   };
-  image.src = (await resolveTraceMap())?.image.url ?? "";
+
+  // Guarded rather than left to `src = ""`, which browsers resolve against the document URL and then
+  // try to fetch — producing an `onerror` and the CDN-failure message for a case that is not a CDN
+  // failure. The right message by accident is still the wrong message.
+  if (result.mapUrl) {
+    image.src = result.mapUrl;
+  } else {
+    say("the scene gives no image for this map", "bad");
+    devLog("error", `workspace: "${result.mapName}" resolved with no image URL`);
+  }
 
   adoptReading(result);
 }
