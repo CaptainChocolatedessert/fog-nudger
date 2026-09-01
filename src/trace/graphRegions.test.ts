@@ -29,6 +29,31 @@ const TWO_ROOMS = [
 ];
 
 /**
+ * The same idea with a **bent** divider, which is what makes the shared-wall test able to fail.
+ *
+ * A straight shared wall simplifies to its two endpoints, and those are graph nodes that are pinned
+ * whatever the fitting does — so there is nothing for a per-ring fit to drift. Two bends give the
+ * shared wall interior points, which is where drift would show.
+ */
+const STEPPED = [
+  "..............................",
+  "..............................",
+  "..#########################...",
+  "..#########################...",
+  "..###.....###..........####...",
+  "..###.....###..........####...",
+  "..###......###.........####...",
+  "..###.......###........####...",
+  "..###........###.......####...",
+  "..###.........###......####...",
+  "..###.........###......####...",
+  "..#########################...",
+  "..#########################...",
+  "..............................",
+  "..............................",
+];
+
+/**
  * One room with a stub wall reaching into it from the left — the case a partition deletes outright
  * and a graph keeps. The stub separates nothing, so a watershed drops it; here it survives as a
  * branch, and shows up as a cycle enclosing no area.
@@ -59,23 +84,50 @@ describe("regions derived from the wall graph", () => {
   });
 
   it("gives the two rooms the identical points along the wall they share", () => {
-    const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
+    /*
+      The property step D was re-planned around: each **edge** is fitted once and both faces are
+      assembled from it. Fitting per ring instead lets two coincident boundaries drift apart by up to
+      the tolerance and opens a sliver between two rooms that share a wall.
 
-    // Every emitted vertex that two faces both use must be exactly one point. Fitting per ring
-    // instead of per edge is what would break this, silently, by up to the tolerance.
-    const counts = new Map<string, number>();
-    for (const region of result.regions) {
-      const own = new Set<string>();
-      for (const ring of region.rings) {
-        for (const point of ring) own.add(`${point.x},${point.y}`);
+      **The fixture has to have a bent divider, and the earlier version of this test did not.**
+      `TWO_ROOMS`' shared wall is straight, so Douglas–Peucker keeps its two endpoints and nothing
+      else — and those endpoints are graph *nodes*, which `fitFaces` pins whichever way the fitting
+      is done. There was nothing for a per-ring fit to drift. `STEPPED` bends twice, so the shared
+      wall carries interior points, which is where drift would show.
+    */
+    const result = deriveGraphRegions(maskFromRows(STEPPED), BASE);
+
+    const keys = (region: { rings: readonly (readonly { x: number; y: number }[])[] }) =>
+      region.rings.map((ring) => ring.map((point) => `${point.x},${point.y}`));
+
+    // The exterior is the one the border frame gave a hole; the other two are the rooms.
+    const rooms = result.regions.filter((region) => region.rings.length === 1);
+    expect(rooms).toHaveLength(2);
+
+    const a = keys(rooms[0]!)[0]!;
+    const b = keys(rooms[1]!)[0]!;
+    const shared = new Set(a.filter((key) => b.includes(key)));
+
+    // More than two: two would be only the shared nodes, which pinning them gives for free.
+    expect(shared.size).toBeGreaterThan(2);
+
+    /*
+      And contiguous along both rings, which is what a *drifted interior point* would break: it
+      appears as two separate keys, punching a hole in the run rather than shortening it. Wrap-around
+      counts, since a ring has no first point.
+    */
+    const oneRun = (ring: readonly string[]): boolean => {
+      const flags = ring.map((key) => shared.has(key));
+      // Count boundaries between shared and not, around the loop. One contiguous run has exactly
+      // two, unless every point is shared.
+      let changes = 0;
+      for (let i = 0; i < flags.length; i++) {
+        if (flags[i] !== flags[(i + 1) % flags.length]) changes += 1;
       }
-      for (const key of own) counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    // Shared vertices exist at all — otherwise the assertion is vacuous.
-    expect([...counts.values()].some((count) => count > 1)).toBe(true);
-    for (const [key, count] of counts) {
-      expect(count, `vertex ${key} shared by ${count} faces`).toBeLessThanOrEqual(4);
-    }
+      return changes <= 2;
+    };
+    expect(oneRun(a), `room A ring ${a.join(" ")}`).toBe(true);
+    expect(oneRun(b), `room B ring ${b.join(" ")}`).toBe(true);
   });
 
   it("emits a joined stub as a line, and leaves no slit in the room's ring", () => {

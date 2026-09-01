@@ -138,16 +138,26 @@ describe("the graph derivation over generated linework", () => {
   }
 
   it("removes the sub-pixel slivers rather than merely tolerating them", () => {
-    // The sweep above would pass with no slivers to remove at all, which would make it a test of
-    // the generator. This says the cleanup is doing work on that same input.
-    let removed = 0;
+    /*
+      The sweep above would pass with no slivers to remove at all, which would make it a test of the
+      generator. This says the cleanup is doing work on that same input.
+
+      **A claim about the generator's coverage, and deliberately loose.** This asserted a *total* of
+      more than 200 slivers across 200 seeds, which is the one place this file broke its own rule —
+      the module doc says in bold that nothing here should say how many faces a seed produces,
+      because that pins the generator rather than the code. Counting *seeds that produced any* says
+      what the comment above actually means, and **the threshold may be lowered freely**: it is
+      about how much of this generator's output exercises the cleanup, not about the cleanup.
+    */
+    let seedsWithSlivers = 0;
     for (let seed = 1; seed <= 200; seed++) {
-      removed += deriveGraphRegions(randomInk(40, 30, rng(seed), 22), {
+      const removed = deriveGraphRegions(randomInk(40, 30, rng(seed), 22), {
         spurPrunePx: 0,
         tolerance: 0.5,
         maxTolerance: 4,
       }).sliversRemoved;
+      if (removed > 0) seedsWithSlivers += 1;
     }
-    expect(removed).toBeGreaterThan(200);
+    expect(seedsWithSlivers).toBeGreaterThan(100);
   });
 });

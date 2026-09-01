@@ -77,10 +77,21 @@ describe("the step declaration", () => {
   });
 
   it("allows a step with no parameters, because a step is a mode rather than a group of sliders", () => {
-    // The opposite of the stage test, which forbids an empty stage. Picking the map and placing a
-    // door are steps with nothing to turn, and they still own what is painted and what a drag does.
-    // Asserted so that a later "tidy-up" does not delete one for looking empty.
-    expect(STEPS.every((step) => stepParameters(step.id).length >= 0)).toBe(true);
+    /*
+      The opposite of the stage test, which forbids an empty stage. Picking the map and placing a
+      door are steps with nothing to turn, and they still own what is painted and what a drag does.
+      Asserted so that a later "tidy-up" does not delete one for looking empty.
+
+      **This used to assert `length >= 0`**, which is true of every array — it passed on an empty
+      `STEPS`, and on a `stepParameters` that always returned nothing. What it has to say is that an
+      empty step *exists* and is a real step, which is the thing a tidy-up would remove.
+    */
+    const empty = STEPS.filter((step) => stepParameters(step.id).length === 0);
+    expect(empty.length).toBeGreaterThan(0);
+    for (const step of empty) {
+      expect(step.title.length, `step ${step.id} has no title`).toBeGreaterThan(0);
+      expect(step.blurb.length, `step ${step.id} has no blurb`).toBeGreaterThan(0);
+    }
   });
 
   it("gives every step a unique id, a title and a blurb", () => {
