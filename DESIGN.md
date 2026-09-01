@@ -2165,11 +2165,48 @@ resulting emission spec are in §4; in brief:
 **OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
 its adjacent corridor stub? Only answerable by running a real map at a real table.
 
-**OQ7. What does the GM review, and how?** *Largely answered by the staging decision in §4* — emit
-onto the `DRAWING` layer where proposals are visibly distinct and inert, let the GM edit them with
-tools they already know, and promote to `FOG` on acceptance. What remains open is only whether a
-*bulk* surface is needed on top — accept-all, revert, re-run, jump to the next suspect region — and
+**OQ7. What does the GM review, and how?** *Largely answered, and the answer changed twice.* It was
+staging — emit onto `DRAWING` where proposals are visibly distinct and inert, let the GM edit them
+with tools they already know, promote to `FOG` on acceptance. **Staging was deleted on 2026-08-30**
+and the answer is now the workspace: the Regions step draws the partition and the wall lines exactly
+as they will be emitted, for the cost of opening a step, and closing pushes. What remains open is
+whether anything is wanted on top of that — jump to the next suspect region, or a re-run diff — and
 that is best judged after a real map has been traced rather than guessed at now.
+
+### Four raised by the code review and deliberately not decided — 2026-09-01
+
+The review of 2026-08-30 to 09-01 is implemented in full. Four of its findings were **not** actioned,
+each because the choice belongs to the user rather than to whoever was holding the review. They are
+recorded here rather than in the review document, which is disposable.
+
+**OQ8. Should `GRAPH_ONLY` become a fourth cascade stage?** One fact — "changing this rebuilds the
+graph but not the mask" — is currently spread across three declarations: `PARAMETER_STAGE` says
+`read`, `GRAPH_ONLY` lists the exception, and `maskFingerprint` filters on it. They agree today and a
+test pins that they do. Collapsing them into a fourth stage between `read` and `derive` would make it
+one fact in one place, at the cost of a stage that is not a step and does not appear in the UI. **This
+is a question about the shape of the cascade, which is architecture, not tidying.** Spur pruning is
+the only member.
+
+**OQ9. Is the workspace deriving the graph twice worth fixing?** The Walls step thins and builds the
+graph to draw the skeleton; entering Regions builds it again to derive the faces. The second is the
+one that counts, and the first is what a GM looks at while judging pruning. Sharing them means caching
+a graph against a settings fingerprint, which is a third cache beside the two the pipeline already
+has. **Measure the cost in a room before paying that complexity** — the thinning is ~430ms on the test
+map and the graph build is cheaper, so the whole duplicate may be under a second and entirely
+affordable.
+
+**OQ10. Who is `index.html` for?** It says "Pre-release — nothing to install yet", while the manifest
+is served from the same Pages site and can be added to Owlbear by URL. So the only public front door
+tells a visitor who *could* install it that they cannot. Either the page carries the manifest URL, or
+it says plainly that this is not ready for strangers. **Both are honest; they are different decisions
+about who the project is for.**
+
+**OQ11. Should `overlay-probe.html` keep shipping?** It is listed in `rollupOptions.input`, so 325
+lines of retired probe plus its page are built and published on every deploy — and nothing can open
+them, since the panel's button was unwired when the click-through design closed. Keeping it costs
+bundle size and puts a page on the public site that opens blank outside a room. Removing it from the
+input list means re-adding two lines before it could ever be run again. **The probe's source stays
+either way**; this is only about whether it is built.
 
 The skeleton project already declares an action with a popover, and **that is not an answer to
 OQ7.** It exists as a second, independent signal: the background page reports through the dev log
@@ -2229,6 +2266,14 @@ The sibling's culture is the reason it works, and it costs almost nothing to ado
 
 - **Mutation testing earns its keep.** Break the code deliberately and confirm a test fails. A green
   suite on first run is evidence about the *tests*, not the code.
+
+  **This project has now paid for it twice, both on 2026-09-01.** The code review found three tests
+  asserting less than their names claimed — including the one the operating notes believed was the
+  area check's own failure test, which never ran the area check at all. And when the shared-wall test
+  was rewritten, sabotage showed the *replacement* could not fail either: its fixture's divider was
+  straight, so the shared wall simplified to two graph nodes that are pinned whichever way the fitting
+  is done, and there was nothing left to drift. Which is the bullet below, arriving from a direction
+  nobody predicted.
 - **A fixture that is easy to read can be too symmetric to fail.** A tangent test on a horizontal
   run cannot detect a search being disabled when the fallback is `(1, 0)` — the right answer for
   that fixture. Sampling has to actually visit the discontinuity it claims to check. **Applies
