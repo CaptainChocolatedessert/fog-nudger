@@ -33,7 +33,7 @@
  * Pure: no DOM, no SDK.
  */
 
-import type { LabelledSpace } from "./label";
+import type { LabelledSpace, Region } from "./label";
 
 export interface CensusOptions {
   /** Raster pixels per grid square, so areas can be reported in a portable unit. */
@@ -99,8 +99,11 @@ export function censusStats(
   let covered = 0;
   for (const region of regions) covered += region.area;
 
-  // Regions arrive largest first, so the median is a lookup rather than a sort.
-  const middle = regions.length === 0 ? 0 : regions[Math.floor(regions.length / 2)]!.area;
+  // Regions arrive largest first, so the median is a lookup rather than a sort — and for an even
+  // count it is the mean of the two middle entries, which it was not until 2026-09-01. Being sorted
+  // justifies not sorting; it does not justify taking the upper-middle element and calling it a
+  // median, and this figure is quoted in the record as a measurement of a real map.
+  const middle = medianArea(regions);
 
   return {
     count: regions.length,
@@ -109,6 +112,14 @@ export function censusStats(
     roomSized: perSquare > 0 ? regions.filter((r) => r.area >= perSquare).length : 0,
     medianSquares: perSquare > 0 ? middle / perSquare : 0,
   };
+}
+
+/** The middle area, averaging the two middle entries when there is an even number of them. */
+function medianArea(regions: readonly Region[]): number {
+  if (regions.length === 0) return 0;
+  const half = Math.floor(regions.length / 2);
+  if (regions.length % 2 === 1) return regions[half]!.area;
+  return (regions[half - 1]!.area + regions[half]!.area) / 2;
 }
 
 /**

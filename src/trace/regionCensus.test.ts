@@ -61,6 +61,23 @@ describe("censusStats", () => {
     expect(censusStats(labelled, { pxPerSquare: 100 }).roomSized).toBe(0);
   });
 
+  it("averages the two middle regions when there is an even number of them", () => {
+    // Four ground runs of 9, 5, 3 and 1 pixels, each in its own row of an otherwise solid raster.
+    // The median is 4 — the mean of the middle pair. Taking the upper-middle entry alone, which is
+    // what this did until 2026-09-01, gives 3. The figure is quoted in the record as a measurement
+    // of a real map, so it has to be the thing it is called.
+    const runs = [1, 3, 5, 9];
+    const labelled = labelSpace(
+      mask(12, 8, (x, y) => {
+        const run = runs[(y - 1) / 2];
+        if (y % 2 === 0 || run === undefined) return true;
+        return !(x >= 1 && x <= run);
+      }),
+    );
+    expect(labelled.regions.map((r) => r.area)).toEqual([9, 5, 3, 1]);
+    expect(censusStats(labelled, { pxPerSquare: 1 }).medianSquares).toBeCloseTo(4, 6);
+  });
+
   it("reports areas in grid squares, not pixels", () => {
     const labelled = labelSpace(mask(20, 20, () => false));
     expect(censusStats(labelled, { pxPerSquare: 10 }).medianSquares).toBeCloseTo(4, 6);

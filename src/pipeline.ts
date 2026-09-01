@@ -810,7 +810,7 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
   // `gaps.ts`.
   const gapStarted = performance.now();
   const gaps = findGaps(filteredMask, {
-    widthPx: settings.trace.gapFillPx,
+    fillPx: settings.trace.gapFillPx,
     travelPx: settings.trace.gapTravelPx,
   });
   const inkedMask = applyGapFill(filteredMask, gaps.labels);

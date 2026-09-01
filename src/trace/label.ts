@@ -212,12 +212,11 @@ export function labelSpace(
 
   let discarded = 0;
   let discardedArea = 0;
-  for (const [root, count] of area) {
+  for (const count of area.values()) {
     if (count < options.minArea) {
       discarded += 1;
       discardedArea += count;
     }
-    void root;
   }
 
   const remap = new Map<number, number>();

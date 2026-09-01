@@ -28,9 +28,9 @@ import { maskFromRows } from "./fixtures";
 import { findGaps, GAP_FILLED, GAP_NONE, GAP_OPEN } from "./gaps";
 
 /** Seals breaks up to two pixels; treats ink more than six pixels apart along itself as separate. */
-const NEAR = { widthPx: 2, travelPx: 6 };
+const NEAR = { fillPx: 2, travelPx: 6 };
 /** The same width, with enough travel allowed to walk right round a small room. */
-const FAR = { widthPx: 2, travelPx: 60 };
+const FAR = { fillPx: 2, travelPx: 60 };
 
 /** A wall across a bordered box, with a two-pixel break in it. */
 const BROKEN_WALL = [
@@ -66,7 +66,7 @@ const WIDE_BREAK = [
 
 describe("findGaps", () => {
   it("finds nothing when the width is zero, which is off", () => {
-    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 0, travelPx: 6 });
+    const found = findGaps(maskFromRows(BROKEN_WALL), { fillPx: 0, travelPx: 6 });
     expect(found.marks).toEqual([]);
     expect(found.searchRadius).toBe(0);
     expect(found.channels).toBe(0);
@@ -75,7 +75,7 @@ describe("findGaps", () => {
   it("finds nothing when the width rounds to nothing", () => {
     // A setting under one pixel cannot describe a break, and must leave the mask alone rather than
     // nearly so — the same exactness the opening's zero depends on.
-    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 0.4, travelPx: 6 });
+    const found = findGaps(maskFromRows(BROKEN_WALL), { fillPx: 0.4, travelPx: 6 });
     expect(found.searchRadius).toBe(0);
     expect(found.channels).toBe(0);
   });
@@ -99,7 +99,7 @@ describe("findGaps", () => {
     const mask = maskFromRows(WIDE_BREAK);
     expect(findGaps(mask, NEAR).channels).toBe(0);
 
-    const found = findGaps(mask, { widthPx: 4, travelPx: 6 });
+    const found = findGaps(mask, { fillPx: 4, travelPx: 6 });
     expect(found.marks).toHaveLength(1);
     expect(found.marks[0]!.area).toBe(4);
     expect(found.marks[0]!.span).toBe(4);
@@ -215,7 +215,7 @@ describe("findGaps", () => {
   });
 
   it("marks every break that passes through when the travel distance is zero", () => {
-    const found = findGaps(maskFromRows(CRACKED_RING), { widthPx: 2, travelPx: 0 });
+    const found = findGaps(maskFromRows(CRACKED_RING), { fillPx: 2, travelPx: 0 });
     expect(found.marks).toHaveLength(1);
   });
 
@@ -385,7 +385,7 @@ describe("findGaps, repairing", () => {
       "##################",
     ]);
     const areas = [1, 2, 3, 4, 6].map(
-      (widthPx) => findGaps(mask, { widthPx, travelPx: 6 }).filledArea,
+      (fillPx) => findGaps(mask, { fillPx, travelPx: 6 }).filledArea,
     );
     for (let i = 1; i < areas.length; i++) {
       expect(areas[i]!).toBeGreaterThanOrEqual(areas[i - 1]!);
@@ -395,7 +395,7 @@ describe("findGaps, repairing", () => {
   });
 
   it("repairs nothing when the width is off", () => {
-    const found = findGaps(maskFromRows(BROKEN_WALL), { widthPx: 0, travelPx: 6 });
+    const found = findGaps(maskFromRows(BROKEN_WALL), { fillPx: 0, travelPx: 6 });
     expect(found.filled).toBe(0);
     expect(found.filledArea).toBe(0);
     expect(found.marks).toEqual([]);
@@ -405,8 +405,8 @@ describe("findGaps, repairing", () => {
     // The invariant the whole design rests on, asserted directly rather than inferred: every
     // repaired pixel belongs to a channel that also produced a mark.
     const mask = maskFromRows(BROKEN_WALL);
-    for (const widthPx of [0, 1, 2, 4, 8]) {
-      const found = findGaps(mask, { widthPx, travelPx: 6 });
+    for (const fillPx of [0, 1, 2, 4, 8]) {
+      const found = findGaps(mask, { fillPx, travelPx: 6 });
       let repairedPixels = 0;
       for (const value of found.labels.data) if (value === GAP_FILLED) repairedPixels += 1;
       expect(repairedPixels).toBe(found.filledArea);

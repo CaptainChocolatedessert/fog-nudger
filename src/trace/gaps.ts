@@ -165,8 +165,14 @@ export interface GapMark {
 }
 
 export interface GapOptions {
-  /** The widest break to find and repair, in raster pixels. Zero is off. */
-  readonly widthPx: number;
+  /**
+   * The widest break to find and repair, in raster pixels. Zero is off.
+   *
+   * Named to match the setting, `gapFillPx`. That setting was renamed from `gapWidthPx` because
+   * "width" meant *highlight only* under the two-control design, and a scene storing the old key
+   * would have silently started inventing ink at a width chosen for looking at.
+   */
+  readonly fillPx: number;
   /**
    * How far two banks may be apart along the ink and still count as one piece, in raster pixels.
    *
@@ -237,7 +243,7 @@ const FLOOD_BUDGET = 40_000_000;
 
 export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
   const { width, height } = mask;
-  const searchRadius = radiusForWidth(options.widthPx);
+  const searchRadius = radiusForWidth(options.fillPx);
 
   const empty: GapFinding = {
     labels: { width, height, data: new Uint8Array(width * height) },

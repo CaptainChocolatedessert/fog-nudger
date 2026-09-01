@@ -45,7 +45,14 @@ export interface IslandRemoval {
   readonly removed: number;
   /** How many ink pixels they held. */
   readonly removedArea: number;
-  /** The longest side of the largest component kept, in raster pixels — for the log. */
+  /**
+   * The longest side of the largest component kept, in raster pixels — for the log.
+   *
+   * **Zero when the filter is off**, which means "not measured" rather than "the largest surviving
+   * island is nothing". Nothing prints it wrongly today because the one reader sits inside a
+   * `minIslandPx > 0` branch. A caller that wants it unconditionally should make it `null` first,
+   * not read the 0.
+   */
   readonly largestKeptSpan: number;
 }
 

@@ -110,9 +110,12 @@ function pass(
 
 function morph(mask: BinaryMask, radius: number, erode: boolean): BinaryMask {
   const { width, height } = mask;
-  if (radius <= 0 || width === 0 || height === 0) {
-    return { width, height, data: Uint8Array.from(mask.data) };
-  }
+  // The caller's own mask, not a copy. Radius 0 is the default for both controls that reach here, so
+  // this is the common path, and `openMask`, `closeMask` and `removeSmallInkIslands` all already
+  // hand the input straight back when they are off. Two functions in one file with different
+  // aliasing at the same input is the sort of asymmetry that gets copied. Safe because nothing in
+  // this pipeline mutates a mask in place — `applyGapFill` copies before it writes.
+  if (radius <= 0 || width === 0 || height === 0) return mask;
   const middle = emptyMask(width, height);
   const out = emptyMask(width, height);
   pass(mask.data, middle.data, width, height, radius, true, erode);
@@ -164,6 +167,10 @@ export function closeMask(mask: BinaryMask, radius: number): BinaryMask {
 
 /** How many ink pixels an opening removed, for the log. */
 export function removedInk(before: BinaryMask, after: BinaryMask): number {
+  // Both callers pass two readings of one raster, so this cannot fire. It is here because the loop
+  // indexes `after` on `before`'s length, and a mismatched pair would read past the end and report
+  // a number rather than fail.
+  if (before.data.length !== after.data.length) return 0;
   let removed = 0;
   for (let i = 0; i < before.data.length; i++) {
     if (before.data[i] === 1 && after.data[i] === 0) removed += 1;
