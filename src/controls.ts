@@ -30,6 +30,12 @@ import type { Scale } from "./sliderScale";
  * Both are nullable and both are nullable *for a reason*: before a first trace there is no ink
  * width and no pixel density, and a control that invents one would be reporting a guess in the
  * voice of a measurement. The readouts say "trace once for a figure" instead.
+ *
+ * **A non-positive number is treated as no measurement**, not as a measurement of zero. Every
+ * `derive` below tests `> 0` rather than `!== null`, because dividing by a zero pixel density puts
+ * the literal string "Infinity" beside a slider — a guess in the voice of a measurement, wearing a
+ * different hat. `lastPixelsPerSquare` already nulls a zero at source; this is the type's own
+ * contract holding rather than one caller remembering.
  */
 export interface Measured {
   /** Raster pixels per grid square, or `null` before any run. */
@@ -112,7 +118,7 @@ export const CONTROLS: readonly Control[] = [
     hint: "Removes marks narrower than this, keeping thicker ones at full width. As a share of the measured ink width; <b>zero is off</b>. Works on width, not contrast, so it reaches a floor grid the blur cannot.",
     derive: (value, { inkWidth }) => {
       if (value <= 0) return "off";
-      if (inkWidth === null) return "trace once for a figure";
+      if (inkWidth === null || inkWidth <= 0) return "trace once for a figure";
       const width = value * inkWidth;
       const radius = Math.max(0, Math.round(width / 2));
       return radius <= 0
@@ -132,7 +138,7 @@ export const CONTROLS: readonly Control[] = [
     hint: "Finds narrow breaks in the linework — what merge two rooms into one — and fills them, in <b class='gap-key'>purple</b>. In pixels; <b>zero is off</b>. Past a doorway's width it starts sealing doorways, and no measurement can tell those apart.",
     derive: (value, { pxPerSquare }) => {
       if (value <= 0) return "off";
-      if (pxPerSquare === null) return `${Math.round(value)}px`;
+      if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;
       return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
     },
   },
@@ -149,7 +155,7 @@ export const CONTROLS: readonly Control[] = [
     hint: "Removes dead-end branches shorter than this, in pixels walked along the skeleton. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Zero is off</b>, and past a wall's own length it eats the graph.",
     derive: (value, { pxPerSquare }) => {
       if (value <= 0) return "off";
-      if (pxPerSquare === null) return `${Math.round(value)}px`;
+      if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;
       return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
     },
   },
@@ -168,7 +174,7 @@ export const CONTROLS: readonly Control[] = [
     label: "Edge simplification",
     hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",
     derive: (value, { inkWidth }) =>
-      inkWidth === null
+      inkWidth === null || inkWidth <= 0
         ? "trace once for a figure"
         : `${(value * inkWidth).toFixed(1)}px of a ${inkWidth.toFixed(1)}px ink width`,
   },

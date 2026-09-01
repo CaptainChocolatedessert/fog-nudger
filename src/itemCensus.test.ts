@@ -17,6 +17,29 @@ describe("attributeByParent", () => {
     ).toBe("baseline×2, hairline×1");
   });
 
+  it("merges two parents that share a label, which the census now relies on", () => {
+    /*
+      The counter is keyed by **label**, not by id. That reads as a bug against the promise below
+      that every known parent gets its own count, and it was a latent one while every caller passed
+      unique labels.
+
+      It is now the mechanism: a pushed map has hundreds of regions, and `fogProbe.ts` passes the
+      *kind* as the label above a threshold so they collapse to `region×N, wall×M` rather than
+      producing a line nobody can read — which is the failure of reporting a total, one step along.
+      Asserted here so the behaviour is a decision rather than an accident, and so that anyone
+      "fixing" it to key by id finds the caller that depends on it.
+    */
+    expect(
+      attributeByParent(
+        [{ attachedTo: "a" }, { attachedTo: "b" }],
+        [
+          { id: "a", label: "region" },
+          { id: "b", label: "region" },
+        ],
+      ),
+    ).toBe("region×2");
+  });
+
   /**
    * The point of the whole function.
    *

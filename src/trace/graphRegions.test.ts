@@ -231,6 +231,41 @@ describe("regions derived from the wall graph", () => {
     expect(result.tolerance).toBeGreaterThan(0.1);
   });
 
+  it("reports a region that still will not fit, and keeps it whole", () => {
+    /*
+      The other half of the cap rule, and the half nothing asserted. `CLAUDE.md`: **never split a
+      region to meet the command cap — raise the tolerance; report what still will not fit.** The
+      escalation half is above; this is what happens when escalating cannot help.
+
+      `maxTolerance` equal to `tolerance` is what removes the escape route, so the cap is reached and
+      stays reached. The assertions are that the region is still *there*, still whole, and **flagged**
+      — a silently dropped or silently split region is the failure this rule exists to forbid, and
+      either would leave the map with a room the fog does not cover.
+    */
+    const result = deriveGraphRegions(maskFromRows(STEPPED), {
+      ...BASE,
+      tolerance: 0.1,
+      maxTolerance: 0.1,
+      maxCommands: 4,
+    });
+
+    const over = result.regions.filter((region) => region.overCap);
+    expect(over.length, "some region is over the cap").toBeGreaterThan(0);
+    // Escalation could not help, so it did not pretend to.
+    expect(result.tolerance).toBe(0.1);
+    for (const region of over) {
+      expect(region.rings.length, `region ${region.id} kept its rings`).toBeGreaterThan(0);
+      for (const ring of region.rings) {
+        expect(ring.length, `region ${region.id} ring is whole`).toBeGreaterThan(2);
+      }
+    }
+    // Nothing was dropped to make room: every face holding map is still emitted.
+    const emitted = new Set(result.regions.map((region) => region.id));
+    for (const face of result.faces.faces) {
+      if (face.interior > 0) expect(emitted.has(face.label), `face ${face.label}`).toBe(true);
+    }
+  });
+
   it("keeps a hole because of what is inside it, and fills none of these", () => {
     /*
       The containment rule, which `contours.test.ts` was the only place asserting until it was
