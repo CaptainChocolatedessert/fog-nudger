@@ -33,6 +33,8 @@ import OBR, {
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
+import { REGION_KEY } from "../emit/fogShapes";
+import { WALL_KEY } from "../emit/wallLines";
 import { attributeByParent, summariseItems } from "../itemCensus";
 import { key } from "../namespace";
 import {
@@ -171,7 +173,14 @@ export async function promoteStaged(): Promise<string> {
   return `Promoted ${staged.length} (${labels}). Wait a moment, then census for walls.`;
 }
 
-/** Remove only the items this probe created. */
+/**
+ * Remove only the items this probe created.
+ *
+ * **`ourItems()` here, deliberately, not `ourFogItems()`.** This is the one place the narrow
+ * probe-keyed set is the right one: widening it to the emit path's keys would make a probe cleanup
+ * button delete the GM's whole fog layer. Removing *that* is the panel's own button, which goes
+ * through `emitRegions`.
+ */
 export async function removeProbeShapes(): Promise<string> {
   if (!(await OBR.scene.isReady())) return "No scene open.";
 
@@ -198,7 +207,7 @@ export async function logCensus(): Promise<string> {
   const [networked, local, ours] = await Promise.all([
     OBR.scene.items.getItems(),
     OBR.scene.local.getItems(),
-    ourItems(),
+    ourFogItems(),
   ]);
 
   const networkedSummary = summariseItems(networked);
@@ -206,11 +215,17 @@ export async function logCensus(): Promise<string> {
 
   // Per shape, not as a total. A total is consistent with the split we expect and with splits we do
   // not, so it cannot settle what it was run to settle.
+  //
+  // **Per KIND once there are many**, because the question this answers on a pushed map — do our
+  // shapes derive walls, and do the wall lines derive them too — is answered by the kind split,
+  // while a per-item split across several hundred regions is a line nobody can read. The per-item
+  // form was written for six hand-placed probe squares and is still what it gives for them.
   const walls = local.filter((item) => item.type === "WALL");
-  const perShape = attributeByParent(
-    walls,
-    ours.map((item) => ({ id: item.id, label: labelOf(item) })),
-  );
+  const parents = ours.map((item) => ({
+    id: item.id,
+    label: ours.length > PER_ITEM_PARENT_CAP ? kindOf(item) : labelOf(item),
+  }));
+  const perShape = attributeByParent(walls, parents);
 
   devLog("info", `census — networked: ${networkedSummary}`);
   devLog("info", `census — local:     ${localSummary}`);
@@ -236,7 +251,8 @@ export async function inspectFogShapes(): Promise<string> {
 
   let theirs = 0;
   for (const item of fogItems) {
-    const ours = PROBE_KEY in item.metadata;
+    const ours =
+      PROBE_KEY in item.metadata || REGION_KEY in item.metadata || WALL_KEY in item.metadata;
     if (!ours) theirs += 1;
     devLog(
       "info",
@@ -253,13 +269,55 @@ export async function inspectFogShapes(): Promise<string> {
   return `Logged ${fogItems.length} fog items (${theirs} not ours). Compare the styles in dev.log.`;
 }
 
+/**
+ * Above this many of our items, the census reports per kind rather than per item.
+ *
+ * A pushed map carries hundreds of regions plus a wall line per fitted segment, and a parent list
+ * that long makes the census line unreadable — which is the same failure as reporting a total, one
+ * step along. Six probe squares stay per item.
+ */
+const PER_ITEM_PARENT_CAP = 20;
+
 function ourItems(): Promise<Item[]> {
   return OBR.scene.items.getItems((item) => PROBE_KEY in item.metadata);
 }
 
+/**
+ * Anything this extension wrote, by any of its three metadata keys.
+ *
+ * **`ourItems()` alone is not that, and the two diagnostics below were using it as though it were.**
+ * `PROBE_KEY` belongs to the step-1 probe, whose only writer has no wired button, so in a shipped
+ * build it matches nothing at all — while the emit path writes `REGION_KEY` on every fog shape and
+ * `WALL_KEY` on every wall line. So a census on a map that had been pushed reported about an empty
+ * set, and the fog inspector called all seven hundred of our own items "GM-drawn". `emitRegions.ts`
+ * already knew the pair; nothing in this file did.
+ */
+function ourFogItems(): Promise<Item[]> {
+  return OBR.scene.items.getItems(
+    (item) =>
+      PROBE_KEY in item.metadata || REGION_KEY in item.metadata || WALL_KEY in item.metadata,
+  );
+}
+
+/** Which of ours this is, named by kind, since three different things now carry a label. */
 function labelOf(item: Item): string {
-  const label = item.metadata[PROBE_KEY];
-  return typeof label === "string" ? label : "unlabelled";
+  const probe = item.metadata[PROBE_KEY];
+  if (typeof probe === "string") return probe;
+  // The emit path stores a provenance string under both of its keys, so it can be reported as it
+  // stands; the prefix is what says which kind it came from.
+  const region = item.metadata[REGION_KEY];
+  if (typeof region === "string") return `region:${region}`;
+  const wall = item.metadata[WALL_KEY];
+  if (typeof wall === "string") return `wall:${wall}`;
+  return "unlabelled";
+}
+
+/** Which kind an item of ours is, for the summary a long parent list collapses to. */
+function kindOf(item: Item): string {
+  if (PROBE_KEY in item.metadata) return "probe";
+  if (REGION_KEY in item.metadata) return "region";
+  if (WALL_KEY in item.metadata) return "wall";
+  return "unlabelled";
 }
 
 function pathItem(
