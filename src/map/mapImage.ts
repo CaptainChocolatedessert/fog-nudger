@@ -26,6 +26,7 @@
 import OBR, { isImage, type Image as ImageItem, type Item } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
+import { defaultMapId, largestByArea } from "./mapChoice";
 import { key } from "../namespace";
 import { planRaster, type RasterPlan } from "./rasterPlan";
 import type { PixelImage } from "../trace/field";
@@ -75,34 +76,6 @@ export interface MapImageSummary {
 }
 
 /**
- * The map to trace when the GM has not said: the **largest by world area**.
- *
- * One rule, two callers - the resolver and the picker - because a picker showing one image selected
- * while the trace read a different one would be a lie told by two functions agreeing separately.
- *
- * World area rather than pixel count, because "the map" means the thing covering the most ground. A
- * small image blown up to fill the table is the map; a crisp 4000px inset of one room is not.
- *
- * **It no longer refuses an ambiguous scene** (user, 2026-08-29). It used to: two images within 4x
- * of each other and no choice made produced nothing at all, on the argument that the wrong one might
- * be a GM overlay whose linework would shape what players can see. That argument was written when a
- * wrong guess was *invisible* - a trace started from a popover with no picture anywhere. The
- * workspace inverts it: the chosen map is drawn full-screen with its name above the picker, so
- * picking wrong is evident in the thing the GM is looking at and is one click from being fixed,
- * which is this project's own standard for when a guess may be a guess.
- */
-export function largestByArea<T extends { readonly area: number }>(maps: readonly T[]): T | null {
-  let best: T | null = null;
-  // Zero and negative areas are skipped: a degenerate item cannot be a map, and letting one win on
-  // an empty scene would trace nothing while claiming to have chosen.
-  for (const map of maps) {
-    if (map.area <= 0) continue;
-    if (!best || map.area > best.area) best = map;
-  }
-  return best;
-}
-
-/**
  * Every `MAP`-layer image in the scene, in the layer's own **z-order**, for the GM to choose from.
  *
  * Everything is listed and nothing is filtered (user, 2026-08-29). Locked images are here - a scene
@@ -132,9 +105,9 @@ export async function listMapImages(): Promise<MapImageSummary[]> {
       Math.max(0, bounds.width) * Math.max(0, bounds.height),
     ]),
   );
-  const fallback = largestByArea(
-    [...areas].map(([id, area]) => ({ id, area })),
-  );
+  // `defaultMapId` rather than `largestByArea` directly, because a lone map is the trace's choice
+  // whatever its area — see that function for the scene the two answer differently on.
+  const fallbackId = defaultMapId([...areas].map(([id, area]) => ({ id, area })));
 
   return measured
     .map(({ map }) => ({
@@ -144,7 +117,7 @@ export async function listMapImages(): Promise<MapImageSummary[]> {
       pixelHeight: map.image.height,
       locked: map.locked,
       visible: map.visible,
-      isDefault: map.id === fallback?.id,
+      isDefault: map.id === fallbackId,
     }))
     .sort((a, b) => zIndexOf(maps, a.id) - zIndexOf(maps, b.id));
 }
@@ -160,11 +133,41 @@ function zIndexOf(maps: readonly ImageItem[], id: string): number {
  * Exists so a watcher can tell "the maps changed" from "something else in the scene moved" without
  * a round trip per image for bounds. Kept here rather than in the panel deliberately: what counts
  * as a map image is decided in one place, and two places deciding it is how they drift apart.
+ *
+ * ## It covers everything a row displays, which id and name did not
+ *
+ * The picker rebuilds only when this string changes, so anything a row shows and this omits goes
+ * stale silently. It was `id:name` alone, and three things a row shows are not either of those. The
+ * worst is **which row is marked as the trace's choice**: with no nomination that is the largest by
+ * world *area*, so a GM scaling map B past map A changed which map would be traced while the picker
+ * went on marking A — the exact lie `largestByArea` exists to prevent, arriving through the refresh
+ * guard rather than through a duplicated rule. The `locked` and `hidden` badges were stale the same
+ * way.
+ *
+ * **Still no round trip.** Every field here is already on the item; the bounds this deliberately
+ * avoids are not needed, because scale and position are what *change* the area. Rounded to two
+ * decimals so a drag by another client rebuilds the rows a bounded number of times rather than on
+ * every floating-point twitch — the workspace is a full-screen modal, so the GM whose list it is
+ * cannot be the one dragging.
  */
 export function mapSignature(items: readonly Item[]): string {
   return items
-    .filter((item) => isImage(item) && item.layer === "MAP")
-    .map((item) => `${item.id}:${item.name}`)
+    .filter((item): item is ImageItem => isImage(item) && item.layer === "MAP")
+    .map((item) =>
+      [
+        item.id,
+        item.name,
+        item.scale.x.toFixed(2),
+        item.scale.y.toFixed(2),
+        item.position.x.toFixed(2),
+        item.position.y.toFixed(2),
+        item.rotation.toFixed(2),
+        item.image.width,
+        item.image.height,
+        item.locked,
+        item.visible,
+      ].join(":"),
+    )
     .sort()
     .join("|");
 }
@@ -213,6 +216,12 @@ export async function resolveTraceMap(): Promise<ImageItem | null> {
     devLog("warn", `map: the nominated map ${chosenId.slice(0, 8)} is not in this scene`);
   }
 
+  // One map wins without a bounds round trip, and therefore without the area guard `largestByArea`
+  // applies. That trade is deliberate: the round trip would be paid on every map load of the
+  // overwhelmingly common single-map scene, and this function runs several times per load. The guard
+  // it skips only bites on a lone MAP image with degenerate bounds, and `listMapImages` marks that
+  // same map as the default so the picker agrees rather than showing nothing selected. **Do not
+  // "fix" this back into consulting the area** without changing the picker in the same edit.
   if (maps.length === 1) return maps[0]!;
 
   const measured = await measure(maps);
