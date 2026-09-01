@@ -9,10 +9,12 @@
  * same computation that produces the mask, not a second copy of it living on a surface. This side
  * only draws what it was handed.
  *
- * **Both stage-one steps ask for this layer**, ink and walls alike. The walls step is where the
- * minimum stroke width can sever a wall, and a severed wall is a break — so it is the likeliest
- * manufacturer of the very thing these rings warn about, and hiding them there would take the
- * warning away from the place it is earned.
+ * **Both stage-one steps ask for this layer**, ink and walls alike, which is the one argued
+ * exception to "each step shows its own layer". The reason is not that the walls step manufactures
+ * breaks — the minimum stroke width that can sever a wall is an *Ink* parameter, and this doc named
+ * the wrong step for it until 2026-09-01. It is that the walls step is where a severed wall becomes
+ * visible: a gap in the ink is a gap in the skeleton, and without the rings a GM looking at a broken
+ * centreline cannot tell a doorway from something their own filter cut.
  */
 
 import { devLog } from "../../devlog";

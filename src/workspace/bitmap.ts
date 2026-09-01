@@ -2,7 +2,7 @@
  * A map-space bitmap: pixels rasterised once, drawn every frame by a `drawImage`.
  *
  * Named a bitmap rather than a layer on purpose. A **layer** is a thing the canvas stack draws and a
- * step asks for by name — ink, breaks, and the linework and faces to come. This is the pixels one of
+ * step asks for by name — ink, breaks, linework and faces. This is the pixels one of
  * them happens to be made of, and conflating the two would make "which layers does this step show"
  * read as a question about allocation.
  *

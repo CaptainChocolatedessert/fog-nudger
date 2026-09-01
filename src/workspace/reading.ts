@@ -3,11 +3,12 @@
  *
  * ## Why this is not in a step
  *
- * Three of the six steps change the reading — ink, walls, and the break repair — and all three want
- * the *same* mask back. Putting the request cycle in one of them would make the other two depend on
- * it, and putting a copy in each would be two more implementations of the chain, which is the
- * duplication the sibling paid for. So the steps subscribe: a reading lands here, and whoever wants
- * to draw something from it is handed it.
+ * Several controls change the reading and they are spread across steps — what counts as ink, the two
+ * linework filters, and the break repair, which is a sub-heading inside Ink rather than a step of
+ * its own — and every one of them wants the *same* mask back. Putting the request cycle in one step
+ * would make the others depend on it, and putting a copy in each would be more implementations of
+ * the chain, which is the duplication the sibling paid for. So the steps subscribe: a reading lands
+ * here, and whoever wants to draw something from it is handed it.
  *
  * ## Blank rather than stale
  *

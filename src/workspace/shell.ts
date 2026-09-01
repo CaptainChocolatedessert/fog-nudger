@@ -4,11 +4,10 @@
  * ## What a shell owns, and what it must not
  *
  * The transform, the input, the canvas stack, and the way out. A **step** owns its controls, what
- * it paints, and what a drag means (`DESIGN.md` §4, "Six steps"). The division is not tidiness: the
- * workspace is about to grow from three sections of sliders into six modes — map, ink, walls, edit
- * walls, regions, doors — and this file is the part that is identical in all of them. Splitting it
- * out before the growth is the whole of step A.1, and the refactor gets harder every session it is
- * deferred.
+ * it paints, and what a drag means (`DESIGN.md` §4, "Six steps"). The division is not tidiness: it
+ * is what lets a step be added without touching any of the above. There are four steps today — map,
+ * ink, walls, regions — and two more expected, wall editing and doors, which are steps F and G.
+ * This file is the part that is identical in all of them.
  *
  * **Nothing here knows what a mask is.** The shell draws the map and then hands the frame to
  * whatever painters were registered, in registration order. That is the canvas stack: an ordered

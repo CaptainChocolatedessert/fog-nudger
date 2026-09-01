@@ -180,10 +180,12 @@ export const STEPS: readonly Step[] = [
       that are really there. Both are comparisons against the ink, so the ink is drawn under it.
 
       **The breaks are here too, which is the one argued exception to "each step shows its own
-      layer".** The minimum stroke width can sever a wall, and a severed wall IS a break — so this
-      step is the likeliest manufacturer of the very thing the break rings warn about, and hiding
-      them here would take the warning away from the place it is earned. The operating notes recorded
-      this as the intent before the code did.
+      layer".** A severed wall IS a break, and this is the step where one becomes visible: a gap in
+      the ink is a gap in the skeleton, and without the rings a GM looking at a broken centreline
+      cannot tell a doorway from something their own filter cut. The control that does the cutting —
+      the minimum stroke width — is an *Ink* parameter, not one of this step's; the version of this
+      note that put it here was naming the wrong step. The operating notes recorded the layer as the
+      intent before the code did.
     */
     layers: ["ink", "skeleton", "breaks"],
     drag: "pan",

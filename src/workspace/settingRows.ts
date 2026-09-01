@@ -80,6 +80,31 @@ export function setControlsLive(next: boolean): void {
 }
 
 /**
+ * Recompute whatever a set of changed parameters invalidates, and nothing else.
+ *
+ * Shared by a slider's release and a step's Defaults, so the two cannot disagree about what a change
+ * costs. A reading covers the partition as well — the regions subscribe to it — so the two cases are
+ * exclusive rather than cumulative.
+ */
+export function recomputeFor(names: readonly SettingName[]): void {
+  const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
+  // Graph-only first: pruning a spur costs a branch walk and a face traversal where a re-read costs
+  // 690ms and would produce an identical mask. `GRAPH_ONLY` is what makes that safe, and it has
+  // exactly one member — the weld radius was the other, and it was deleted rather than defaulted to
+  // zero after 459 of 600 generated cases failed at its default.
+  const rest = pipeline.filter((name) => !isSkeletonOnly(name));
+  const graphChanged = pipeline.some(isSkeletonOnly);
+  if (graphChanged) invalidateSkeleton();
+
+  if (rest.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
+  // A graph change now invalidates the partition as well, because the faces *are* the graph's
+  // (step D). It did not have to before, when the skeleton was a view that emitted nothing — and
+  // that is the whole of what step D changed here.
+  else if (rest.length > 0 || graphChanged) invalidateRegions();
+  invalidate();
+}
+
+/**
  * Build one slider.
  *
  * Two events, and the split is the point of using a slider. `input` fires continuously while
@@ -104,30 +129,6 @@ export function setControlsLive(next: boolean): void {
  * cached mask may be reused for — so this reads them rather than keeping a third list of which
  * slider does what.
  */
-/**
- * Recompute whatever a set of changed parameters invalidates, and nothing else.
- *
- * Shared by a slider's release and a step's Defaults, so the two cannot disagree about what a change
- * costs. A reading covers the partition as well — the regions subscribe to it — so the two cases are
- * exclusive rather than cumulative.
- */
-export function recomputeFor(names: readonly SettingName[]): void {
-  const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
-  // Graph-only first: pruning a spur or welding a junction costs a branch walk and a face traversal
-  // where a re-read costs 690ms and would produce an identical mask. `GRAPH_ONLY` is what makes that
-  // safe.
-  const rest = pipeline.filter((name) => !isSkeletonOnly(name));
-  const graphChanged = pipeline.some(isSkeletonOnly);
-  if (graphChanged) invalidateSkeleton();
-
-  if (rest.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
-  // A graph change now invalidates the partition as well, because the faces *are* the graph's
-  // (step D). It did not have to before, when the skeleton was a view that emitted nothing — and
-  // that is the whole of what step D changed here.
-  else if (rest.length > 0 || graphChanged) invalidateRegions();
-  invalidate();
-}
-
 export function settingRow(control: Control): HTMLElement {
   const limits = SETTING_LIMITS[control.name];
   const scale = control.scale ?? "linear";

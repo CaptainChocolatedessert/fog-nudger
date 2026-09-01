@@ -8,12 +8,6 @@
  *
  * It is not a slider and cannot be a `settingRow`: the colour is the one setting that is not a
  * number, so it sits outside the parameter machinery entirely and needs its own row of buttons.
- *
- * ## Why a spread of hues plus both extremes of neutral
- *
- * The only thing that makes a colour good here is contrast against a particular map — red vanishes
- * on red stonework and shouts on a grey plan, and only the GM can see which they have. Six is enough
- * to find something workable on any map in one click, with the picker there for the rest.
  */
 
 import { DEFAULT_SETTINGS, normaliseColour } from "../settings";
@@ -26,8 +20,9 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
  *
  * A spread of hues plus both extremes of neutral, because the only thing that makes a colour good
  * here is contrast against a particular map — red vanishes on red stonework and shouts on a grey
- * plan, and only the GM can see which they have. Six is enough to find something workable on any
- * map in one click, with the picker there for the rest.
+ * plan, and only the GM can see which they have. Seven is enough to find something workable on any
+ * map in one click, with the picker there for the rest. The count is the argument, so it has to
+ * match the list: this said six while declaring seven, and the paragraph appeared twice.
  */
 const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[] = [
   { value: "#ff2020", name: "Red" },
