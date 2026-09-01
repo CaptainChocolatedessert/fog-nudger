@@ -66,15 +66,10 @@ describe("censusStats", () => {
     expect(censusStats(labelled, { pxPerSquare: 10 }).medianSquares).toBeCloseTo(4, 6);
   });
 
-  it("carries the filter's droppings through", () => {
-    const labelled = labelSpace(
-      mask(30, 10, (x, y) => x === 20 || (x > 20 && y !== 5)),
-      { minArea: 10 },
-    );
-    const stats = censusStats(labelled, { pxPerSquare: 10 });
-    expect(stats.discarded).toBe(1);
-    expect(stats.discardedShare).toBeGreaterThan(0);
-  });
+  // "carries the filter's droppings through" was here. The census no longer reports what a minimum
+  // dropped, because the only labelling it is ever handed passes `minArea: 0` — the clause printed
+  // "dropped 0" on every map, which reads as evidence that nothing was dropped rather than as
+  // evidence that nothing could be. `labelSpace` still counts them; `label.test.ts` still pins that.
 
   it("does not divide by zero when the grid is unknown", () => {
     // A dpi of zero is a real state for a scene with no grid, and a NaN here would propagate into
@@ -104,6 +99,10 @@ describe("describeCensus", () => {
     const line = describeCensus(censusStats(twoRooms(), { pxPerSquare: 10 }));
     expect(line).toMatch(/^3 regions covering/);
     expect(line).toMatch(/largest first/);
-    expect(line).toMatch(/touch the border/);
+    // Nothing about the border: the census is only handed the labelling of a *framed* skeleton, whose
+    // outer row and column are ink, so no labelled pixel can touch the raster edge and the count was
+    // always zero.
+    expect(line).not.toMatch(/touch the border/);
+    expect(line).not.toMatch(/below the minimum/);
   });
 });

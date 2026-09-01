@@ -52,16 +52,30 @@ export interface CensusStats {
   readonly roomSized: number;
   /** Median region area in grid squares. */
   readonly medianSquares: number;
-  readonly touchingBorder: number;
-  readonly discarded: number;
-  readonly discardedShare: number;
+  /*
+    `touchingBorder`, `discarded` and `discardedShare` were here until 2026-08-31, and all three had
+    become **structurally constant** — which by this project's own rule makes them evidence about the
+    diagnostic rather than about the map.
+
+    The census is only ever handed the labelling of `graph.framed`, and two things follow from that.
+    `frameSkeleton` paints the whole outer row and column as skeleton before labelling runs, and
+    `labelSpace` skips ink, so no labelled pixel can sit on the raster border and the count was always
+    zero. And that call passes `minArea: 0`, so nothing is ever filtered and `dropped N below the
+    minimum` always printed `dropped 0`.
+
+    The second was the worse of the two, because it printed a *number*: a reader who did not know the
+    smallest-room control had been deleted read "dropped 0" as evidence that nothing was dropped rather
+    than as evidence that nothing could be.
+
+    The underlying fields stay on `LabelledSpace` — see the note there.
+  */
 }
 
 export function censusStats(
   labelled: LabelledSpace,
   options: CensusOptions,
 ): CensusStats {
-  const { regions, width, height, discarded, discardedArea } = labelled;
+  const { regions, width, height } = labelled;
   const pixels = Math.max(1, width * height);
   const perSquare = options.pxPerSquare > 0 ? options.pxPerSquare ** 2 : 0;
   const top = options.top ?? 5;
@@ -78,9 +92,6 @@ export function censusStats(
     topShares: regions.slice(0, top).map((region) => region.area / pixels),
     roomSized: perSquare > 0 ? regions.filter((r) => r.area >= perSquare).length : 0,
     medianSquares: perSquare > 0 ? middle / perSquare : 0,
-    touchingBorder: regions.filter((region) => region.touchesBorder).length,
-    discarded,
-    discardedShare: discardedArea / pixels,
   };
 }
 
@@ -93,10 +104,9 @@ export function censusStats(
  */
 export function describeCensus(stats: CensusStats): string {
   if (stats.count === 0) {
-    return (
-      "no regions at all — every pixel is ink, or everything was below the minimum area " +
-      `(${stats.discarded} dropped)`
-    );
+    // Not "or everything was below the minimum area": there is no minimum any more, so every pixel
+    // being ink is the only way to get here.
+    return "no regions at all — every pixel is ink";
   }
 
   const percent = (share: number) => `${(share * 100).toFixed(1)}%`;
@@ -105,8 +115,6 @@ export function describeCensus(stats: CensusStats): string {
   return (
     `${stats.count} regions covering ${percent(stats.coverage)} of the raster; ` +
     `largest first ${shares}; ` +
-    `${stats.roomSized} at least a grid square, median ${stats.medianSquares.toFixed(2)} sq; ` +
-    `${stats.touchingBorder} touch the border; ` +
-    `dropped ${stats.discarded} below the minimum (${percent(stats.discardedShare)} of the raster)`
+    `${stats.roomSized} at least a grid square, median ${stats.medianSquares.toFixed(2)} sq`
   );
 }
