@@ -30,11 +30,6 @@ export interface BinaryMask {
   readonly data: Uint8Array;
 }
 
-export function maskAt(mask: BinaryMask, x: number, y: number): number {
-  if (x < 0 || y < 0 || x >= mask.width || y >= mask.height) return 0;
-  return mask.data[y * mask.width + x]!;
-}
-
 export function countInk(mask: BinaryMask): number {
   let total = 0;
   for (const value of mask.data) total += value;
@@ -70,14 +65,6 @@ export interface SauvolaOptions {
 
 export const DEFAULT_SAUVOLA: SauvolaOptions = { radius: 12, k: 0.34 };
 
-/** Ink is darker than the local threshold. */
-export function sauvolaBinarize(
-  field: ScalarField,
-  options: SauvolaOptions = DEFAULT_SAUVOLA,
-): BinaryMask {
-  return sauvolaBothPolarities(field, options).dark;
-}
-
 /**
  * Both polarities from one pass, because deciding between them means measuring both.
  *
@@ -90,6 +77,12 @@ export function sauvolaBinarize(
  * Note the two masks are *not* complements of each other. Sauvola's threshold is asymmetric about
  * the mean, so a pixel can be ink under both readings or neither — which is precisely why the
  * polarity decision has to look at the masks rather than reason about the histogram.
+ *
+ * **This is where polarity stops mattering.** `detectPolarity` picks one of these two masks and
+ * every stage downstream may then assume ink is 1, whichever way the map was drawn. The alternative
+ * — threading a polarity flag onward and getting the comparison right in each place — is what
+ * choosing here avoids. It is done by *selection*, not by inverting the field: nothing in this
+ * pipeline ever inverts one.
  */
 export function sauvolaBothPolarities(
   field: ScalarField,
@@ -153,22 +146,6 @@ export function sauvolaBothPolarities(
     dark: { width, height, data: dark },
     light: { width, height, data: light },
   };
-}
-
-/**
- * Plain global cutoff — ink is anything darker than `level`.
- *
- * Kept as the comparison case: on clean line art over flat white it is equivalent to Sauvola and far
- * easier to reason about, so having both is what shows whether a given map actually needs the local
- * threshold at all.
- */
-export function globalBinarize(field: ScalarField, level: number): BinaryMask {
-  const { width, height } = field;
-  const mask = new Uint8Array(width * height);
-  for (let i = 0; i < mask.length; i++) {
-    mask[i] = field.data[i]! < level ? 1 : 0;
-  }
-  return { width, height, data: mask };
 }
 
 /**

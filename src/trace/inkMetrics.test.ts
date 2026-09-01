@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { emptyMask, type BinaryMask } from "./binarize";
-import { erosionCounts, estimateInkWidth, inkWidthFromThinness, thinness } from "./inkMetrics";
+import { erosionCounts, inkWidthFromThinness, thinness } from "./inkMetrics";
 
 function mask(
   width: number,
@@ -67,12 +67,17 @@ describe("inkWidthFromThinness", () => {
   });
 });
 
-describe("estimateInkWidth", () => {
+/**
+ * The composition, which is what the pipeline actually calls (`polarity.ts`). These were written
+ * against a one-line convenience wrapper that has since gone; the properties are about the pair and
+ * survive it, which is why they were moved rather than deleted with it.
+ */
+describe("inkWidthFromThinness, on a real mask", () => {
   it("recovers the width of a plain stroke", () => {
     // The claim the whole readout rests on. Checked across several widths rather than one, since a
     // single width is satisfied by constants that are not the formula.
     for (const w of [4, 6, 8, 12]) {
-      const estimate = estimateInkWidth(stroke(w))!;
+      const estimate = inkWidthFromThinness(thinness(stroke(w)))!;
       expect(estimate).toBeGreaterThan(w - 1);
       expect(estimate).toBeLessThan(w + 1);
     }
@@ -81,8 +86,8 @@ describe("estimateInkWidth", () => {
   it("saturates at 2 for anything thinner", () => {
     // Erosion removes a one-pixel and a two-pixel stroke alike, so both report 2. Pinned down
     // because every length derived from ink width inherits this floor.
-    expect(estimateInkWidth(stroke(1))).toBeCloseTo(2, 6);
-    expect(estimateInkWidth(stroke(2))).toBeCloseTo(2, 6);
+    expect(inkWidthFromThinness(thinness(stroke(1)))).toBeCloseTo(2, 6);
+    expect(inkWidthFromThinness(thinness(stroke(2)))).toBeCloseTo(2, 6);
   });
 
   it("is biased thin on a mixture, not averaged", () => {
@@ -94,11 +99,7 @@ describe("estimateInkWidth", () => {
       const speck = y === 40 && x % 3 === 0; // isolated single pixels
       return band || speck;
     });
-    const estimate = estimateInkWidth(withSpecks)!;
-    expect(estimate).toBeLessThan(10);
-  });
-
-  it("returns null for an empty mask", () => {
-    expect(estimateInkWidth(emptyMask(8, 8))).toBeNull();
+    expect(inkWidthFromThinness(thinness(withSpecks))!).toBeLessThan(10);
   });
 });
+

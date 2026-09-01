@@ -20,11 +20,6 @@ export interface ScalarField {
   readonly data: Float32Array;
 }
 
-export function fieldAt(field: ScalarField, x: number, y: number): number {
-  if (x < 0 || y < 0 || x >= field.width || y >= field.height) return 0;
-  return field.data[y * field.width + x]!;
-}
-
 /**
  * Perceptual luminance, 0 (black) to 1 (white).
  *
@@ -47,20 +42,6 @@ export function luminanceField(image: PixelImage): ScalarField {
   }
 
   return { width, height, data: out };
-}
-
-/**
- * Invert a field, so light linework becomes dark.
- *
- * This is the whole of polarity handling as far as the rest of the pipeline is concerned. Every
- * stage downstream may assume ink is dark, because a light-ink map is inverted here and never
- * mentioned again — which is much safer than threading a polarity flag through code that would
- * then have to get the comparison right in each place.
- */
-export function invertField(field: ScalarField): ScalarField {
-  const out = new Float32Array(field.data.length);
-  for (let i = 0; i < out.length; i++) out[i] = 1 - field.data[i]!;
-  return { width: field.width, height: field.height, data: out };
 }
 
 /**

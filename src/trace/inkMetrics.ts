@@ -93,8 +93,3 @@ export function inkWidthFromThinness(value: number): number | null {
   if (!(value > 0)) return null;
   return 2 / value;
 }
-
-/** Convenience for callers that have a mask but no thinness figure yet. */
-export function estimateInkWidth(mask: BinaryMask): number | null {
-  return inkWidthFromThinness(thinness(mask));
-}

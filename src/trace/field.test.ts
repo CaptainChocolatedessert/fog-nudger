@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { blur, fieldAt, invertField, luminanceField } from "./field";
+import { blur, luminanceField } from "./field";
 import { field, greyImage } from "./fixtures";
 
 describe("luminanceField", () => {
@@ -27,21 +27,6 @@ describe("luminanceField", () => {
   });
 });
 
-describe("invertField", () => {
-  it("flips light and dark", () => {
-    const out = invertField(field(3, 1, (x) => x / 2));
-    expect([...out.data]).toEqual([1, 0.5, 0]);
-  });
-
-  it("is its own inverse", () => {
-    const original = field(4, 4, (x, y) => (x + y) / 6);
-    const round = invertField(invertField(original));
-    for (let i = 0; i < original.data.length; i++) {
-      expect(round.data[i]!).toBeCloseTo(original.data[i]!, 6);
-    }
-  });
-});
-
 describe("blur", () => {
   it("returns a copy for a non-positive sigma", () => {
     const original = field(3, 3, (x) => x);
@@ -59,9 +44,10 @@ describe("blur", () => {
 
   it("spreads a single bright pixel into its neighbours", () => {
     const out = blur(field(9, 9, (x, y) => (x === 4 && y === 4 ? 1 : 0)), 1);
-    expect(fieldAt(out, 4, 4)).toBeLessThan(1);
-    expect(fieldAt(out, 5, 4)).toBeGreaterThan(0);
-    expect(fieldAt(out, 4, 4)).toBeGreaterThan(fieldAt(out, 5, 4));
+    const at = (x: number, y: number) => out.data[y * out.width + x]!;
+    expect(at(4, 4)).toBeLessThan(1);
+    expect(at(5, 4)).toBeGreaterThan(0);
+    expect(at(4, 4)).toBeGreaterThan(at(5, 4));
   });
 
   it("conserves total intensity", () => {
@@ -72,14 +58,5 @@ describe("blur", () => {
 
   it("handles a degenerate field", () => {
     expect(blur({ width: 0, height: 0, data: new Float32Array(0) }, 2).data).toHaveLength(0);
-  });
-});
-
-describe("fieldAt", () => {
-  it("reads outside the field as 0", () => {
-    const one = field(2, 2, () => 1);
-    expect(fieldAt(one, 0, 0)).toBe(1);
-    expect(fieldAt(one, -1, 0)).toBe(0);
-    expect(fieldAt(one, 2, 0)).toBe(0);
   });
 });
