@@ -40,6 +40,7 @@
 
 import type { BinaryMask } from "./binarize";
 import type { ScalarField } from "./field";
+import { GAP_FILLED, type GapLabels } from "./gaps";
 import type { LabelledSpace } from "./label";
 
 export type PointKind =
@@ -51,6 +52,15 @@ export type PointKind =
    * case for anything but the centreline itself.
    */
   | "ink"
+  /**
+   * Ink **this run invented** — the break repair filled it, and the map has no ink there.
+   *
+   * Worth its own kind rather than a clause on `"ink"`, because every word of the ink message is
+   * misdirection here: the luminance is light *because there is nothing there*, the local threshold
+   * did not call it ink, and the binariser is not wrong. The old answer sent a GM to tune the
+   * threshold when the control that did this is the break repair.
+   */
+  | "invented-ink"
   /**
    * Not ink, and nothing more can be said yet: no partition has been derived in this frame.
    *
@@ -99,6 +109,14 @@ export function readPoint(
   labelled: LabelledSpace | null,
   x: number,
   y: number,
+  /**
+   * Which pixels the break repair invented, if a repair ran.
+   *
+   * Optional beside `labelled` and for the same reason: it is the same lookup, and the whole value of
+   * this diagnostic is that it reports from the data that produced the picture rather than from a
+   * parallel path. `null` means no repair was running, not that nothing was invented.
+   */
+  gapLabels: GapLabels | null = null,
 ): PointReading {
   const px = Math.floor(x);
   const py = Math.floor(y);
@@ -109,11 +127,13 @@ export function readPoint(
   const i = py * mask.width + px;
   const luminance = field.data[i] ?? 0;
   const ink = mask.data[i] === 1;
+  const invented = ink && gapLabels !== null && gapLabels.data[i] === GAP_FILLED;
 
   // No partition to consult. The ink verdict is still worth reporting; the coverage question is not
   // answerable, and saying anything about it here would be inventing one.
   if (!labelled) {
-    return { x: px, y: py, kind: ink ? "ink" : "space", luminance, region: 0 };
+    const kind = invented ? "invented-ink" : ink ? "ink" : "space";
+    return { x: px, y: py, kind, luminance, region: 0 };
   }
 
   /*
@@ -125,6 +145,7 @@ export function readPoint(
     pixel is unlabelled only when it is a centreline pixel itself.
   */
   const region = labelled.labels[i] ?? 0;
+  if (invented) return { x: px, y: py, kind: "invented-ink", luminance, region };
   if (ink) return { x: px, y: py, kind: "ink", luminance, region };
 
   return { x: px, y: py, kind: region === 0 ? "unlabelled" : "region", luminance, region };
@@ -162,6 +183,12 @@ export function describePoint(reading: PointReading): string {
         `${at}${tone} is INK, and it sits inside face ${reading.region} — a face boundary is the ` +
         `wall's centreline, so about half a wall's thickness is inside the room beside it. This ` +
         `point IS covered.${inkTone}`
+      );
+    case "invented-ink":
+      return (
+        `${at}${tone} is ink this run INVENTED — the break repair filled it. The map has no ink ` +
+        `here, which is why the luminance is light, and the threshold did not put it there. If this ` +
+        `is wrong, lower the largest break to repair rather than touching the threshold.`
       );
     case "space":
       return (

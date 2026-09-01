@@ -3,16 +3,24 @@
  *
  * ## The failure this exists to catch
  *
- * Binarisation runs on luminance, so colour is thrown away (DESIGN.md §4). The live risk that
- * leaves is narrow and specific: **a filled area whose tone lands on the ink side of the threshold
- * becomes ink**, and ink is never a region and is never covered by anything. It renders as bare map
- * inside a room the GM has revealed, which is exactly what a hole looks like — so the symptom points
- * at the wrong stage, and the census cannot see it at all, because from the region statistics'
- * point of view nothing is wrong. The area simply never existed.
+ * Binarisation runs on luminance, so colour is thrown away (DESIGN.md §4). The live risk that leaves
+ * is narrow and specific: **a filled area whose tone lands on the ink side of the threshold becomes
+ * ink**. What happens next changed completely at the wall-graph pivot, and this module is worth
+ * keeping for the new consequence rather than the old one.
  *
- * A GM reported it as unfilled pockets and two stages were investigated before this one, so it is
- * worth a diagnostic that names the thing directly rather than leaving it to be deduced from a
- * coverage figure.
+ * A blob is thinned like any other ink, so its skeleton becomes **walls running through the middle of
+ * whatever room it sits in**, splitting one face into several. That is a merge failure's mirror image
+ * — a partition where there should be none — and the symptom on screen is a room broken into pieces
+ * around a feature that is not a wall.
+ *
+ * **The account this replaces described a mechanism that is gone twice over**, and it is deleted
+ * rather than corrected in place, per this project's convention. It said the area rendered as bare
+ * map inside a revealed room, because ink was never covered by a region. Under the graph a face
+ * boundary is a wall's centreline, so ink is mostly *inside* faces — and separately, removing the
+ * smallest-room control removed the bare-map path altogether, since nothing is discarded any more.
+ *
+ * A GM reported the original symptom as unfilled pockets and two stages were investigated before this
+ * one, which is why a diagnostic that names the thing directly earns its place either way.
  *
  * ## What separates a blob from linework, in two measures rather than one
  *
@@ -148,9 +156,10 @@ export function describeInkBlobs(blobs: readonly InkBlob[], rasterWidth: number,
     .join("; ");
 
   return (
-    `${blobs.length} compact ink blobs, which are filled shapes rather than strokes and are ` +
-    `therefore never covered by a region — ${listed}. Look at these on the map: a pillar or a block ` +
-    `of rubble is correct, a lightly-tinted feature is a tone falling on the ink side of the ` +
-    `threshold, which is the one thing discarding colour costs us`
+    `${blobs.length} compact ink blobs, which are filled shapes rather than strokes — ${listed}. ` +
+    `Each is thinned like any other ink, so its skeleton becomes walls running through whatever room ` +
+    `it sits in: look for a room split into pieces around one of these. A pillar or a block of ` +
+    `rubble is correct; a lightly-tinted feature is a tone falling on the ink side of the threshold, ` +
+    `which is the one thing discarding colour costs us`
   );
 }

@@ -69,7 +69,7 @@ import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
 import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
-import { applyGapFill, findGaps, type GapFinding } from "./trace/gaps";
+import { applyGapFill, findGaps, type GapFinding, type GapLabels } from "./trace/gaps";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { censusStats, describeCensus } from "./trace/regionCensus";
 import { describeAreaCheck } from "./trace/faces";
@@ -257,6 +257,8 @@ function readingIdentity(map: ImageItem, dpi: number, settings: Settings): strin
 let lastRun: {
   rawField: ScalarField;
   mask: BinaryMask;
+  /** Which pixels the repair invented, so the probe can tell them from the map's own ink. */
+  gapLabels: GapLabels;
   labelled: LabelledSpace;
   placement: RasterPlacement;
   pxPerSquare: number;
@@ -274,6 +276,7 @@ let lastRun: {
 let lastReading: {
   rawField: ScalarField;
   mask: BinaryMask;
+  gapLabels: GapLabels;
   pxPerSquare: number;
   name: string;
 } | null = null;
@@ -291,18 +294,18 @@ let lastReading: {
  */
 export function probeMapFraction(u: number, v: number): string {
   if (lastRun) {
-    const { rawField, mask, labelled, name } = lastRun;
+    const { rawField, mask, labelled, gapLabels, name } = lastRun;
     const line = describePoint(
-      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height),
+      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height, gapLabels),
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
   }
 
   if (lastReading) {
-    const { rawField, mask, name } = lastReading;
+    const { rawField, mask, gapLabels, name } = lastReading;
     const line = describePoint(
-      readPoint(rawField, mask, null, u * mask.width, v * mask.height),
+      readPoint(rawField, mask, null, u * mask.width, v * mask.height, gapLabels),
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
@@ -321,13 +324,13 @@ export function probeMapFraction(u: number, v: number): string {
 export function probeWorldPoint(x: number, y: number): string {
   if (!lastRun) return "Nothing traced yet in this session — run a trace first, then probe.";
 
-  const { rawField, mask, labelled, placement, name } = lastRun;
+  const { rawField, mask, labelled, gapLabels, placement, name } = lastRun;
   const rasterX =
     placement.unitsPerPixelX === 0 ? 0 : (x - placement.origin.x) / placement.unitsPerPixelX;
   const rasterY =
     placement.unitsPerPixelY === 0 ? 0 : (y - placement.origin.y) / placement.unitsPerPixelY;
 
-  const line = describePoint(readPoint(rawField, mask, labelled, rasterX, rasterY));
+  const line = describePoint(readPoint(rawField, mask, labelled, rasterX, rasterY, gapLabels));
   devLog("info", `probe: world (${x.toFixed(0)}, ${y.toFixed(0)}) on "${name}" — ${line}`);
   return line;
 }
@@ -984,6 +987,7 @@ export async function maskForOverlay(
   lastReading = {
     rawField: resolved.stage.rawField,
     mask: resolved.stage.mask,
+    gapLabels: resolved.stage.gaps.labels,
     pxPerSquare: resolved.stage.pxPerSquare,
     name: resolved.stage.name,
   };
@@ -1085,6 +1089,7 @@ export async function runTrace(
     rawField,
     reading,
     mask: inkMask,
+    gaps: inkGaps,
     chosenCoverage,
     name: mapName,
     mapId,
@@ -1123,7 +1128,15 @@ export async function runTrace(
   // served by the mask cache alone. The mask is the **ink**, so "is this ink?" still answers about
   // the linework; the labelling is the graph's, so "which region?" answers about the faces that were
   // actually emitted.
-  lastRun = { rawField, mask: inkMask, labelled, placement, pxPerSquare, name: mapName };
+  lastRun = {
+    rawField,
+    mask: inkMask,
+    gapLabels: inkGaps.labels,
+    labelled,
+    placement,
+    pxPerSquare,
+    name: mapName,
+  };
 
   const stats = censusStats(labelled, { pxPerSquare });
 

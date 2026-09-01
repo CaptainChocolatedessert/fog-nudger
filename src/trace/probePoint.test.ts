@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import { field as buildField, maskFromRows } from "./fixtures";
 import { labelSpace } from "./label";
 import { describePoint, readPoint } from "./probePoint";
+import { GAP_FILLED, GAP_NONE } from "./gaps";
 import { frameSkeleton } from "./wallGraph";
+
+/** Gap labels of the same size as a fixture, with the listed indices marked as repaired. */
+function repaired(width: number, height: number, indices: readonly number[]) {
+  const data = new Uint8Array(width * height).fill(GAP_NONE);
+  for (const index of indices) data[index] = GAP_FILLED;
+  return { width, height, data };
+}
 
 const rows = [
   "#####",
@@ -114,6 +122,29 @@ describe("readPoint", () => {
     expect(readPoint(wall.field, wall.ink, null, 4, 0).kind).toBe("space");
   });
 
+  it("separates ink the repair invented from ink the map has", () => {
+    /*
+      The composed mask is base ink plus whatever the repair filled, and the probe is handed the
+      composed one — so a repaired pixel used to come back as ordinary ink, with the "nearly white"
+      warning attached because the map genuinely has nothing there. Every clause of that answer was
+      misdirection: the threshold did not put it there, and the binariser is not wrong. It sent a GM
+      to the threshold when the control responsible is the break repair.
+
+      Reachable whenever the repair is on, and most likely to fire exactly when someone is probing to
+      find out why a wall looks odd.
+    */
+    const index = 3 * 9 + 4;
+    const labels = repaired(9, 7, [index]);
+
+    const invented = readPoint(wall.field, wall.ink, wall.labelled, 4, 3, labels);
+    expect(invented.kind).toBe("invented-ink");
+
+    // Its neighbour along the same wall is the map's own ink and must still read as ink.
+    expect(readPoint(wall.field, wall.ink, wall.labelled, 5, 3, labels).kind).toBe("ink");
+    // And with no repair running at all, nothing is invented.
+    expect(readPoint(wall.field, wall.ink, wall.labelled, 4, 3, null).kind).toBe("ink");
+  });
+
   it("says when the point missed the map altogether", () => {
     const labelled = labelSpace(mask);
     for (const [x, y] of [
@@ -164,6 +195,16 @@ describe("describePoint", () => {
     expect(line).toContain("border frame");
     expect(line).not.toContain("minimum area");
     expect(line).not.toContain("discarded");
+  });
+
+  it("sends a GM to the repair rather than the threshold for invented ink", () => {
+    const labels = repaired(9, 7, [3 * 9 + 4]);
+    const line = describePoint(readPoint(wall.field, wall.ink, wall.labelled, 4, 3, labels));
+
+    expect(line).toContain("INVENTED");
+    expect(line).toContain("break repair");
+    // The ink message's advice is the wrong advice here and must not appear.
+    expect(line).not.toContain("binariser is wrong");
   });
 
   it("flags ink that has no business being ink", () => {
