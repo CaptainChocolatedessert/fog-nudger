@@ -3,6 +3,12 @@
  *
  * The ring and path-command machinery it used to hold moved to `geometry/ring.ts` when the trace
  * pipeline needed the same types; what is left is the hand-built shapes the probe places.
+ *
+ * **NOT a candidate for an unreferenced-module sweep, and it looks like one.** The probe's spec
+ * table is unwired, so a reachability walk from the entry points finds nothing here — but
+ * `geometry/ring.test.ts` uses both functions as the fixtures for eleven assertions about
+ * `ringsToCommands`, `commandCount` and `doubleSignedArea`, all live emit-path code. The module has
+ * two jobs and only one of them is retired.
  */
 
 import type { Ring } from "../geometry/ring";

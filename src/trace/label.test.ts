@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { emptyMask, type BinaryMask } from "./binarize";
+import { maskFromRows } from "./fixtures";
 import { labelSpace } from "./label";
 
-/** `ink` returns true where the pixel is a wall; everything else is space to be labelled. */
+/**
+ * A predicate fixture, for the shapes a text grid cannot express.
+ *
+ * The standing rule is that fixtures are drawn as text grids — step 4 shipped two predicate
+ * fixtures that were wrong before its code was. **The small ones here are grids now**; what is left
+ * on this helper is deliberately past the size a grid can be read at: a 121-wide comb and a 61x61
+ * checkerboard, both of which are *about* being larger than anything anybody would draw by hand.
+ */
 function mask(
   width: number,
   height: number,
@@ -27,7 +35,15 @@ describe("labelSpace", () => {
   });
 
   it("separates two rooms divided by a wall", () => {
-    const labelled = labelSpace(mask(11, 5, (x) => x === 5));
+    const labelled = labelSpace(
+      maskFromRows([
+        ".....#.....",
+        ".....#.....",
+        ".....#.....",
+        ".....#.....",
+        ".....#.....",
+      ]),
+    );
     expect(labelled.regions).toHaveLength(2);
     expect(labelAt(labelled, 0, 2)).not.toBe(labelAt(labelled, 10, 2));
   });
@@ -35,7 +51,15 @@ describe("labelSpace", () => {
   it("joins two rooms through a gap in the wall", () => {
     // The doorway case, and the one the whole project is arranged around: a break in the ink means
     // revealing one room reveals the other.
-    const labelled = labelSpace(mask(11, 5, (x, y) => x === 5 && y !== 2));
+    const labelled = labelSpace(
+      maskFromRows([
+        ".....#.....",
+        ".....#.....",
+        "...........",
+        ".....#.....",
+        ".....#.....",
+      ]),
+    );
     expect(labelled.regions).toHaveLength(1);
     expect(labelAt(labelled, 0, 2)).toBe(labelAt(labelled, 10, 2));
   });
@@ -46,11 +70,22 @@ describe("labelSpace", () => {
     // through the diagonal while the ink also joins — the paradox from DESIGN.md §5. Space must be
     // 4-connected so the ink's diagonal counts as a seal.
     //
-    //   . . # .        ink on a diagonal from top-left to bottom-right
-    //   . # . .
-    //   # . . .
+    //
+    // The grid below used to live in this comment while the fixture was `x + y === size - 1`, which
+    // is the tell: it had to be drawn out by hand to be legible, which is what `maskFromRows` is
+    // for.
     const size = 7;
-    const labelled = labelSpace(mask(size, size, (x, y) => x + y === size - 1));
+    const labelled = labelSpace(
+      maskFromRows([
+        "......#",
+        ".....#.",
+        "....#..",
+        "...#...",
+        "..#....",
+        ".#.....",
+        "#......",
+      ]),
+    );
 
     expect(labelled.regions).toHaveLength(2);
     expect(labelAt(labelled, 0, 0)).not.toBe(labelAt(labelled, size - 1, size - 1));
@@ -71,7 +106,15 @@ describe("labelSpace", () => {
   });
 
   it("orders regions largest first and numbers them from 1", () => {
-    const labelled = labelSpace(mask(11, 5, (x) => x === 3));
+    const labelled = labelSpace(
+      maskFromRows([
+        "...#.......",
+        "...#.......",
+        "...#.......",
+        "...#.......",
+        "...#.......",
+      ]),
+    );
     expect(labelled.regions.map((r) => r.id)).toEqual([1, 2]);
     expect(labelled.regions[0]!.area).toBeGreaterThan(labelled.regions[1]!.area);
     // The ids must actually index the label map, not merely look tidy in the list.
@@ -133,7 +176,19 @@ describe("labelSpace", () => {
     // first rows and are only discovered to be the same region much later. A labeller that never
     // resolved its equivalences would report two regions here and look perfectly plausible doing it.
     const labelled = labelSpace(
-      mask(11, 11, (x, y) => x >= 4 && x <= 6 && y < 8),
+      maskFromRows([
+        "....###....",
+        "....###....",
+        "....###....",
+        "....###....",
+        "....###....",
+        "....###....",
+        "....###....",
+        "....###....",
+        "...........",
+        "...........",
+        "...........",
+      ]),
     );
     expect(labelled.regions).toHaveLength(1);
     expect(labelAt(labelled, 0, 0)).toBe(labelAt(labelled, 10, 0));

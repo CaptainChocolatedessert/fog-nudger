@@ -41,11 +41,16 @@ const JUNCTION_CLUSTER = [
 /**
  * One straight run with a one-pixel break in it.
  *
- * Two things about the spacing are deliberate, and both were got wrong first. The runs are **longer
- * than any radius tested**, or a run's own two ends weld to each other, which makes it a closed
- * nothing and drops it. And the whole thing is kept **further from the edge than the radius**, or
- * the run's end welds to the border frame and starts at (0, 0). Both are real behaviours; neither is
- * what these tests are about.
+ * **The spacing was deliberate for reasons that no longer exist.** Both were about welding: a short
+ * run's own two ends welded to each other and became a closed nothing, and a run near the edge
+ * welded to the border frame. The weld radius was deleted on 2026-08-30 — nothing here moves a
+ * point any more — so neither constraint binds for the reason it was written down.
+ *
+ * The margin is kept anyway, and the honest statement of why is weaker: `frameSkeleton` paints a
+ * one-pixel border, so a run *adjacent* to the edge would meet it as an ordinary junction and this
+ * fixture would be about two things at once. The run length is now arbitrary. Left as it is rather
+ * than tightened, because a fixture that still reads clearly costs nothing and re-deriving its
+ * minimum would be work in service of nothing.
  */
 const BROKEN_RUN = [
   "...................",

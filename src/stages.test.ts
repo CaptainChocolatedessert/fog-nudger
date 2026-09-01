@@ -1,9 +1,9 @@
 /**
  * The three stages, and the one property the cache boundary rests on.
  *
- * The stage declaration is read by two things that must not disagree: the panel, which decides
- * which tab a control appears on, and the pipeline, which decides whether a cached mask may be
- * reused. If they ever diverged the symptom would be a stage-two tweak silently deriving regions
+ * The stage declaration is read by two things that must not disagree: the workspace's accordion,
+ * which decides what a slider release recomputes, and the pipeline, which decides whether a cached
+ * mask may be reused. If they ever diverged the symptom would be a stage-two tweak silently deriving regions
  * from a stale reading and reporting them as current — a diagnostic that lies, which is the
  * failure this project has already paid for once.
  *
@@ -57,8 +57,8 @@ describe("the stage declaration", () => {
   });
 
   it("puts every stage to work", () => {
-    // An empty stage would be a tab with no controls on it, which is a structure claiming an
-    // ordering it does not have.
+    // An empty stage would be a step in the cascade with nothing in it, which is a structure
+    // claiming an ordering it does not have.
     for (const stage of STAGES) {
       expect(stageParameters(stage).length).toBeGreaterThan(0);
     }
@@ -86,8 +86,8 @@ describe("maskFingerprint", () => {
     /*
       The exclusion this rests on, stated as a property.
 
-      Spur pruning and the weld radius are reading-stage pipeline parameters, and since step D they
-      do feed the emit path — the faces are the graph's. What they still do not touch is the **mask**.
+      Spur pruning is a reading-stage pipeline parameter, and since step D it does feed the emit
+      path — the faces are the graph's. What they still do not touch is the **mask**.
       Leaving them in the mask fingerprint would throw away a cached mask and spend 690ms arriving at
       a byte-identical one.
 
@@ -118,8 +118,8 @@ describe("maskFingerprint", () => {
   });
 
   it("does NOT change for a reading-stage DISPLAY parameter", () => {
-    // The reason the two axes exist. The overlay's opacity sits on the reading tab because that is
-    // where the overlay is looked at, but it changes nothing the pipeline computes. Filing it as a
+    // The reason the two axes exist. The ink opacity sits in the Ink step because that is where the
+    // ink is looked at, but it changes nothing the pipeline computes. Filing it as a
     // reading parameter would throw away the cached mask and force a full re-binarisation every
     // time the GM nudged the slider — a second of work to arrive at an identical image.
     const base = maskFingerprint(DEFAULT_SETTINGS);
@@ -230,7 +230,7 @@ describe("readParameter and writeParameter", () => {
   it("round-trip every parameter, whichever group it is stored in", () => {
     // The stored shape keeps its two groups while the UI shows three stages, so these accessors are
     // the only thing bridging them. A parameter written to the wrong group would read back as its
-    // default and the panel would snap the slider back on the next repaint.
+    // default and the workspace would snap the slider back on the next repaint.
     for (const name of ALL_NAMES) {
       const value = otherValue(name);
       const written = writeParameter(DEFAULT_SETTINGS, name, value);

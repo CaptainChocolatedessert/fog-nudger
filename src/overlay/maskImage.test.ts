@@ -1,11 +1,15 @@
 /**
- * What the stage-one overlay actually paints.
+ * How the ink and break masks become pixels.
  *
  * Worth testing rather than eyeballing in a room, because the two ways this fails both look like
  * something else entirely. Ink painted at the wrong offset reads as the *pipeline* having found the
- * wall in the wrong place, which is the exact misreading the whole blank-and-restore design exists
- * to prevent — and a stale alpha left in a reused buffer paints the previous run's ink over the
- * current map, which reads as a working overlay that is simply wrong.
+ * wall in the wrong place — and a stale alpha left in a reused buffer paints the previous run's ink
+ * over the current map, which reads as a working layer that is simply wrong.
+ *
+ * (This said "the stage-one **overlay**", and named blank-and-restore as the design the first
+ * failure would defeat. The click-through overlay and all of its machinery were deleted on
+ * 2026-08-23; `paintMask` survived onto the workspace canvas, and both failures are still real
+ * there.)
  *
  * Fixtures are text grids, per the standing rule that nothing in this suite needs an image looked
  * at to know whether it passed.

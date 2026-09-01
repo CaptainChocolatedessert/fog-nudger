@@ -139,18 +139,24 @@ export interface GraphRegionResult {
   /**
    * Edges no emitted ring traverses — the walls that need a line of their own.
    *
-   * **This is narrower than the design record predicted, and the record is wrong on the point.** §4
-   * says a bridge can never be covered "because there is only one region there". That was reasoned
-   * from a region-first partition, where a room's outline does not visit a stub hanging into it.
-   * The half-edge traversal walks the stub **out and back as a slit inside the room's own ring**, so
-   * the geometry is there, and stroking it yields the wall. Demonstrated by a fixture: the room's
-   * emitted ring repeats the stub's tip.
-   *
-   * What is genuinely left over is smaller and different:
+   * **Every bridge is one**, plus two smaller cases:
    *
    * - **A free-floating piece of linework inside a face.** It forms a cycle of its own enclosing no
    *   area, which is not emitted as a ring, so nothing covers it.
-   * - **An edge with no emitted face on either side** — between two faces the minimum discarded.
+   * - **An edge with no emitted face on either side** — between two faces that hold no map.
+   *
+   * ## This doc argued the opposite until 2026-09-01, and the test beside it says so
+   *
+   * It claimed the design record was wrong to say a bridge can never be covered: the traversal walks
+   * a stub out and back as a slit inside the room's own ring, so the geometry is there and stroking
+   * it yields the wall — "demonstrated by a fixture: the room's emitted ring repeats the stub's
+   * tip". **Step E reversed that**, on the user's rejection of emitting the slit: it puts our
+   * internal representation into the scene, leaves Skia's stroking and Owlbear's storage to
+   * interpret a degenerate excursion, and produces something Owlbear's own tools cannot draw. The
+   * slit is dropped from the emitted ring and the bridge goes out as a `LINE`.
+   *
+   * The fixture the old argument appealed to now asserts the reverse — `graphRegions.test.ts` checks
+   * that the ring visits no vertex twice, and that `uncoveredEdges.length` equals the bridge count.
    *
    * Carried as fitted polylines in raster space, ready for placement.
    */

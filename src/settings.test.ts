@@ -10,7 +10,7 @@ import {
 
 describe("normaliseSettings", () => {
   it("returns the defaults for nothing at all", () => {
-    // Scene metadata is empty before a GM ever opens the panel, and every call goes through here.
+    // Scene metadata is empty before a GM ever opens the workspace, and every call goes through here.
     for (const nothing of [undefined, null, {}, { trace: {}, review: {} }]) {
       expect(normaliseSettings(nothing)).toEqual(DEFAULT_SETTINGS);
     }
@@ -34,8 +34,18 @@ describe("normaliseSettings", () => {
   });
 
   it("caps simplification below the bound that stops a boundary crossing a wall", () => {
-    // Half an ink width is where Douglas-Peucker stops being provably unable to carry a room's edge
-    // into the room next door. A control whose top end silently merges rooms is not a control.
+    /*
+      **A conservative bound whose original reason is gone — do not raise it without deriving a new
+      one.** Region-first, half an ink width was where Douglas–Peucker stopped being provably unable
+      to carry a room's edge into the room next door. Under the wall graph that cannot happen: the
+      boundary *is* the wall's centreline, both faces are assembled from the same fitted edge, and
+      they move together.
+
+      The cap stays because it is conservative, and the risk it now guards — a corner cut across a
+      doorway — **has not been derived**. Said plainly here because the comment this replaced gave a
+      causal justification a future session would check, find false, and use to justify raising a
+      cap `CLAUDE.md` says never to raise.
+    */
     expect(SETTING_LIMITS.simplifyInkWidths.max).toBeLessThan(0.5);
     expect(normaliseSettings({ trace: { simplifyInkWidths: 5 } }).trace.simplifyInkWidths).toBe(
       SETTING_LIMITS.simplifyInkWidths.max,
@@ -71,7 +81,7 @@ describe("normaliseSettings", () => {
   });
 
   it("keeps every default inside its own limits", () => {
-    // A default outside its control's range would be silently rewritten the first time the panel
+    // A default outside its control's range would be silently rewritten the first time the workspace
     // saved, which reads as the extension changing a setting nobody touched.
     expect(normaliseSettings(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
   });

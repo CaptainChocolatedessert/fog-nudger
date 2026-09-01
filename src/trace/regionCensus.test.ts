@@ -4,6 +4,15 @@ import { emptyMask, type BinaryMask } from "./binarize";
 import { labelSpace } from "./label";
 import { censusStats, describeCensus } from "./regionCensus";
 
+/**
+ * A predicate fixture rather than a text grid, and the choice is deliberate rather than drift.
+ *
+ * The standing rule is grids, because a predicate can be wrong before the code is — and `twoRooms`
+ * below is exactly that risk, which is why it carries five lines explaining what its perimeter has
+ * to be. What keeps it a predicate is size: at 40x20 a grid is a wall of text nobody proofreads,
+ * and the fixtures that matter here are about *areas*, which a reader checks by arithmetic rather
+ * than by looking. `label.test.ts`'s small fixtures went the other way, to grids, on 2026-09-01.
+ */
 function mask(
   width: number,
   height: number,
