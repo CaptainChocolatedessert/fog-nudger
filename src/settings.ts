@@ -543,41 +543,17 @@ export function isPostReading(name: SettingName): boolean {
   return POST_READING.includes(name);
 }
 
-/**
- * The stage the overlay's colour belongs to.
- *
- * Stated once rather than in each of the two places below. The colour is the one setting that is
- * not a number, so it sits outside `SETTING_LIMITS` and therefore outside `stageParameters` — which
- * means every function that walks a stage's parameters has to remember it separately. That is the
- * cost of having one non-numeric setting, and naming it here is cheaper than a second machinery.
- */
-const COLOUR_STAGE: Stage = "read";
+/*
+  `isStageDefault`, `resetStage` and the `COLOUR_STAGE` that served them were here until 2026-08-31.
 
-/** Whether one stage's parameters are all at their defaults, ignoring the other stages. */
-export function isStageDefault(settings: Settings, stage: Stage): boolean {
-  const normalised = normaliseSettings(settings);
-  const numbersMatch = stageParameters(stage).every(
-    (name) => readParameter(normalised, name) === readParameter(DEFAULT_SETTINGS, name),
-  );
-  const colourMatches =
-    stage !== COLOUR_STAGE ||
-    normalised.overlay.inkColour === DEFAULT_SETTINGS.overlay.inkColour;
-  return numbersMatch && colourMatches;
-}
+  They were the panel's per-stage reset. A.6 replaced them with `isStepDefault` and `resetStep` in
+  `steps.ts`, per *step* rather than per stage — the user's reason being that "the reading stage" is a
+  phrase about cache invalidation and had stopped naming anything a GM can see. The stage versions
+  were left behind with no caller at all.
 
-/** A copy of `settings` with one stage's parameters back to their defaults, leaving the rest alone. */
-export function resetStage(settings: Settings, stage: Stage): Settings {
-  const numbers = stageParameters(stage).reduce(
-    (accumulated, name) =>
-      writeParameter(accumulated, name, readParameter(DEFAULT_SETTINGS, name)),
-    settings,
-  );
-  if (stage !== COLOUR_STAGE) return numbers;
-  return {
-    ...numbers,
-    overlay: { ...numbers.overlay, inkColour: DEFAULT_SETTINGS.overlay.inkColour },
-  };
-}
+  `stageParameters` stays: `readingParameters()` uses it below, so it is live despite having no
+  external caller.
+*/
 
 function clamp(value: unknown, name: SettingName, fallback: number): number {
   const limits = SETTING_LIMITS[name];

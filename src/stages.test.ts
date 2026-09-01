@@ -15,7 +15,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SETTINGS,
-  isStageDefault,
   maskFingerprint,
   normaliseColour,
   normaliseSettings,
@@ -25,13 +24,11 @@ import {
   PARAMETER_STAGE,
   readingFingerprint,
   readParameter,
-  resetStage,
   SETTING_LIMITS,
   STAGES,
   stageParameters,
   writeParameter,
   type SettingName,
-  type Stage,
 } from "./settings";
 
 const ALL_NAMES = Object.keys(SETTING_LIMITS) as SettingName[];
@@ -260,58 +257,33 @@ describe("readParameter and writeParameter", () => {
   });
 });
 
-describe("isStageDefault and resetStage", () => {
-  it("judges one stage without regard to the others", () => {
-    // The two-tab version judged both reset buttons against the whole settings object, so editing
-    // the appearance left the reading's button live with nothing for it to do.
-    for (const stage of STAGES) {
-      const edited = stageParameters(stage).reduce(
-        (settings, name) => writeParameter(settings, name, otherValue(name)),
-        DEFAULT_SETTINGS,
-      );
-      expect(isStageDefault(edited, stage)).toBe(false);
-      for (const other of STAGES) {
-        if (other === stage) continue;
-        expect(isStageDefault(edited, other)).toBe(true);
-      }
-    }
-  });
-
-  it("puts one stage back without touching the rest", () => {
-    const everything = ALL_NAMES.reduce(
-      (settings, name) => writeParameter(settings, name, otherValue(name)),
-      DEFAULT_SETTINGS,
-    );
-
-    for (const stage of STAGES) {
-      const reset = resetStage(everything, stage);
-      for (const name of stageParameters(stage)) {
-        expect(readParameter(reset, name)).toBe(readParameter(DEFAULT_SETTINGS, name));
-      }
-      for (const name of ALL_NAMES) {
-        if (PARAMETER_STAGE[name] === stage) continue;
-        expect(readParameter(reset, name)).toBe(readParameter(everything, name));
-      }
-    }
-  });
-
-  it("recognises the untouched case for every stage", () => {
-    for (const stage of STAGES) {
-      expect(isStageDefault(DEFAULT_SETTINGS, stage)).toBe(true);
-    }
-  });
-
-  it("resetting the reading stage leaves the mask fingerprint at its default", () => {
-    // Stated as a tie between the two mechanisms rather than as two separate facts: whatever the
-    // reset does must be exactly what the cache considers a return to the default reading.
-    const edited = stageParameters("read").reduce(
+describe("putting the reading stage back", () => {
+  /**
+   * The one assertion that survived the deletion of `isStageDefault` and `resetStage`.
+   *
+   * Those two had no production caller — the per-*step* versions replaced them at A.6 — and went with
+   * pass 2's item 3.1. Their tests went with them, except this: it is a property of the **mask
+   * fingerprint**, which is live, that merely happened to be expressed through a dead helper. Whatever
+   * counts as putting the reading stage back must be exactly what the cache considers a return to the
+   * default reading, or a GM who resets lands on a fingerprint that reuses nothing.
+   *
+   * Built inline from `stageParameters("read")` rather than through a helper, so it tests the
+   * fingerprint rather than testing something else's idea of a reset.
+   */
+  it("leaves the mask fingerprint at its default", () => {
+    const reading = stageParameters("read");
+    const edited = reading.reduce(
       (settings: typeof DEFAULT_SETTINGS, name) => writeParameter(settings, name, otherValue(name)),
       DEFAULT_SETTINGS,
     );
     expect(maskFingerprint(edited)).not.toBe(maskFingerprint(DEFAULT_SETTINGS));
-    expect(maskFingerprint(resetStage(edited, "read" as Stage))).toBe(
-      maskFingerprint(DEFAULT_SETTINGS),
+
+    const restored = reading.reduce(
+      (settings: typeof DEFAULT_SETTINGS, name) =>
+        writeParameter(settings, name, readParameter(DEFAULT_SETTINGS, name)),
+      edited,
     );
+    expect(maskFingerprint(restored)).toBe(maskFingerprint(DEFAULT_SETTINGS));
   });
 });
 
@@ -343,19 +315,9 @@ describe("the overlay colour", () => {
     expect(mixed.overlay.inkOpacity).toBe(0.5);
   });
 
-  it("is put back by resetting the reading stage, being a reading-tab control", () => {
-    // The colour is not in SETTING_LIMITS, so every function that walks a stage's parameters has to
-    // remember it separately. This is the one that would be forgotten.
-    const edited = { ...DEFAULT_SETTINGS, overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" } };
-    expect(isStageDefault(edited, "read")).toBe(false);
-    expect(resetStage(edited, "read").overlay.inkColour).toBe(DEFAULT_SETTINGS.overlay.inkColour);
-  });
-
-  it("is left alone by resetting the other stages", () => {
-    const edited = { ...DEFAULT_SETTINGS, overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" } };
-    for (const stage of ["derive", "adjust"] as const) {
-      expect(isStageDefault(edited, stage)).toBe(true);
-      expect(resetStage(edited, stage).overlay.inkColour).toBe("#00ff00");
-    }
-  });
+  // Two tests about the colour surviving a per-STAGE reset lived here. They moved to
+  // `steps.test.ts` when `isStageDefault` and `resetStage` were deleted for having no production
+  // caller: the live reset is per *step*, and the hazard they guard — the colour being the one
+  // setting outside `SETTING_LIMITS`, so a parameter-walking function forgets it — is identical
+  // there. What stays here is the normaliser's own behaviour, which is this file's business.
 });

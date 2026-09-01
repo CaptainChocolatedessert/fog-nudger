@@ -89,15 +89,12 @@ export interface Step {
    * shape because the rendering is identical; what makes it different is that it has no mode.
    */
   readonly persistent?: true;
-  /**
-   * Declared, but its section is not on this surface yet — the panel still draws its controls.
-   *
-   * An explicit flag rather than "skip a step that would render empty", because the derived version
-   * would silently hide a step that legitimately has neither controls nor layers, and picking the map
-   * is exactly that. This one is loud and it has an end date: it goes when region derivation moves
-   * across and the panel shrinks to the actions that need the real scene in view.
-   */
-  readonly pending?: true;
+  /*
+    `pending` was here: a flag for a step whose controls the panel still drew. Its doc gave it an end
+    date — "it goes when region derivation moves across" — and A.5 did that. No step ever carried it
+    again, so `workspaceSteps` filtered on a field nobody set and its test's loop body never ran.
+    Deleted 2026-08-31.
+  */
 }
 
 /**
@@ -189,8 +186,9 @@ export const STEPS: readonly Step[] = [
     id: "regions",
     title: "Regions",
     blurb:
-      "Every enclosed area, in six colours so neighbours differ. This is what would be staged. " +
-      "Neither control can split or join a region — the reading already decided which rooms exist.",
+      "Every enclosed area, in six colours so neighbours differ. This is what goes on the map. " +
+      "The top two only change how it is drawn here; the third smooths the outlines. None of them " +
+      "can split or join a region — the ink and the walls above already decided which rooms exist.",
     /*
       The partition alone, with no ink under it.
 
@@ -277,13 +275,9 @@ export function resetStep(settings: Settings, id: StepId): Settings {
   };
 }
 
-export function findStep(id: StepId): Step | undefined {
-  return STEPS.find((step) => step.id === id);
-}
-
-/** The steps that are modes on the workspace: neither persistent nor still drawn by the panel. */
+/** The steps that are modes on the workspace: everything but the persistent View group. */
 export function workspaceSteps(): readonly Step[] {
-  return STEPS.filter((step) => !step.persistent && !step.pending);
+  return STEPS.filter((step) => !step.persistent);
 }
 
 /** Every parameter belonging to one step, in declaration order. */

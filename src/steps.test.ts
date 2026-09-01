@@ -28,8 +28,10 @@ import { describe, expect, it } from "vitest";
 import { CONTROLS } from "./controls";
 import {
   groupControls,
+  isStepDefault,
   LAYERS,
   PARAMETER_STEP,
+  resetStep,
   STEPS,
   stepControls,
   stepParameters,
@@ -37,11 +39,26 @@ import {
   workspaceSteps,
   type StepId,
 } from "./steps";
-import { isPostReading, PARAMETER_KIND, PARAMETER_STAGE, SETTING_LIMITS } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  isPostReading,
+  PARAMETER_KIND,
+  PARAMETER_STAGE,
+  readParameter,
+  SETTING_LIMITS,
+  writeParameter,
+} from "./settings";
 import type { SettingName } from "./settings";
 
 const ALL_NAMES = Object.keys(SETTING_LIMITS) as SettingName[];
 const DECLARED = new Set<StepId>(STEPS.map((step) => step.id));
+
+/** A value for a parameter that is guaranteed to differ from its default. */
+function otherValue(name: SettingName): number {
+  const limits = SETTING_LIMITS[name];
+  const current = readParameter(DEFAULT_SETTINGS, name);
+  return current === limits.max ? limits.min : limits.max;
+}
 
 describe("the step declaration", () => {
   it("assigns every parameter to exactly one declared step", () => {
@@ -80,16 +97,11 @@ describe("the step declaration", () => {
     expect(STEPS.filter((step) => step.persistent).length).toBe(1);
   });
 
-  it("keeps a pending step off the canvas as well as out of the accordion", () => {
-    // `pending` means the panel still draws this step's controls. Declaring layers for one would be
-    // a step that paints without being enterable — pixels on screen belonging to a mode the GM
-    // cannot get into.
-    for (const step of STEPS) {
-      if (!step.pending) continue;
-      expect(step.persistent).toBeUndefined();
-      expect(step.layers).toEqual([]);
-    }
-    expect(workspaceSteps().every((step) => !step.pending && !step.persistent)).toBe(true);
+  it("makes every step but the persistent one a mode on the workspace", () => {
+    // Replaces a test of the deleted `pending` flag, whose loop body never executed because no step
+    // ever carried it — it passed vacuously and would have kept passing with the flag inverted.
+    expect(workspaceSteps().every((step) => !step.persistent)).toBe(true);
+    expect(workspaceSteps()).toHaveLength(STEPS.length - 1);
   });
 
   it("shows every layer in at least one step", () => {
@@ -139,6 +151,90 @@ describe("a step's groups", () => {
     // The union of the steps must cover the control list, or a control is declared and never drawn.
     const drawn = STEPS.flatMap((step) => stepControls(step.id)).map((control) => control.name);
     expect([...drawn].sort()).toEqual(CONTROLS.map((control) => control.name).sort());
+  });
+});
+
+/**
+ * Per-step Defaults, ported from `stages.test.ts` when the stage-level twins were deleted.
+ *
+ * Those twins — `isStageDefault` and `resetStage` — had no production caller and went with pass 2's
+ * item 3.1. They were also the **only** coverage this logic had anywhere: the live per-step versions,
+ * which the accordion actually calls, were untested. Deleting the tests with the dead code would have
+ * left the working helpers with nothing.
+ *
+ * The colour case is the one that earns its place. `overlay.inkColour` is the single setting that is
+ * not a number, so it sits outside `SETTING_LIMITS` and every function walking a step's parameters
+ * has to remember it separately — which is exactly the kind of thing that gets forgotten.
+ */
+describe("per-step defaults", () => {
+  it("judges one step without regard to the others", () => {
+    for (const step of STEPS) {
+      const parameters = stepParameters(step.id);
+      if (parameters.length === 0) continue;
+
+      const edited = parameters.reduce(
+        (settings, name) => writeParameter(settings, name, otherValue(name)),
+        DEFAULT_SETTINGS,
+      );
+      expect(isStepDefault(edited, step.id), `${step.id} is edited`).toBe(false);
+      for (const other of STEPS) {
+        if (other.id === step.id) continue;
+        expect(isStepDefault(edited, other.id), `${other.id} is untouched`).toBe(true);
+      }
+    }
+  });
+
+  it("puts one step back without touching the rest", () => {
+    const everything = ALL_NAMES.reduce(
+      (settings, name) => writeParameter(settings, name, otherValue(name)),
+      DEFAULT_SETTINGS,
+    );
+
+    for (const step of STEPS) {
+      const reset = resetStep(everything, step.id);
+      for (const name of stepParameters(step.id)) {
+        expect(readParameter(reset, name), `${step.id}: ${name} restored`).toBe(
+          readParameter(DEFAULT_SETTINGS, name),
+        );
+      }
+      for (const name of ALL_NAMES) {
+        if (PARAMETER_STEP[name] === step.id) continue;
+        expect(readParameter(reset, name), `${step.id}: ${name} untouched`).toBe(
+          readParameter(everything, name),
+        );
+      }
+    }
+  });
+
+  it("recognises the untouched case for every step", () => {
+    for (const step of STEPS) {
+      expect(isStepDefault(DEFAULT_SETTINGS, step.id), step.id).toBe(true);
+    }
+  });
+
+  it("counts the ink colour as part of the Ink step, since nothing else would", () => {
+    // The colour is not in SETTING_LIMITS, so a step-walking function that only looked at numbers
+    // would report Ink as untouched with a changed colour, and its Defaults button would do nothing.
+    const edited = {
+      ...DEFAULT_SETTINGS,
+      overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" },
+    };
+
+    expect(isStepDefault(edited, "ink")).toBe(false);
+    expect(resetStep(edited, "ink").overlay.inkColour).toBe(DEFAULT_SETTINGS.overlay.inkColour);
+  });
+
+  it("leaves the ink colour alone when another step is reset", () => {
+    const edited = {
+      ...DEFAULT_SETTINGS,
+      overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" },
+    };
+
+    for (const step of STEPS) {
+      if (step.id === "ink") continue;
+      expect(isStepDefault(edited, step.id), step.id).toBe(true);
+      expect(resetStep(edited, step.id).overlay.inkColour, step.id).toBe("#00ff00");
+    }
   });
 });
 
