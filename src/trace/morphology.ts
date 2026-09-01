@@ -145,15 +145,17 @@ export function openMask(mask: BinaryMask, radius: number): BinaryMask {
 /**
  * Fill breaks narrower than about `2 * radius`, leaving everything else where it was.
  *
- * The exact inverse of the opening, and it is currently used for one thing only: **finding** the
- * narrow breaks, not sealing them. What the closing adds over the original mask is precisely the
- * set of channels too narrow to survive — cracks, seams, notches and enclosed pockets — which is
- * the candidate set the gap detector then sifts.
+ * The exact inverse of the opening, and it is used here for one thing only: **finding** the narrow
+ * breaks, not sealing them. What the closing adds over the original mask is precisely the set of
+ * channels too narrow to survive — cracks, seams, notches and enclosed pockets — which is the
+ * candidate set the gap detector then sifts.
  *
- * Nothing writes this back into the pipeline. When a bridging control eventually does, the danger
- * is the mirror image of the opening's and worse: an opening that severs a wall leaves a visible
- * absence, while a closing that seals a doorway looks like perfectly good wall. That is why the
- * marks are being built first.
+ * **The repair does write a subset of this back**, from `gaps.ts`: the pixels of the channels that
+ * were marked as breaks, and never the whole closing. That distinction is the safety property, and
+ * it is the answer to a danger this doc used to describe as prospective. The danger is the mirror
+ * image of the opening's and worse — an opening that severs a wall leaves a visible absence, while
+ * a closing that seals a doorway looks like perfectly good wall, and Dynamic Fog would then derive
+ * a wall across an open door. Keeping the whole closing would do exactly that, silently.
  */
 export function closeMask(mask: BinaryMask, radius: number): BinaryMask {
   if (radius <= 0) return mask;

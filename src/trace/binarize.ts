@@ -48,12 +48,16 @@ const DYNAMIC_RANGE = 0.5;
 
 export interface SauvolaOptions {
   /**
-   * Window radius in pixels. Wants to be comfortably larger than the linework is thick, so a stroke
-   * never fills its own window and become "the ground" locally.
+   * Window radius in **raster pixels**. Wants to be comfortably larger than the linework is thick,
+   * so a stroke never fills its own window and become "the ground" locally.
    *
-   * **Denominate this in ink width or grid squares, never in raster pixels.** Tying it to the raster
-   * is what made the sibling's resolution impossible to change afterwards (DESIGN.md §5). The dry
-   * run derives it from the scene's pixels-per-grid-square figure for exactly that reason.
+   * This doc used to say the opposite — denominate in ink width or grid squares, never in raster
+   * pixels — and both halves of that have since been decided the other way. §5's blanket rule was
+   * **amended**: units are chosen per parameter, and there is no unit that is always right. And
+   * **nothing in stage one may depend on the scene grid**, because a GM who does not need a grid
+   * leaves it at a default that has nothing to do with the map, which would move this window
+   * invisibly. The setting is `sauvolaRadiusPx`, named for the unit after a rename that was
+   * deliberately loud.
    */
   readonly radius: number;
   /**

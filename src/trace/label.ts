@@ -1,6 +1,12 @@
 /**
- * Connected-component labelling of the *space* — the non-ink pixels, which are the regions we
- * eventually emit as fog.
+ * Connected-component labelling of the *space* — the non-ink pixels.
+ *
+ * **What this produces is no longer what gets emitted.** Region-first it was: the components were
+ * traced and became the fog shapes. Under the wall graph the emitted geometry is fitted from the
+ * skeleton's own edges, and the labelling's remaining job is **topology rather than geometry** — it
+ * supplies each face's identity and the interior pixel count the area check compares against. It
+ * contributes no emitted point at all. The connectivity argument below is unaffected, and is still
+ * a correctness requirement.
  *
  * ## The connectivity pairing is a correctness requirement, not a tuning knob
  *
@@ -78,8 +84,11 @@ export interface LabelledSpace {
 
 export interface LabelOptions {
   /**
-   * Smallest region to keep, in pixels. Below this a region is dropped — not turned into ink, just
-   * never emitted, which leaves it permanently hidden and is correct for a sliver.
+   * Smallest component to keep, in pixels. Below this a component is dropped from `regions` and its
+   * label is zeroed — it is not turned into ink, and nothing downstream sees it. The old wording
+   * here said "never emitted, which leaves it permanently hidden and is correct for a sliver", and
+   * that described the smallest-room control: what it left behind was bare map inside a revealed
+   * room, which is the defect deleting the control resolved.
    *
    * **The region pipeline always passes 0**, and that is the whole of it since 2026-08-30: a face is
    * left out only when it holds no interior pixels, which is an invariant rather than a threshold.

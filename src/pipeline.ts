@@ -533,8 +533,10 @@ async function computeReading(
 
   // ## Luminance
   //
-  // The one measurement here that is not bookkeeping. Step 3 has to handle polarity, and this says
-  // what the ink and the ground on *this* map actually are rather than assuming dark-on-light.
+  // A shape summary of the image, not a polarity verdict. The verdict is the thinness comparison
+  // below; reading the ink off the minority class is the rule this project rejected, and printing
+  // both as though they were the same kind of statement is how a reader would come to trust the
+  // wrong one on the map where they disagree.
   const histogram = luminanceHistogram(pixels);
   const split = otsuSplit(histogram);
 
@@ -545,21 +547,24 @@ async function computeReading(
   );
 
   if (split) {
-    // The minority class is the ink on line art. Stated as a reading rather than a fact, because a
-    // share near a half means this is not line art at all and the whole interpretation is off.
+    // Tone distribution only. This deliberately no longer names ink or ground: it used to print
+    // "LIGHT ink on dark ground — step 3 must invert polarity", which is a verdict from the
+    // minority-class rule, in the same log as the real verdict from the thinness comparison, and
+    // naming a step that no longer exists. On a map with a dark exterior the two disagree and this
+    // one is the wrong one.
     const darkPercent = split.darkShare * 100;
     const reading =
       darkPercent < 35
-        ? "dark ink on light ground"
+        ? "mostly light"
         : darkPercent > 65
-          ? "LIGHT ink on dark ground — step 3 must invert polarity for this map"
-          : "neither class is a clear minority, so this may not be line art";
+          ? "mostly dark"
+          : "near an even split — this may not be line art";
     devLog(
       "info",
       `trace: global split at ${(split.threshold / 255).toFixed(3)} — ` +
         `${darkPercent.toFixed(1)}% dark (mean ${split.darkMean.toFixed(3)}) vs ` +
         `${(100 - darkPercent).toFixed(1)}% light (mean ${split.lightMean.toFixed(3)}); ` +
-        `reads as ${reading}`,
+        `tone is ${reading} (the polarity verdict is the thinness line below, not this)`,
     );
   } else {
     devLog(
@@ -728,12 +733,13 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
         `(${rawInk > 0 ? ((removed / rawInk) * 100).toFixed(1) : "0.0"}%).`,
     );
     // Named as a risk rather than reported as a number, because the number cannot distinguish a
-    // floor grid from a wall. Only the overlay can, which is the entire reason this control exists
-    // at all rather than remaining rejected.
+    // floor grid from a wall. Only looking at the mask can, which is the entire reason this control
+    // exists at all rather than remaining rejected.
     devLog(
       "warn",
       "trace: the minimum stroke width can sever a thin wall, which merges two rooms. Check the " +
-        "ink overlay for gaps in the linework, and watch the second-largest region below.",
+        "Ink step in the workspace for gaps in the linework, and watch the second-largest region " +
+        "below.",
     );
   } else if (settings.trace.minStrokeInkWidths > 0) {
     // The setting is on but rounds to nothing. Silence here would look identical to it working.

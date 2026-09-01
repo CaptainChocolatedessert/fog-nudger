@@ -1,15 +1,20 @@
 /**
  * Luminance statistics over a map's pixels.
  *
- * This is the one part of the dry run that is not bookkeeping. Roadmap step 3 has to handle
- * **polarity** — classic dungeon maps are frequently light ink on dark ground, and a binarizer
- * assuming dark-on-light produces the exact complement of the right answer, confidently and
- * completely (DESIGN.md §10). The histogram is how that stops being an assumption: it says what the
- * ink and the ground on *this* map actually are, measured, before any thresholding exists.
+ * **Polarity is NOT decided here, and this doc used to say it was.** Which class is the ink is
+ * settled by `polarity.ts`, from how *thin* each of the two readings comes out under erosion. The
+ * rule these statistics suggest — the ink is the minority class — was tried and rejected: it
+ * inverts a map drawn with a dark exterior, and this project's own test map is a near miss. That
+ * argument is written out at the top of `polarity.ts` and is the one to read.
  *
- * **This is not binarisation and does not pre-empt it.** Step 3 wants Sauvola, which is adaptive and
- * local. What is here is a global summary — a statistic to read in a log, not a mask to trace. The
- * two share no code and the global split below would be the wrong tool for the real job.
+ * What the histogram is *for* is a shape summary of the image, before any threshold exists: whether
+ * this is line art at all. A tone distribution near an even split means a photograph or a heavy
+ * textured render, and every reading taken from it is suspect — worth knowing before blaming the
+ * binariser.
+ *
+ * **This is not binarisation and does not pre-empt it.** Binarisation is Sauvola, which is adaptive
+ * and local. What is here is a global summary — a statistic to read in a log, not a mask to trace.
+ * The two share no code and the global split below would be the wrong tool for the real job.
  *
  * Pure: no DOM, no SDK.
  */
@@ -75,12 +80,14 @@ export interface LuminanceSplit {
 /**
  * Split the histogram in two by Otsu's method — the threshold maximising between-class variance.
  *
- * Reported so the histogram is actionable rather than 256 numbers. What it answers is the polarity
- * question in the form step 3 needs it: on a dungeon map the *ink is the minority class*, so a dark
- * share of a few per cent means dark-on-light and a dark share of most of the image means the map
- * is light ink on dark ground. A share near a half means neither, and is a signal that the image is
- * a photograph or a heavily textured render rather than line art — which is worth knowing before
- * blaming the binarizer.
+ * Reported so the histogram is actionable rather than 256 numbers. What it says is how the map's
+ * tone is distributed: mostly light, mostly dark, or near an even split. **It does not say which
+ * class is the ink.** Reading it that way — the ink is the minority — is the rejected rule; see
+ * the module doc, and `polarity.ts` for what replaced it.
+ *
+ * The value that survives is the middle case. A share near a half means the image is a photograph
+ * or a heavily textured render rather than line art, which is worth knowing before blaming the
+ * binariser for anything.
  *
  * Returns `null` for an empty histogram or one where every pixel is the same shade. Both are real
  * states of a broken or blank asset, and inventing a threshold for them would produce a number
