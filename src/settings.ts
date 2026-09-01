@@ -433,7 +433,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   strokeSquares: "display",
 };
 
-/** Every parameter belonging to one stage, in declaration order. */
+/** Every parameter belonging to one stage, in `SETTING_LIMITS`' declaration order. */
 export function stageParameters(stage: Stage): readonly SettingName[] {
   return (Object.keys(SETTING_LIMITS) as SettingName[]).filter(
     (name) => PARAMETER_STAGE[name] === stage,
@@ -543,7 +543,7 @@ export function isSkeletonOnly(name: SettingName): boolean {
   return GRAPH_ONLY.includes(name);
 }
 
-/** Every reading-stage pipeline parameter, in declaration order. */
+/** Every reading-stage pipeline parameter, in `SETTING_LIMITS`' declaration order. */
 function readingParameters(): readonly SettingName[] {
   return stageParameters("read").filter((name) => PARAMETER_KIND[name] === "pipeline");
 }

@@ -2005,9 +2005,16 @@ biases hardest against. The same averaging can also close a genuine doorway gap.
 real, they push in opposite directions, and which dominates on a given map is not predictable. At
 native resolution neither is introduced.
 
-The cost side inverts too. The sibling's downscale bought *thinning* — iterative and expensive per
-pixel — and thinning is exactly the stage we dropped. Fill and label is a couple of passes, and this
-runs GM-only, once per map, at prep time, where a slow answer is affordable.
+**The cost side does not invert, and this said it did until 2026-09-01.** The argument ran: the
+sibling's downscale bought *thinning*, and thinning is exactly the stage we dropped. Thinning came
+back at step C on 2026-08-29 — as the section above already says — and it is the most expensive
+stage after the reading, 428ms on the test map, growing roughly linearly in pixels. So a larger
+raster does cost more time.
+
+The decision stands on the benefit leg alone, and **the graph pivot strengthens that leg**: the
+centreline of a resampled stroke is not the centreline of the drawn one, and centrelines are now
+the emitted geometry rather than an intermediate. The time is affordable for its own reason — this
+runs GM-only, once per map, at prep time.
 
 **The cap is memory.** Roughly four bytes per pixel for the decoded image, one for the mask, four
 for the labels, inside a third-party iframe. The budget is stated in megapixels, reported on every

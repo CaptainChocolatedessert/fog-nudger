@@ -159,7 +159,16 @@ interface ReadingStage {
 }
 
 interface MaskStage extends ReadingStage {
-  /** Identity of the map and *all* the reading-stage settings. See `maskIdentity`. */
+  /**
+   * Identity of the map and *all* the reading-stage settings. See `maskIdentity`.
+   *
+   * **Named "fingerprint" and holding an identity**, which is the same mismatch `ReadingStage`'s own
+   * `fingerprint` field carries. Left as it is deliberately rather than renamed across both: the two
+   * are consistent with each other, the cache compares them for equality and nothing else, and a
+   * rename touching both stages buys a better word for a field no caller outside this file reads.
+   * `composeInk`'s parameter *was* renamed, because it shadowed the imported `maskFingerprint`
+   * function.
+   */
   readonly maskFingerprint: string;
   /**
    * The ink as **read**: the reading's mask after the two 1b filters, before anything is invented.
@@ -311,7 +320,7 @@ export function probeMapFraction(u: number, v: number): string {
     return line;
   }
 
-  return "Nothing read yet in this frame — wait for the ink, then click again.";
+  return "Nothing read yet in this session — wait for the ink, then click again.";
 }
 
 /**
@@ -612,7 +621,10 @@ async function computeReading(
   // it is the chosen thinness reinterpreted, not a second pass. Reported in both pixels and grid
   // squares, because the pixel figure is what the Sauvola window has to clear and the grid figure
   // is the one that means the same thing on the next map.
-  const window = radius * 2 + 1;
+  // `windowPx`, not `window`: this runs in a browser iframe, and a local named `window` shadows the
+  // global one for the rest of the scope. Nothing here wants the real `window`, so it worked — the
+  // next line that wants it would have got a number and no error.
+  const windowPx = radius * 2 + 1;
   if (reading.inkWidth === null) {
     devLog("warn", "trace: no ink at all in the chosen reading — nothing to measure or trace");
   } else {
@@ -620,17 +632,17 @@ async function computeReading(
     devLog(
       "info",
       `trace: ink width ~${reading.inkWidth.toFixed(1)}px (${squares.toFixed(3)} of a grid ` +
-        `square); Sauvola window ${window}px is ${(window / reading.inkWidth).toFixed(1)}x that. ` +
+        `square); Sauvola window ${windowPx}px is ${(windowPx / reading.inkWidth).toFixed(1)}x that. ` +
         `Biased thin and saturates at 2px — see inkMetrics.ts`,
     );
 
     // The condition the radius is supposed to satisfy, checked rather than assumed. A stroke that
     // fills a large share of its own window becomes the local *ground*, and Sauvola then declines
     // to call it ink — which loses exactly the heaviest linework on the map, silently.
-    if (window < reading.inkWidth * MIN_WINDOW_RATIO) {
+    if (windowPx < reading.inkWidth * MIN_WINDOW_RATIO) {
       devLog(
         "warn",
-        `trace: the Sauvola window (${window}px) is not comfortably wider than the ink ` +
+        `trace: the Sauvola window (${windowPx}px) is not comfortably wider than the ink ` +
           `(~${reading.inkWidth.toFixed(1)}px). Heavy linework can fill its own window and be ` +
           `read as ground. Raise the detail window.`,
       );
@@ -694,7 +706,7 @@ async function computeReading(
  * Synchronous, because everything here works on arrays already in hand. That is the same property
  * that lets it be re-run without re-reading the map.
  */
-function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: string): MaskStage {
+function composeInk(source: ReadingStage, settings: Settings, identity: string): MaskStage {
   const { plan, pxPerSquare, reading } = source;
 
   // ## Ink that is not linework
@@ -858,7 +870,7 @@ function composeInk(source: ReadingStage, settings: Settings, maskFingerprint: s
       `${describeInkBlobs(blobs, plan.width, plan.height)}`,
   );
 
-  return { ...source, maskFingerprint, base: filteredMask, mask: inkedMask, gaps };
+  return { ...source, maskFingerprint: identity, base: filteredMask, mask: inkedMask, gaps };
 }
 
 /**
@@ -1359,7 +1371,6 @@ export async function runTrace(
         `expected or a region that has merged into something enormous.`,
     );
   }
-
 
   // ## World placement
   //

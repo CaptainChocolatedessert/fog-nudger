@@ -85,6 +85,16 @@ export interface RasterPlan {
    * fractional ratio resamples different parts of the image against different sub-pixel phases,
    * which puts a beat pattern into linework of a consistent width — thinning it in some places and
    * not others, which is the leak this whole module is trying not to invent.
+   *
+   * **Integral to within one pixel over the image, not exactly.** The output size is a `floor`, so
+   * the *effective* ratio is `sourceWidth / floor(sourceWidth / factor)` — 2.0006 for a 3301-wide
+   * source at factor 2. One phase slip across the whole image, which is sub-pixel and almost
+   * certainly harmless, and `drawImage` resamples with the browser's own filter at any ratio
+   * anyway. Stated because the paragraph above reads as an exact claim and is not one.
+   *
+   * **Nothing has ever run this path.** The test map is 8.4 megapixels against a 16-megapixel
+   * budget, so `capped` has been false on every run this project has made. The first map that
+   * exceeds it exercises the reduction for the first time in a room.
    */
   readonly factor: number;
   /** Whether a limit bit. False means the raster is the image, pixel for pixel. */

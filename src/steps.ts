@@ -288,7 +288,14 @@ export function workspaceSteps(): readonly Step[] {
   return STEPS.filter((step) => !step.persistent);
 }
 
-/** Every parameter belonging to one step, in declaration order. */
+/**
+ * Every parameter belonging to one step, in `PARAMETER_STEP`'s declaration order.
+ *
+ * Named because `stageParameters` walks `SETTING_LIMITS` instead, and both docs used to say
+ * "in declaration order" — which reads as one shared order and is two different ones. Nothing
+ * depends on either: the UI takes its order from `CONTROLS`, and both callers here are
+ * order-independent.
+ */
 export function stepParameters(step: StepId): readonly SettingName[] {
   return (Object.keys(PARAMETER_STEP) as SettingName[]).filter(
     (name) => PARAMETER_STEP[name] === step,

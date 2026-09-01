@@ -68,6 +68,17 @@ export function formatDevLogLabel(
  * Stringify log arguments without throwing. Anything can end up in a log call — circular SDK
  * items, Errors, DOM events — and the shim losing a message is much worse than the message
  * being ugly, since the message is usually why we are looking.
+ *
+ * **`[Circular]` means "seen before", not necessarily "cycle".** The replacer marks every object it
+ * visits and reports any second sighting, where a real cycle is a repeat along the *ancestor path*.
+ * So `{ a: shared, b: shared }` — two properties pointing at one object, no cycle at all — logs
+ * `b` as `[Circular]` and its value is lost. Reachable in practice: SDK items sharing a style
+ * object, or one settings snapshot appearing twice in a call.
+ *
+ * Left as it is deliberately. Doing it properly needs a recursive serialiser holding its own
+ * ancestor set, because `JSON.stringify`'s replacer is never told when it *leaves* a subtree — real
+ * work against a bug whose whole cost is one log line. What was not acceptable was leaving a reader
+ * to believe `[Circular]` proves a cycle.
  */
 export function serializeArgs(args: readonly unknown[]): string[] {
   return args.map((arg) => {

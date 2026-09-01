@@ -54,6 +54,19 @@ describe("serializeArgs", () => {
     expect(serializeArgs([item])).toEqual(['{"id":"wall-1","self":"[Circular]"}']);
   });
 
+  it("also calls a merely repeated reference circular, which is a known cost", () => {
+    // Not a cycle: two properties pointing at one object. The replacer marks every object it visits
+    // and reports any second sighting, so the second copy is lost. Pinned rather than fixed — doing
+    // it properly needs a recursive serialiser with its own ancestor set, because `JSON.stringify`'s
+    // replacer is never told when it leaves a subtree, and the whole cost of the bug is one log
+    // line. This is here so the behaviour is a decision rather than a surprise, and so that fixing
+    // it later is a deliberate change to a test rather than a silent one.
+    const shared = { colour: "#ff2020" };
+    expect(serializeArgs([{ a: shared, b: shared }])).toEqual([
+      '{"a":{"colour":"#ff2020"},"b":"[Circular]"}',
+    ]);
+  });
+
   it("renders primitives that JSON.stringify handles badly", () => {
     expect(serializeArgs([undefined, null, NaN, 10n])).toEqual([
       "undefined",
