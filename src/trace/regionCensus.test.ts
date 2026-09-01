@@ -97,7 +97,10 @@ describe("describeCensus", () => {
 
   it("leads with the count and the shares", () => {
     const line = describeCensus(censusStats(twoRooms(), { pxPerSquare: 10 }));
-    expect(line).toMatch(/^3 regions covering/);
+    // "faces", not "regions", and it names what the remainder is. The figure's complement used to be
+    // the ink and is now the one-pixel skeleton, so a line inviting the old comparison misleads.
+    expect(line).toMatch(/^3 faces covering/);
+    expect(line).toContain("centreline skeleton");
     expect(line).toMatch(/largest first/);
     // Nothing about the border: the census is only handed the labelling of a *framed* skeleton, whose
     // outer row and column are ink, so no labelled pixel can touch the raster edge and the count was

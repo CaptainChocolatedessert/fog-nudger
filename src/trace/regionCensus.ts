@@ -44,7 +44,23 @@ export interface CensusOptions {
 
 export interface CensusStats {
   readonly count: number;
-  /** Share of the raster held by surviving regions, 0–1. */
+  /**
+   * Share of the raster held by the faces, 0–1 — a **skeleton-density** readout, not an ink one.
+   *
+   * **Its meaning changed at the wall-graph pivot and the wording did not**, which made it worse than
+   * merely uninformative. Region-first, the complement of this figure was the ink: "269 regions
+   * covering 92.7%" sat beside "ink 7.2%" and the two were one fact. The labelling now runs on
+   * `graph.framed`, so the complement is the one-pixel skeleton plus the border frame — around 0.5%
+   * of any raster, on any map. The number jumped about seven points for reasons that have nothing to
+   * do with the map, and `CLAUDE.md`'s recorded 92.7% is not comparable to anything a run prints now.
+   *
+   * Still worth having, read as what it is: a thinned skeleton is a roughly constant share of a
+   * raster, so a figure well away from ~99.5% means the thinning or the framing did something odd.
+   *
+   * **The merge alarm is unaffected.** That is the *second-largest* share in `topShares` — 1.5%
+   * healthy, 5–15% meaning rooms have leaked together — and it still measures exactly what it did.
+   * So do `roomSized` and `medianSquares`. Only this one moved.
+   */
   readonly coverage: number;
   /** Largest-first shares of the raster, one per region, truncated to `top`. */
   readonly topShares: readonly number[];
@@ -113,7 +129,8 @@ export function describeCensus(stats: CensusStats): string {
   const shares = stats.topShares.map(percent).join(", ");
 
   return (
-    `${stats.count} regions covering ${percent(stats.coverage)} of the raster; ` +
+    `${stats.count} faces covering ${percent(stats.coverage)} of the raster ` +
+    `(the rest is the centreline skeleton); ` +
     `largest first ${shares}; ` +
     `${stats.roomSized} at least a grid square, median ${stats.medianSquares.toFixed(2)} sq`
   );
