@@ -43,16 +43,22 @@ import {
   type Settings,
 } from "./settings";
 
-/** Every step that exists today. Six are designed; the rest arrive with the code that needs them. */
+/**
+ * Every step that exists today.
+ *
+ * The A-plan designed six — map, ink, walls, edit walls, regions, doors — and these five are what has
+ * been built; "edit walls" arrives with step G and doors stay with Dynamic Fog entirely. `view` is not
+ * one of the six: it is the persistent group, which is a step's shape without a mode.
+ */
 export type StepId = "map" | "ink" | "walls" | "regions" | "view";
 
 /**
  * What the canvas can draw over the map.
  *
- * A step declares which of these it shows, and they legitimately differ: the ink steps paint the
- * binary mask, and the wall and region steps to come will paint linework and coloured faces over a
- * map with no mask on it at all. Nothing is drawn "because it exists" — a layer is on screen because
- * the step the GM is in is about it.
+ * A step declares which of these it shows, and they legitimately differ: Ink paints the binary mask,
+ * Walls paints linework over it, and Regions paints coloured faces over a map with no mask at all.
+ * Nothing is drawn "because it exists" — a layer is on screen because the step the GM is in is about
+ * it.
  */
 export const LAYERS = ["ink", "breaks", "skeleton", "regions"] as const;
 

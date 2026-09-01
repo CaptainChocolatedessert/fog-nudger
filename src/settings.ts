@@ -1,26 +1,27 @@
 /**
- * The knobs a GM can turn, and the two stages they belong to.
+ * The knobs a GM can turn, and the three stages they belong to.
  *
  * ## Why the split is architectural rather than cosmetic
  *
- * The binary mask determines the partition **completely**. Connected-component labelling has one
- * choice in it — the connectivity pairing — and that is forced by the diagonal-leak paradox, so it
- * is a correctness requirement rather than a knob. Nothing downstream of the mask can split or join
- * a region: the minimum-area filter only *deletes*, simplification is bounded below half an ink
- * width so it cannot change topology, and tracing and placement are exact.
+ * The ink determines the partition **completely**. What the rooms are is settled by the time the
+ * skeleton is thinned from it: connected-component labelling has one choice in it — the connectivity
+ * pairing — and that is forced by the diagonal-leak paradox, so it is a correctness requirement
+ * rather than a knob. Nothing after the graph can split or join a region: simplification is bounded
+ * so it cannot change topology, and fitting and placement are exact.
  *
- * So every parameter that decides *what the rooms are* acts on the mask, and every parameter that
- * acts after it is either a filter or a finish. That is the whole reason for two stages:
+ * So every parameter that decides *what the rooms are* acts on the ink or the graph, and every
+ * parameter after that is a finish. The three stages are the cascade that falls out of it — what a
+ * change **destroys**:
  *
- * - **Reading the map** — what is a wall. Changing any of these recomputes the partition wholesale,
- *   which by construction discards anything the GM has edited by hand.
- * - **Editing the regions** — what the GM wants, which no amount of mask work can express: merge
- *   these two because they are one room to me, do not fog that at all, show me the proposals
- *   differently while I judge them.
+ * - **read** — what is a wall. Recomputes the partition wholesale, discarding everything after it.
+ * - **derive** — how the boundaries are drawn from a partition that is already decided. Regenerates
+ *   every polygon from the same ink, so it discards hand edits but not the reading.
+ * - **adjust** — how the result is *shown* while it is judged. Destroys nothing.
  *
- * The ordering is therefore forced, not advisory: stage one destroys stage two's work every time it
- * runs. DESIGN.md §9 step 9 has carried "a re-run destroys hand edits" as an open problem; the
- * answer is not to engineer around it but to make the sequence visible.
+ * The ordering is forced rather than advisory: `read` destroys `derive`'s work every time it runs.
+ * The answer to that has never been to engineer around it but to make the sequence visible — which
+ * is what the workspace's steps do, and what the two-stage editing model settled for good (see
+ * `DESIGN.md` under step G: pixel edits, then a frozen graph, with a one-way door between them).
  *
  * ## Everything is validated, because nothing here is trusted
  *
@@ -157,14 +158,6 @@ export interface TraceSettings {
    * through, which is the most eager the detector gets.
    */
   readonly gapTravelPx: number;
-  /**
-   * Smallest area kept as a room, in grid squares.
-   *
-   * Guards against hatching, speckle and the slivers a picked-up floor grid leaves. It can only
-   * delete, never re-partition — and what it deletes is left as bare map inside a revealed room
-   * unless a filled hole happens to reach it. §5's bias favours setting it low: a spurious region
-   * costs one click, a bare patch is a visible defect.
-   */
   /**
    * The longest dead-end branch spur pruning will remove from the skeleton, in raster pixels walked.
    *
@@ -330,15 +323,28 @@ export type SettingName = keyof typeof SETTING_LIMITS;
  * every polygon from the same mask, so it discards hand edits but not the reading. Nothing in
  * `adjust` destroys anything.
  *
- * The split between the first two is not stylistic. The mask determines the partition completely —
+ * The split between the first two is not stylistic. The ink determines the partition completely —
  * labelling's one choice is forced by the diagonal-leak paradox — so nothing in `derive` can split
- * or join a region. What it *can* do is delete a region and, through the containment rule, absorb
- * the space it held into whatever encloses it. That is abstraction, not reading, which is why the
- * minimum-area filter and the simplification tolerance sit here rather than beside the threshold.
+ * or join a region. That is abstraction rather than reading, which is why the simplification
+ * tolerance sits here rather than beside the threshold.
+ *
+ * The minimum-area filter was the other member and the one that *established* the distinction: it
+ * could delete a region and, through the containment rule, absorb the space it held into whatever
+ * enclosed it — which is a change to surviving polygons, not a pure delete, and therefore not a
+ * reading operation. The control was removed on 2026-08-30; the argument it settled is why the line
+ * is drawn here.
  */
 export type Stage = "read" | "derive" | "adjust";
 
-/** In order. The order is the cascade, and every part of the UI depends on it being this way round. */
+/**
+ * In order, and the order **is** the cascade: read destroys derive and adjust, derive destroys adjust.
+ *
+ * No production code reads this array — the UI reads `PARAMETER_STAGE` and `PARAMETER_STEP`, and the
+ * cache invalidation reads the fingerprints. What it is for is stating the cascade in one place so a
+ * test can pin it, and so that "the three stages" is checkable rather than remembered. It said "every
+ * part of the UI depends on it being this way round", which was true of the panel's stage tabs and
+ * stopped being true when they were deleted at A.6.
+ */
 export const STAGES = ["read", "derive", "adjust"] as const;
 
 /**

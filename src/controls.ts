@@ -38,14 +38,6 @@ export interface Measured {
   readonly inkWidth: number | null;
 }
 
-/**
- * The controls, in the order a GM meets them, with a hint saying which way to turn each one.
- *
- * The hints exist because every one of these is a number whose direction is not guessable —
- * raising Sauvola's `k` makes *less* ink, which is the opposite of what "sensitivity" suggests to
- * most people. A control whose direction you have to discover by experiment is a control that gets
- * turned once and left alone.
- */
 /*
   What a control says, and nothing about where it lives.
 
@@ -75,7 +67,12 @@ export interface Control {
 }
 
 /**
- * Every control, in the order a GM meets them.
+ * Every control, in the order a GM meets them, each with a hint saying which way to turn it.
+ *
+ * **The hints are not decoration.** Every one of these is a number whose direction is not guessable —
+ * raising Sauvola's `k` makes *less* ink, which is the opposite of what "sensitivity" suggests to
+ * most people. A control whose direction you have to discover by experiment is a control that gets
+ * turned once and left alone.
  *
  * One list rather than one per surface: which stage a control belongs to is read from the stage
  * declaration in `settings.ts`, which is the same declaration the pipeline's cache invalidation

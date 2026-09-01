@@ -210,10 +210,13 @@ let cachedMask: MaskStage | null = null;
  * used to reject the correct answer. Recomputing needlessly costs 690ms; reusing wrongly costs a
  * diagnostic that lies.
  *
- * So this covers every input to the mask: the map's identity and geometry, the scene's grid (which
- * sets pixels-per-square and therefore the Sauvola radius), and the reading parameters. Owlbear's
- * own `lastModified` would very likely cover the geometry on its own, but it is undocumented
- * bookkeeping and the explicit fields cost nothing but a string concatenation.
+ * So this covers every input to the mask, plus the scene's grid, which is **not** one — and the
+ * distinction is worth keeping straight because a comment here used to get it wrong. The Sauvola
+ * window has been in raster pixels since 2026-08-23, so the grid cannot change the mask: `dpi` reaches
+ * only log lines, the island warning's gate, and a reporting fallback. It stays in the fingerprint
+ * for the reason stated three lines up — over-broad is the safe direction, since a wrong reuse
+ * reports a stale mask as current — and it costs a string concatenation. Owlbear's own `lastModified`
+ * would very likely cover the geometry on its own, but it is undocumented bookkeeping.
  */
 function mapIdentity(map: ImageItem, dpi: number): string {
   return [
@@ -445,20 +448,14 @@ export type TraceOutcome =
   | { readonly ok: true; readonly run: TraceRun };
 
 /**
- * Stage one — read the map. Everything from the image to the binary mask, and nothing after it.
- *
- * Split out for one reason: it is the expensive half and it depends on none of the deriving
- * parameters, so `runTrace` can skip it when the map and the reading settings are unchanged. It is
- * not a separate mode and has no caller but `runTrace` — the chain stays one implementation.
- *
- * Returns `null` on the two failures a GM can act on, having already logged which one it was.
- */
-/**
  * The expensive half: turn the map into a binary mask, and measure what it is made of.
  *
  * Ends deliberately at the last thing that reads the *image*. Everything after this point works on
  * the mask alone — filters, repairs, and eventually the GM's own suppression and ink — which is what
- * makes this the right place to cache.
+ * makes this the right place to cache. It is not a separate mode: `resolveMask` is its only caller,
+ * so the chain stays one implementation.
+ *
+ * Returns `null` on exactly one condition — `loadMapRaster` finding nothing to read.
  */
 async function computeReading(
   map: ImageItem,
@@ -936,9 +933,10 @@ export interface MaskForOverlay {
 /**
  * Run stage one alone, for the overlay.
  *
- * **Not a third mode, and not a second implementation.** `computeMask` is already a discrete
+ * **Not a third mode, and not a second implementation.** `resolveMask` is already a discrete
  * function with `runTrace` as its caller; this adds a second caller to the *same* function rather
- * than a second copy of the chain. The distinction is the one the sibling paid for: what must never
+ * than a second copy of the chain — and to the same pair of caches, which matters as much, since two
+ * callers with two caches would disagree about what is current. The distinction is the one the sibling paid for: what must never
  * be duplicated is the chain, because a duplicate drifts and then disagrees with a real room in a
  * direction nobody can account for.
  *
@@ -1041,9 +1039,10 @@ export async function runTrace(
     };
   }
 
-  // One SDK call, made before deciding anything, because the grid sets pixels-per-square and
-  // therefore the Sauvola radius — a regridded scene needs a fresh mask even though the map image
-  // has not changed.
+  // One SDK call, made before deciding anything, because the *deriving* half and every log line
+  // need it. Not because the mask does: the Sauvola window is in raster pixels, so the grid cannot
+  // change what is read. It is still in the mask fingerprint, deliberately over-broad — see
+  // `mapIdentity`.
   const dpi = await readGridDpi();
 
   const resolved = await resolveMask(map, dpi, settings);
