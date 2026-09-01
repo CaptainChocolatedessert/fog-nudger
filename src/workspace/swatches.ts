@@ -44,12 +44,23 @@ export function renderSwatches(body: HTMLElement): void {
   const container = document.createElement("div");
   container.className = "swatches";
 
+  // Built before the swatches so they can write into it, appended after so it still sits at the end
+  // of the row.
+  const picker = document.createElement("input");
+  picker.type = "color";
+  picker.disabled = !controlsLive();
+  picker.value = normaliseColour(currentSettings().overlay.inkColour, DEFAULT_SETTINGS.overlay.inkColour);
+
   for (const swatch of INK_SWATCHES) {
     const button = document.createElement("button");
     button.style.background = swatch.value;
     button.title = swatch.name;
     button.addEventListener("click", () => {
       setInkColour(swatch.value);
+      // The picker is the readout of the current colour as well as a way to set one, so a swatch
+      // that left it showing the previous colour made the row disagree with itself until the next
+      // rebuild of the panel.
+      picker.value = swatch.value;
       void persistSettings();
     });
     container.append(button);
@@ -57,10 +68,6 @@ export function renderSwatches(body: HTMLElement): void {
 
   for (const button of container.querySelectorAll("button")) button.disabled = !controlsLive();
 
-  const picker = document.createElement("input");
-  picker.type = "color";
-  picker.disabled = !controlsLive();
-  picker.value = normaliseColour(currentSettings().overlay.inkColour, DEFAULT_SETTINGS.overlay.inkColour);
   // Live on `input`, saved on `change`: a colour costs a buffer rewrite rather than a re-read, so
   // there is nothing to be gained by making the GM let go to see it.
   picker.addEventListener("input", () => setInkColour(picker.value));

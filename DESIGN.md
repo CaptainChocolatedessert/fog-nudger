@@ -3271,7 +3271,10 @@ Both halves are answered and the full results are in §4 under "The workspace pr
 - **The surface owns its input.** Pointer, wheel and right-click are ours with no leak to Owlbear,
   against a detector made to fail before its zero was believed. The keyboard is *taken rather than
   given* — until claimed, every keystroke reaches Owlbear's page — and claiming it succeeds on the
-  first try, about 150ms in. `hidePaper` changes nothing.
+  first try, about 16ms after this page's own script starts. `hidePaper` changes nothing. (This
+  summary said 150ms until 2026-09-01, against §4's detailed record of 16ms. The figure that
+  matters to a GM is neither: the dead window is the iframe's **load**, 2,396ms cold and 166ms
+  warm.)
 - **The navigation feels right**, at **12% per mouse notch** and **1.00% per trackpad pixel**, and it
   opens on the view Owlbear was already showing so nothing jumps.
 - **Frame cost is negligible** — 0.1ms of a 16.7ms frame with both map-sized layers.

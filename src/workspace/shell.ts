@@ -360,7 +360,16 @@ if (canvas instanceof HTMLCanvasElement) {
   let pressed: { x: number; y: number } | null = null;
   let moved = false;
 
+  // Firefox opens its own menu over an opaque sheet otherwise. The workspace probe suppressed this
+  // and the workspace did not inherit it.
+  canvas.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+
   canvas.addEventListener("pointerdown", (event) => {
+    // Left button only. Without this a right-click started a pan and, on release without moving,
+    // fired the point probe as well — two things nobody asked for from one gesture.
+    if (event.button !== 0) return;
     pressed = { x: event.clientX, y: event.clientY };
     moved = false;
     // Ctrl pans in any step, which is what keeps a pan available once the plain drag is a brush.
@@ -590,7 +599,11 @@ document.getElementById("toggle-panel")?.addEventListener("click", (event) => {
   panel?.classList.toggle("hidden");
   const button = event.currentTarget;
   if (button instanceof HTMLButtonElement) {
-    button.setAttribute("aria-pressed", String(!panel?.classList.contains("hidden")));
+    const showing = !panel?.classList.contains("hidden");
+    button.setAttribute("aria-pressed", String(showing));
+    // The tooltip says what pressing it will do, so it has to swap with the state. It was
+    // permanently "Hide the controls", including while they were hidden.
+    button.title = showing ? "Hide the controls" : "Show the controls";
   }
   dirty = true;
 });
@@ -605,9 +618,13 @@ window.addEventListener("keydown", (event) => {
  * Claim the keyboard, immediately and then until it sticks.
  *
  * Measured: this modal is given no keyboard at all until it asks, and every keystroke before that
- * reaches Owlbear's page and does whatever it does there. Asking succeeds on the first try about
- * 150ms in, and one attempt is not enough because a frame not yet ready to take focus refuses it
- * silently.
+ * reaches Owlbear's page and does whatever it does there. Asking normally succeeds on the **first**
+ * attempt, within a frame or two of this script starting; the retry is insurance against a frame not
+ * yet ready to take focus, which refuses silently.
+ *
+ * (The previous wording said "succeeds on the first try about 150ms in", which cannot be both. 150ms
+ * is a summary figure; the detailed measurement is about 16ms after the page's own script starts,
+ * and the *dead window* a GM experiences is the iframe's load, not the claim.)
  */
 function claimKeyboard(attempt = 0): void {
   // `leaving`, not `closing`: once the GM has asked to go there is nothing left to claim the

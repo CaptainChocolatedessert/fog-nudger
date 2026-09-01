@@ -47,10 +47,26 @@ export async function loadSettings(): Promise<Settings> {
   return settings;
 }
 
+/**
+ * Where a failed write gets reported, supplied by whoever owns a state line.
+ *
+ * The whole of a GM's tuning is in that write, and it used to reach the dev log and nothing else —
+ * against the standing rule that the log is not a channel to anyone. This module is deliberately
+ * DOM-free and cannot `say` anything itself, so the reporter is registered from the composition root
+ * the same way the shell's close action is. Unset is a legitimate state: nothing is lost, the log
+ * still has it, and there is simply nowhere to put it yet.
+ */
+let reportFailure: ((message: string) => void) | null = null;
+
+export function onSettingsWriteFailure(report: (message: string) => void): void {
+  reportFailure = report;
+}
+
 export async function persistSettings(): Promise<void> {
   try {
     await writeSettings(settings);
   } catch (error) {
     devLog("error", "workspace: could not save settings", describeError(error));
+    reportFailure?.("could not save your settings — this tuning will not survive a reload");
   }
 }

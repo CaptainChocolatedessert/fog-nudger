@@ -25,6 +25,7 @@ import {
   mapSignature,
   nominateMap,
   readNominatedMapId,
+  type MapImageSummary,
 } from "../map/mapImage";
 import { loadNominatedMap } from "./mapSource";
 import { say } from "./shell";
@@ -42,6 +43,22 @@ let list: HTMLElement | null = null;
  * rows are drawn as "waiting for the scene" and filled once, from the start-up sequence.
  */
 let live = false;
+
+/**
+ * The last answer the scene gave, kept so a rebuild can draw it immediately.
+ *
+ * The accordion rebuilds **every** step's body on every `renderPanel()` — which is every header
+ * click and every Defaults press — and that is deliberate and earns its keep elsewhere. The cost
+ * lands here alone, because this is the one step whose body is a query rather than a set of numbers:
+ * without this the list reverted to "Waiting for the scene…" and fired a fresh `listMapImages()`
+ * four times over a click through the four steps, each one a `getItems` plus a bounds measurement of
+ * every map-layer image in the scene.
+ *
+ * Drawing the known rows first does not remove the query — `refreshMaps` still runs and still
+ * replaces them, which is what keeps the list honest when the scene has changed underneath. It
+ * removes the *flash*, which is the part a GM sees.
+ */
+let known: { readonly maps: readonly MapImageSummary[]; readonly selected: string } | null = null;
 
 /** One choosable row. Built as DOM rather than markup so a map's name cannot be read as HTML. */
 function mapRow(value: string, name: string, note: string, checked: boolean): HTMLLabelElement {
@@ -66,6 +83,22 @@ function mapRow(value: string, name: string, note: string, checked: boolean): HT
   return label;
 }
 
+/** Draw one row per map, with the trace's choice marked. */
+function drawRows(
+  container: HTMLElement,
+  maps: readonly MapImageSummary[],
+  selected: string,
+): void {
+  for (const map of maps) {
+    const notes = [
+      `${map.pixelWidth}x${map.pixelHeight} px`,
+      map.locked ? "locked" : "",
+      map.visible ? "" : "hidden",
+    ].filter(Boolean);
+    container.append(mapRow(map.id, map.name, notes.join(", "), map.id === selected));
+  }
+}
+
 /** Fill the picker from the scene. */
 async function refreshMaps(): Promise<void> {
   const container = list;
@@ -83,6 +116,9 @@ async function refreshMaps(): Promise<void> {
     let selected = "";
 
     if (maps.length === 0) {
+      // Cleared, not left holding the last non-empty answer: a scene that has lost its maps must not
+      // go on offering them on the next rebuild.
+      known = null;
       const empty = document.createElement("p");
       empty.textContent = "No MAP-layer image in this scene.";
       empty.className = "sub";
@@ -101,14 +137,8 @@ async function refreshMaps(): Promise<void> {
         ? wanted
         : (maps.find((map) => map.isDefault)?.id ?? "");
 
-      for (const map of maps) {
-        const notes = [
-          `${map.pixelWidth}x${map.pixelHeight} px`,
-          map.locked ? "locked" : "",
-          map.visible ? "" : "hidden",
-        ].filter(Boolean);
-        container.append(mapRow(map.id, map.name, notes.join(", "), map.id === selected));
-      }
+      drawRows(container, maps, selected);
+      known = { maps, selected };
     }
 
     // Unconditional, including the zero case. An empty picker was reported as a bug precisely
@@ -160,10 +190,16 @@ export function renderMapPicker(body: HTMLElement): void {
       });
   });
 
-  const waiting = document.createElement("p");
-  waiting.className = "sub";
-  waiting.textContent = "Waiting for the scene…";
-  container.append(waiting);
+  // What the scene last said, if it has said anything. `refreshMaps` below replaces these the moment
+  // it lands; until then the GM sees the list they were just looking at rather than it emptying.
+  if (known) {
+    drawRows(container, known.maps, known.selected);
+  } else {
+    const waiting = document.createElement("p");
+    waiting.className = "sub";
+    waiting.textContent = "Waiting for the scene…";
+    container.append(waiting);
+  }
 
   list = container;
   body.append(container);

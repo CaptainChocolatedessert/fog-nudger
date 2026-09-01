@@ -53,10 +53,16 @@ import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
-import { loadSettings } from "./workspace/settingsState";
+import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 
 installDevLog("workspace");
+
+// The settings holder is DOM-free on purpose, so it cannot report its own failures. A failed write
+// loses the GM's whole tuning, which is not something to leave in the log alone.
+onSettingsWriteFailure((message) => {
+  say(message, "bad");
+});
 
 /*
   A new reading is a new partition, and a new skeleton.

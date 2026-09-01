@@ -318,8 +318,9 @@
         The state of the mask, and the one thing on this page that must never be quietly absent.
 
         A blank sheet means "no mask is current", and that is a deliberate state rather than a
-        failure — but a GM looking at bare map needs to know which of "computing", "failed" and
-        "the opacity is at zero" they are looking at.
+        failure — but a GM looking at bare map needs to know whether it is computing or has failed.
+        (The third case this used to name, "the opacity is at zero", is not reported here and does
+        not need to be: the slider's own readout says so, right beside the slider that did it.)
       */
       #state {
         position: fixed;
@@ -342,6 +343,15 @@
         */
         max-width: max(12rem, min(34rem, calc(100vw - 26rem)));
         text-align: left;
+      }
+      /*
+        With the controls hidden there is no panel to stay clear of, so the middle bound has
+        nothing to do and the line was narrower than it needed to be. Only the outer guards
+        remain. `:has()` is the whole mechanism; where it is unsupported the line simply keeps
+        the tighter cap, which is the safe direction.
+      */
+      body:has(#panel.hidden) #state {
+        max-width: max(12rem, min(34rem, calc(100vw - 2rem)));
       }
       #state.bad {
         color: #ff8080;
@@ -390,7 +400,7 @@
 
       <div id="bar">
         <button class="chip" id="fit" title="Fit the whole map">Fit</button>
-        <button class="chip" id="toggle-panel" title="Hide the controls">Controls</button>
+        <button class="chip" id="toggle-panel" title="Hide the controls" aria-pressed="true">Controls</button>
         <button class="chip" id="close">Close (Esc)</button>
         <button class="chip urgent" id="exit-anyway" hidden>Exit anyway</button>
       </div>

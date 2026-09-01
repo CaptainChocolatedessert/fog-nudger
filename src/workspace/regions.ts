@@ -97,7 +97,12 @@ async function derive(): Promise<void> {
   invalidate();
   say("deriving the regions…", "working");
 
-  const wanted = { ...currentSettings() };
+  // No copy. `Settings` is readonly through and through and `setSettings` replaces the whole object
+  // rather than writing into it, so the reference taken here is already a snapshot of what was
+  // current when the request went out. This used to be a shallow spread, which defended against
+  // nothing that happens and implied a guard it could not give anyway — `trace`, `review` and
+  // `overlay` would have stayed shared references.
+  const wanted = currentSettings();
   try {
     const outcome = await runTrace(wanted);
     if (isClosing()) return;

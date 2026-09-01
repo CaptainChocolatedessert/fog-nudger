@@ -223,6 +223,11 @@ export function renderPanel(): void {
     }
   }
 
+  // The persistent group is drawn whenever one is declared, and today it holds **no controls at
+  // all**: every display parameter moved to the step that draws its layer, which is what emptied it.
+  // So this renders a heading and a blurb over nothing. Left as it is on purpose — the group is
+  // where a genuinely cross-step display control would go — and said here so the next reader does
+  // not go looking for a control that failed to render.
   const view = document.getElementById("view-group");
   const persistent = STEPS.find((step) => step.persistent);
   if (view && persistent) {
