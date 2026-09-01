@@ -1066,7 +1066,11 @@ parameters kept turning out to be the wrong lever because downstream is not wher
 minimum-area filter is not a pure delete. A hole is kept only when it encloses a surviving region
 and **filled in when it encloses nothing**, so dropping a sliver also dilates whatever surrounds it
 into the space the sliver held. Measured on *Lair Of The Lamb*, mask unchanged — the ink share is
-6.5% in both runs, which is the basis for saying only the minimum moved:
+6.5% in both runs, which is the basis for saying only the minimum moved. **The control this
+measured was deleted on 2026-08-30**; the table stays because the finding it established — that the
+minimum-area filter is not a pure delete, since dropping a region dilates whatever surrounds it into
+the space it held — is what moved the control from the reading stage to the deriving stage and is
+still the reason the stages are cut where they are:
 
 | smallest room | regions | discarded | **holes kept** | bare floor |
 | --- | --- | --- | --- | --- |
@@ -1125,9 +1129,10 @@ conflated.
 4. **Edit walls** — suppression, ink painting and line editing. **Not built, and deliberately not
    created early to hold the gap repair**: this is the first step where a drag paints, and there is
    nothing to paint with yet.
-5. **Regions** — smallest room, edge simplification, the partition drawn in the six-colour cycle.
-   **Built 2026-08-29.** Ends with "stage these". Deliberately **thin and late**: it is the export,
-   not the main event.
+5. **Regions** — edge simplification and the preview's fill and outline, with the partition drawn in
+   the six-colour cycle. **Built 2026-08-29.** Ends with **"Put on the map"**. Deliberately **thin
+   and late**: it is the export, not the main event. (Smallest room was here until 2026-08-30 and is
+   deleted; staging went at the same time, so the button writes rather than proposes.)
 6. **Doors** — a stub, and probably permanently (§3).
 
 Plus a **View** group that is persistent rather than a step. It held the ink colour and opacity and
@@ -1884,8 +1889,9 @@ width, smallest ink island. Two for the breaks — largest break to repair, same
 as a share of a separate marking width — and it was withdrawn when the premise behind the split
 turned out to be false (§11 item 3). What survives from it is that a derived readout is repainted
 when a reading lands rather than only when its own slider moves, because several of them report a
-setting against a *measurement* that does not exist until then. Two for stage two — smallest room, edge simplification. Two for stage three, both about how a
-proposal is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
+setting against a *measurement* that does not exist until then. **One** for stage two — edge
+simplification; smallest room was the other and was deleted on 2026-08-30. Two for stage three, both
+about how the preview is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
 reading tab but are **display** parameters (below).
 
 - **One declaration decides which stage owns which parameter**, and both the panel's tabs and the
@@ -2047,11 +2053,14 @@ Where each parameter landed:
 | Smallest ink island | **px** (was squares) | a size on the image, and ink width is not trusted here |
 | Largest break to repair | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes what is repaired invisibly |
 | Same-wall distance | px | a distance travelled across the image; nothing about it is a stroke or a square |
-| Smallest room | squares | it really is an area on the map's grid, and a GM thinks in squares |
+| ~~Smallest room~~ | ~~squares~~ | **Control deleted 2026-08-30.** Kept in the table only because it was the one entry justifying a square-denominated unit; nothing takes squares now |
 | Edge simplification | ink widths | its safety bound *is* half an ink width |
 
-**Stage one now depends on nothing but the image.** Stage two's smallest-room control still depends
-on the grid, and squared — a grid off by four puts it off by sixteen. That is a known exposure.
+**Nothing in the pipeline depends on the grid any more.** Stage one never did; stage two's exposure
+was the smallest-room control, which depended on it *squared*, so a grid off by four put it off by
+sixteen. That control was deleted on 2026-08-30 and the exposure went with it. The grid still feeds
+diagnostics — the census reports areas in squares — where being wrong is a misleading number rather
+than a wrong partition.
 
 *Rejected: choosing the raster to hit a target pixels-per-grid-square density.* The sibling tried
 it, reasoning that pixel-denominated constants are only meaningful against the ink scale they were

@@ -42,7 +42,7 @@ import { key } from "../namespace";
 export const WALL_KEY = key("wall");
 
 /**
- * The stroke an accepted wall line carries: **none**, and this is an experiment.
+ * The stroke an emitted wall line carries: **none**, confirmed in a room.
  *
  * Dynamic Fog strokes the item at `style.strokeWidth` and takes the outline, so the width is the
  * distance between the two walls it derives — and the band between them can be seen into from
@@ -58,16 +58,19 @@ export const WALL_KEY = key("wall");
  * whole drawn wall is visible between them. That is the same thing accepted shapes do, so every
  * emitted item ends up with its walls exactly on the centreline — one rule rather than two.
  *
- * **What is unmeasured, and it is the reason this is called an experiment.** A closed path has its
- * own boundary to stroke at any width, which is why zero is settled for shapes — step 1 measured it.
- * An open `LINE` has no interior and no boundary of its own, so what Skia's stroker returns at width
- * zero is genuinely unknown: possibly the line itself, which would give one wall exactly where it is
- * wanted, and possibly nothing, which would give no wall at all.
+ * **This was called an experiment until 2026-08-31, and the doubt had already been settled.** The
+ * worry was specific and worth keeping: a closed path has its own boundary to stroke at any width,
+ * which is why zero is settled for shapes — step 1 measured it — while an open `LINE` has neither, so
+ * Skia's stroker at zero might have returned nothing and given no wall at all. **That failure would
+ * have been silent**: no error, just sight passing through a free-standing wall.
  *
- * **If it is nothing, the failure is silent** — no error, no warning, just sight passing through a
- * free-standing wall. So it wants looking at in a room before it is trusted: reveal a room with a
- * stub in it and check that the stub still blocks. Raising this to a small positive number is the
- * whole of the fix if it does not.
+ * A room answered it on 2026-08-30. Lighting a wall from both sides revealed everything with no fog
+ * line down the middle **and the walls still blocked sight**, so a zero-width `LINE` on the `FOG`
+ * layer does yield a Dynamic Fog wall. Tiny rendering artefacts sit right on the division, visible
+ * only against a deliberately garish fog colour, and the GM called those resolved.
+ *
+ * Raising this above zero is still the whole of the fix if a future room ever contradicts that — but
+ * do not raise it on the strength of the doubt alone, which is what the stale wording invited.
  */
 export const ACCEPTED_WALL_STROKE = 0;
 

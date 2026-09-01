@@ -175,8 +175,14 @@ export const STEPS: readonly Step[] = [
       A centreline on its own says nothing: what a GM is judging is whether it runs down the middle
       of the wall it came from, and whether the hairs on it are artefacts of a ragged edge or stubs
       that are really there. Both are comparisons against the ink, so the ink is drawn under it.
+
+      **The breaks are here too, which is the one argued exception to "each step shows its own
+      layer".** The minimum stroke width can sever a wall, and a severed wall IS a break — so this
+      step is the likeliest manufacturer of the very thing the break rings warn about, and hiding
+      them here would take the warning away from the place it is earned. The operating notes recorded
+      this as the intent before the code did.
     */
-    layers: ["ink", "skeleton"],
+    layers: ["ink", "skeleton", "breaks"],
     drag: "pan",
   },
   {
