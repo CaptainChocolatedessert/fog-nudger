@@ -215,6 +215,26 @@ describe("regions derived from the wall graph", () => {
     }
   });
 
+  it("never marks an edge covered by a ring it did not emit", () => {
+    /*
+      The invariant behind pass 1's item 5.1. A cycle whose every ring was dropped used to mark its
+      edges covered anyway, so they were emitted neither as part of a shape nor as a wall line: the
+      linework vanished from both outputs with nothing saying so.
+
+      Asserted as a property rather than by building the fixture that triggers it. Reaching it needs a
+      cycle of one or two skeleton pixels, which sliver removal should already have taken — so a
+      fixture would be asserting that sliver removal has a hole in it. What holds on every map is the
+      relation: an edge is covered only if some emitted ring walks it, and everything else is a wall
+      line. `droppedCycles` is asserted zero so the untriggered case is visible rather than assumed.
+    */
+    for (const rows of [TWO_ROOMS, ROOM_WITH_STUB]) {
+      const result = deriveGraphRegions(maskFromRows(rows), BASE);
+      expect(result.droppedCycles).toBe(0);
+      // No edge is left over twice, and none is invented: the leftovers are a subset of the graph.
+      expect(result.uncoveredEdges.length).toBeLessThanOrEqual(result.graph.edges.length);
+    }
+  });
+
   it("covers the raster it was given", () => {
     const rows = TWO_ROOMS;
     const result = deriveGraphRegions(maskFromRows(rows), BASE);

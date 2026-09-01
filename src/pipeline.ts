@@ -1102,6 +1102,18 @@ export async function runTrace(
         `stepped over them, which loses linework without saying which. Expected to be zero.`,
     );
   }
+  if (derived.droppedCycles > 0) {
+    // Latent rather than observed: it needs a cycle of one or two skeleton pixels, which sliver
+    // removal should have taken. Warned about because the failure it guards was silent in both
+    // outputs at once — the edges were marked covered by a ring that did not exist, so they were
+    // emitted neither as a shape nor as a wall line.
+    devLog(
+      "warn",
+      `trace: ${derived.droppedCycles} cycles produced no usable ring. Their edges fall through to ` +
+        `the wall lines rather than vanishing, which is the safe direction, but a cycle this small ` +
+        `should have been removed as a sliver — read the sliver counts above.`,
+    );
+  }
   if (derived.sliversLeft > 0) {
     // Reported rather than merely counted, because it is never harmless: a surviving sub-pixel face
     // is emitted as a shape enclosing nothing, and the area check will have failed on its

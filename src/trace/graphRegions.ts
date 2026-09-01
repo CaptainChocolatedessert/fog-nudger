@@ -129,6 +129,14 @@ export interface GraphRegionResult {
   /** Holes dropped because the face they enclose did not survive the minimum. */
   readonly filledHoles: number;
   /**
+   * Cycles that produced no ring at all, so their edges were left for the wall lines.
+   *
+   * Expected to be zero: reaching it needs a cycle of one or two skeleton pixels, which sliver
+   * removal should have taken already. Counted rather than only guarded, because the failure it
+   * replaces was silent in both outputs at once.
+   */
+  readonly droppedCycles: number;
+  /**
    * Edges no emitted ring traverses — the walls that need a line of their own.
    *
    * **This is narrower than the design record predicted, and the record is wrong on the point.** §4
@@ -283,6 +291,7 @@ export function deriveGraphRegions(
     uncoveredEdges: built.uncovered,
     degenerateCycles: built.degenerateCycles,
     filledHoles: built.filledHoles,
+    droppedCycles: built.droppedCycles,
     tolerance,
     escalations,
     sliversRemoved,
@@ -306,6 +315,7 @@ function assemble(
   regions: Omit<GraphRegion, "overCap">[];
   degenerateCycles: number;
   filledHoles: number;
+  droppedCycles: number;
   /** Edges some emitted ring actually traverses. Everything else needs a line of its own. */
   covered: Set<number>;
 } {
@@ -314,6 +324,7 @@ function assemble(
   const covered = new Set<number>();
   let degenerateCycles = 0;
   let filledHoles = 0;
+  let droppedCycles = 0;
 
   kept.forEach((face, index) => {
     const rings: Ring[] = [];
@@ -344,6 +355,18 @@ function assemble(
 
       // A cycle yields more than one ring when a bridge splits it: removing a stalk from a
       // boundary genuinely disconnects it, so one hole around a building-plus-lollipop becomes two.
+      /**
+       * Whether this cycle contributed a ring at all.
+       *
+       * The `covered` loop below used to run unconditionally, which is wrong when *every* ring the
+       * cycle produced was dropped: its edges were then recorded as covered by a ring that does not
+       * exist, so they were not emitted as wall lines either and the linework vanished from both
+       * outputs silently. Reaching it needs a cycle of one or two skeleton pixels, which sliver
+       * removal should already have taken — a latent hole rather than an observed defect, which is
+       * why it is also counted rather than only guarded.
+       */
+      let contributed = false;
+
       for (const fitted of fittedRings[index]![cycleIndex]!) {
         // A ring small against the tolerance collapses to two points and stops being a shape at
         // all, which for a region means the room vanishes. Vertices are the cheap thing here and a
@@ -355,6 +378,12 @@ function assemble(
         } else {
           rings.push(fitted.points);
         }
+        contributed = true;
+      }
+
+      if (!contributed) {
+        droppedCycles += 1;
+        return;
       }
 
       // This ring is emitted, so every edge it walks is represented in the scene by it — except the
@@ -385,7 +414,7 @@ function assemble(
     if (!covered.has(edge)) uncovered.push(fittedEdges[edge]!);
   }
 
-  return { regions, degenerateCycles, filledHoles, covered, uncovered };
+  return { regions, degenerateCycles, filledHoles, droppedCycles, covered, uncovered };
 }
 
 /** One line for the log. */
@@ -402,7 +431,8 @@ export function describeGraphRegions(result: GraphRegionResult): string {
     // somebody filtered away.
     `edges (${result.discarded} faces held no map, ${result.bridges} bridges, ` +
     `${result.sliversRemoved} slivers removed in ${result.sliverRounds} rounds, ` +
-    `${result.filledHoles} holes filled); ${exact}; tolerance ${result.tolerance.toFixed(2)}px ` +
+    `${result.filledHoles} holes filled, ${result.droppedCycles} cycles produced no ring); ` +
+    `${exact}; tolerance ${result.tolerance.toFixed(2)}px ` +
     `after ${result.escalations} escalations; thin ${Math.round(timings.thinMs)}ms, ` +
     `prune ${Math.round(timings.pruneMs)}ms, graph ${Math.round(timings.graphMs)}ms, ` +
     `label ${Math.round(timings.labelMs)}ms, faces ${Math.round(timings.faceMs)}ms, ` +

@@ -3199,6 +3199,47 @@ ordering F-then-G is worth revisiting rather than inherited.
 
 **G. Vector editing.** Additions and deletions as durable inputs; a move implies the freeze point (§4).
 
+#### The freeze point is SETTLED — two stages with a one-way door (user, 2026-08-31)
+
+The question F and G both hang on, decided before either was built.
+
+**Stage one: the map.** Load it, tune the reading, make **pixel** edits — suppressing ink, drawing
+ink — and generate the graph. **Stage two: the graph.** Nudge vertices, add and delete edges. The
+graph is stored in scene metadata, so the workspace can be closed and reopened and the editing
+resumed. **Going back to stage one discards the graph**, and that is the whole of the rule.
+
+**Why this is better than the alternatives it replaces.** The hard problem in storing a *move* is
+identity: to re-apply "this vertex moved here" after a re-derivation, the vertex must still be
+findable, and it is not — any reading change renumbers the graph. Three answers were on the table
+(lock the reading settings once editing starts; replay edits onto a fresh derivation; warn and
+discard). This does not solve that problem, it **removes** it: stage two never re-derives, so nothing
+is ever renumbered and a move is just a stored coordinate. It also makes "the graph is the document"
+literally true rather than aspirational.
+
+**Freeze the graph BEFORE fitting.** Douglas–Peucker tolerance is a *rendering* choice, not part of
+the document. Freezing the pixel-chain graph keeps it adjustable in stage two; freezing the fitted
+graph bakes it in permanently.
+
+**Keep stage one's inputs anyway, even though stage one is closed.** The settings and the ink strokes
+are small, and keeping them means "start over" lands the GM back at their tuned ink with their
+suppression and drawn ink intact rather than at a bare map. That is the difference between a one-way
+door nobody will walk through and a re-roll — and it costs kilobytes.
+
+**Store strokes, not masks.** A GM's pixel edits are polylines with a brush width, which re-apply to
+a reading at any resolution. A rasterised mask of the test map would be about a megabyte and would be
+wrong the moment the raster cap changed.
+
+**Sizing, which is no longer an open question.** Scene metadata takes arbitrary JSON with no limit
+measured below **512KB per key** (measured by the sibling; a "reportedly 16KB" figure that once
+shaped decisions there was simply wrong). The graph is a walk, so encoding each chain as a start
+point plus 3-bit direction steps puts the test map's ~43,000 skeleton pixels at roughly **40KB** —
+against about a megabyte as a bitmap. The fitted graph is smaller again, ~8,700 vertices. This
+retires the deferred item below.
+
+**What it owes, under §8.** The boundary must be visible *before* it is crossed. "Generate the graph"
+becomes a commitment, and a control that can be wrong needs a visual channel — so it has to say what
+it is about to close off, not report it afterwards.
+
 *Deferred deliberately, not forgotten:* **doors** stay with Dynamic Fog (§3 — door subtraction is
 global, so they cut our walls with nothing emitted by us). **Sizing the graph against the metadata
 limit** and **measuring what Owlbear does with overlapping fog shapes** were both raised and both
