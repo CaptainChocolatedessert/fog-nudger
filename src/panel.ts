@@ -82,13 +82,28 @@ function reportResult(text: string, state: "ok" | "bad"): void {
  * `describeError` — the SDK rejects with a raw payload rather than an `Error`, so reading
  * `.message` would print `undefined` for every refusal it can produce, which is the whole class of
  * outcome this probe exists to observe.
+ *
+ * ## Two owners of `disabled`, reconciled through one flag
+ *
+ * The readiness subscription also sets `disabled` on every button, and it used to fight this one: a
+ * readiness change landing mid-action re-enabled the button and defeated the double-click guard the
+ * paragraph above exists for, while this one's `finally` set `disabled = false` unconditionally and
+ * could enable a button after the scene had closed. Both now read `sceneOpen`, and the readiness
+ * handler skips a button that is mid-run.
  */
+/** Whether a scene is open, which is the other half of what decides a button's `disabled`. */
+let sceneOpen = false;
+
+/** Buttons whose action is still in flight, so the readiness handler leaves them alone. */
+const running = new Set<HTMLButtonElement>();
+
 function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement | null {
   const button = document.getElementById(id);
   if (!(button instanceof HTMLButtonElement)) return null;
 
   button.addEventListener("click", () => {
     button.disabled = true;
+    running.add(button);
     reportResult("Working…", "ok");
     void run()
       .then((message) => reportResult(message, "ok"))
@@ -98,7 +113,10 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
         console.error(`Fog Nudger — probe failed: ${detail}`);
       })
       .finally(() => {
-        button.disabled = false;
+        running.delete(button);
+        // Not `false`: the scene may have closed while this ran, and re-enabling a button that
+        // writes to a scene there is not is worse than leaving it dead.
+        button.disabled = !sceneOpen;
       });
   });
   return button;
@@ -166,8 +184,16 @@ OBR.onReady(async () => {
     // Subscribe as well as check, for the usual reason: a scene opened while the popover is already
     // up would otherwise leave the buttons dead with no explanation.
     const setEnabled = (open: boolean): void => {
-      for (const button of buttons) if (button) button.disabled = !open;
-      reportResult(open ? "Ready." : "Waiting for a scene.", "ok");
+      sceneOpen = open;
+      // A button mid-action keeps its own `disabled`, which is what makes the double-click guard
+      // survive a readiness change landing in the middle of a write.
+      for (const button of buttons) {
+        if (button && !running.has(button)) button.disabled = !open;
+      }
+      // Only on the way *down*. This used to write on every change, so a readiness event wiped
+      // whatever the GM last clicked — including a failure message. Losing a stale "Ready." is
+      // cheaper than losing an error.
+      if (!open) reportResult("Waiting for a scene.", "ok");
     };
     OBR.scene.onReadyChange(setEnabled);
     setEnabled(ready);

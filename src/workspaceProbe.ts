@@ -51,7 +51,14 @@ import {
   WORKSPACE_PROBE_ID,
   WORKSPACE_PROBE_LIFETIME_MS,
 } from "./probe/workspaceProbeControl";
-import { attributeMovement, pointMoved, type InputChannel } from "./probe/workspaceInput";
+import {
+  attributeMovement,
+  channelVerdict,
+  describeKeyboardFocus,
+  pointMoved,
+  summariseCapture,
+  type InputChannel,
+} from "./probe/workspaceInput";
 import {
   MAX_SCALE,
   MIN_SCALE,
@@ -182,6 +189,9 @@ const tally = {
   contextMenu: 0,
   keyDown: 0,
   keysBeforeAnyPointer: 0,
+  // The one piece of evidence `describeKeyboardFocus` wants that this was not keeping: a key that
+  // landed *before* the page asked for focus is the only proof focus was given rather than taken.
+  keysBeforeFocusAttempt: 0,
   blamed: { drag: 0, wheel: 0, key: 0, other: 0 } as Record<InputChannel, number>,
   polls: 0,
   worstPollMs: 0,
@@ -474,7 +484,21 @@ function render(): void {
 
   const remaining = Math.max(0, LIFETIME_MS - (performance.now() - opened));
   const frameMean = average(frames.frameMs);
-  const leaks = tally.blamed.drag + tally.blamed.wheel + tally.blamed.key;
+
+  /*
+    Per channel, not summed — and this line was summed for the whole life of the probe.
+
+    `channelVerdict` exists because a channel nobody tried and a channel that leaked nothing produce
+    identical movement counts, so a single "still" reports the first as a pass. That is the §8
+    failure the module's own doc names, and the probe was reimplementing exactly it: a run where the
+    wheel was never touched read the same as a run where it was worked hard and stayed ours.
+    `summariseCapture` calls itself "the line the whole probe exists to produce" and was not called.
+  */
+  const verdicts = {
+    drag: channelVerdict(tally.pointerMove, tally.blamed.drag),
+    wheel: channelVerdict(tally.wheel, tally.blamed.wheel),
+  } as const;
+  const leaking = verdicts.drag === "leaking" || verdicts.wheel === "leaking";
 
   hud.innerHTML =
     `<b>Fog Nudger — workspace probe · ${variant}</b>\n` +
@@ -501,11 +525,27 @@ function render(): void {
     `map       ${mapNote}\n` +
     `\n` +
     `Owlbear   ${
-      leaks > 0
-        ? `<span class="bad">MOVED ${leaks}x from our input — navigation is leaking</span>`
-        : `still (${tally.blamed.other} unattributed) · detector ${selfTest.note}`
+      selfTest.active
+        ? // The detector stops attributing while it nudges the viewport itself, so a genuine
+          // leak inside that window is absorbed. Saying so beats printing a verdict that is
+          // blind for about a second of the run.
+          "self-test running — detection paused"
+        : leaking
+          ? `<span class="bad">${summariseCapture(verdicts)}</span>`
+          : `${summariseCapture(verdicts)} · ${tally.blamed.other} unattributed · ` +
+            `detector ${selfTest.note}`
     }\n` +
-    `keyboard  ${focusAttempt.held ? `ours, claimed ${focusAttempt.claimedAtMs.toFixed(0)}ms in` : focusAttempt.note}\n` +
+    `keyboard  ${
+      focusAttempt.held
+        ? `ours, claimed ${focusAttempt.claimedAtMs.toFixed(0)}ms in`
+        : describeKeyboardFocus({
+            hadFocusAtOpen: focusAttempt.before,
+            keysBeforeAnyPointer: tally.keysBeforeAnyPointer,
+            keysAfterAPointer: tally.keyDown - tally.keysBeforeAnyPointer,
+            focusWasAsked: focusAttempt.made,
+            keysBeforeFocusAttempt: tally.keysBeforeFocusAttempt,
+          })
+    }\n` +
     `\n` +
     `<span class="key">drag</span> pan · <span class="key">wheel</span> zoom · ` +
     `<span class="key">[ ]</span> notch · <span class="key">, .</span> pinch · ` +
@@ -708,6 +748,7 @@ window.addEventListener("keydown", (event) => {
   noteEvent("key");
   tally.keyDown += 1;
   if (!anyPointerYet) tally.keysBeforeAnyPointer += 1;
+  if (!focusAttempt.made) tally.keysBeforeFocusAttempt += 1;
 
   // Logged the instant it arrives, because a modal torn down by Owlbear writes no closing summary
   // and the first key is the evidence that the claim worked.
@@ -1018,7 +1059,14 @@ async function run(): Promise<void> {
       if (selfTest.active) {
         selfTest.movementsSeen += 1;
       } else {
-        const channel = attributeMovement(started, lastEventAt);
+        // The movement time is the end of the round trip, not `started`. `attributeMovement`
+        // rejects any event later than the movement, so an input that fired *during* the poll and
+        // caused the movement it observed was rejected by every channel and filed as unattributed,
+        // which the HUD does not count as a leak. That is under-attribution — the direction the
+        // module's own doc says closes the question wrongly — and the poll is 2-4ms, which a drag
+        // firing `pointermove` continuously can land inside. Widening it errs towards
+        // over-attribution, which sends someone to look again.
+        const channel = attributeMovement(performance.now(), lastEventAt);
         tally.blamed[channel] += 1;
         if (tally.blamed[channel] <= MOVEMENTS_LOGGED_PER_CHANNEL) {
           devLog(
@@ -1067,7 +1115,23 @@ async function runSelfTest(): Promise<void> {
 
     await OBR.viewport.setPosition({ x: start.x + SELF_TEST_NUDGE, y: start.y });
     await new Promise((resolve) => window.setTimeout(resolve, SELF_TEST_SETTLE_MS));
-    await OBR.viewport.setPosition(start);
+
+    // The restore is best-effort and cannot be made atomic — stated as a cost rather than dressed
+    // up with machinery. This writes to the GM's actual camera, so if the second call fails or the
+    // iframe is torn down between the two, their view is left nudged by `SELF_TEST_NUDGE` with
+    // nothing to explain it. Naming the original position in the log is what gives them something
+    // to read.
+    try {
+      await OBR.viewport.setPosition(start);
+    } catch (error) {
+      devLog(
+        "error",
+        `workspace probe (${variant}): the self-test could NOT put the viewport back. It was ` +
+          `nudged ${SELF_TEST_NUDGE} in x; the original position was ` +
+          `(${start.x.toFixed(1)}, ${start.y.toFixed(1)}).`,
+        describeError(error),
+      );
+    }
     await new Promise((resolve) => window.setTimeout(resolve, SELF_TEST_SETTLE_MS));
 
     selfTest.active = false;

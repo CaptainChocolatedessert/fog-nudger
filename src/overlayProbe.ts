@@ -36,6 +36,12 @@
  * button is the convenience, not the safety net — a popover is dismissed by clicking anywhere
  * outside it, which kills its timers with it.
  *
+ * **Armed at module load, not inside `onReady`, and that distinction is the whole of the guarantee.**
+ * This paragraph was true in intent and false in fact until 2026-09-01: the timer sat at the end of
+ * `run()`, which Owlbear calls, so it was armed only once the SDK had replied — measured at 2,396ms
+ * on a cold load, and never at all if the SDK never answers. A safety net that depends on the thing
+ * it is protecting against is not one.
+ *
  * Development only. Draws nothing into the scene and writes nothing anywhere.
  */
 
@@ -71,6 +77,34 @@ const SETTLE_MS = 200;
 
 const sheet = document.getElementById("sheet");
 const readout = document.getElementById("readout");
+
+/*
+  The escape hatch, armed at module load and NOT inside `onReady`.
+
+  This is the one thing on the page that must not depend on Owlbear answering. It sat at the end of
+  `run()` — which is called from `OBR.onReady` — for the whole life of the file, while three
+  separate places (this module's own doc, the page's comment, and the operating notes) claimed the
+  opposite. `workspaceProbe.ts` got it right and said why; this did not, and it is kept as the
+  *record* of how the platform answers were got, so teaching the wrong thing about its own safety
+  net is the expensive kind of stale.
+
+  The dead window it closes is real and measured: the iframe's load was 2,396ms cold. A timer armed
+  after the SDK replies is a timer that starts two and a half seconds late, and the sibling has a
+  constant named "300ms after load" that measured 300ms after the SDK replied.
+
+  `stopped` is module-scope for the same reason — the timer has to be able to stop the poll loop
+  that `run()` owns.
+*/
+const opened = performance.now();
+let stopped = false;
+
+window.setTimeout(() => {
+  stopped = true;
+  devLog("info", `overlay probe: closing after ${(LIFETIME_MS / 1000).toFixed(0)}s`);
+  void OBR.modal.close(OVERLAY_PROBE_ID).catch((error: unknown) => {
+    devLog("error", "overlay probe: could not close itself", describeError(error));
+  });
+}, LIFETIME_MS);
 
 function say(text: string): void {
   if (readout) readout.innerHTML = text;
@@ -221,7 +255,6 @@ async function run(): Promise<void> {
         : "DIFFERENT — the modal is not the map view, so screen positions need an offset."),
   );
 
-  const opened = performance.now();
   let previous: Screen | null = null;
   let stillSince = performance.now();
   let showing = false;
@@ -286,8 +319,8 @@ async function run(): Promise<void> {
   };
 
   // A chain of timeouts rather than an interval, so a poll that runs long cannot overlap the next
-  // one and turn a slow bus into a queue that never drains.
-  let stopped = false;
+  // one and turn a slow bus into a queue that never drains. `stopped` is module-scope, set by the
+  // dismissal timer armed at load.
   const loop = (): void => {
     if (stopped) return;
     void tick()
@@ -300,17 +333,16 @@ async function run(): Promise<void> {
   };
   loop();
 
+  // The poll figures, on the same schedule as the dismissal above — which is armed at module load
+  // and knows nothing about them. Separated so the *closing* cannot depend on `run()` having got
+  // this far, which was the whole defect.
   window.setTimeout(() => {
-    stopped = true;
     devLog(
       "info",
-      `overlay probe: closing after ${(LIFETIME_MS / 1000).toFixed(0)}s — ${polls} polls, ` +
+      `overlay probe: ${polls} polls, ` +
         `${(totalMs / Math.max(1, polls)).toFixed(0)}ms mean, ${worstMs.toFixed(0)}ms worst, ` +
         `blanked ${blanks} times`,
     );
-    void OBR.modal.close(OVERLAY_PROBE_ID).catch((error: unknown) => {
-      devLog("error", "overlay probe: could not close itself", describeError(error));
-    });
   }, LIFETIME_MS);
 }
 

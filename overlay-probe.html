@@ -69,6 +69,9 @@
       It closes itself on a timer. A full-screen click-through overlay that hides the toolbar may
       also hide the way to dismiss it, so the escape hatch cannot be a button on this page or on
       the panel — it has to be something that fires without anyone being able to reach anything.
+      Which also means it cannot wait for Owlbear: the timer is armed at module load, not inside
+      `onReady`. It was inside `onReady` until 2026-09-01, while all three places describing it
+      said otherwise.
     -->
     <canvas id="sheet"></canvas>
     <pre id="readout">Overlay probe starting…</pre>
