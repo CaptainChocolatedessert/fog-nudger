@@ -10,8 +10,15 @@
  * `image.url` through the SDK. `crossOrigin = "anonymous"` is nonetheless mandatory: without it the
  * canvas is tainted whatever the server sends, and `getImageData` throws. A failure here means that
  * result has changed, so it is reported rather than swallowed — and reported through `console.error`
- * rather than the dev log, because the dev log compiles away in a production build and this is the
- * one failure that is about the platform rather than about the map.
+ * rather than the dev log, because the dev log compiles away in a production build.
+ *
+ * **All three of `loadMapRaster`'s failure exits use `console.error`, and that took two goes.** The
+ * paragraph above was written about the tainted-canvas one and applied only to it; the other two —
+ * the image not loading at all, which is where a CORS refusal lands first, and a decode to zero
+ * pixels — were on the dev log, which is a no-op in a deployed build. The GM-facing message for all
+ * three is "Could not read pixels from ... — see the console", so two of the three sent a GM to an
+ * empty console. Nothing is lost in development either way: `installDevLog` wraps `console.error`
+ * and forwards it, so one call reaches both channels in dev and the surviving one in production.
  */
 
 // Aliased: the SDK's `Image` item type would otherwise shadow the DOM `Image` constructor that
@@ -260,13 +267,13 @@ export async function loadMapRaster(map: ImageItem): Promise<MapRaster | null> {
   try {
     source = await loadImage(map.image.url);
   } catch (error) {
-    devLog("error", `map: could not load the map image ${map.image.url}`, error);
+    console.error(`Fog Nudger: could not load the map image ${map.image.url}`, error);
     return null;
   }
 
   const plan = planRaster(source.naturalWidth, source.naturalHeight);
   if (plan.width === 0 || plan.height === 0) {
-    devLog("error", `map: "${map.name || "map"}" decoded to zero pixels — broken asset?`);
+    console.error(`Fog Nudger: "${map.name || "map"}" decoded to zero pixels — broken asset?`);
     return null;
   }
 

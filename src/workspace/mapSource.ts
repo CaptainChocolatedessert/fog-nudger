@@ -28,7 +28,7 @@
 
 import { devLog } from "../devlog";
 import { advanceTo } from "./accordion";
-import { adoptReading, takeReading } from "./reading";
+import { adoptReading, describeMaskFailure, takeReading } from "./reading";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
 /**
@@ -40,14 +40,17 @@ import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
  * the one step that can do something about that.
  */
 export async function loadNominatedMap(opening = false): Promise<void> {
-  const result = await takeReading();
-  if (!result) {
-    // Not an error state so much as an unanswered question, and the answer is one step away.
-    say("no map chosen — pick one under Map", "bad");
-    setMapName("No map chosen.");
+  const outcome = await takeReading();
+  if (!outcome.ok) {
+    // Two failures, and they need different sentences. "No map" is an unanswered question with the
+    // answer one step away; "unreadable" is a map that *is* chosen and drawn, whose pixels would not
+    // come back — telling that GM to pick a map is advice they cannot act on.
+    say(describeMaskFailure(outcome), "bad");
+    setMapName(outcome.reason === "no-map" ? "No map chosen." : `${outcome.mapName} — unreadable.`);
     setMapImage(null);
     return;
   }
+  const result = outcome.reading;
 
   setMapName(result.mapName);
   if (opening) advanceTo("ink");

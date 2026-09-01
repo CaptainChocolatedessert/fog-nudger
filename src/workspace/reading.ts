@@ -22,7 +22,7 @@
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { maskForOverlay, type MaskForOverlay } from "../pipeline";
+import { maskForOverlay, type MaskForOverlay, type MaskOutcome } from "../pipeline";
 import { currentSettings } from "./settingsState";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { invalidate, isClosing, say, sayIfSettled } from "./shell";
@@ -163,13 +163,14 @@ async function refreshMask(): Promise<void> {
   // `overlay` would have stayed shared references.
   const wanted = currentSettings();
   try {
-    const result = await maskForOverlay(wanted);
+    const outcome = await maskForOverlay(wanted);
     if (isClosing()) return;
 
-    if (!result) {
-      if (requests.fail(generation)) say("no map chosen — pick one under Map", "bad");
+    if (!outcome.ok) {
+      if (requests.fail(generation)) say(describeMaskFailure(outcome), "bad");
       return;
     }
+    const result = outcome.reading;
 
     if (!requests.fulfil(generation)) {
       // Superseded while it computed. The sheet is already blank for the newer generation, so
@@ -202,8 +203,23 @@ async function refreshMask(): Promise<void> {
   }
 }
 
-/** Read the nominated map now. Returns the result, because the map name and bounds come with it. */
-export async function takeReading(): Promise<MaskForOverlay | null> {
+/**
+ * What to put on the state line for each way a reading can fail.
+ *
+ * One function rather than a sentence at each call site, so the two surfaces that read a mask
+ * cannot describe one failure two ways — which is how "no map chosen" came to be shown for a map
+ * that was chosen and visibly on screen.
+ */
+export function describeMaskFailure(outcome: MaskOutcome & { ok: false }): string {
+  return outcome.reason === "no-map"
+    ? "no map chosen — pick one under Map"
+    : // Matches `runTrace`'s wording for the same failure. The console is where the detail is, and
+      // it is genuinely there in a production build now.
+      `could not read pixels from "${outcome.mapName}" — see the console`;
+}
+
+/** Read the nominated map now. Returns the outcome, because the map name and bounds come with it. */
+export async function takeReading(): Promise<MaskOutcome> {
   return maskForOverlay(currentSettings());
 }
 

@@ -958,6 +958,25 @@ export interface MaskForOverlay {
 }
 
 /**
+ * Either a reading, or which of the two ways it failed.
+ *
+ * The same shape as `TraceOutcome`, and for a sharper version of the same reason. This used to be
+ * `MaskForOverlay | null`, and `null` meant **two entirely different things**: the scene holds no
+ * `MAP`-layer image, or the map's pixels could not be read. The workspace named only the first, so a
+ * GM whose map failed to load was told to pick a map — while the map they picked was drawn on the
+ * canvas behind the message. Advice that is not merely unhelpful but impossible to follow: picking
+ * the same map again produces the same sentence, and picking a different one is not the fix.
+ *
+ * That is `DESIGN.md` §8's rule — a diagnostic that reads the same for two outcomes cannot
+ * distinguish them — arriving in a return type rather than in a message. `runTrace` never had it,
+ * because it tests the two conditions separately.
+ */
+export type MaskOutcome =
+  | { readonly ok: false; readonly reason: "no-map" }
+  | { readonly ok: false; readonly reason: "unreadable"; readonly mapName: string }
+  | { readonly ok: true; readonly reading: MaskForOverlay };
+
+/**
  * Run stage one alone, for the overlay.
  *
  * **Not a third mode, and not a second implementation.** `resolveMask` is already a discrete
@@ -989,14 +1008,16 @@ export async function maskForOverlay(
     from whatever settings arrive rather than from where they came from.
   */
   override?: Settings,
-): Promise<MaskForOverlay | null> {
+): Promise<MaskOutcome> {
   const settings = override ?? (await readSettings());
   const map = await resolveTraceMap();
-  if (!map) return null;
+  if (!map) return { ok: false, reason: "no-map" };
 
   const dpi = await readGridDpi();
   const resolved = await resolveMask(map, dpi, settings);
-  if (!resolved) return null;
+  // Named rather than collapsed into the case above: the map is chosen and on screen, and what
+  // failed is reading its pixels. `loadMapRaster` has already put the detail on the console.
+  if (!resolved) return { ok: false, reason: "unreadable", mapName: map.name || "map" };
 
   // Kept for the point probe, which the workspace answers from wherever the GM clicks. The mask here
   // is the *composed* one, since that is what a region would be derived from — the base is what gets
@@ -1011,17 +1032,20 @@ export async function maskForOverlay(
   };
 
   return {
-    mask: resolved.stage.base,
-    composed: resolved.stage.mask,
-    gaps: resolved.stage.gaps,
-    bounds: resolved.stage.bounds,
-    mapName: resolved.stage.name,
-    // From `map`, the item this call resolved, rather than from the cached stage: a cache hit means
-    // the same map by identity, but the URL is the one thing about an item that can be reissued
-    // without its identity changing, and this is the copy that is certainly current.
-    mapUrl: map.image.url,
-    reused: resolved.maskReused,
-    readingReused: resolved.readingReused,
+    ok: true,
+    reading: {
+      mask: resolved.stage.base,
+      composed: resolved.stage.mask,
+      gaps: resolved.stage.gaps,
+      bounds: resolved.stage.bounds,
+      mapName: resolved.stage.name,
+      // From `map`, the item this call resolved, rather than from the cached stage: a cache hit
+      // means the same map by identity, but the URL is the one thing about an item that can be
+      // reissued without its identity changing, and this is the copy that is certainly current.
+      mapUrl: map.image.url,
+      reused: resolved.maskReused,
+      readingReused: resolved.readingReused,
+    },
   };
 }
 
