@@ -254,7 +254,20 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   review: {
     fillOpacity: 0.22,
-    strokeSquares: 1 / 12,
+    /*
+      0.08 rather than 1/12, so the default is a position the slider can actually select.
+
+      It was 1/12 (0.08333...), and `SETTING_LIMITS.strokeSquares` steps by 0.01 — the only default
+      in the whole set that did not land on its own step. Nudging that slider and putting it back
+      landed on 0.08, so `isDefault` was false from then on and every log line said "(edited)" for a
+      scene the GM considers untouched, with the per-step Defaults button the only way back.
+
+      Safe to change because this is a **display** parameter in the **adjust** stage: it draws the
+      preview's outline on the workspace canvas and reaches no emitted geometry, since an emitted
+      shape carries no stroke at all. The visible difference between 0.0833 and 0.08 squares of
+      preview outline is nothing.
+    */
+    strokeSquares: 0.08,
   },
   overlay: {
     inkColour: "#ff2020",
@@ -625,10 +638,20 @@ export function normaliseColour(value: unknown, fallback: string): string {
   return typeof value === "string" && COLOUR_PATTERN.test(value) ? value.toLowerCase() : fallback;
 }
 
-/** Whether a set differs from the defaults, so the panel can offer a meaningful reset. */
+/**
+ * Whether a set differs from the defaults, so a surface can say "(edited)" and mean it.
+ *
+ * **Both sides go through `normaliseSettings`, and that is not belt-and-braces.** `JSON.stringify`
+ * serialises in key insertion order, so comparing against the `DEFAULT_SETTINGS` literal directly was
+ * equal only while the literal and the normaliser happened to list their fields in the same sequence.
+ * They did; nothing enforced it. Reordering `DEFAULT_SETTINGS` for readability would have made this
+ * return false forever — every log line reading "(edited)" for a scene at its defaults — and the
+ * symptom is quiet enough to live a while. It costs one call to remove the dependency entirely.
+ */
 export function isDefault(settings: Settings): boolean {
   return (
-    JSON.stringify(normaliseSettings(settings)) === JSON.stringify(DEFAULT_SETTINGS)
+    JSON.stringify(normaliseSettings(settings)) ===
+    JSON.stringify(normaliseSettings(DEFAULT_SETTINGS))
   );
 }
 

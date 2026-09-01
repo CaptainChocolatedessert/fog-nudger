@@ -86,17 +86,29 @@ describe("round-tripping", () => {
    * the slider must reproduce it — otherwise merely *opening the panel* rewrites a GM's setting,
    * which is the worst failure a control can have because nothing announces it.
    */
-  it("returns every default unchanged", () => {
+  it("returns every default EXACTLY unchanged", () => {
+    /*
+      Tightened from "within one step" on 2026-08-31, and the loosening it replaces is worth
+      recording. `strokeSquares` defaulted to 1/12 against a hundredth-step track, so it was the one
+      default that could not land on its own slider — nudging it and putting it back gave 0.08, after
+      which `isDefault` was false permanently and every log line said "(edited)" for a scene the GM
+      considers untouched. The default is 0.08 now and the tolerance is gone with it.
+
+      Every default landing on its own step is the property worth having, because the failure it
+      prevents is the worst a control can have: merely opening a surface rewrites a GM's setting, and
+      nothing announces it.
+
+      No shipping control is log-scaled — the smallest-room threshold was the only one and was
+      deleted — so this walks the linear scale. The log path is covered against a locally declared
+      range in the tests above; a ternary here naming `minRoomSquares` outlived the setting and always
+      chose "linear" anyway.
+    */
     for (const [name, limits] of Object.entries(SETTING_LIMITS)) {
-      const scale = name === "minRoomSquares" ? "log" : "linear";
       // Read from the real defaults rather than a copy of them. A hand-maintained list here went
       // stale the moment a setting was added, and failed as `NaN` — which reads as a scaling bug
       // rather than as a missing entry.
       const value = readParameter(DEFAULT_SETTINGS, name as SettingName);
-      const back = fromSlider(toSlider(value, limits, scale), limits, scale);
-      // A twelfth of a square cannot land on a hundredth-step track exactly; a step's worth is the
-      // most any setting may move, and that only for values that were never on the track.
-      expect(Math.abs(back - value)).toBeLessThanOrEqual(limits.step);
+      expect(fromSlider(toSlider(value, limits, "linear"), limits, "linear"), name).toBe(value);
     }
   });
 
