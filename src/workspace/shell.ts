@@ -144,7 +144,8 @@ let drag: Drag = "pan";
 // Drawing
 // ---------------------------------------------------------------------------------------------
 
-export function viewportSize(): { width: number; height: number } {
+/** Not exported: `workspaceProbe.ts` has its own copy, which is what makes this look used. */
+function viewportSize(): { width: number; height: number } {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
@@ -162,10 +163,6 @@ export function setActiveLayers(layers: readonly LayerId[]): void {
 /** Ask for a repaint on the next frame. Cheap and idempotent — the frame loop coalesces. */
 export function invalidate(): void {
   dirty = true;
-}
-
-export function currentView(): View {
-  return view;
 }
 
 export function setView(next: View): void {

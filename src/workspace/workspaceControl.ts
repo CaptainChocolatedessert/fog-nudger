@@ -61,16 +61,3 @@ export async function openWorkspace(): Promise<string> {
 
   return "Workspace open. Escape or the Close button comes back.";
 }
-
-/**
- * Close it from outside.
- *
- * A convenience only. The workspace covers this panel, and a popover is dismissed by clicking
- * anywhere outside it, so by the time the workspace is up this button is gone. The ways out that
- * matter are on the workspace itself.
- */
-export async function closeWorkspace(): Promise<string> {
-  await OBR.modal.close(WORKSPACE_ID);
-  devLog("info", "workspace: closed from the panel");
-  return "Workspace closed.";
-}

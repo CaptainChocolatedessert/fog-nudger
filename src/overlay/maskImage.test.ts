@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "../trace/fixtures";
-import { paintGaps, paintMask, parseColour, rgbaByteLength, screenRect } from "./maskImage";
+import { paintGaps, paintMask, parseColour } from "./maskImage";
 
 const RED = { r: 255, g: 32, b: 32 };
 
@@ -87,13 +87,12 @@ describe("paintMask", () => {
 
   it("allocates the right size", () => {
     const mask = maskFromRows(["##", "##", "##"]);
-    expect(rgbaByteLength(mask)).toBe(2 * 3 * 4);
     expect(paintMask(mask, RED).length).toBe(2 * 3 * 4);
   });
 
   it("reuses a buffer of the right size", () => {
     const mask = maskFromRows(["#.", ".#"]);
-    const buffer = new Uint8ClampedArray(rgbaByteLength(mask));
+    const buffer = new Uint8ClampedArray(2 * 2 * 4);
     expect(paintMask(mask, RED, buffer)).toBe(buffer);
   });
 
@@ -129,36 +128,11 @@ describe("paintMask", () => {
     const tooSmall = new Uint8ClampedArray(4);
     const out = paintMask(mask, RED, tooSmall);
     expect(out).not.toBe(tooSmall);
-    expect(out.length).toBe(rgbaByteLength(mask));
+    expect(out.length).toBe(2 * 2 * 4);
   });
 
   it("handles an empty mask without throwing", () => {
     expect(paintMask(maskFromRows([]), RED).length).toBe(0);
-  });
-});
-
-describe("screenRect", () => {
-  it("builds the rectangle from two corners", () => {
-    expect(screenRect({ x: 10, y: 20 }, { x: 110, y: 220 })).toEqual({
-      x: 10,
-      y: 20,
-      width: 100,
-      height: 200,
-    });
-  });
-
-  it("does not care which corner arrives first", () => {
-    // Owlbear's bounds are not promised minimum-first, and a mirrored placement would swap them.
-    // Trusting the order would put the overlay inside out on exactly the maps nobody tests with.
-    expect(screenRect({ x: 110, y: 220 }, { x: 10, y: 20 })).toEqual(
-      screenRect({ x: 10, y: 20 }, { x: 110, y: 220 }),
-    );
-  });
-
-  it("never returns a negative extent", () => {
-    const rect = screenRect({ x: 50, y: 50 }, { x: -50, y: -50 });
-    expect(rect.width).toBeGreaterThanOrEqual(0);
-    expect(rect.height).toBeGreaterThanOrEqual(0);
   });
 });
 

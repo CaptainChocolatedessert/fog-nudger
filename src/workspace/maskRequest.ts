@@ -81,7 +81,6 @@ export function isCurrent(reply: Generation, requested: Generation): boolean {
  */
 export class MaskRequests {
   private requested: Generation = 0;
-  private settled: Generation = 0;
   private state: MaskState = { kind: "idle" };
 
   /** What the surface should currently be showing. */
@@ -111,7 +110,6 @@ export class MaskRequests {
    */
   fulfil(generation: Generation): boolean {
     if (!isCurrent(generation, this.requested)) return false;
-    this.settled = generation;
     this.state = { kind: "current", generation };
     return true;
   }
@@ -127,11 +125,6 @@ export class MaskRequests {
     if (!isCurrent(generation, this.requested)) return false;
     this.state = { kind: "failed", generation };
     return true;
-  }
-
-  /** The generation the surface is painting, or `null` when it is not painting one. */
-  painted(): Generation | null {
-    return this.state.kind === "current" ? this.settled : null;
   }
 
   /** Whether anything is in flight — the surface is blank and waiting rather than blank and idle. */

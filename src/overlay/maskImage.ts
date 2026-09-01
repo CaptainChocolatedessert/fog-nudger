@@ -1,12 +1,13 @@
 /**
  * Painting the binary mask into RGBA pixels.
  *
- * The whole of what the stage-one overlay draws. Ink gets the chosen colour at full alpha;
- * everything else is left completely transparent, so the map shows through untouched wherever the
- * pipeline found nothing. **Opacity is deliberately not applied here** — it is a display parameter
- * that changes many times a second while the GM drags a slider, and baking it into 8.4 million
- * pixels on every drag would be absurd when the canvas can apply it to the whole image for free at
- * draw time. See `overlay.ts`.
+ * How the ink and break masks become pixels — not the whole of what the surface draws, since the
+ * skeleton and regions layers draw vectors that never pass through here. Ink gets the chosen colour
+ * at full alpha; everything else is left completely transparent, so the map shows through untouched
+ * wherever the pipeline found nothing. **Opacity is deliberately not applied here** — it is a
+ * display parameter that changes many times a second while the GM drags a slider, and baking it
+ * into 8.4 million pixels on every drag would be absurd when the canvas can apply it to the whole
+ * image for free at draw time. `layers/ink.ts` is where that happens.
  *
  * Kept pure and separate from the page because the page cannot be tested: it needs a real modal, a
  * real room and a real map. This can be checked against a hand-written grid the way every other
@@ -44,11 +45,12 @@ export function parseColour(colour: string): Rgb | null {
 /**
  * How many bytes an RGBA buffer for this mask needs.
  *
- * Exported so a caller can decide whether to allocate before trying. At native resolution this is
- * four bytes a pixel over the whole map — about 34MB on this project's test map, on top of the
- * ~75MB of typed arrays the pipeline already holds.
+ * Not exported: it used to be, "so a caller can decide whether to allocate before trying", and no
+ * caller ever did. Worth knowing the figure anyway — at native resolution it is four bytes a pixel
+ * over the whole map, about 34MB on this project's test map, on top of the ~75MB of typed arrays the
+ * pipeline already holds.
  */
-export function rgbaByteLength(mask: BinaryMask): number {
+function rgbaByteLength(mask: BinaryMask): number {
   return mask.width * mask.height * 4;
 }
 
@@ -132,21 +134,4 @@ export function paintGaps(
   }
 
   return out;
-}
-
-/**
- * Where the raster's rectangle sits on screen, from the two probed corners.
- *
- * The corners come back as whatever Owlbear reports for the map's world bounding box, which is not
- * guaranteed to arrive minimum-first — a mirrored placement would swap them. Taking min and max
- * rather than trusting the order costs two comparisons and removes a whole class of "the overlay is
- * inside out" bug that would otherwise only appear on an unusually placed map.
- */
-export function screenRect(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-): { x: number; y: number; width: number; height: number } {
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  return { x, y, width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
 }

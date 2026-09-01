@@ -21,7 +21,6 @@ describe("MaskRequests", () => {
     const requests = new MaskRequests();
     expect(requests.current().kind).toBe("idle");
     expect(shouldPaint(requests.current())).toBe(false);
-    expect(requests.painted()).toBeNull();
     expect(requests.waiting()).toBe(false);
   });
 
@@ -35,15 +34,13 @@ describe("MaskRequests", () => {
     requests.request();
     expect(shouldPaint(requests.current())).toBe(false);
     expect(requests.waiting()).toBe(true);
-    expect(requests.painted()).toBeNull();
   });
 
   it("paints a reply that is still current", () => {
     const requests = new MaskRequests();
     const generation = requests.request();
     expect(requests.fulfil(generation)).toBe(true);
-    expect(shouldPaint(requests.current())).toBe(true);
-    expect(requests.painted()).toBe(generation);
+    expect(requests.current()).toEqual({ kind: "current", generation });
   });
 
   it("discards a reply that a later request has superseded, and stays blank", () => {
@@ -59,7 +56,7 @@ describe("MaskRequests", () => {
 
     // And the newer one still lands normally afterwards.
     expect(requests.fulfil(second)).toBe(true);
-    expect(requests.painted()).toBe(second);
+    expect(requests.current()).toEqual({ kind: "current", generation: second });
   });
 
   it("keeps only the latest of several requests made while one is in flight", () => {
@@ -72,7 +69,7 @@ describe("MaskRequests", () => {
 
     expect(requests.fulfil(first)).toBe(false);
     expect(requests.fulfil(latest)).toBe(true);
-    expect(requests.painted()).toBe(latest);
+    expect(requests.current()).toEqual({ kind: "current", generation: latest });
   });
 
   it("reports a current failure and stays blank", () => {
