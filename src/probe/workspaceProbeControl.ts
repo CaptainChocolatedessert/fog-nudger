@@ -40,6 +40,20 @@ import { key } from "../namespace";
 /** The modal's id, shared by the opener and the page it opens. */
 export const WORKSPACE_PROBE_ID = key("workspace-probe");
 
+/**
+ * How long the probe stays up, shared for the same reason the id is.
+ *
+ * The page arms its own dismissal timer from this and the message below quotes it, so the two
+ * cannot disagree. **They did**: the message promised 60 seconds against a 90-second timer, which
+ * is thirty seconds of an opaque full-screen sheet that was supposed to have gone — exactly the
+ * moment someone starts clicking at random. A number offered as reassurance to someone about to be
+ * put behind that sheet has to be the real one.
+ *
+ * Longer than the overlay probe's 25 seconds. Judging navigation is not a glance: it wants a pan, a
+ * zoom in, a zoom out, a comparison against Owlbear's, and a sweep of the step constant.
+ */
+export const WORKSPACE_PROBE_LIFETIME_MS = 90_000;
+
 /** Which of Owlbear's chrome the modal is opened with. */
 export type WorkspaceProbeVariant = "bare" | "framed";
 
@@ -86,7 +100,8 @@ export async function openWorkspaceProbe(variant: WorkspaceProbeVariant): Promis
   });
 
   return (
-    `Workspace probe (${variant}) up for 60 seconds. Drag the pad, spin the wheel, type in the ` +
+    `Workspace probe (${variant}) up for ${WORKSPACE_PROBE_LIFETIME_MS / 1000} seconds. ` +
+    `Drag the pad, spin the wheel, type in the ` +
     "box — the readout says whether Owlbear moved underneath. Escape or the button closes it, and " +
     "it closes itself regardless."
   );

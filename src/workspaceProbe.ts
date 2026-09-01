@@ -47,7 +47,10 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 import { resolveTraceMap } from "./map/mapImage";
-import { WORKSPACE_PROBE_ID } from "./probe/workspaceProbeControl";
+import {
+  WORKSPACE_PROBE_ID,
+  WORKSPACE_PROBE_LIFETIME_MS,
+} from "./probe/workspaceProbeControl";
 import { attributeMovement, pointMoved, type InputChannel } from "./probe/workspaceInput";
 import {
   MAX_SCALE,
@@ -69,10 +72,11 @@ installDevLog("workspace");
 /**
  * How long the probe stays up.
  *
- * Longer than the overlay probe's 25 seconds. Judging navigation is not a glance — it wants a pan,
- * a zoom in, a zoom out, a comparison against Owlbear's, and a sweep of the step constant.
+ * **Imported rather than declared here**, so the opener's message and this timer cannot say
+ * different numbers. They did: 60 promised against 90 armed — thirty seconds of an opaque
+ * full-screen sheet that was supposed to have gone.
  */
-const LIFETIME_MS = 90_000;
+const LIFETIME_MS = WORKSPACE_PROBE_LIFETIME_MS;
 
 /** How often Owlbear is asked where our two fixed world points are. */
 const POLL_MS = 150;
@@ -144,8 +148,17 @@ const canvas = document.getElementById("canvas");
 const hud = document.getElementById("hud");
 const closeButton = document.getElementById("close");
 
-/** Which chrome variant the opener asked for, purely so the readout can name it. */
-const variant = new URLSearchParams(window.location.search).get("variant") ?? "unknown";
+/**
+ * Which chrome variant the opener asked for, purely so the readout can name it.
+ *
+ * **Clamped to the known set rather than taken as given**, because it reaches `hud.innerHTML`. On
+ * every path anything here opens, `probeUrl()` builds it from a two-member union — but this page
+ * ships in `dist/` and is served from a public Pages site, so the query string is whatever a
+ * visitor types. Clamping is also what narrows the type to the union the rest of the file assumes.
+ */
+const requestedVariant = new URLSearchParams(window.location.search).get("variant");
+const variant: "bare" | "framed" | "unknown" =
+  requestedVariant === "bare" || requestedVariant === "framed" ? requestedVariant : "unknown";
 
 /**
  * When the sheet went up — the single origin for the countdown, the dismissal timer and the
@@ -283,6 +296,24 @@ let mapNote = "no map yet";
 
 function viewportSize(): { width: number; height: number } {
   return { width: window.innerWidth, height: window.innerHeight };
+}
+
+/**
+ * Escape text that came from the scene before it reaches `hud.innerHTML`.
+ *
+ * The HUD legitimately wants markup — it uses `<b>` and a couple of styled spans — so the answer is
+ * to escape the values rather than to give up the sink. An item's `name` is editable text stored in
+ * the scene, so a map called `<img src=x onerror=…>` would run in this iframe, which has the SDK
+ * loaded and can write back to the scene. It needs someone with edit rights or an imported scene,
+ * and it needs a GM to open the probe — low, and not zero, and three lines to close.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function average(values: readonly number[]): number {
@@ -920,7 +951,10 @@ async function run(): Promise<void> {
       const image = await loadImage(map.image.url);
       mapImage = image;
       maskLayer = buildMaskStandIn(image.naturalWidth, image.naturalHeight);
-      mapNote = `${map.name || "map"} ${image.naturalWidth}x${image.naturalHeight}`;
+      // Escaped where it is *built*, so every consumer is covered and no future interpolation site
+      // has to remember. The dev log takes the escaped form too, which is a small ugliness against
+      // one place to get it right.
+      mapNote = `${escapeHtml(map.name || "map")} ${image.naturalWidth}x${image.naturalHeight}`;
 
       /*
         Open on exactly what Owlbear is showing.

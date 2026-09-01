@@ -38,24 +38,6 @@
       p { margin: 0.4rem 0; }
       #status { color: var(--dim); }
       #status[data-state="bad"] { color: var(--danger); }
-      code {
-        font-family: ui-monospace, Consolas, monospace;
-        font-size: 0.9em;
-        color: var(--dim);
-      }
-      .probe {
-        margin-top: 0.8rem;
-        padding-top: 0.7rem;
-        border-top: 1px solid var(--line);
-      }
-      .probe h2 {
-        font-size: 0.8rem;
-        margin: 0 0 0.5rem;
-        font-weight: 600;
-        color: var(--dim);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
       button {
         font: inherit;
         color: var(--text);
@@ -77,137 +59,11 @@
         margin-bottom: 0.25rem;
       }
       /*
-        A list rather than a <select>, deliberately.
-
-        The dropdown this replaces rendered its options white-on-white and looked empty. Firefox
-        paints a native popup against the *system* background, not the page's, so `--line` at 12%
-        alpha stopped being a dark grey the moment the list escaped this iframe. Explicit opaque
-        option colours would have fixed that particular symptom, but a native popup inside a
-        sandboxed third-party iframe is a rendering path we do not control and cannot style
-        reliably.
-
-        It is also better for the job. There are typically two candidates and the choice between
-        them is a *comparison* — name, size, whether one is hidden. A dropdown hides exactly the
-        information the GM needs to choose with.
-      */
-      /*
-        Also used outside the picker, for standing explanation. Kept dim and small: it must not
-        compete with #result, which is where the answer to the last thing the GM clicked appears.
+        Standing explanation, as against an answer. Kept dim and small: it must not compete with
+        #result, which is where the answer to the last thing the GM clicked appears.
       */
       .note { color: var(--dim); font-size: 0.8em; }
       .note em { font-style: normal; color: var(--text); }
-
-      /*
-        Tabs. Three stages, and the numbering is load-bearing rather than decorative — destruction
-        cascades one way down them, so the order is forced rather than advisory.
-      */
-      .tabs {
-        display: flex;
-        gap: 0.25rem;
-        margin: 0.6rem 0 0.8rem;
-        border-bottom: 1px solid var(--line);
-      }
-      .tabs button {
-        flex: 1;
-        margin: 0;
-        border: none;
-        border-bottom: 2px solid transparent;
-        border-radius: 0.35rem 0.35rem 0 0;
-        background: transparent;
-        color: var(--dim);
-        padding: 0.4rem 0.3rem;
-        font-size: 0.8rem;
-      }
-      .tabs button:hover:not([aria-selected="true"]) { color: var(--text); background: var(--line); }
-      .tabs button[aria-selected="true"] {
-        color: var(--text);
-        border-bottom-color: var(--accent);
-        background: transparent;
-      }
-
-      /*
-        One row per setting: label and value on the first line, the slider across the second, the
-        hint under both. Sliders rather than number boxes because these are values you arrive at by
-        feel — you drag until the map looks right, and the readout tells you where you landed.
-      */
-      .settings { margin-bottom: 0.6rem; }
-      .setting {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: baseline;
-        gap: 0.15rem 0.5rem;
-        padding: 0.4rem 0;
-      }
-      .setting + .setting { border-top: 1px solid var(--line); }
-      .setting label { font-size: 0.8rem; }
-      .setting .value {
-        font-family: ui-monospace, Consolas, monospace;
-        font-size: 0.78rem;
-        color: var(--accent);
-      }
-      .setting input[type="range"] {
-        grid-column: 1 / -1;
-        width: 100%;
-        margin: 0.15rem 0 0.1rem;
-        /*
-          The track and thumb are drawn by the browser against the *system* palette, not the page.
-          That is the same trap the map dropdown fell into — it rendered white-on-white and looked
-          empty — so the colour is stated rather than inherited. `accent-color` is enough for the
-          filled track and the thumb in every browser that ships this panel.
-        */
-        accent-color: var(--accent);
-        background: transparent;
-        cursor: grab;
-      }
-      .setting input[type="range"]:active { cursor: grabbing; }
-      .setting input[type="range"]:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-      .setting input:disabled { opacity: 0.45; cursor: default; }
-      .setting .hint {
-        grid-column: 1 / -1;
-        font-size: 0.72rem;
-        color: var(--dim);
-        line-height: 1.35;
-        margin: 0;
-      }
-      .setting .hint b { font-weight: 600; color: var(--text); }
-
-      /*
-        Colour swatches, plus a native picker beside them.
-
-        The swatches exist because a native colour dialog opened from a sandboxed third-party iframe
-        is the rendering path that already burned this panel once, when the map dropdown painted its
-        options white-on-white against the *system* background and looked empty. Buttons we draw
-        ourselves cannot fail that way. The picker is offered as well because when it works it beats
-        any fixed palette.
-      */
-      .swatches {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.3rem;
-        margin-bottom: 0.5rem;
-      }
-      .swatches button {
-        width: 1.5rem;
-        height: 1.5rem;
-        margin: 0;
-        padding: 0;
-        border-radius: 0.3rem;
-        border: 2px solid transparent;
-        /* A ring in the panel's own colour, so a chosen swatch reads as chosen against any hue. */
-        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
-      }
-      .swatches button[aria-pressed="true"] { border-color: var(--accent); }
-      .swatches input[type="color"] {
-        width: 1.9rem;
-        height: 1.6rem;
-        padding: 0;
-        border: 1px solid var(--line);
-        border-radius: 0.3rem;
-        background: transparent;
-        cursor: pointer;
-      }
-      .swatches input:disabled, .swatches button:disabled { opacity: 0.45; cursor: default; }
 
       .actions { margin: 0.5rem 0 0.2rem; }
       button.quiet { background: transparent; color: var(--dim); }
@@ -233,35 +89,6 @@
     -->
     <p id="status" data-state="pending">Connecting&hellip;</p>
 
-    <!--
-      Three tabs, and the ordering is architectural rather than cosmetic.
-
-      Reading the map decides what is ink. Deriving abstracts that ink into the regions that will
-      define walls. Adjusting is what the GM wants, which neither of the others can express.
-
-      **Destruction cascades one way, and that is the whole reason for the numbers.** Changing the
-      reading recomputes the mask, which re-partitions wholesale and discards everything after it.
-      Changing the derivation regenerates every polygon from the same mask, so it discards hand
-      edits but not the reading. Nothing in the third tab destroys anything.
-
-      Why the first two are separate: the mask determines the partition completely — labelling's one
-      choice is forced by the diagonal-leak paradox — so nothing in tab 2 can split or join a
-      region. What it *can* do is delete a region and, through the containment rule, absorb the
-      space it held into whatever encloses it. That is abstraction, not reading.
-    -->
-    <!--
-      What is left here, and why each thing is not on the workspace.
-
-      Everything a GM turns is a step on that surface now. What stays is what acts on the *scene* —
-      accepting, un-accepting and removing items — plus the diagnostics, which report on a scene
-      rather than on a picture. A full-screen sheet over the map is the one place you cannot look at
-      the map as Owlbear is actually drawing it, which is exactly what these buttons need you to do.
-
-      The three stage tabs went with the controls. They carried a cascade — reading destroys
-      deriving, deriving destroys adjusting — and that cascade is still real and still declared, but
-      what is left on this side is a short list of actions with no ordering between them, and tabs
-      claiming one would have been decoration.
-    -->
     <div class="actions">
       <button id="open-workspace" disabled>Open the workspace</button>
     </div>
@@ -308,7 +135,7 @@
     <div class="actions">
       <button id="workspace-probe-bare" disabled>Workspace probe</button>
       <button id="workspace-probe-framed" disabled>&hellip;framed</button>
-      <button id="workspace-probe-close" class="quiet" disabled>Close workspace</button>
+      <button id="workspace-probe-close" class="quiet" disabled>Close probe</button>
     </div>
     <p class="note">
       <em>Workspace probe</em> puts up an <strong>opaque</strong> full-screen sheet that keeps its

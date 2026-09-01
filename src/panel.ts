@@ -3,7 +3,9 @@
  *
  * Every control a GM turns is a step on the workspace now. What is left here is the button that
  * opens it, removing what we put in the scene, and the diagnostics — and what those have in common is
- * that they are about a scene rather than about a picture.
+ * that they are about a scene rather than about a picture. Which is also why they are not on the
+ * workspace: a full-screen sheet over the map is the one place you cannot look at the map as
+ * Owlbear is actually drawing it, and that is exactly what these buttons need you to do.
  *
  * **This used to list three buttons for moving staged items around.** Staging is gone: there is one
  * operation, push, and the workspace both judges the partition and triggers the write.
@@ -23,17 +25,26 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devlog";
 import { describeError } from "./describeError";
 import { themeVariables } from "./theme";
-// `placeProbeShapes`, `promoteStaged` and `removeProbeShapes` are deliberately NOT wired up. They
-// answered roadmap step 1 — every finding is recorded in DESIGN.md §4 — and leaving their buttons
-// on the panel would invite someone to scatter magenta squares across a real map. The code stays
-// so re-measuring is cheap if Owlbear's fog behaviour ever changes; import them here to bring the
-// buttons back, and re-add the markup in panel.html.
+// `placeProbeShapes` and `removeProbeShapes` are deliberately NOT wired up. They answered roadmap
+// step 1 — every finding is recorded in DESIGN.md §4 — and leaving their buttons on the panel would
+// invite someone to scatter magenta squares across a real map. The code stays so re-measuring is
+// cheap if Owlbear's fog behaviour ever changes; import them here to bring the buttons back, and
+// re-add the markup in panel.html.
+//
+// `promoteStaged` was a third and is **deleted**, not unwired. It modelled the accept gesture, and
+// staging is gone — but the reason to delete rather than keep was its doc, which recorded
+// `visible: false` on the FOG layer as "not known to be load-bearing". It was: on that layer the
+// flag is the difference between a shape that *is* fog and one that has been cleared, and believing
+// that note is what shipped every accepted room coming back revealed. A corrected copy of a
+// function for a design that no longer exists is an invitation to re-wire it.
 import { inspectFogShapes, logCensus } from "./probe/fogProbe";
 // The overlay probe is not wired up either, and for a stronger reason than the shape-placing
 // buttons: it measured whether a *click-through* sheet over the map was possible at all, and that
 // design is closed — the workspace owns its input instead, and its probe measured the same modal
 // answering a harder question. `overlayProbeControl.ts` and its page stay as the record of how the
-// answer was got; re-import `openOverlayProbe` here and re-add the markup to bring it back.
+// answer was got; re-import `openOverlayProbe` **and `closeOverlayProbe`** here and re-add both
+// buttons to bring it back. Both, because opening a sheet you cannot close from the panel is
+// survivable only for a click-through one, and would not be for anything else.
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
 import { dryRun } from "./pipeline";
 import { openWorkspace } from "./workspace/workspaceControl";
