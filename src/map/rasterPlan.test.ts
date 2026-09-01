@@ -31,10 +31,18 @@ describe("planRaster", () => {
     expect(plan.factor).toBeGreaterThan(1);
   });
 
-  it("keeps the factor integral, so the reduction is uniform", () => {
-    // The reason this matters is not tidiness: a fractional ratio resamples different parts of the
-    // image against different sub-pixel phases and thins linework unevenly, which is how a wall
-    // acquires a gap that is not on the map.
+  it("keeps the factor integral, and the output a floor of the source over it", () => {
+    /*
+      The reason this matters is not tidiness: a fractional ratio resamples different parts of the
+      image against different sub-pixel phases and thins linework unevenly, which is how a wall
+      acquires a gap that is not on the map.
+
+      **The name used to end "so the reduction is uniform", and it overstates by exactly what the
+      second assertion measures.** The output size is a `floor`, so the *effective* ratio is
+      `size / floor(size / factor)` — not the factor. One phase slip across the whole image, which
+      is sub-pixel and almost certainly harmless, and `drawImage` resamples with the browser's own
+      filter at any ratio anyway. Uniform to within a pixel, not uniform.
+    */
     for (const size of [5000, 9000, 13000, 21000]) {
       const plan = planRaster(size, size, 12);
       expect(Number.isInteger(plan.factor)).toBe(true);

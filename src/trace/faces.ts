@@ -6,7 +6,10 @@
  * produces is a face boundary. The arrangement is safe to walk here because **no intersection is
  * ever computed**: the skeleton is already a planar embedding, nodes exist only where pixels are
  * adjacent, and the only geometric decision is the angular sort — which is close only when two edges
- * leave a node at nearly the same heading, the case the weld radius has already removed.
+ * leave a node at nearly the same heading. **That used to say "the case the weld radius has already
+ * removed", and nothing welds** (2026-08-30). What removes it now is sliver removal: two chains
+ * between the same pair of nodes bounding a sub-pixel triangle are exactly the near-parallel case,
+ * and one of the two is deleted before the faces are walked.
  *
  * With the convention below the face lies to the **right** of each half-edge and an enclosing cycle
  * has positive signed area. Holes come out negative, and a bridge walked out and back comes out at

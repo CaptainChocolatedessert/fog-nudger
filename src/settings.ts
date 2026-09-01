@@ -480,7 +480,7 @@ export function writeParameter(
  */
 export function maskFingerprint(settings: Settings): string {
   return readingParameters()
-    // The graph-only ones are excluded, which is what stops a prune or a weld costing a re-read.
+    // The graph-only ones are excluded, which is what stops a prune costing a re-read.
     // They change the faces, not the mask, and `GRAPH_ONLY` says why that distinction survived
     // step D when the record expected it to disappear.
     .filter((name) => !isSkeletonOnly(name))
@@ -522,8 +522,7 @@ const POST_READING: readonly SettingName[] = [
  * graph. **That was half right, and deleting the list would have been the wrong correction.**
  *
  * What is true is narrower than it looked. The mask fingerprint answers one question — would these
- * settings produce a different *mask* — and pruning a spur or welding a junction does not touch the
- * mask at all. It changes the graph, and therefore the faces. So the list stays out of the
+ * settings produce a different *mask* — and pruning a spur does not touch the mask at all. It changes the graph, and therefore the faces. So the list stays out of the
  * fingerprint, correctly, and what changes at step D is the **dispatch**: a change here used to
  * invalidate only the skeleton view, and must now invalidate the derived regions as well, because
  * they are the graph's faces. `recomputeFor` is where that lives.
