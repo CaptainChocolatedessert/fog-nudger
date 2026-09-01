@@ -59,6 +59,23 @@ import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 installDevLog("workspace");
 
 /*
+  A new reading is a new partition, and a new skeleton.
+
+  **Registered BEFORE the layers, and that order is load-bearing.** `publish` walks its listeners in
+  registration order and stops at the first one that refuses a reading, which is how a layer that
+  cannot allocate blanks the mask instead of leaving a stale one on screen. Behind the layers, these
+  two were part of what got cancelled — so a failed reading left the *partition* from the previous
+  mask marked current, and opening the Regions step drew it as though it were this reading's, with
+  nothing on the state line by then to say otherwise.
+
+  Marking derived state stale is not a thing that can fail and does not depend on anything being
+  paintable. A reading that produced a new mask has invalidated the partition whether or not a layer
+  could show it.
+*/
+registerRegionInvalidation();
+registerSkeletonInvalidation();
+
+/*
   The canvas stack, in draw order.
 
   Ink first, breaks over it: invented pixels sit on top of read ones rather than under them. Which of
@@ -69,11 +86,6 @@ registerInkLayer();
 registerBreaksLayer();
 registerSkeletonLayer();
 registerRegionsLayer();
-
-// A new reading is a new partition. Registered before the hint refresher below for no reason beyond
-// order of appearance; both are listeners and neither depends on the other.
-registerRegionInvalidation();
-registerSkeletonInvalidation();
 // Deriving costs the better part of a second and is visible in one step, so entering it is what pays
 // for it.
 onStepOpen("regions", watchRegions);
