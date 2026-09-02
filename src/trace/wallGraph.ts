@@ -292,6 +292,36 @@ function walkChains(mask: BinaryMask): { chains: Chain[]; orphans: number } {
  * walked instead, by deleting the sub-pixel faces such a cluster produces. Deleting an edge is a
  * purely combinatorial edit and cannot cross anything. See `removeEdges` and `graphRegions.ts`.
  */
+/**
+ * Paint a graph's edges back into a mask — the inverse of the chain walk.
+ *
+ * **This is what lets the stored graph leave its raster behind.** `WallGraph.framed` is a
+ * full-raster bitmap, about a megabyte on the test map, and `graphCodec.ts` deliberately does not
+ * store it. It does not have to: every skeleton pixel belongs to some chain, so the union of every
+ * edge's points *is* the framed skeleton, and this rebuilds it exactly.
+ *
+ * The one condition is the graph's own invariant — `stats.orphans` zero, meaning no skeleton pixel
+ * was stepped over by the walk. That is asserted by the randomised sweep on every generated skeleton,
+ * so it is a property the graph already has rather than one this function is hoping for.
+ *
+ * Node pixels are shared between the edges that meet there and simply get written twice.
+ */
+export function rasterizeGraph(graph: {
+  readonly width: number;
+  readonly height: number;
+  readonly edges: readonly { readonly points: readonly Vector2[] }[];
+}): BinaryMask {
+  const { width, height } = graph;
+  const data = new Uint8Array(Math.max(0, width * height));
+  for (const edge of graph.edges) {
+    for (const point of edge.points) {
+      if (point.x < 0 || point.y < 0 || point.x >= width || point.y >= height) continue;
+      data[point.y * width + point.x] = 1;
+    }
+  }
+  return { width, height, data };
+}
+
 export function buildWallGraph(skeleton: BinaryMask): WallGraph {
   const framed = frameSkeleton(skeleton);
   const { chains, orphans } = walkChains(framed);
