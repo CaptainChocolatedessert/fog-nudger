@@ -72,7 +72,8 @@ import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { applyGapFill, findGaps, type GapFinding, type GapLabels } from "./trace/gaps";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
-import { describeAreaCheck } from "./trace/faces";
+import { describeAreaCheck, type FittedEdge } from "./trace/faces";
+import type { WallGraph } from "./trace/wallGraph";
 import {
   coveredArea,
   deriveGraphRegions,
@@ -444,6 +445,19 @@ export interface TraceRun {
    * which is right for the area check and wrong to emit, so the ring drops it and it comes out here.
    */
   readonly walls: readonly TracedWall[];
+  /**
+   * The cleaned graph and its fitted edges — what step G freezes.
+   *
+   * The **cleaned** one, after sliver removal, because that is what the faces are made of and what
+   * the Walls step draws: a GM must edit what they can see. The raw graph has an order of magnitude
+   * more nodes, almost all of them artefacts of junction clusters.
+   *
+   * Carried on the run rather than re-derived by the freeze, so what gets stored is provably the
+   * same geometry this run would have emitted. Fitting keeps both ends of every edge, so the fitted
+   * endpoints *are* these nodes, which is what lets the stored document share them by reference.
+   */
+  readonly graph: WallGraph;
+  readonly fittedEdges: readonly FittedEdge[];
   /** One line for the panel. Detail is already in the dev log by the time this is returned. */
   readonly summary: string;
 }
@@ -1468,6 +1482,8 @@ export async function runTrace(
       raster: { width: plan.width, height: plan.height },
       regions,
       walls,
+      graph: derived.graph,
+      fittedEdges: derived.fittedEdges,
       summary,
     },
   };

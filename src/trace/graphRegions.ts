@@ -137,6 +137,14 @@ export interface GraphRegionResult {
    */
   readonly droppedCycles: number;
   /**
+   * Every edge's fitted polyline, aligned with `graph.edges`, at the tolerance actually used.
+   *
+   * What step G freezes. Fitting keeps both ends of every edge, so these endpoints *are* the graph's
+   * own nodes — which is what lets the stored document share them by reference rather than by two
+   * coordinates happening to be equal.
+   */
+  readonly fittedEdges: readonly FittedEdge[];
+  /**
    * Edges no emitted ring traverses — the walls that need a line of their own.
    *
    * **Every bridge is one**, plus two smaller cases:
@@ -291,6 +299,7 @@ export function deriveGraphRegions(
     faces,
     labelled: filteredLabelling,
     regions: built.regions.map((region) => ({ ...region, overCap: region.commands > cap })),
+    fittedEdges: built.fitted,
     skeleton: pruned.mask,
     discarded,
     bridges,
@@ -318,6 +327,14 @@ function assemble(
   tolerance: number,
 ): {
   uncovered: FittedEdge[];
+  /**
+   * Every edge's fitted polyline, positionally aligned with `graph.edges`.
+   *
+   * Carried out so the freeze can store it. It is the *escalated* set when the tolerance rose, which
+   * is the point: what gets frozen has to be what would have been emitted, not a first attempt that
+   * did not fit the command cap.
+   */
+  fitted: readonly FittedEdge[];
   regions: Omit<GraphRegion, "overCap">[];
   degenerateCycles: number;
   filledHoles: number;
@@ -420,7 +437,7 @@ function assemble(
     if (!covered.has(edge)) uncovered.push(fittedEdges[edge]!);
   }
 
-  return { regions, degenerateCycles, filledHoles, droppedCycles, covered, uncovered };
+  return { regions, degenerateCycles, filledHoles, droppedCycles, covered, uncovered, fitted: fittedEdges };
 }
 
 /** One line for the log. */

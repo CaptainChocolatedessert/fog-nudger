@@ -105,6 +105,14 @@
       .row {
         margin: 0 0 0.9rem;
       }
+      /*
+        A control the frozen graph has closed. Dimmed rather than hidden: the GM needs to see that
+        the reading still exists and where it went, or "start over" reads as a way to lose work
+        rather than as the way back to a thing they can still see.
+      */
+      .row.frozen {
+        opacity: 0.45;
+      }
       .row .top {
         display: flex;
         justify-content: space-between;
@@ -312,6 +320,49 @@
       }
       #exit-anyway[hidden] {
         display: none;
+      }
+
+      /*
+        The confirmation, drawn by us rather than by Owlbear.
+
+        The workspace already owns its whole surface and all of its input, so this needs no modal
+        from the SDK and raises no question about nesting one inside another. It is only ever used
+        for the two irreversible actions — freezing the graph and discarding it — because a dialog
+        that appears often is one a GM learns to dismiss, and the boundary itself is shown by
+        disabling what would cross it rather than by asking afterwards.
+      */
+      #confirm {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        background: rgba(6, 7, 16, 0.72);
+      }
+      .confirm-panel {
+        max-width: 30rem;
+        margin: 1rem;
+        padding: 1rem 1.15rem;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 0.5rem;
+        background: #14162a;
+        box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.55);
+      }
+      .confirm-panel h2 {
+        margin: 0 0 0.5rem;
+        font-size: 0.95rem;
+      }
+      .confirm-panel p {
+        margin: 0 0 0.6rem;
+        font-size: 0.8rem;
+        line-height: 1.45;
+        color: #c8ccdf;
+      }
+      .confirm-actions {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
+        margin-top: 0.9rem;
       }
 
       /*

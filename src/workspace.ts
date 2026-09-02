@@ -53,6 +53,8 @@ import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
+import { renderFreezeAction } from "./workspace/freezeAction";
+import { loadStage, onStageChange } from "./workspace/stage";
 import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 
@@ -104,9 +106,13 @@ registerStepContent("map", renderMapPicker);
 // The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
 // particular map is change the colour, and it is not a number so it cannot be a row.
 registerStepContent("ink", renderSwatches);
-// The one action on this surface that writes to the scene, at the *end* of the step that judges what
-// would be written.
-registerStepContent("regions", renderPushAction, "bottom");
+// The two actions on this surface that write to the scene, at the *end* of the step that judges what
+// would be written. The door comes first: freezing is what decides whether the reading is still
+// live, and pushing is the routine thing you do afterwards.
+registerStepContent("regions", (body) => {
+  renderFreezeAction(body);
+  renderPushAction(body);
+}, "bottom");
 
 /*
   Closing writes the result to the scene.
@@ -136,6 +142,15 @@ onMapClick((u, v) => {
   say(probeMapFraction(u, v));
 });
 
+/*
+  Crossing the door changes which controls are live, so the rows are rebuilt.
+
+  Subscribed **once, here**, rather than by the rows or the button that draws it. Both of those are
+  rebuilt on every accordion click, so a subscription inside either would add a listener per click,
+  each holding DOM that has already been thrown away.
+*/
+onStageChange(renderPanel);
+
 // The measurements a readout reports against only exist once a reading has landed. Registered after
 // the layers, so a layer that could not take a reading stops this too.
 onReading(() => {
@@ -156,10 +171,20 @@ async function run(): Promise<void> {
   }
 
   await loadSettings();
+  // Before the first `renderPanel`, because the stage decides whether the reading controls are drawn
+  // live or closed, and a row drawn live and disabled a moment later is a row that invited a click.
+  const stage = await loadStage();
   setControlsLive(true);
   // Repainted wholesale rather than patched, so there is no path by which a row keeps a value from
   // the defaults it was first drawn with.
   renderPanel();
+
+  // Said on the state line rather than only in the console, because it is a real loss: something was
+  // stored and could not be read, so the GM's wall editing for this scene is gone. Distinguished from
+  // "nothing stored yet", which is silent because it is the ordinary state of a new scene.
+  if (stage.corrupt) {
+    say("the saved wall editing could not be read and has been ignored — see the console", "bad");
+  }
 
   // Watched before the first load, so a scene whose items arrive after this iframe does not leave
   // the picker empty — the race the panel's version lost on its first outing.

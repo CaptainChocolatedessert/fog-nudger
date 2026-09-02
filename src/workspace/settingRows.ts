@@ -22,6 +22,7 @@ import {
 import type { SettingName } from "../settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
 import { requestReread } from "./reading";
+import { inStageTwo } from "./stage";
 import { invalidateRegions } from "./regions";
 import { invalidateSkeleton } from "./skeleton";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
@@ -217,7 +218,30 @@ export function settingRow(control: Control): HTMLElement {
     void persistSettings();
   });
 
-  input.disabled = !live;
+  /*
+    Frozen in stage two, if this control is one that would rebuild the graph.
+
+    **`PARAMETER_KIND` already answers which**, which is why there is no second list to keep in step
+    with the cascade. A `pipeline` control feeds the mask or the graph, so moving it in stage two
+    would re-derive the very thing the GM has been editing; a `display` one — ink opacity, and the
+    two preview colours — touches neither, and stays live because recolouring while editing walls is
+    an ordinary thing to want.
+
+    Disabled rather than confirmed on use. §8 wants the boundary visible *before* it is crossed, and
+    a live slider that throws a dialog when you nudge it to see what it does is a trap; the sentence
+    below is the continuous statement, and the deliberate way back is one button in the Regions step.
+  */
+  const frozen = inStageTwo() && PARAMETER_KIND[control.name] === "pipeline";
+  input.disabled = !live || frozen;
+  if (frozen) {
+    row.classList.add("frozen");
+    const closed = document.createElement("p");
+    closed.className = "hint";
+    closed.textContent = "Closed — the graph is frozen. Start over, under Regions, reopens this.";
+    row.append(top, input, closed);
+    return row;
+  }
+
   row.append(top, input, hint);
   return row;
 }
