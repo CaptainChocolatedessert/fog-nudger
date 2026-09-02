@@ -69,6 +69,14 @@ export interface LabelledParent {
  * Anything attached to something we do not recognise is counted separately: a GM's own hand-drawn
  * fog produces walls too, and folding those into ours would inflate the numbers invisibly.
  *
+ * ## And it says so when there is nothing to attribute
+ *
+ * With no parents *and* no derived items every branch below is skipped and the join produces the
+ * empty string, so the census printed `Walls by shape: .` — which is the blank line
+ * `summariseItems` has an explicit guard against, arriving in the function next to it. Found in a
+ * room on 2026-09-01, on a scene that had no fog of ours in it yet. An empty answer and an answer
+ * that never ran must not look the same, and a lone full stop is how that failure looks.
+ *
  * ## Counted per LABEL, not per id — and that is now used deliberately
  *
  * Two parents sharing a label collapse into one entry. That reads as a bug against the paragraph
@@ -107,5 +115,6 @@ export function attributeByParent(
   const parts = [...counts.entries()].map(([label, count]) => `${label}×${count}`);
   if (foreign > 0) parts.push(`other-parents×${foreign}`);
   if (unattached > 0) parts.push(`unattached×${unattached}`);
+  if (parts.length === 0) return "nothing of ours in the scene, and no walls derived from anything";
   return parts.join(", ");
 }

@@ -65,6 +65,24 @@
  * **The reserve, if a larger map turns up:** tile the binarisation with an overlap of the Sauvola
  * radius, which bounds the tables to a tile rather than the image. That is real work and there is no
  * reason to do it before a map demands it.
+ *
+ * ## A larger map turned up — 2026-09-01, and the budget does not count everything
+ *
+ * A 9299×5692 map (52.9 megapixels) was loaded in a room. It caps at factor 2 to 4649×2846, or 13.2
+ * — inside the budget, and **the first time this path has ever run**. Closing the workspace then took
+ * long enough that the GM used the Exit anyway button.
+ *
+ * **The arithmetic above bounds the RASTER and says nothing about the decoded SOURCE.** `loadImage`
+ * holds an `HTMLImageElement` for the full-size image while `drawToPixels` scales it into the capped
+ * canvas, so both are live at once. At four bytes a pixel that source is ~212MB on top of the
+ * raster's ~450MB, in a third-party iframe — and the source is the *larger* of the two on exactly
+ * the maps that trigger capping, since capping is what makes them differ. The budget was counted
+ * against the arrays this module allocates and the browser's decode was never in it.
+ *
+ * **That is reasoning, not a measurement.** What is measured is one GM saying the close was slow on
+ * one 52.9MP map, with no log captured. It could as easily be the trace being honestly 1.6× the test
+ * map's, or the emit being larger, or the connection. **Do not act on this paragraph without a log
+ * from that map**; it is here so the next person to see a slow large map has somewhere to start.
  */
 export const MEGAPIXEL_BUDGET = 16;
 

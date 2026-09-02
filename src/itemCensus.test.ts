@@ -77,6 +77,15 @@ describe("attributeByParent", () => {
   it("says nothing misleading when there are no parents at all", () => {
     expect(attributeByParent([{ attachedTo: "a" }], [])).toBe("other-parents×1");
   });
+
+  it("says something when there is nothing at all, rather than an empty string", () => {
+    // Found in a room, 2026-09-01: on a scene with no fog of ours the census printed
+    // "Walls by shape: ." — the blank line `summariseItems` has an explicit guard against, in the
+    // function beside it. An empty answer and an answer that never ran must not look the same.
+    expect(attributeByParent([], [])).toBe(
+      "nothing of ours in the scene, and no walls derived from anything",
+    );
+  });
 });
 
 describe("summariseItems", () => {
