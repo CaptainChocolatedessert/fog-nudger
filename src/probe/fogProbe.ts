@@ -12,8 +12,9 @@
  *   fog shape does not do that, so it is ours. `opaque` differs from `baseline` in fill opacity
  *   alone.
  * - **Wall attribution** — the first census reported a total, which was consistent with the split
- *   we expected *and* with splits we did not. Walls are now counted per parent shape (see
- *   `attributeByParent`), so "stroke width zero still makes walls" is measured rather than inferred.
+ *   we expected *and* with splits we did not, so it could not settle what it was run to settle.
+ *   Counting per parent shape is what answered it. That census is **deleted** (2026-09-02): the
+ *   question is closed, and its answer is in §4 of the design record.
  * - **Layer staging** — fog shapes ignore their own colour, so a proposal cannot be marked by
  *   appearance while it sits on the `FOG` layer. Staging proposals on another layer and moving them
  *   across when accepted would restore that. The open question is whether players see them while
@@ -33,7 +34,6 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { REGION_KEY } from "../emit/fogShapes";
 import { WALL_KEY } from "../emit/wallLines";
-import { attributeByParent, summariseItems } from "../itemCensus";
 import { key } from "../namespace";
 import {
   PathOp,
@@ -124,7 +124,7 @@ export async function placeProbeShapes(): Promise<string> {
     `dpi=${dpi} size=${size} stroke=${stroke}`,
   );
 
-  return `Placed ${items.length} shapes. Give Dynamic Fog a moment, then take a census.`;
+  return `Placed ${items.length} shapes. Give Dynamic Fog a moment, then inspect the fog items.`;
 }
 
 /**
@@ -144,48 +144,6 @@ export async function removeProbeShapes(): Promise<string> {
   await OBR.scene.items.deleteItems(ours.map((item) => item.id));
   devLog("info", `probe: removed ${ours.length} shapes`);
   return `Removed ${ours.length} shapes.`;
-}
-
-/**
- * Report what is in the scene, what is in this client's local set, and which of our shapes produced
- * which walls.
- *
- * Fires unconditionally and reports in every case, including the boring one — a census that only
- * spoke when something was wrong could not tell "no walls were derived" from "the census never
- * ran". Both item sets are reported because Dynamic Fog's walls live only in the local one, which
- * is the finding this census style came from.
- */
-export async function logCensus(): Promise<string> {
-  if (!(await OBR.scene.isReady())) return "No scene open.";
-
-  const [networked, local, ours] = await Promise.all([
-    OBR.scene.items.getItems(),
-    OBR.scene.local.getItems(),
-    ourFogItems(),
-  ]);
-
-  const networkedSummary = summariseItems(networked);
-  const localSummary = summariseItems(local);
-
-  // Per shape, not as a total. A total is consistent with the split we expect and with splits we do
-  // not, so it cannot settle what it was run to settle.
-  //
-  // **Per KIND once there are many**, because the question this answers on a pushed map — do our
-  // shapes derive walls, and do the wall lines derive them too — is answered by the kind split,
-  // while a per-item split across several hundred regions is a line nobody can read. The per-item
-  // form was written for six hand-placed probe squares and is still what it gives for them.
-  const walls = local.filter((item) => item.type === "WALL");
-  const parents = ours.map((item) => ({
-    id: item.id,
-    label: ours.length > PER_ITEM_PARENT_CAP ? kindOf(item) : labelOf(item),
-  }));
-  const perShape = attributeByParent(walls, parents);
-
-  devLog("info", `census — networked: ${networkedSummary}`);
-  devLog("info", `census — local:     ${localSummary}`);
-  devLog("info", `census — walls by parent: ${perShape}`);
-
-  return `Walls by shape: ${perShape}. (networked ${networkedSummary}; local ${localSummary})`;
 }
 
 /**
@@ -223,37 +181,18 @@ export async function inspectFogShapes(): Promise<string> {
   return `Logged ${fogItems.length} fog items (${theirs} not ours). Compare the styles in dev.log.`;
 }
 
-/**
- * Above this many of our items, the census reports per kind rather than per item.
- *
- * A pushed map carries hundreds of regions plus a wall line per fitted segment, and a parent list
- * that long makes the census line unreadable — which is the same failure as reporting a total, one
- * step along. Six probe squares stay per item.
- */
-const PER_ITEM_PARENT_CAP = 20;
-
 function ourItems(): Promise<Item[]> {
   return OBR.scene.items.getItems((item) => PROBE_KEY in item.metadata);
 }
 
 /**
- * Anything this extension wrote, by any of its three metadata keys.
+ * Which of ours this is, named by kind, since three different things carry a label.
  *
- * **`ourItems()` alone is not that, and the two diagnostics below were using it as though it were.**
- * `PROBE_KEY` belongs to the step-1 probe, whose only writer has no wired button, so in a shipped
- * build it matches nothing at all — while the emit path writes `REGION_KEY` on every fog shape and
- * `WALL_KEY` on every wall line. So a census on a map that had been pushed reported about an empty
- * set, and the fog inspector called all seven hundred of our own items "GM-drawn". `emitRegions.ts`
- * already knew the pair; nothing in this file did.
+ * The three-key test matters and was got wrong for months: `PROBE_KEY` belongs to the step-1 probe,
+ * whose only writer has no wired button, so on its own it matches nothing in a shipped build — while
+ * the emit path writes `REGION_KEY` on every fog shape and `WALL_KEY` on every wall line. Checking
+ * the probe key alone made the fog inspector call every one of our own items "GM-drawn".
  */
-function ourFogItems(): Promise<Item[]> {
-  return OBR.scene.items.getItems(
-    (item) =>
-      PROBE_KEY in item.metadata || REGION_KEY in item.metadata || WALL_KEY in item.metadata,
-  );
-}
-
-/** Which of ours this is, named by kind, since three different things now carry a label. */
 function labelOf(item: Item): string {
   const probe = item.metadata[PROBE_KEY];
   if (typeof probe === "string") return probe;
@@ -263,14 +202,6 @@ function labelOf(item: Item): string {
   if (typeof region === "string") return `region:${region}`;
   const wall = item.metadata[WALL_KEY];
   if (typeof wall === "string") return `wall:${wall}`;
-  return "unlabelled";
-}
-
-/** Which kind an item of ours is, for the summary a long parent list collapses to. */
-function kindOf(item: Item): string {
-  if (PROBE_KEY in item.metadata) return "probe";
-  if (REGION_KEY in item.metadata) return "region";
-  if (WALL_KEY in item.metadata) return "wall";
   return "unlabelled";
 }
 

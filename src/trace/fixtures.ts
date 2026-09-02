@@ -100,7 +100,8 @@ export function room(options: {
  * which is to say not at all once it is a line long.
  *
  * A drawn grid cannot hide that class of mistake: the teeth are visibly joined or visibly not. It
- * is the same argument the project makes for the region census, applied one level down.
+ * is the same argument that eventually deleted the region census, applied one level down — a picture
+ * you can look at beats a number standing in for one.
  *
  * Rows must all be the same length, and a ragged fixture throws rather than padding — padding would
  * silently invent the space at the end of a short row, which is precisely the kind of accident this

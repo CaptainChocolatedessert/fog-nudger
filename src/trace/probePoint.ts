@@ -10,10 +10,16 @@
  * measurement that already existed, and one by the GM pointing out that the areas are *white*, which
  * no binariser is going to call ink.
  *
- * The common fault is not that the guesses were bad. It is that **every diagnostic in this project
- * reports a total**, and a total cannot answer "what is happening *there*". The census counts
- * regions, the coverage line sums areas, the ink-shape check ranks components — none of them can be
- * pointed at the thing a human is looking at.
+ * The common fault is not that the guesses were bad. It is that **every other diagnostic here
+ * reports a total**, and a total cannot answer "what is happening *there*". The coverage line sums
+ * areas, the ink-shape check ranks components — neither can be pointed at the thing a human is
+ * looking at.
+ *
+ * That is also why this one survived when both censuses were deleted on 2026-09-02. The workspace
+ * draws the ink, the skeleton and the partition, so most of what an aggregate used to stand in for
+ * can simply be looked at now. **This answers what looking cannot**: what luminance was actually
+ * read, whether the threshold called it ink, and whether that ink was invented by the gap repair
+ * rather than read from the map.
  *
  * So this reports one pixel, and the numbers it returns are the ones that discriminate:
  *

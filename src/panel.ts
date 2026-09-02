@@ -37,7 +37,7 @@ import { themeVariables } from "./theme";
 // flag is the difference between a shape that *is* fog and one that has been cleared, and believing
 // that note is what shipped every accepted room coming back revealed. A corrected copy of a
 // function for a design that no longer exists is an invitation to re-wire it.
-import { inspectFogShapes, logCensus } from "./probe/fogProbe";
+import { inspectFogShapes } from "./probe/fogProbe";
 // The overlay probe is not wired up either, and for a stronger reason than the shape-placing
 // buttons: it measured whether a *click-through* sheet over the map was possible at all, and that
 // design is closed — the workspace owns its input instead, and its probe measured the same modal
@@ -165,7 +165,6 @@ OBR.onReady(async () => {
     wireButton("dry-run", dryRun),
     wireButton("open-workspace", openWorkspace),
     wireButton("remove", removeOurs),
-    wireButton("census", logCensus),
     wireButton("inspect", inspectFogShapes),
     wireButton("workspace-probe-bare", () => openWorkspaceProbe("bare")),
     wireButton("workspace-probe-framed", () => openWorkspaceProbe("framed")),

@@ -19,12 +19,13 @@
  * with a real room *in direction* and did. A dry run inside the extension executes the same code
  * the emit path will, so that class of disagreement cannot arise here by construction.
  *
- * ## What it cannot report yet, said plainly
+ * ## What it reports, and what it deliberately no longer does
  *
- * The roadmap calls for a **region** census. Regions do not exist until steps 4 and 5, so this
- * reports the rig around the hole they will fill: which map, at what resolution, under what
- * transform, with what luminance. That is less than the word "census" promises, and it is better to
- * say so than to let a smaller set of numbers wear the name.
+ * Which map, at what resolution, under what transform, with what luminance, and what the graph and
+ * the faces came out as. **Not** a region census: that existed so a fault could be diagnosed without
+ * either party looking at pixels, which was true when the panel was a popover with no picture, and
+ * stopped being true when the workspace started drawing the partition in six colours. Deleted
+ * 2026-09-02 — see `DESIGN.md` §11 G, which also carries why the merge alarm went with it.
  *
  * ## Everything is reported on every run
  *
@@ -71,7 +72,6 @@ import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { applyGapFill, findGaps, type GapFinding, type GapLabels } from "./trace/gaps";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
-import { censusStats, describeCensus } from "./trace/regionCensus";
 import { describeAreaCheck } from "./trace/faces";
 import {
   coveredArea,
@@ -713,8 +713,9 @@ function composeInk(source: ReadingStage, settings: Settings, identity: string):
   //
   // Runs before labelling because it explains a class of result labelling cannot: a filled area
   // whose tone fell on the ink side of the threshold is *ink*, so it never becomes a region, is
-  // never covered, and shows through as bare map inside a revealed room. The census cannot see it —
-  // from the region statistics' point of view nothing is missing, because the area never existed.
+  // never covered, and shows through as bare map inside a revealed room. No aggregate can see it:
+  // from a count of regions' point of view nothing is missing, because the area never existed. Only
+  // the point probe answers it, which is why that one survived the diagnostics being cut back.
   //
   // Denominated in measured ink width, since a stroke is one ink width across its narrow side by
   // definition and a filled shape is several.
@@ -1196,8 +1197,6 @@ export async function runTrace(
     name: mapName,
   };
 
-  const stats = censusStats(labelled, { pxPerSquare });
-
   devLog(
     "info",
     `trace: graph — thinned ${derived.thinning.before} ink pixels to ${derived.thinning.after} in ` +
@@ -1245,7 +1244,6 @@ export async function runTrace(
     "info",
     `trace: ${describeGraphRegions(derived)}`,
   );
-  devLog("info", `trace: census — ${describeCensus(stats)}`);
 
   // ## The area check
   //
@@ -1275,19 +1273,6 @@ export async function runTrace(
       "warn",
       `trace: ${derived.faces.unlabelled} cycles had no interior at all. Exactly one is expected — ` +
         `the unbounded face outside the border frame — so anything else is a degenerate sliver.`,
-    );
-  }
-
-  // The merge signal, spelled out rather than left for a reader to reconstruct. With the exterior
-  // kept, the largest region is normally the outside and its share being big is correct — so the
-  // number that matters is the *second*, which is the largest thing that ought to be a single room.
-  if (stats.topShares.length >= 2) {
-    const second = stats.topShares[1]!;
-    devLog(
-      "info",
-      `trace: largest region ${(stats.topShares[0]! * 100).toFixed(1)}% (expected to be the ` +
-        `outside, which is kept deliberately); second ${(second * 100).toFixed(1)}% — that is the ` +
-        `one to watch, since rooms merging into each other show up there`,
     );
   }
 
@@ -1469,7 +1454,7 @@ export async function runTrace(
     `, ${reading.polarity}${reading.confident ? "" : "?"}` +
     `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
     (reading.inkWidth === null ? "" : ` ~${reading.inkWidth.toFixed(1)}px wide`) +
-    `, ${stats.count} regions (${stats.roomSized} room-sized)` +
+    `, ${derived.regions.length} regions` +
     `, ${totalVertices} vertices in ${totalCommands} commands` +
     (overCap.length > 0 ? ` (${overCap.length} OVER CAP)` : "") +
     `, ${elapsed}ms`;

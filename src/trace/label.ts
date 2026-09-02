@@ -48,12 +48,12 @@ export interface Region {
    * Reported, never acted on. It used to be the candidate rule for finding the exterior and was
    * retired for being wrong on any map whose rooms run to the edge — which is common.
    *
-   * **No production caller can currently see a `true` here**, and the census stopped printing it on
-   * 2026-08-31 for that reason: the pipeline only labels `graph.framed`, whose outer row and column
-   * are painted as skeleton before labelling runs, and `labelSpace` skips ink. Kept because this is a
-   * general labeller — `inkBlobs` labels an inverted mask through it, and nothing stops a future
-   * caller passing an unframed one — but a diagnostic that can only report its own null must not be
-   * printed, which is the rule the census was breaking.
+   * **No production caller can currently see a `true` here**: the pipeline only labels
+   * `graph.framed`, whose outer row and column are painted as skeleton before labelling runs, and
+   * `labelSpace` skips ink. The region census printed it anyway until 2026-08-31 and was deleted
+   * outright on 09-02. Kept because this is a general labeller — `inkBlobs` labels an inverted mask
+   * through it, and nothing stops a future caller passing an unframed one — but **a diagnostic that
+   * can only report its own null must not be printed**, which is the rule that was being broken.
    */
   readonly touchesBorder: boolean;
 }
@@ -204,8 +204,8 @@ export function labelSpace(
     }
   }
 
-  // Filter and compact. Surviving roots are renumbered from 1 in descending area order, so the
-  // census reads in the order a human wants and the ids are stable to quote.
+  // Filter and compact. Surviving roots are renumbered from 1 in descending area order, so an id is
+  // stable enough to quote and the biggest face is always 1.
   const survivors = [...area.entries()]
     .filter(([, count]) => count >= options.minArea)
     .sort((a, b) => b[1] - a[1] || a[0] - b[0]);

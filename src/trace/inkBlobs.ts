@@ -46,8 +46,8 @@
  *
  * That a blob is wrong. A solid ink blob can be a perfectly correct piece of map — a filled pillar,
  * a block of rubble, a plinth. It is a *candidate*, reported with its position so a human can look
- * at it, and the census's standing rule applies: this is a troubleshooting instrument, not a
- * quality signal.
+ * at it. **A troubleshooting instrument, not a quality signal** — the standing rule that outlived
+ * the census it was written for.
  *
  * Pure: no DOM, no SDK.
  */

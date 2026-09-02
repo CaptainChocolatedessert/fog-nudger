@@ -104,8 +104,8 @@ export interface GraphRegionResult {
   /**
    * The labelling of the framed skeleton, with the smallest-room filter applied to its region list.
    *
-   * Carried so the census and the point probe read the *same* partition the faces came from rather
-   * than a second one derived beside it. Its `discarded` counts are the faces the filter dropped,
+   * Carried so the point probe reads the *same* partition the faces came from rather than a second
+   * one derived beside it. Its `discarded` counts are the faces the filter dropped,
    * not anything the labelling itself refused — labelling runs with no minimum, because the area
    * identity compares against a pixel count and a filtered count would have holes in it.
    */
@@ -238,7 +238,7 @@ export function deriveGraphRegions(
     else discarded += 1;
   }
 
-  // Carried out with the survivors only, so the census and the probe describe what was emitted.
+  // Carried out with the survivors only, so the point probe describes what was emitted.
   const filteredLabelling: LabelledSpace = {
     ...labelled,
     regions: labelled.regions.filter((region) => survives.has(region.id)),
