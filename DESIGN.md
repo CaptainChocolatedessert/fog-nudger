@@ -3277,9 +3277,123 @@ discard). This does not solve that problem, it **removes** it: stage two never r
 is ever renumbered and a move is just a stored coordinate. It also makes "the graph is the document"
 literally true rather than aspirational.
 
-**Freeze the graph BEFORE fitting.** Douglas–Peucker tolerance is a *rendering* choice, not part of
-the document. Freezing the pixel-chain graph keeps it adjustable in stage two; freezing the fitted
-graph bakes it in permanently.
+**Freeze AFTER fitting, not before — corrected 2026-09-02 (user).** This section said the opposite,
+and the reasoning was: Douglas–Peucker tolerance is a *rendering* choice, so freezing the pixel-chain
+graph keeps it adjustable in stage two where freezing the fitted graph bakes it in.
+
+**That position is incoherent with editing, which is what stage two is.** Re-fitting re-derives the
+vertex set, so changing the tolerance after a GM has nudged vertices destroys their edits — the
+points they moved no longer exist. The adjustability being protected survives exactly as long as
+nobody edits, which is the state we are leaving. It was never a real trade: once editing exists the
+tolerance is fixed at the freeze whatever we store.
+
+And the pixel-chain graph is the wrong thing to hand a GM anyway. What the workspace *draws* is the
+fitted geometry — some 8,700 vertices on the test map, against 43,000 lattice points. Editing has to
+operate on what is visible.
+
+**The cut is not "after fitting", it is "where the pixels stop being needed".** Fitting is simply the
+last thing before that line. Four jobs need the raster and all four are on the near side:
+
+- **Face identity.** A traversal cycle is matched to a labelled region by sampling the pixel one step
+  to the right of each step it walks.
+- **Sliver detection.** A cycle that encloses area but matches no label is a sub-pixel sliver from a
+  junction cluster. That is the signal sliver removal runs on, and it must run before the freeze
+  because the cleaned graph is what gets edited.
+- **The empty-face invariant.** A face with no interior pixels holds no map and is not emitted. This
+  *must* happen before the freeze: afterwards there is no raster to evaluate it against, and the only
+  substitute is an area threshold — which is precisely the mechanism deleted when the smallest-room
+  control went.
+- **The area check and the handedness check.** Both validate the derivation. After the freeze there
+  is no derivation, so there is nothing left for them to check.
+
+#### What is stored: a flat node table and edges as sequences of node ids
+
+**Node identity is the whole point, and it is what the emitted form throws away.** A stub wall
+emitted as fog is a run of independent `LINE` items whose endpoints merely happen to be coincident;
+the GM's intent is that they are one shared point. That is why editing cannot be pulled back from the
+scene and has to live in metadata.
+
+So the stored record is two tables:
+
+- **Nodes** — a flat list of coordinates, positionally indexed. **Every fitted vertex is a node**,
+  not just the junctions. The derived graph reserves "node" for a topologically special point because
+  its path points are *pixels*, 43,000 of them each referenced once. After fitting that inverts: there
+  are 8,700 points and what matters about them is whether they are **shared**.
+- **Edges** — each a sequence of node ids, first and last being its endpoints.
+
+Junction-ness is derived: it is how many edge-ends reference an id. Two rooms sharing a wall reference
+the *same ids*, so the shared geometry is identical **by reference** rather than by a build-time
+construction that holds only until something is edited. Move the vertex once and both rooms follow,
+with no code keeping them in step.
+
+**Faces are derived, not stored**, by the half-edge traversal that already exists. That is what makes
+add and delete tractable: add or remove an edge, re-traverse, and the faces fall out. Storing shapes
+instead would mean recovering topology by comparing geometry — finding the run of ids two sequences
+share in order to merge them — which works until two walls coincide for an unrelated reason. Faces
+being renumbered on every edit costs nothing: nothing stores them, and a push rewrites the scene
+wholesale. **Node ids are the only identity that has to be stable, and they are.**
+
+Walls that no face boundary covers still emit as lines, decided by the bridge criterion at emit time
+exactly as now, so they need no separate storage either.
+
+**No edit list, deliberately** (user, 2026-09-02). Replaying a list of GM actions was considered and
+rejected: it would have to happen twice — once on the raster and again on the graph — and it grows
+more error-prone with every tool added. Accepting the information loss from earlier stages is the
+price, and the one-way door is what makes it honest.
+
+#### What stage two loses, and owes
+
+**The area check does not cover it.** It is a lattice identity, counting interior points and steps,
+and fitted geometry has neither. That is coherent — it validates a derivation and stage two has none
+— but it means a graph edit has no equivalent safety net, and the area check is the diagnostic this
+project leans on hardest because the bugs it catches all render plausibly. **Stage two needs an
+invariant of its own and does not have one yet.**
+
+**The point probe changes mechanism.** "Which room is this?" is answered from the labelling today; in
+stage two it becomes point-in-polygon against the fitted faces.
+
+**Re-tuning the smoothing means starting over**, so the door's warning has to say so alongside "this
+closes the reading".
+
+#### Degenerate and near-degenerate faces — decided 2026-09-02 (user)
+
+**A sliver a GM creates is theirs to keep.** They may be reducing an area to a sliver deliberately, to
+get a wall where they want one. Nothing downstream breaks: emitted shapes use an even-odd fill rule so
+winding never mattered, and a degenerate ring contributes zero to the coverage total. **Warn, do not
+prevent.** Worth knowing when wording that warning: a sliver is not small in its *effect*, because
+Dynamic Fog derives walls by stroking a boundary — so a few pixels of shape still block line of sight,
+and the GM gets an obstruction they may not be able to see. *(Reasoning; a degenerate path has not
+been put through DF.)*
+
+**An exactly degenerate shape is warned about too, not refused** (user). Refusing assumes the gesture
+is finished, and it may be a step towards something — doubling a line in order to drag the copy
+elsewhere is the obvious case. A tool that rejects a legal intermediate state is worse than one that
+reports an odd final one.
+
+#### Diagnostics: both censuses go, the point probe stays — 2026-09-02 (user)
+
+**The region census and the scene census are both deleted.** The region census existed "so a fault the
+GM reports can be diagnosed without either party looking at pixels", which was written when the panel
+was a popover with no picture at all; the workspace draws the partition in six colours now. Its
+coverage figure had already become noise, reading ~99.5% on any map since the pivot.
+
+**The merge alarm goes with it**, and its own argument is worth recording because it was the last part
+with a defender. The alarm reads the second-largest region's share — healthy at ~1.5%, rooms leaked
+together at 5–15%. It assumes a dungeon of many small rooms with one dominant exterior, so a single
+large cavern or two big halls trips it legitimately; nothing acts on it; and it is a numeric proxy, in
+a log nobody reads, for something that is now **visible** in the drawn partition. That is exactly the
+pattern §8 says not to rely on. *Cost, stated: the recorded baseline for the test map quotes the
+census's figures, so that measurement cannot be reproduced after this.*
+
+**The scene census's question is closed.** "Do our shapes derive Dynamic Fog walls, and how many
+each" was answered long ago, and finding that DF's walls live only in the local item set was the
+sibling's single most productive diagnostic. It has done its job.
+
+**The point probe stays**, and the reason it survives where the censuses do not is precise: it answers
+what *looking cannot*. The picture shows ink; it cannot show that a pixel read 0.991 luminance, that
+the threshold did not call it ink, or that the ink under the cursor was **invented by the gap repair**
+rather than read from the map. Those are the questions that arise exactly when something looks wrong,
+which is the situation the whole diagnostic exists for.
 
 **Keep stage one's inputs anyway, even though stage one is closed.** The settings and the ink strokes
 are small, and keeping them means "start over" lands the GM back at their tuned ink with their
@@ -3292,10 +3406,16 @@ wrong the moment the raster cap changed.
 
 **Sizing, which is no longer an open question.** Scene metadata takes arbitrary JSON with no limit
 measured below **512KB per key** (measured by the sibling; a "reportedly 16KB" figure that once
-shaped decisions there was simply wrong). The graph is a walk, so encoding each chain as a start
-point plus 3-bit direction steps puts the test map's ~43,000 skeleton pixels at roughly **40KB** —
-against about a megabyte as a bitmap. The fitted graph is smaller again, ~8,700 vertices. This
-retires the deferred item below.
+shaped decisions there was simply wrong). What is stored is the *fitted* graph: the test map's ~8,700
+vertices as coordinates, plus about as many node-id references in the edge sequences — tens of
+kilobytes, before any delta-coding along an edge. Against a megabyte as a bitmap. This retires the
+deferred item below.
+
+*(A packed 3-bit-step encoding of the **pixel-chain** graph was built on 2026-09-01 and measured at
+0.45–0.55 bytes a step, putting 43,000 skeleton pixels in about 21KB. It is superseded: consecutive
+points are only 8-adjacent in a *derived* graph, so the format cannot represent an edited one, and
+finding that is what moved the freeze point. Recorded because the measurement is sound and the
+technique would apply again if anything ever needs to store a lattice walk.)*
 
 **What it owes, under §8.** The boundary must be visible *before* it is crossed. "Generate the graph"
 becomes a commitment, and a control that can be wrong needs a visual channel — so it has to say what
