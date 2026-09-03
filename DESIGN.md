@@ -3306,7 +3306,7 @@ last thing before that line. Four jobs need the raster and all four are on the n
 - **The area check and the handedness check.** Both validate the derivation. After the freeze there
   is no derivation, so there is nothing left for them to check.
 
-#### What is stored: a flat node table and edges as sequences of node ids
+#### What is stored: a flat node table and segments, in fractions of the map
 
 **Node identity is the whole point, and it is what the emitted form throws away.** A stub wall
 emitted as fog is a run of independent `LINE` items whose endpoints merely happen to be coincident;
@@ -3319,7 +3319,33 @@ So the stored record is two tables:
   not just the junctions. The derived graph reserves "node" for a topologically special point because
   its path points are *pixels*, 43,000 of them each referenced once. After fitting that inverts: there
   are 8,700 points and what matters about them is whether they are **shared**.
-- **Edges** — each a sequence of node ids, first and last being its endpoints.
+- **Edges** — **one segment each**, two node ids and nothing else.
+
+**Segments rather than polylines, corrected 2026-09-03 (user).** The first version stored a wall as a
+polyline, which meant the face traversal needed the invariant *a junction is always an edge
+endpoint* — and mutation testing found that invariant is violable. A wall meeting another head-on at
+one of its *interior* vertices makes a junction at a point that is structurally an interior point,
+and the walk goes straight through it without turning. It was repaired by a normalisation pass for a
+day; segments make it **impossible**, which is better by this project's own standard. A *wall* is
+recovered by chaining through the degree-2 nodes, which is what emitting a run of lines wants anyway.
+Storage roughly doubles — tens of kilobytes against a 512KB ceiling.
+
+**Coordinates are fractions of the map, not raster pixels** (user, same day). The raster is an
+artefact of the megapixel cap: a 52.9-megapixel map halves for reasons that have nothing to do with
+its content, so a document denominated in it goes stale the moment a budget constant moves. §5 already
+records the general form — the sibling's real trap was denominating *parameters* in raster pixels,
+which made the raster load-bearing forever — and storing the GM's **work** that way is that trap one
+level worse, because a parameter can be re-tuned and their editing cannot.
+
+Fractions are also independent of the source image's pixel size, and convert to world at emit time
+from the map's *current* bounds, so moving or scaling the map carries the fog with it. Held as
+float32 and quantised on the way in, so the round trip is exact and nothing downstream needs a
+tolerance for storage having moved a number.
+
+**The cost, stated: exact integer geometry is gone.** The crossing predicate now carries a degeneracy
+threshold — when is a crossing close enough to a segment's end to count as being *at* it. That is
+**not** an identity epsilon and the standing exactness rule is untouched: identity is by node **id**,
+and whether a click near a vertex attaches to it is the editing tool's decision, not the geometry's.
 
 Junction-ness is derived: it is how many edge-ends reference an id. Two rooms sharing a wall reference
 the *same ids*, so the shared geometry is identical **by reference** rather than by a build-time
@@ -3327,14 +3353,20 @@ construction that holds only until something is edited. Move the vertex once and
 with no code keeping them in step.
 
 **Faces are derived, not stored**, by the half-edge traversal that already exists. That is what makes
-add and delete tractable: add or remove an edge, re-traverse, and the faces fall out. Storing shapes
-instead would mean recovering topology by comparing geometry — finding the run of ids two sequences
+add and delete tractable: add or remove a segment, re-traverse, and the faces fall out. Storing shapes
+instead would mean recovering topology by comparing geometry — finding the run of ids two shapes
 share in order to merge them — which works until two walls coincide for an unrelated reason. Faces
 being renumbered on every edit costs nothing: nothing stores them, and a push rewrites the scene
 wholesale. **Node ids are the only identity that has to be stable, and they are.**
 
 Walls that no face boundary covers still emit as lines, decided by the bridge criterion at emit time
 exactly as now, so they need no separate storage either.
+
+**The store records which map the graph is for.** Fractions of *a* map say nothing about which, so
+nominating a second image would otherwise have the first map's walls silently reinterpreted over it.
+A mismatch reads as "no graph here", which drops the GM into stage one for the new map without
+touching the first map's work; switching back restores it. **One graph is stored at a time**, so
+freezing on the second map replaces the first's — per-map keys are the fix if that ever matters.
 
 **No edit list, deliberately** (user, 2026-09-02). Replaying a list of GM actions was considered and
 rejected: it would have to happen twice — once on the raster and again on the graph — and it grows
