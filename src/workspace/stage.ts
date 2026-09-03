@@ -69,9 +69,24 @@ function announce(): void {
   for (const listener of listeners) listener();
 }
 
-/** Read the scene's graph once at start-up. Reports whether something stored could not be read. */
-export async function loadStage(): Promise<{ readonly corrupt: boolean }> {
-  const { graph, corrupt } = await readFrozenGraph();
+/**
+ * The map the loaded graph belongs to.
+ *
+ * Held so an edit writes it back under the same map. A graph's coordinates are fractions of *a* map
+ * and say nothing about which, so the association is part of what is stored.
+ */
+let mapId: string | null = null;
+
+/**
+ * Read the scene's graph for a map. Reports whether something stored could not be read.
+ *
+ * Called again when the GM nominates a different image, because a graph frozen against one map does
+ * not describe another — the store treats a mismatch as "no graph here", which puts them back in
+ * stage one for the new map without touching the old map's work.
+ */
+export async function loadStage(forMap: string | null): Promise<{ readonly corrupt: boolean }> {
+  mapId = forMap;
+  const { graph, corrupt } = await readFrozenGraph(forMap);
   frozen = graph;
   loaded = true;
   announce();
@@ -85,15 +100,17 @@ export async function loadStage(): Promise<{ readonly corrupt: boolean }> {
  * controls live rather than in a stage two the scene does not agree with.
  */
 export async function freezeTo(graph: FrozenGraph): Promise<void> {
-  await writeFrozenGraph(graph);
+  if (!mapId) throw new Error("no map is nominated, so there is nothing to freeze a graph against");
+  await writeFrozenGraph(mapId, graph);
   frozen = graph;
   announce();
-  devLog("info", `stage: frozen — ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
+  devLog("info", `stage: frozen — ${graph.nodes.length} nodes, ${graph.edges.length} segments`);
 }
 
 /** Save an edited graph over the stored one. Stage two stays stage two. */
 export async function updateFrozen(graph: FrozenGraph): Promise<void> {
-  await writeFrozenGraph(graph);
+  if (!mapId) throw new Error("no map is nominated, so there is nothing to save the graph against");
+  await writeFrozenGraph(mapId, graph);
   frozen = graph;
   announce();
 }

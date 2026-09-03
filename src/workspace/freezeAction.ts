@@ -24,7 +24,7 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { runTrace } from "../pipeline";
-import { freezeGraph } from "../trace/frozenGraph";
+import { freezeGraph, wallRuns } from "../trace/frozenGraph";
 import { confirmAction } from "./confirmDialog";
 import { controlsLive } from "./settingRows";
 import { currentSettings } from "./settingsState";
@@ -44,8 +44,10 @@ async function generate(): Promise<string> {
 
   const stored = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
   await freezeTo(stored);
+  // Walls rather than segments, because that is the unit a GM counts. A wall is a run of segments
+  // chained through its bends, which is what the polyline used to be before it stopped being stored.
   return (
-    `Graph frozen — ${stored.nodes.length} points, ${stored.edges.length} walls. ` +
+    `Graph frozen — ${wallRuns(stored).length} walls, ${stored.nodes.length} points. ` +
     "The reading is closed; Start over reopens it."
   );
 }
@@ -82,8 +84,8 @@ export function renderFreezeAction(body: HTMLElement): void {
         ? await confirmAction({
             title: "Start over?",
             body: [
-              `This discards your wall editing — ${graph?.nodes.length ?? 0} points and ` +
-                `${graph?.edges.length ?? 0} walls. It cannot be undone.`,
+              `This discards your wall editing — ${graph ? wallRuns(graph).length : 0} walls and ` +
+                `${graph?.nodes.length ?? 0} points. It cannot be undone.`,
               "Your reading settings, your map choice and your ink edits are kept, so you come " +
                 "back to the same ink you tuned rather than to a bare map.",
             ],

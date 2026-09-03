@@ -19,6 +19,16 @@
  * tens of kilobytes every time a slider moved, and — worse — a settings write racing a graph write
  * could drop one of them. Separate keys make that impossible rather than unlikely.
  *
+ * ## It records which map it is for
+ *
+ * The graph's coordinates are fractions of *a* map, and nothing in them says which. A GM who freezes
+ * a graph and then nominates a different image would otherwise have the first map's walls silently
+ * reinterpreted over the second. So the stored value is a small wrapper — the map's id beside the
+ * encoded graph — and a mismatch reads as "no graph for this map" rather than as a graph.
+ *
+ * The wrapper lives here rather than inside the encoding on purpose: which map a document belongs to
+ * is a fact about the *scene*, and `trace/frozenGraph.ts` stays purely geometric and purely testable.
+ *
  * The SDK is imported here, so nothing in this file is reachable from a node test. Everything with
  * a decision in it lives in `trace/frozenGraph.ts`, which is pure and tested; this is the round trip
  * to the scene and the error handling around it, and it is deliberately thin.
@@ -50,7 +60,7 @@ const GRAPH_KEY = key("graph");
  * a real loss and has to be said out loud rather than looking like "you have not started yet".
  * `readFrozenGraph` reports the distinction; deciding what the GM is told is the caller's.
  */
-export async function readFrozenGraph(): Promise<{
+export async function readFrozenGraph(mapId: string | null): Promise<{
   readonly graph: FrozenGraph | null;
   /** True when there was something stored and it could not be read. */
   readonly corrupt: boolean;
@@ -66,12 +76,25 @@ export async function readFrozenGraph(): Promise<{
   }
 
   if (stored === undefined || stored === null) return { graph: null, corrupt: false };
-  if (typeof stored !== "string") {
-    console.error("Fog Nudger: the stored graph is not a string", typeof stored);
+  if (typeof stored !== "object" || stored === null) {
+    console.error("Fog Nudger: the stored graph is not an object", typeof stored);
     return { graph: null, corrupt: true };
   }
 
-  const graph = decodeFrozenGraph(stored);
+  const record = stored as { map?: unknown; graph?: unknown };
+  if (typeof record.graph !== "string") {
+    console.error("Fog Nudger: the stored graph has no encoded body");
+    return { graph: null, corrupt: true };
+  }
+
+  // A graph for another map is not corruption — it is a document that simply does not apply here.
+  // Silent, because it is the ordinary consequence of nominating a different image.
+  if (typeof record.map !== "string" || record.map !== mapId) {
+    devLog("info", `graph: the stored graph belongs to another map, ignoring it`);
+    return { graph: null, corrupt: false };
+  }
+
+  const graph = decodeFrozenGraph(record.graph);
   if (!graph) {
     // `console.error`, not the dev log: the dev log compiles away in a production build, and this is
     // a message a GM may be told to go and look for.
@@ -82,11 +105,7 @@ export async function readFrozenGraph(): Promise<{
     return { graph: null, corrupt: true };
   }
 
-  devLog(
-    "info",
-    `graph: loaded ${graph.nodes.length} nodes and ${graph.edges.length} edges ` +
-      `for a ${graph.width}x${graph.height} raster`,
-  );
+  devLog("info", `graph: loaded ${graph.nodes.length} nodes and ${graph.edges.length} walls`);
   return { graph, corrupt: false };
 }
 
@@ -98,12 +117,12 @@ export async function readFrozenGraph(): Promise<{
  * silently means the GM keeps editing a graph that is not being saved. The caller has a state line
  * and must use it.
  */
-export async function writeFrozenGraph(graph: FrozenGraph): Promise<void> {
+export async function writeFrozenGraph(mapId: string, graph: FrozenGraph): Promise<void> {
   const encoded = encodeFrozenGraph(graph);
-  await OBR.scene.setMetadata({ [GRAPH_KEY]: encoded });
+  await OBR.scene.setMetadata({ [GRAPH_KEY]: { map: mapId, graph: encoded } });
   devLog(
     "info",
-    `graph: stored ${graph.nodes.length} nodes and ${graph.edges.length} edges ` +
+    `graph: stored ${graph.nodes.length} nodes and ${graph.edges.length} walls ` +
       `in ${encoded.length} characters`,
   );
 }

@@ -54,7 +54,7 @@ import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleto
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { renderFreezeAction } from "./workspace/freezeAction";
-import { loadStage, onStageChange } from "./workspace/stage";
+import { onStageChange } from "./workspace/stage";
 import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 
@@ -171,20 +171,10 @@ async function run(): Promise<void> {
   }
 
   await loadSettings();
-  // Before the first `renderPanel`, because the stage decides whether the reading controls are drawn
-  // live or closed, and a row drawn live and disabled a moment later is a row that invited a click.
-  const stage = await loadStage();
   setControlsLive(true);
   // Repainted wholesale rather than patched, so there is no path by which a row keeps a value from
   // the defaults it was first drawn with.
   renderPanel();
-
-  // Said on the state line rather than only in the console, because it is a real loss: something was
-  // stored and could not be read, so the GM's wall editing for this scene is gone. Distinguished from
-  // "nothing stored yet", which is silent because it is the ordinary state of a new scene.
-  if (stage.corrupt) {
-    say("the saved wall editing could not be read and has been ignored — see the console", "bad");
-  }
 
   // Watched before the first load, so a scene whose items arrive after this iframe does not leave
   // the picker empty — the race the panel's version lost on its first outing.

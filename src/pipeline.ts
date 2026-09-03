@@ -966,6 +966,8 @@ export interface MaskForOverlay {
   readonly gaps: GapFinding;
   readonly bounds: WorldBounds;
   readonly mapName: string;
+  /** The resolved map's id, so the frozen graph can record which map it describes. */
+  readonly mapId: string;
   /**
    * The map image's URL, from the same resolution the mask was read through.
    *
@@ -1066,6 +1068,7 @@ export async function maskForOverlay(
       gaps: resolved.stage.gaps,
       bounds: resolved.stage.bounds,
       mapName: resolved.stage.name,
+      mapId: map.id,
       // From `map`, the item this call resolved, rather than from the cached stage: a cache hit
       // means the same map by identity, but the URL is the one thing about an item that can be
       // reissued without its identity changing, and this is the copy that is certainly current.

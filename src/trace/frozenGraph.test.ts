@@ -1,10 +1,12 @@
 /**
  * The document's construction and its encoding.
  *
- * Two separate claims. **`freezeGraph` preserves shared identity** — that two rooms either side of a
- * wall end up referencing the same ids, which is the entire reason editing lives in metadata rather
- * than in the scene. And **the round trip is exact**, because stage two never re-derives, so a graph
- * that comes back slightly different is a graph the GM's edits were made against and no longer have.
+ * Three separate claims. **`freezeGraph` preserves shared identity** — two rooms either side of a
+ * wall reference the same ids, which is the entire reason editing lives in metadata rather than in
+ * the scene. **The round trip is exact**, because stage two never re-derives, so a graph that comes
+ * back slightly different is a graph the GM's edits were made against and no longer have. And
+ * **coordinates are fractions of the map**, so the document does not depend on a raster that exists
+ * only because of our memory budget.
  */
 
 import { describe, expect, it } from "vitest";
@@ -15,14 +17,15 @@ import { labelSpace } from "./label";
 import { maskFromRows } from "./fixtures";
 import {
   decodeFrozenGraph,
-  edgePoints,
+  documentPoint,
   encodeFrozenGraph,
   freezeGraph,
   nodeDegrees,
+  wallRuns,
   type FrozenGraph,
 } from "./frozenGraph";
 
-/** Two rooms sharing a wall, plus a stub — the shapes whose identity claims differ. */
+/** Two rooms sharing a wall, plus a stub hanging off the bottom. */
 const TWO_ROOMS = [
   "....................",
   "....................",
@@ -47,105 +50,149 @@ function frozen(rows: readonly string[], tolerance = 1): FrozenGraph {
 }
 
 describe("freezeGraph", () => {
-  it("gives every fitted vertex an id, shared and unshared alike", () => {
+  it("stores fractions of the map, never raster pixels", () => {
+    // The whole point of the change: the raster is an artefact of the megapixel cap, so a document
+    // denominated in it is a document that goes stale when a budget constant moves.
     const graph = frozen(TWO_ROOMS);
     expect(graph.nodes.length).toBeGreaterThan(0);
-    expect(graph.edges.length).toBeGreaterThan(0);
+    for (const node of graph.nodes) {
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.x).toBeLessThanOrEqual(1);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeLessThanOrEqual(1);
+    }
+    // And they are genuinely fractional rather than integers that happen to be small.
+    expect(graph.nodes.some((n) => !Number.isInteger(n.x) || !Number.isInteger(n.y))).toBe(true);
+  });
+
+  it("gives every edge exactly two nodes", () => {
+    // Segments, not polylines. This is what makes a junction at a non-node impossible rather than
+    // something a normalisation pass has to repair.
+    const graph = frozen(TWO_ROOMS);
     for (const edge of graph.edges) {
-      expect(edge.nodes.length).toBeGreaterThanOrEqual(2);
-      for (const id of edge.nodes) {
-        expect(id).toBeGreaterThanOrEqual(0);
-        expect(id).toBeLessThan(graph.nodes.length);
-      }
+      expect(edge.a).toBeGreaterThanOrEqual(0);
+      expect(edge.a).toBeLessThan(graph.nodes.length);
+      expect(edge.b).toBeGreaterThanOrEqual(0);
+      expect(edge.b).toBeLessThan(graph.nodes.length);
     }
   });
 
   it("makes junctions shared by reference, not merely coincident", () => {
-    // The whole claim. A junction is one id appearing as the end of three or more edges — not three
-    // separate points that happen to hold equal coordinates, which is exactly what the emitted fog
-    // degrades to and why editing cannot be done there.
+    // A junction is one id that three or more segments meet at — not three points that happen to
+    // hold equal coordinates, which is what the emitted fog degrades to and why editing cannot be
+    // done there.
     const graph = frozen(TWO_ROOMS);
     const degrees = nodeDegrees(graph);
-    const junctions = degrees.filter((d) => d >= 3).length;
-    expect(junctions).toBeGreaterThan(0);
+    expect(degrees.filter((d) => d >= 3).length).toBeGreaterThan(0);
 
-    // And nothing else holds those coordinates: a shared point is shared, not duplicated.
     for (let id = 0; id < graph.nodes.length; id++) {
       if (degrees[id]! < 3) continue;
       const here = graph.nodes[id]!;
-      const duplicates = graph.nodes.filter((n) => n.x === here.x && n.y === here.y).length;
-      expect(duplicates).toBe(1);
-    }
-  });
-
-  it("puts an edge's endpoints on the derived graph's own nodes", () => {
-    // `simplifyPolyline` keeps both ends, which is what lets the endpoints be *reused* rather than
-    // approximated — and reuse is what makes them shared.
-    const wall = buildWallGraph(maskFromRows(TWO_ROOMS));
-    const labelled = labelSpace(wall.framed, { minArea: 0 });
-    const resolved = resolveFaces(wall, labelled);
-    const fitted = fitFaces(resolved.graph, resolved.faces.faces, 1);
-    const graph = freezeGraph(resolved.graph, fitted.edges);
-
-    for (let i = 0; i < resolved.graph.edges.length; i++) {
-      const derived = resolved.graph.edges[i]!;
-      const stored = graph.edges[i]!;
-      expect(stored.nodes[0]).toBe(derived.a);
-      expect(stored.nodes[stored.nodes.length - 1]).toBe(derived.b);
+      expect(graph.nodes.filter((n) => n.x === here.x && n.y === here.y).length).toBe(1);
     }
   });
 
   it("carries the fitted geometry, not the pixel chain", () => {
     // A coarse tolerance must actually reduce the point count, or the freeze is storing the wrong
     // artefact — which is the mistake the first version of this made.
-    const fine = frozen(TWO_ROOMS, 0);
-    const coarse = frozen(TWO_ROOMS, 3);
-    expect(coarse.nodes.length).toBeLessThan(fine.nodes.length);
+    expect(frozen(TWO_ROOMS, 3).nodes.length).toBeLessThan(frozen(TWO_ROOMS, 0).nodes.length);
+  });
+
+  it("quantises to float32 so storage cannot change a coordinate", () => {
+    const graph = frozen(TWO_ROOMS);
+    for (const node of graph.nodes) {
+      expect(node.x).toBe(Math.fround(node.x));
+      expect(node.y).toBe(Math.fround(node.y));
+    }
+  });
+});
+
+describe("wallRuns", () => {
+  it("chains segments back into walls through their bends", () => {
+    // The polyline, recovered rather than stored. A run ends where the degree does.
+    const graph = frozen(TWO_ROOMS);
+    const runs = wallRuns(graph);
+    const degrees = nodeDegrees(graph);
+    expect(runs.length).toBeGreaterThan(0);
+
+    for (const run of runs) {
+      expect(run.length).toBeGreaterThanOrEqual(2);
+      // Everything strictly inside a run is a bend; the ends are not.
+      for (let i = 1; i < run.length - 1; i++) expect(degrees[run[i]!]).toBe(2);
+    }
+    // Every segment belongs to exactly one run.
+    const counted = runs.reduce((total, run) => total + run.length - 1, 0);
+    expect(counted).toBe(graph.edges.length);
+  });
+
+  it("walks a closed loop that has no junction to start from", () => {
+    // Every node degree 2, so there is no end to begin at and the fallback has to find it.
+    const ring: FrozenGraph = {
+      nodes: [
+        documentPoint(0.1, 0.1),
+        documentPoint(0.9, 0.1),
+        documentPoint(0.9, 0.9),
+        documentPoint(0.1, 0.9),
+      ],
+      edges: [
+        { a: 0, b: 1 },
+        { a: 1, b: 2 },
+        { a: 2, b: 3 },
+        { a: 3, b: 0 },
+      ],
+    };
+    const runs = wallRuns(ring);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toHaveLength(5);
+    expect(runs[0]![0]).toBe(runs[0]![4]);
+  });
+
+  it("splits a run at a junction rather than running through it", () => {
+    // A T. The crossbar is one run and the stem is another; nothing chains through degree 3.
+    const tee: FrozenGraph = {
+      nodes: [
+        documentPoint(0.1, 0.5),
+        documentPoint(0.5, 0.5),
+        documentPoint(0.9, 0.5),
+        documentPoint(0.5, 0.9),
+      ],
+      edges: [
+        { a: 0, b: 1 },
+        { a: 1, b: 2 },
+        { a: 1, b: 3 },
+      ],
+    };
+    const runs = wallRuns(tee);
+    expect(runs).toHaveLength(3);
+    for (const run of runs) expect(run).toHaveLength(2);
   });
 });
 
 describe("encodeFrozenGraph and decodeFrozenGraph", () => {
   it("round-trips exactly", () => {
     const graph = frozen(TWO_ROOMS);
-    const back = decodeFrozenGraph(encodeFrozenGraph(graph))!;
-    expect(back.width).toBe(graph.width);
-    expect(back.height).toBe(graph.height);
-    expect(back.nodes).toEqual([...graph.nodes]);
-    expect(back.edges.map((e) => [...e.nodes])).toEqual(graph.edges.map((e) => [...e.nodes]));
+    expect(decodeFrozenGraph(encodeFrozenGraph(graph))).toEqual({
+      nodes: [...graph.nodes],
+      edges: graph.edges.map((e) => ({ a: e.a, b: e.b })),
+    });
   });
 
   it("round-trips an empty graph rather than refusing one", () => {
     // A map with no linework the reading found is a legitimate state, not a failure to interpret.
-    const empty: FrozenGraph = { width: 40, height: 30, nodes: [], edges: [] };
+    const empty: FrozenGraph = { nodes: [], edges: [] };
     expect(decodeFrozenGraph(encodeFrozenGraph(empty))).toEqual(empty);
-  });
-
-  it("round-trips a closed loop, whose two ends are the same id", () => {
-    const loop: FrozenGraph = {
-      width: 16,
-      height: 16,
-      nodes: [
-        { x: 2, y: 2 },
-        { x: 9, y: 2 },
-        { x: 9, y: 9 },
-      ],
-      edges: [{ nodes: [0, 1, 2, 0] }],
-    };
-    expect(decodeFrozenGraph(encodeFrozenGraph(loop))).toEqual(loop);
   });
 
   it("keeps sharing across the round trip, which is the point of storing it at all", () => {
     const before = frozen(TWO_ROOMS);
-    const after = decodeFrozenGraph(encodeFrozenGraph(before))!;
-    expect(nodeDegrees(after)).toEqual(nodeDegrees(before));
+    expect(nodeDegrees(decodeFrozenGraph(encodeFrozenGraph(before))!)).toEqual(nodeDegrees(before));
   });
 
   it("stays well inside the metadata limit", () => {
-    // 512KB per key is the measured ceiling. The fixture is small, so this checks the shape of the
-    // cost rather than the absolute figure: a few bytes per vertex, not tens.
+    // 512KB per key is the measured ceiling. Eight bytes a node plus a couple per edge reference,
+    // and base64's third on top — so this checks the shape of the cost, not an absolute figure.
     const graph = frozen(TWO_ROOMS);
-    const perNode = encodeFrozenGraph(graph).length / graph.nodes.length;
-    expect(perNode).toBeLessThan(12);
+    expect(encodeFrozenGraph(graph).length / graph.nodes.length).toBeLessThan(24);
   });
 });
 
@@ -165,103 +212,34 @@ describe("decodeFrozenGraph, refusing", () => {
   });
 
   it("refuses a corrupted coordinate, which ONLY the checksum can see", () => {
-    // The reason the checksum exists, and the test has to be aimed carefully to show it. The
-    // previous format stored lattice steps, so corruption threw the walk off its end node and was
-    // caught structurally. A corrupted *coordinate* is just a different, entirely plausible
-    // coordinate — a wall silently somewhere it does not belong.
-    //
-    // So this flips the low bit of the first node's x, which is byte 8: version, four checksum
-    // bytes, then the width, height and node-count varints, all one byte each on this fixture.
-    // Changing a low bit leaves the varint's length and every later offset untouched, so **no
-    // structural check can fire** — the payload is perfectly well formed and says the wrong thing.
+    // The reason the checksum exists. A corrupted coordinate is a different and entirely plausible
+    // coordinate — a wall silently somewhere it does not belong — and no structural check can tell.
+    // Byte 10 is inside the first node's x: version, four checksum bytes, one node-count varint,
+    // then four bytes of float. Changing it leaves every offset and every id intact.
     const bytes = bytesOf(encodeFrozenGraph(frozen(TWO_ROOMS)));
-    const before = decodeFrozenGraph(textOf(bytes))!;
-    bytes[8] = bytes[8]! ^ 0x01;
+    bytes[10] = bytes[10]! ^ 0x40;
     expect(decodeFrozenGraph(textOf(bytes))).toBeNull();
-
-    // And prove the aim: with the checksum ignored, that same payload would have parsed cleanly into
-    // a graph of the right shape holding one wrong coordinate.
-    const body = bytes.subarray(5);
-    expect(body.length).toBeGreaterThan(0);
-    expect(before.nodes.length).toBeGreaterThan(0);
   });
 
   it("refuses a truncated payload rather than returning the part it read", () => {
-    const text = encodeFrozenGraph(frozen(TWO_ROOMS));
-    const binary = atob(text);
+    const binary = atob(encodeFrozenGraph(frozen(TWO_ROOMS)));
     expect(decodeFrozenGraph(btoa(binary.slice(0, Math.floor(binary.length / 2))))).toBeNull();
   });
 
   it("refuses appended bytes", () => {
     // The checksum covers the body, so appended bytes fail it before the trailing-byte check is
-    // reached. That check is kept as defence in depth against a payload whose declared counts stop
-    // the reader early while the checksum still matches — reachable only by deliberate construction,
-    // so it is not isolated by a test here. Recorded rather than left to look like coverage.
+    // reached. That check stays as defence in depth against a payload whose declared counts stop the
+    // reader early while the checksum still matches — reachable only by deliberate construction, so
+    // it is not isolated by a test here. Recorded rather than left to look like coverage.
     const binary = atob(encodeFrozenGraph(frozen(TWO_ROOMS)));
     expect(decodeFrozenGraph(btoa(binary + " "))).toBeNull();
   });
 
   it("refuses an edge naming a node that does not exist", () => {
-    // No sensible fallback exists — there is no "default edge" to fall back to the way a bad blur
-    // falls back to its default — and a graph with an edge quietly dropped is a corrupt document
-    // presented as a valid one, which is the failure shape this project fears most.
-    const nodes = [{ x: 1, y: 1 }, { x: 4, y: 4 }];
-    expect(decodeFrozenGraph(encodeFrozenGraph({ width: 8, height: 8, nodes, edges: [{ nodes: [0, 1] }] })))
-      .not.toBeNull();
-    expect(decodeFrozenGraph(encodeFrozenGraph({ width: 8, height: 8, nodes, edges: [{ nodes: [0, 2] }] })))
-      .toBeNull();
-  });
-
-  it("refuses an edge of fewer than two points", () => {
-    const degenerate: FrozenGraph = {
-      width: 8,
-      height: 8,
-      nodes: [{ x: 1, y: 1 }],
-      edges: [{ nodes: [0] }],
-    };
-    expect(decodeFrozenGraph(encodeFrozenGraph(degenerate))).toBeNull();
-  });
-});
-
-describe("nodeDegrees", () => {
-  it("counts edge ENDS, so an interior point scores zero and a junction three", () => {
-    // Built by hand rather than derived, so the expected degrees are readable rather than whatever
-    // the pipeline happened to produce. Node 0 is a T-junction: three edges end on it. Nodes 4 and 5
-    // are interior points of the third edge — passed through, never met at.
-    const tee: FrozenGraph = {
-      width: 32,
-      height: 32,
-      nodes: [
-        { x: 10, y: 10 },
-        { x: 2, y: 10 },
-        { x: 20, y: 10 },
-        { x: 10, y: 24 },
-        { x: 10, y: 15 },
-        { x: 10, y: 20 },
-      ],
-      edges: [{ nodes: [0, 1] }, { nodes: [0, 2] }, { nodes: [0, 4, 5, 3] }],
-    };
-    expect(nodeDegrees(tee)).toEqual([3, 1, 1, 1, 0, 0]);
-  });
-
-  it("counts both ends of a closed loop", () => {
-    const loop: FrozenGraph = {
-      width: 8,
-      height: 8,
-      nodes: [{ x: 1, y: 1 }, { x: 5, y: 1 }],
-      edges: [{ nodes: [0, 1, 0] }],
-    };
-    expect(nodeDegrees(loop)).toEqual([2, 0]);
-  });
-});
-
-describe("edgePoints", () => {
-  it("resolves an edge back to the polyline it draws", () => {
-    const graph = frozen(TWO_ROOMS);
-    for (const edge of graph.edges) {
-      const points = edgePoints(graph, edge);
-      expect(points.length).toBe(edge.nodes.length);
-      expect(points[0]).toEqual(graph.nodes[edge.nodes[0]!]);
-    }
+    // No sensible fallback exists — there is no "default edge" the way a bad blur has a default —
+    // and a graph with an edge quietly dropped is a corrupt document presented as a valid one.
+    const nodes = [documentPoint(0.1, 0.1), documentPoint(0.4, 0.4)];
+    expect(decodeFrozenGraph(encodeFrozenGraph({ nodes, edges: [{ a: 0, b: 1 }] }))).not.toBeNull();
+    expect(decodeFrozenGraph(encodeFrozenGraph({ nodes, edges: [{ a: 0, b: 2 }] }))).toBeNull();
   });
 });

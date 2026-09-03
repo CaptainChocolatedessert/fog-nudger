@@ -29,6 +29,7 @@
 import { devLog } from "../devlog";
 import { advanceTo } from "./accordion";
 import { adoptReading, describeMaskFailure, takeReading } from "./reading";
+import { loadStage } from "./stage";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
 /**
@@ -53,6 +54,19 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   const result = outcome.reading;
 
   setMapName(result.mapName);
+  /*
+    The stage is re-read for *this* map, and that is what makes switching maps safe.
+
+    A frozen graph's coordinates are fractions of a map and say nothing about which, so the store
+    records the map's id beside them and a mismatch reads as "no graph here". Nominating a second
+    image therefore drops the GM back into stage one for it, without touching the first map's work —
+    and switching back restores it. **One graph is stored at a time**, so freezing on the second map
+    does replace the first map's; per-map keys are the fix if that ever matters.
+  */
+  const stage = await loadStage(result.mapId);
+  if (stage.corrupt) {
+    say("the saved wall editing could not be read and has been ignored — see the console", "bad");
+  }
   if (opening) advanceTo("ink");
 
   // The map image, drawn by us rather than by Owlbear. `crossOrigin` matches the pipeline's loader:
