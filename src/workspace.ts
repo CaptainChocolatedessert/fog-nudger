@@ -43,13 +43,14 @@ import { requestPushStop } from "./emit/emitRegions";
 import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
 import { registerBreaksLayer } from "./workspace/layers/breaks";
 import { registerInkLayer } from "./workspace/layers/ink";
+import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSkeletonLayer } from "./workspace/layers/skeleton";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { onReading } from "./workspace/reading";
-import { registerRegionInvalidation, watchRegions } from "./workspace/regions";
+import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
@@ -94,9 +95,13 @@ registerInkLayer();
 registerBreaksLayer();
 registerSkeletonLayer();
 registerRegionsLayer();
-// Deriving costs the better part of a second and is visible in one step, so entering it is what pays
-// for it.
-onStepOpen("regions", watchRegions);
+// Last, so the editable graph sits over the rooms it makes rather than under them.
+registerGraphLayer();
+// Deriving costs the better part of a second in stage one and is visible in two steps, so entering
+// one of them is what pays for it. Both are told on every change, which is why the module keeps a
+// set rather than a flag.
+onStepOpen("regions", (open) => watchRegions("regions", open));
+onStepOpen("edit", (open) => watchRegions("edit", open));
 // Thinning is the same shape of cost and gets the same answer: entering the step pays for it.
 onStepOpen("walls", watchSkeleton);
 
@@ -106,13 +111,17 @@ registerStepContent("map", renderMapPicker);
 // The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
 // particular map is change the colour, and it is not a number so it cannot be a row.
 registerStepContent("ink", renderSwatches);
-// The two actions on this surface that write to the scene, at the *end* of the step that judges what
-// would be written. The door comes first: freezing is what decides whether the reading is still
-// live, and pushing is the routine thing you do afterwards.
-registerStepContent("regions", (body) => {
-  renderFreezeAction(body);
-  renderPushAction(body);
-}, "bottom");
+/*
+  The door lives in the step it is the door to.
+
+  It was at the end of Regions, which its own doc called a first answer pending "a step of its own
+  once stage two has real editing tools". Edit walls is that step, and the button reads differently
+  from inside it: in stage one the step has nothing in it and the button is what puts something
+  there, and in stage two it is the way back out. A door at the boundary rather than one room away.
+*/
+registerStepContent("edit", renderFreezeAction, "bottom");
+// Pushing stays with the partition, which is the thing it writes and the thing being judged.
+registerStepContent("regions", renderPushAction, "bottom");
 
 /*
   Closing writes the result to the scene.
@@ -149,7 +158,18 @@ onMapClick((u, v) => {
   rebuilt on every accordion click, so a subscription inside either would add a listener per click,
   each holding DOM that has already been thrown away.
 */
-onStageChange(renderPanel);
+/*
+  Crossing the door also changes what the rooms are made of, so the partition goes with it.
+
+  Freezing, starting over and loading a scene's stored graph all change which of the two sources the
+  partition comes from — the map or the frozen graph. Without this, crossing the door would leave the
+  previous stage's partition on screen marked current, which is exactly the "shows the rooms before
+  your edits" failure the two-source split exists to prevent.
+*/
+onStageChange(() => {
+  renderPanel();
+  invalidateRegions();
+});
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after
 // the layers, so a layer that could not take a reading stops this too.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildFrozenFaces, describeFrozenFaces } from "./frozenFaces";
+import { buildFrozenFaces, describeFrozenFaces, wallSegments } from "./frozenFaces";
 import { documentPoint, type FrozenGraph } from "./frozenGraph";
 
 /** A graph from plain coordinates, quantised the way the document holds them. */
@@ -325,6 +325,23 @@ describe("the arithmetic check", () => {
     expect(result.components).toBe(1);
     expect(describeFrozenFaces(result)).toContain("EULER FAILED");
     expect(describeFrozenFaces(result)).toContain("outward cycles 2 against 1");
+  });
+});
+
+describe("the uncovered walls as geometry", () => {
+  it("gives each one the two points of its own wall", () => {
+    const segments = wallSegments(STUB, buildFrozenFaces(STUB));
+
+    // The stub runs from the room's corner to its free tip, and is the only wall no ring covers.
+    expect(segments).toEqual([[STUB.nodes[0], STUB.nodes[4]]]);
+  });
+
+  it("takes the ends from the edge it names, not from the position it sits at", () => {
+    // The lollipop's stalk is edge 12 of thirteen, so an index used as a position would name the
+    // first wall of the frame instead and draw a line nothing on the map has.
+    const segments = wallSegments(LOLLIPOP, buildFrozenFaces(LOLLIPOP));
+
+    expect(segments).toEqual([[LOLLIPOP.nodes[5], LOLLIPOP.nodes[8]]]);
   });
 });
 

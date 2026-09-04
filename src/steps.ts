@@ -46,11 +46,11 @@ import {
 /**
  * Every step that exists today.
  *
- * The A-plan designed six — map, ink, walls, edit walls, regions, doors — and these five are what has
- * been built; "edit walls" arrives with step G and doors stay with Dynamic Fog entirely. `view` is not
- * one of the six: it is the persistent group, which is a step's shape without a mode.
+ * The A-plan designed six — map, ink, walls, edit walls, regions, doors — and five of them are built;
+ * doors stay with Dynamic Fog entirely. `view` is not one of the six: it is the persistent group,
+ * which is a step's shape without a mode.
  */
-export type StepId = "map" | "ink" | "walls" | "regions" | "view";
+export type StepId = "map" | "ink" | "walls" | "edit" | "regions" | "view";
 
 /**
  * What the canvas can draw over the map.
@@ -60,7 +60,7 @@ export type StepId = "map" | "ink" | "walls" | "regions" | "view";
  * Nothing is drawn "because it exists" — a layer is on screen because the step the GM is in is about
  * it.
  */
-export const LAYERS = ["ink", "breaks", "skeleton", "regions"] as const;
+export const LAYERS = ["ink", "breaks", "skeleton", "regions", "graph"] as const;
 
 export type LayerId = (typeof LAYERS)[number];
 
@@ -188,6 +188,34 @@ export const STEPS: readonly Step[] = [
       intent before the code did.
     */
     layers: ["ink", "skeleton", "breaks"],
+    drag: "pan",
+  },
+  {
+    id: "edit",
+    title: "Edit walls",
+    blurb:
+      "The walls as a <b>graph</b>: every wall a line, every corner a point. Generating it hands " +
+      "them over to be edited by hand and closes the reading above — from then on this is what the " +
+      "rooms are made of, and nothing recalculates it from the map.",
+    /*
+      The partition under the graph, which is the one pairing that answers this step's question.
+
+      The convention is that each step draws its own thing, and the Regions step makes the strongest
+      case for it — ink under a partition answers the previous question over the top of this one.
+      This is the argued exception, and it is the same shape as the one Walls carries: what a GM is
+      deciding here is not where a line *is* but what moving it would do, and what it does is change
+      which rooms exist. The rooms are the consequence, so they are drawn under the cause.
+
+      They also do not compete for the same ink. The partition is fills and outlines in six cycling
+      colours; the graph is one colour and a handle at every point.
+    */
+    layers: ["regions", "graph"],
+    /*
+      Pan, still — the drag that will edit a vertex is not built yet.
+
+      Said here rather than left as an oversight: this is the step that takes the drag when it is,
+      and it is the first step whose declared drag will change from `pan`.
+    */
     drag: "pan",
   },
   {

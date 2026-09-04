@@ -3434,6 +3434,37 @@ emit.** It should be none, because sliver removal runs before the freeze.
 **And there is no simplification, which is the freeze point paying off.** The frozen graph *is* the
 fitted geometry, so a ring is its own vertices and no boundary is approximated a second time.
 
+#### Stage two gets a step — BUILT 2026-09-04
+
+**"Edit walls" is a step of its own**, between Walls and Regions, which is where the A-plan's six put
+it before any of this existed. It carries no controls: a step is a mode rather than a group of
+sliders, and this one's mode is the graph.
+
+**The door moved into it**, from the end of Regions where it had been placed provisionally against
+exactly this. A door belongs at the boundary it opens rather than one step short of it, and it reads
+differently from inside — in stage one the step is empty and the button is what puts something in it,
+in stage two it is the way out. Regions keeps the push, which is the button that acts on the thing
+beside it.
+
+**The step draws the partition with the graph over it.** The standing convention is that each step
+draws its own thing, and Regions makes the strongest case for it — ink under a partition answers the
+previous question over the top of this one. This is the argued exception, and it is the same shape as
+the one the Walls step carries: what a GM decides here is not where a line *is* but what moving it
+would do, and what it does is change which rooms exist. The consequence is drawn under the cause.
+
+**The partition therefore has two sources, chosen by stage.** In stage one it is what the trace
+makes of the map; in stage two it is what the traversal makes of the frozen graph. That is a
+different input rather than a parallel chain — there is still exactly one place faces come from a map
+and one place they come from a graph. Getting it wrong would not be cosmetic: the traced partition in
+stage two is the rooms *before* the GM's edits, which is precisely what this surface exists to
+prevent showing them.
+
+**One cost, stated rather than hidden: the region outline is drawn at its screen-pixel floor in stage
+two.** The setting is denominated in grid squares, converting it needs a pixels-per-square
+measurement only a trace produces, and a GM who reopens a room already in stage two has never run
+one. Honouring it only when a trace happens to have run this session would be an invisible
+divergence, which is the worse failure. Fills and shapes are unaffected.
+
 #### Degenerate and near-degenerate faces — decided 2026-09-02 (user)
 
 **A sliver a GM creates is theirs to keep.** They may be reducing an area to a sliver deliberately, to

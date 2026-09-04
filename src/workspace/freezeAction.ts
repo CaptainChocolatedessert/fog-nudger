@@ -1,17 +1,21 @@
 /**
- * The one-way door, as a pair of buttons at the end of the Regions step.
+ * The one-way door, as a pair of buttons at the end of the Edit walls step.
  *
  * In stage one it offers **Generate the graph**; in stage two it offers **Start over**. One slot,
  * two states, because they are the same door from the two sides and putting them in different places
  * would suggest they are different subjects.
  *
- * ## Why the Regions step
+ * ## Why the Edit walls step
  *
- * The thing being committed to is the partition, and this is the step that draws it. A GM freezes
- * when the rooms look right, which is a judgement they can only make while looking at them.
+ * **It was the Regions step until 2026-09-04**, on the argument that the thing being committed to is
+ * the partition and Regions is where a GM judges it. That argument was sound and it was answered by
+ * a step existing: this doc predicted stage two would want one, and the door belongs at the boundary
+ * that step creates rather than one step short of it.
  *
- * *Placement is a first answer rather than a settled one.* Once stage two has real editing tools it
- * may want a step of its own, and the door would move to whatever boundary that creates.
+ * It also reads better from inside. In stage one the Edit walls step is empty and this button is
+ * what puts something in it; in stage two it is the way back out of the thing the GM is looking at.
+ * Regions keeps the button that acts on the partition — the push — which is the one that genuinely
+ * belongs beside what it writes.
  *
  * ## Why a dialog here and disabled controls elsewhere
  *

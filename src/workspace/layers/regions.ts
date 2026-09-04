@@ -30,8 +30,13 @@
  */
 
 import { PROPOSAL_COLOURS } from "../../emit/fogShapes";
-import { lastPixelsPerSquare } from "../../pipeline";
-import { currentRaster, currentRegions, currentWalls, regionsShowing } from "../regions";
+import {
+  currentRaster,
+  currentRegions,
+  currentWalls,
+  outlineUnitsPerSquare,
+  regionsShowing,
+} from "../regions";
 import { currentSettings } from "../settingsState";
 import { addPainter, type Painter } from "../shell";
 
@@ -72,12 +77,19 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const scaleY = drawHeight / raster.height;
 
   const settings = currentSettings();
-  const pxPerSquare = lastPixelsPerSquare();
-  const strokeMapPx = pxPerSquare === null ? 0 : settings.review.strokeSquares * pxPerSquare;
+  /*
+    The width is read live and the *unit* is asked for, which is the split that matters.
+
+    A grid square is a different number of ring units in the two stages — raster pixels in one,
+    fractions of the map in the other — and only the partition's own module knows which space its
+    rings are in. Reading the setting here keeps the outline responding to the slider without a
+    re-derive; asking for the conversion keeps the two stages from needing a branch in the painter.
+  */
+  const strokeInRingUnits = settings.review.strokeSquares * outlineUnitsPerSquare();
 
   context.save();
   context.lineJoin = "round";
-  context.lineWidth = Math.max(MIN_STROKE_PX, strokeMapPx * scaleX);
+  context.lineWidth = Math.max(MIN_STROKE_PX, strokeInRingUnits * scaleX);
 
   regions.forEach((region, index) => {
     const colour = PROPOSAL_COLOURS[index % PROPOSAL_COLOURS.length]!;

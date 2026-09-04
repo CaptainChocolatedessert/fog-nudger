@@ -395,6 +395,29 @@ export function buildFrozenFaces(graph: FrozenGraph): FrozenFaces {
 }
 
 /**
+ * The uncovered walls as geometry — one pair of points each.
+ *
+ * A convenience, and it lives here rather than at the two call sites because that is the whole of
+ * it: `walls` holds *indices*, both the preview and the emit path want points, and index arithmetic
+ * repeated in two places is index arithmetic that can disagree in one. A wall drawn from the wrong
+ * pair of vertices is a line across the map that looks like a decision somebody made.
+ */
+export function wallSegments(
+  graph: FrozenGraph,
+  faces: FrozenFaces,
+): readonly (readonly [Vector2, Vector2])[] {
+  const out: (readonly [Vector2, Vector2])[] = [];
+  for (const index of faces.walls) {
+    const edge = graph.edges[index];
+    if (!edge) continue;
+    const from = graph.nodes[edge.a];
+    const to = graph.nodes[edge.b];
+    if (from && to) out.push([from, to]);
+  }
+  return out;
+}
+
+/**
  * Take the bridges out of a cycle and close up what is left.
  *
  * **A graph operation, not a linear one**, and the two cases that look identical in the walk need
