@@ -12,7 +12,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { findCrossings, insertEdge, segmentMeeting } from "./planarGraph";
+import { findCrossings, segmentMeeting } from "./planarGraph";
+import { insertEdge } from "./planarOps";
 import { documentPoint, nodeDegrees, type FrozenGraph } from "./frozenGraph";
 
 const at = (x: number, y: number) => documentPoint(x, y);
