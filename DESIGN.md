@@ -3378,14 +3378,61 @@ price, and the one-way door is what makes it honest.
 **The area check does not cover it.** It is a lattice identity, counting interior points and steps,
 and fitted geometry has neither. That is coherent — it validates a derivation and stage two has none
 — but it means a graph edit has no equivalent safety net, and the area check is the diagnostic this
-project leans on hardest because the bugs it catches all render plausibly. **Stage two needs an
-invariant of its own and does not have one yet.**
+project leans on hardest because the bugs it catches all render plausibly.
+
+**Two checks answer that, and they check different things** (2026-09-02 and 09-03). **Planarity**
+says the embedding is one a half-edge traversal can mean anything over at all: two walls crossing at
+a point that is a node of neither leaves the faces either side of the crossing undefined rather than
+wrong. **Euler's identity** — vertices minus walls plus enclosing cycles equals the number of
+separate pieces of linework — says the traversal of that embedding was coherent. Neither catches the
+other's failures: a crossing satisfies Euler, and a mis-partitioned walk can be perfectly planar.
+
+**Both are diagnostics rather than gates, and that is forced by the same argument that keeps
+degenerate shapes legal.** Two walls on one pair of vertices are coincident, which is not an
+embedding Euler describes — and doubling a line in order to drag the copy away is exactly the legal
+intermediate state the section below refuses to prevent. So the identity is reported and the
+derivation carries on producing what it can.
 
 **The point probe changes mechanism.** "Which room is this?" is answered from the labelling today; in
 stage two it becomes point-in-polygon against the fitted faces.
 
 **Re-tuning the smoothing means starting over**, so the door's warning has to say so alongside "this
 closes the reading".
+
+#### Faces from the frozen graph — BUILT 2026-09-03
+
+**Stage two derives its own partition, from the document and nothing else.** This is what made
+"faces on release" buildable: stage one reads face identity out of a raster labelling, one sample to
+the right of each boundary step, and that single lookup does three jobs — names the face, separates
+an outer ring from a hole, and resolves nesting. After the freeze there are no pixels, so all three
+are geometric.
+
+**The walk is the same walk**, on purpose: sort the walls at each vertex by heading, leave by the
+entry before the one arrived along, keep the face on the right. Two implementations of one
+convention, so both produce the same partition from the same graph.
+
+**Grouping is by containment, with one exclusion that is a correctness requirement.** Each connected
+piece of linework contributes exactly one outward-facing cycle, plus one enclosing cycle per bounded
+face of its own; an outward cycle is therefore a hole of the smallest enclosing ring that contains
+it. A cycle is tested only against cycles of *other* pieces — because a piece's outward cycle runs
+along the same vertices as its own rings, so testing it against one of them asks whether a point
+lying exactly on a polygon is inside it. That is a coin flip, and it is the case that arises on every
+room rather than an exotic one.
+
+**Areas are summed per half-edge, dropping any whose twin is in the same cycle.** A stub is walked
+out and back, and its two terms are exact negations that a point-by-point sum separates by the whole
+rest of the walk. **Measured: about one random chain in a thousand fails to cancel**, and the case
+kept as a fixture sums to +5.55e-17 — *positive*, which is the direction that turns a loose stub into
+a room. Removing the terms before they are added is exact by construction rather than by luck.
+
+**Nothing is dropped for being small.** Stage one drops a face with no interior pixels; there is no
+pixel count here, and the only substitute would be the area threshold that was deleted with the
+smallest-room control for deleting a region where what is usually wrong is a wall. **The cost is
+stated rather than argued away: a sub-pixel sliver stage one refused to emit is one stage two will
+emit.** It should be none, because sliver removal runs before the freeze.
+
+**And there is no simplification, which is the freeze point paying off.** The frozen graph *is* the
+fitted geometry, so a ring is its own vertices and no boundary is approximated a second time.
 
 #### Degenerate and near-degenerate faces — decided 2026-09-02 (user)
 
