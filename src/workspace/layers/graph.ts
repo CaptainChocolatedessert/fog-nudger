@@ -26,9 +26,12 @@
  * keeping visible while the graph is drawn over the same picture.
  */
 
+import type { Vector2 } from "@owlbear-rodeo/sdk";
+
 import { nodeDegrees, type FrozenGraph } from "../../trace/frozenGraph";
 import { addPainter, type Painter } from "../shell";
 import { frozenGraph } from "../stage";
+import { draggedNode, hoveredNode, snapTarget } from "../wallEdit";
 
 /** Kept distinct from the wall lines' red and from the six proposal colours. */
 const WALL_COLOUR = "#2b6bff";
@@ -39,6 +42,21 @@ const WALL_WIDTH_PX = 2;
 const HANDLE_FILL = "#ffffff";
 const HANDLE_RIM = "#2b6bff";
 const HANDLE_RADIUS = 3;
+
+/**
+ * The three states a handle can be in beyond ordinary, and they say different things.
+ *
+ * **Grabbable** is the answer to a question nobody can otherwise ask: a press either moves a vertex
+ * or pans, and without this the GM finds out which by doing it. **Moving** marks the one point the
+ * gesture is carrying. **Joining** is the one §8 actually demands — a merge is not undoable and the
+ * boundary has to be visible *before* it is crossed, so the target changes colour and grows while
+ * there is still a chance to move away or hold ALT.
+ */
+const HOVER_RADIUS = 5;
+const ACTIVE_FILL = "#ffcc00";
+const MERGE_FILL = "#00e06a";
+const ACTIVE_RIM = "#20242c";
+const MERGE_RADIUS = 6;
 
 /**
  * Past this many handles *on screen*, none are drawn.
@@ -70,6 +88,17 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const x = (fraction: number): number => view.x + fraction * drawWidth;
   const y = (fraction: number): number => view.y + fraction * drawHeight;
 
+  /*
+    Where a vertex is *drawn*, which during a drag is not where it is stored.
+
+    The gesture holds the position it would land on and nothing is written to the graph until the
+    release. So the walls follow the cursor by substituting one coordinate here, at no cost beyond
+    the redraw — no graph rebuilt per frame, and no crossing sweep per frame either.
+  */
+  const dragged = draggedNode();
+  const at = (id: number): Vector2 | undefined =>
+    dragged !== null && id === dragged.id ? dragged.at : graph.nodes[id];
+
   context.save();
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -77,8 +106,8 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   // One path for every wall, stroked twice: the casing first, then the core over it.
   context.beginPath();
   for (const edge of graph.edges) {
-    const from = graph.nodes[edge.a];
-    const to = graph.nodes[edge.b];
+    const from = at(edge.a);
+    const to = at(edge.b);
     if (!from || !to) continue;
     context.moveTo(x(from.x), y(from.y));
     context.lineTo(x(to.x), y(to.y));
@@ -90,7 +119,23 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   context.lineWidth = WALL_WIDTH_PX;
   context.stroke();
 
-  paintHandles(context, graph, x, y);
+  // The walls the gesture is carrying, over the rest, so what is moving is never in doubt.
+  if (dragged !== null) {
+    context.beginPath();
+    for (const edge of graph.edges) {
+      if (edge.a !== dragged.id && edge.b !== dragged.id) continue;
+      const from = at(edge.a);
+      const to = at(edge.b);
+      if (!from || !to) continue;
+      context.moveTo(x(from.x), y(from.y));
+      context.lineTo(x(to.x), y(to.y));
+    }
+    context.strokeStyle = ACTIVE_FILL;
+    context.lineWidth = WALL_WIDTH_PX;
+    context.stroke();
+  }
+
+  paintHandles(context, graph, x, y, at);
   context.restore();
 };
 
@@ -113,6 +158,7 @@ function paintHandles(
   graph: FrozenGraph,
   x: (fraction: number) => number,
   y: (fraction: number) => number,
+  at: (id: number) => Vector2 | undefined,
 ): void {
   const degree = degrees(graph);
   const width = context.canvas.width;
@@ -131,19 +177,42 @@ function paintHandles(
     if (visible > MAX_HANDLES) return;
   }
 
-  context.fillStyle = HANDLE_FILL;
-  context.strokeStyle = HANDLE_RIM;
+  const dragged = draggedNode();
+  const snap = snapTarget();
+  const hover = hoveredNode();
+
+  const dot = (px: number, py: number, radius: number, fill: string, rim: string): void => {
+    context.fillStyle = fill;
+    context.strokeStyle = rim;
+    context.beginPath();
+    context.arc(px, py, radius, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  };
+
   context.lineWidth = 1.5;
   for (let id = 0; id < graph.nodes.length; id++) {
     if ((degree[id] ?? 0) === 0) continue;
+    // The three marked states are drawn afterwards, over everything, so a handle they overlap
+    // cannot cover them.
+    if (id === dragged?.id || id === snap) continue;
     const node = graph.nodes[id]!;
     const px = x(node.x);
     const py = y(node.y);
     if (!onScreen(px, py)) continue;
-    context.beginPath();
-    context.arc(px, py, HANDLE_RADIUS, 0, Math.PI * 2);
-    context.fill();
-    context.stroke();
+    const grabbable = id === hover;
+    dot(px, py, grabbable ? HOVER_RADIUS : HANDLE_RADIUS, HANDLE_FILL, HANDLE_RIM);
+  }
+
+  if (dragged !== null) {
+    const point = at(dragged.id);
+    if (point) dot(x(point.x), y(point.y), HOVER_RADIUS, ACTIVE_FILL, ACTIVE_RIM);
+  }
+  // Last and largest: this is the one mark that has to be seen before the gesture ends, because a
+  // merge is what release would do and it cannot be taken back.
+  if (snap !== null) {
+    const point = graph.nodes[snap];
+    if (point) dot(x(point.x), y(point.y), MERGE_RADIUS, MERGE_FILL, ACTIVE_RIM);
   }
 }
 

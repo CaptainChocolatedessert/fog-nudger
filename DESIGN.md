@@ -3465,6 +3465,39 @@ measurement only a trace produces, and a GM who reopens a room already in stage 
 one. Honouring it only when a trace happens to have run this session would be an invisible
 divergence, which is the worse failure. Fills and shapes are unaffected.
 
+#### The vertex drag — BUILT 2026-09-04
+
+**The first tool in this project that changes the GM's own work rather than a setting.** Everything
+before it turns a number and re-derives; this moves a point, and the point stays moved because stage
+two never re-derives. That is what the freeze was for.
+
+**The gesture is taken by looking rather than by a mode.** A press is offered to the step's tool
+before panning is decided, and the tool takes it only when there is a vertex under it. A drag on
+empty map still pans and Ctrl still pans anywhere. That matters more here than it would in a painting
+step: editing a graph is mostly *looking*, and a mode that took every drag would charge for the
+looking in order to pay for the editing.
+
+**Snapping is shown by moving the wall, not by colouring a dot.** While a release would merge, the
+dragged vertex is drawn in the target's position — which is exactly what releasing produces. §8 wants
+a boundary visible *before* it is crossed, and a merge cannot be undone; showing the outcome is a
+stronger statement than announcing that one is available. ALT suppresses it, and the suppression is
+simply not asking.
+
+**A snap is a merge and not a move**, and the distinction is the reason the document exists. Merging
+renames every reference to the folded vertex, so two walls genuinely share a point and follow each
+other for ever. A move that happened to land on identical coordinates would leave two vertices
+agreeing until one of them moves again — which is the state emitted fog is permanently stuck in, and
+the reason editing cannot be recovered from the scene.
+
+**Nothing is written while the gesture runs.** The tool holds where the vertex *would* be and the
+layer substitutes that one coordinate, so a drag costs no graph rebuild and no crossing sweep per
+frame. The sweep runs once, on release — which is also when the scene is written and the rooms are
+re-derived, as decided.
+
+**A failed write loses the drag, loudly.** The graph is stored before what is in hand changes, so a
+failure leaves the GM with the graph they had rather than one the scene does not agree with. Losing a
+single drag is the safe direction against editing for an hour against something unsaved.
+
 #### Degenerate and near-degenerate faces — decided 2026-09-02 (user)
 
 **A sliver a GM creates is theirs to keep.** They may be reducing an area to a sliver deliberately, to

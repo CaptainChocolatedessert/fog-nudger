@@ -64,8 +64,14 @@ export const LAYERS = ["ink", "breaks", "skeleton", "regions", "graph"] as const
 
 export type LayerId = (typeof LAYERS)[number];
 
-/** What a plain left-drag does while a step is open. */
-export type Drag = "pan" | "brush";
+/**
+ * What a plain left-drag does while a step is open.
+ *
+ * `edit` is not a third kind of painting: it hands the press to the step's tool, which decides by
+ * looking whether there is anything under it. A drag beginning on a vertex moves it and one
+ * beginning on empty map pans as usual, which is why this is a mode rather than a mouse button.
+ */
+export type Drag = "pan" | "brush" | "edit";
 
 /** A sub-heading within a step, for a handful of controls that want their own explanation. */
 export interface StepGroup {
@@ -211,12 +217,14 @@ export const STEPS: readonly Step[] = [
     */
     layers: ["regions", "graph"],
     /*
-      Pan, still — the drag that will edit a vertex is not built yet.
+      The first step that takes the plain drag for something other than panning.
 
-      Said here rather than left as an oversight: this is the step that takes the drag when it is,
-      and it is the first step whose declared drag will change from `pan`.
+      It is not all-or-nothing, which is what makes it liveable: the tool takes the gesture only when
+      the press lands on a vertex, so panning by dragging empty map still works and Ctrl still pans
+      anywhere. That matters more here than in a painting step — editing a graph is mostly looking,
+      and a mode that took every drag would make the looking part awkward to pay for the editing.
     */
-    drag: "pan",
+    drag: "edit",
   },
   {
     id: "regions",

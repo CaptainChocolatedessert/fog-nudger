@@ -54,6 +54,7 @@ import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./w
 import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
+import { registerWallEdit } from "./workspace/wallEdit";
 import { renderFreezeAction } from "./workspace/freezeAction";
 import { onStageChange } from "./workspace/stage";
 import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
@@ -97,6 +98,14 @@ registerSkeletonLayer();
 registerRegionsLayer();
 // Last, so the editable graph sits over the rooms it makes rather than under them.
 registerGraphLayer();
+/*
+  The one tool on this surface that changes the GM's own work rather than a setting.
+
+  Registered here with the layers because it is the other half of one thing: the tool holds the
+  gesture and the layer draws it, and neither is any use alone. The step declares that a drag means
+  this; the shell offers every press to it and it takes the ones that land on a vertex.
+*/
+registerWallEdit();
 // Deriving costs the better part of a second in stage one and is visible in two steps, so entering
 // one of them is what pays for it. Both are told on every change, which is why the module keeps a
 // set rather than a flag.

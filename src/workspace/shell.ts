@@ -5,9 +5,9 @@
  *
  * The transform, the input, the canvas stack, and the way out. A **step** owns its controls, what
  * it paints, and what a drag means (`DESIGN.md` §4, "Six steps"). The division is not tidiness: it
- * is what lets a step be added without touching any of the above. There are four steps today — map,
- * ink, walls, regions — and two more expected, wall editing and doors, which are steps F and G.
- * This file is the part that is identical in all of them.
+ * is what lets a step be added without touching any of the above. There are five steps today — map,
+ * ink, walls, edit walls, regions — and doors would be the sixth, except that doors stay with
+ * Dynamic Fog. This file is the part that is identical in all of them.
  *
  * **Nothing here knows what a mask is.** The shell draws the map and then hands the frame to
  * whatever painters were registered, in registration order. That is the canvas stack: an ordered
@@ -348,6 +348,60 @@ export function onMapClick(listener: (u: number, v: number) => void): void {
   clickListeners.push(listener);
 }
 
+/** A position on the map, as the tools want it: fractions, plus what a screen pixel is worth. */
+export interface MapPoint {
+  readonly u: number;
+  readonly v: number;
+  /**
+   * Map fractions per screen pixel, so a tool can ask for a target a constant size under the cursor.
+   *
+   * **One number for both axes, and that is a stated approximation.** Fraction space is square and
+   * the map generally is not, so a circle on screen is an ellipse in fractions. Taken from the
+   * *longer* drawn side, which makes a screen-derived radius land at or inside what was asked for
+   * rather than outside it — up to the map's aspect ratio smaller on the short axis, which on the
+   * test map is about a fifth. Conservative is the right direction here: the radius decides whether
+   * a drag merges two vertices, and a merge that happens when the GM did not mean it is worse than
+   * one they have to aim for.
+   */
+  readonly perPixel: number;
+  /** Held to suppress snapping. Read at the moment of the event, never remembered. */
+  readonly altKey: boolean;
+}
+
+/**
+ * A step that takes the plain drag for editing rather than panning.
+ *
+ * **The step owns the binding**, which is the same rule that deleted the hand-tool button: a step
+ * declares what a drag means and the shell obeys, so there is nothing to switch and nothing that can
+ * be set two ways. Ctrl still pans in any step, which is what keeps a pan available once the plain
+ * drag is something else.
+ *
+ * `start` returning false leaves the gesture alone, and it pans as usual. That is what lets a drag
+ * beginning on empty map still pan while one beginning on a vertex moves it — the tool decides by
+ * looking, and the shell does not have to know what it looked at.
+ */
+export interface MapDragHandler {
+  readonly start: (point: MapPoint) => boolean;
+  readonly move: (point: MapPoint) => void;
+  readonly end: () => void;
+  /**
+   * The gesture was taken away — the pointer was cancelled rather than released.
+   *
+   * Its own call rather than an `end` with nothing in it, because the two mean opposite things: one
+   * applies the edit and the other abandons it. A shared entry point would need a flag, and a flag
+   * read the wrong way round writes a half-finished drag into the scene.
+   */
+  readonly cancel: () => void;
+  /** Where the pointer is while no gesture is running; `null` when it leaves the map or the canvas. */
+  readonly hover?: (point: MapPoint | null) => void;
+}
+
+let dragHandler: MapDragHandler | null = null;
+
+export function setMapDragHandler(handler: MapDragHandler | null): void {
+  dragHandler = handler;
+}
+
 /*
   The navigation listens on the **canvas**, not on the surface that contains everything.
 
@@ -364,6 +418,20 @@ export function onMapClick(listener: (u: number, v: number) => void): void {
 if (canvas instanceof HTMLCanvasElement) {
   let panning = false;
   let last: { x: number; y: number } | null = null;
+  /** Whether the registered handler took the gesture in progress. */
+  let editing = false;
+
+  /** Where a pointer event landed on the map, or `null` for anywhere else. */
+  const mapPointFrom = (event: PointerEvent): MapPoint | null => {
+    if (!mapImage) return null;
+    const drawWidth = mapImage.naturalWidth * view.scale;
+    const drawHeight = mapImage.naturalHeight * view.scale;
+    if (drawWidth <= 0 || drawHeight <= 0) return null;
+    const u = (event.clientX - view.x) / drawWidth;
+    const v = (event.clientY - view.y) / drawHeight;
+    if (u < 0 || v < 0 || u > 1 || v > 1) return null;
+    return { u, v, perPixel: 1 / Math.max(drawWidth, drawHeight), altKey: event.altKey };
+  };
 
   // Where the press landed and whether it has moved since, which is what separates a click from a
   // drag. Four pixels of slop, because a mouse moves a little under a finger and a click that only
@@ -383,6 +451,28 @@ if (canvas instanceof HTMLCanvasElement) {
     if (event.button !== 0) return;
     pressed = { x: event.clientX, y: event.clientY };
     moved = false;
+
+    /*
+      The editing step gets first refusal, and only when Ctrl is not held.
+
+      Offered before panning is decided rather than after, because the tool's answer is what decides:
+      a press on a vertex is an edit and a press on empty map is a pan, and only the tool can tell
+      those apart. Taking the gesture also takes the pointer capture, so a drag that leaves the
+      canvas keeps arriving.
+    */
+    if (drag === "edit" && !event.ctrlKey && dragHandler) {
+      const point = mapPointFrom(event);
+      if (point && dragHandler.start(point)) {
+        editing = true;
+        try {
+          canvas.setPointerCapture(event.pointerId);
+        } catch (error) {
+          devLog("warn", "workspace: could not capture the pointer for an edit", describeError(error));
+        }
+        return;
+      }
+    }
+
     // Ctrl pans in any step, which is what keeps a pan available once the plain drag is a brush.
     if (drag !== "pan" && !event.ctrlKey) return;
     panning = true;
@@ -399,6 +489,24 @@ if (canvas instanceof HTMLCanvasElement) {
     if (pressed && (Math.abs(event.clientX - pressed.x) > 4 || Math.abs(event.clientY - pressed.y) > 4)) {
       moved = true;
     }
+    if (editing) {
+      // Off the map mid-drag is not nothing: the gesture is still running and the vertex has to
+      // follow, so the fractions are taken unclamped rather than the move being dropped.
+      if (mapImage) {
+        const drawWidth = mapImage.naturalWidth * view.scale;
+        const drawHeight = mapImage.naturalHeight * view.scale;
+        dragHandler?.move({
+          u: (event.clientX - view.x) / drawWidth,
+          v: (event.clientY - view.y) / drawHeight,
+          perPixel: 1 / Math.max(drawWidth, drawHeight),
+          altKey: event.altKey,
+        });
+      }
+      return;
+    }
+    if (!panning && drag === "edit" && dragHandler?.hover) {
+      dragHandler.hover(mapPointFrom(event));
+    }
     if (!panning || !last) return;
     setView(panBy(view, event.clientX - last.x, event.clientY - last.y));
     last = { x: event.clientX, y: event.clientY };
@@ -413,6 +521,21 @@ if (canvas instanceof HTMLCanvasElement) {
 
   canvas.addEventListener("pointerup", (event) => {
     const wasClick = pressed !== null && !moved;
+    /*
+      An edit gesture ends as an edit, whether or not it moved.
+
+      It must not also fire the point probe. A press and release on a vertex that did not move is a
+      gesture the tool took and finished; reporting "what is here?" on top of it would be two things
+      from one press, which is the same fault a right-click had before it was filtered out.
+    */
+    if (editing) {
+      editing = false;
+      endPan();
+      // No position: the tool has been told where the vertex is on every move, and a release does
+      // not move it. Handing it a fresh point would invite a second, subtly different answer.
+      dragHandler?.end();
+      return;
+    }
     endPan();
     if (!wasClick || !mapImage) return;
     const u = (event.clientX - view.x) / (mapImage.naturalWidth * view.scale);
@@ -423,7 +546,20 @@ if (canvas instanceof HTMLCanvasElement) {
     for (const listener of clickListeners) listener(u, v);
   });
 
-  canvas.addEventListener("pointercancel", endPan);
+  canvas.addEventListener("pointercancel", () => {
+    // A cancelled gesture is abandoned, not applied: the tool drops what it was holding and the
+    // graph is left exactly as it was. Losing an edit is the safe direction against half-applying it.
+    if (editing) {
+      editing = false;
+      dragHandler?.cancel();
+    }
+    endPan();
+  });
+
+  // Nothing is being pointed at any more, so nothing is highlighted as grabbable.
+  canvas.addEventListener("pointerleave", () => {
+    if (!editing) dragHandler?.hover?.(null);
+  });
 
   canvas.addEventListener(
     "wheel",
