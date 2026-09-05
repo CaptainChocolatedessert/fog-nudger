@@ -213,3 +213,24 @@ export function describeDraw(splits: number, overlaps: number): string {
   }
   return notes.length === 0 ? "drew a wall" : `drew a wall · ${notes.join(" · ")}`;
 }
+
+/**
+ * What releasing the button means while drawing: put the wall down, or leave it armed.
+ *
+ * **Four cases, and getting one of them wrong is what a room found** (2026-09-05): the first version
+ * finished only when the press had *travelled*, which is never true of the second click of a
+ * click-click draw — so two clicks placed an anchor and then silently re-placed it, for ever, and
+ * only dragging could finish a wall.
+ *
+ * A tiny function rather than an expression in the handler, because gesture *sequencing* is where
+ * both of that day's defects lived and it is the one part of a pointer tool that can be pinned
+ * without a DOM.
+ *
+ * - No anchor before the press, and it moved: a drag drew the whole wall. **Finish.**
+ * - No anchor before the press, and it did not: a click set the first end. **Arm.**
+ * - An anchor already, and it moved: dragged from the armed end. **Finish.**
+ * - An anchor already, and it did not: the second click. **Finish** — this is the one that was wrong.
+ */
+export function drawRelease(armedBeforePress: boolean, travelled: boolean): "finish" | "arm" {
+  return armedBeforePress || travelled ? "finish" : "arm";
+}

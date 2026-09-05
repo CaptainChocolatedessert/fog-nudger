@@ -49,6 +49,7 @@ import {
   describeEdit,
   dragTo,
   drawPoint,
+  drawRelease,
   grabAt,
   type DragState,
   type DrawPoint,
@@ -102,6 +103,8 @@ let hoveredEdge: number | null = null;
  * re-aimed — so supporting both costs a boolean and settles nothing arbitrarily.
  */
 let travelled = false;
+/** Whether a wall was already part-drawn when this press landed — the second click of a pair. */
+let armedBeforePress = false;
 let pressedAt: { u: number; v: number } | null = null;
 /**
  * Map fractions per screen pixel, from the last event that carried one.
@@ -160,6 +163,7 @@ function clearGesture(): void {
   anchor = null;
   reach = null;
   travelled = false;
+  armedBeforePress = false;
   pressedAt = null;
 }
 
@@ -170,6 +174,7 @@ function start(point: MapPoint): boolean {
 
   pressedAt = { u: point.u, v: point.v };
   travelled = false;
+  armedBeforePress = anchor !== null;
   lastPerPixel = point.perPixel;
 
   if (tool === "move") {
@@ -296,7 +301,7 @@ function end(): void {
     with the far end re-aimable in between, from the same code.
   */
   if (!anchor || !reach) return;
-  if (!travelled) {
+  if (drawRelease(armedBeforePress, travelled) === "arm") {
     pressedAt = null;
     return;
   }

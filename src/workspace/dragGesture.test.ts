@@ -8,6 +8,7 @@ import {
   describeEdit,
   dragTo,
   drawPoint,
+  drawRelease,
   grabAt,
 } from "./dragGesture";
 import { nearestEdge, nearestNode, removeEdge } from "../trace/planarOps";
@@ -304,6 +305,22 @@ describe("drawing a wall", () => {
     expect(describeDraw(0, 0)).toBe("drew a wall");
     expect(describeDraw(2, 0)).toBe("drew a wall · split 2 walls at the crossing");
     expect(describeDraw(0, 1)).toBe("drew a wall · 1 wall lies along another");
+  });
+});
+
+describe("finishing a drawn wall", () => {
+  it("puts the wall down on the second click, which is the case that was broken", () => {
+    // A room found this: two clicks armed the anchor and then silently re-placed it, for ever.
+    expect(drawRelease(true, false)).toBe("finish");
+  });
+
+  it("puts it down on a drag that went somewhere, from either starting state", () => {
+    expect(drawRelease(false, true)).toBe("finish");
+    expect(drawRelease(true, true)).toBe("finish");
+  });
+
+  it("arms the first end when a press neither travelled nor followed one", () => {
+    expect(drawRelease(false, false)).toBe("arm");
   });
 });
 
