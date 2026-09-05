@@ -3530,6 +3530,27 @@ thing GMs will want, is an ordinary click rather than a modifier on a destructiv
 not also close the workspace, because closing pushes to the scene — one keystroke would mean two
 things, and the second cannot be taken back.
 
+**One rule for the cursor, and the reasoning is worth keeping because it decides the next one.** A
+**crosshair** means the tool will act at this point; an **open hand** means the surface will move. An
+**arrow** was considered and rejected: it is the null statement — "ordinary surface, clicking picks
+things" — which under-promises on a map where every press does something specific, and gives nothing
+to aim with. The crosshair says the exact position matters and keeps its own target visible, which is
+why it replaced a hand whose fingers sat on the handle being aimed at.
+
+**What the cursor cannot say goes on the canvas.** Whether a drawn end would *attach* to the vertex
+under it is a third state, decided before the press, and a shape nobody can look directly at will not
+carry it. It is marked on the canvas in the same green the merge target uses — and **only** where it
+would attach: a mark that merely follows the pointer says where the pointer is, which the pointer
+already says, while sitting in the middle of the thing being aimed at.
+
+**Vertices no wall uses are compacted away after an edit** (user, 2026-09-05). Erasing and merging
+both leave them, because renumbering invalidates every id a caller holds — including, mid-drag, the
+one being carried. That rule stands; what changed is that compaction is a *separate* operation run at
+one safe moment, after a gesture has ended and cleared its state. The caller satisfies "hold no ids
+across it" by stopping holding them and re-asking what is under the pointer, which is also the more
+correct answer, since the graph has just changed. Speed was never the objection: 0.31ms at ten
+thousand vertices, against a scene write of about 1,200ms.
+
 #### Putting stage two on the map — BUILT 2026-09-05
 
 **The push traced unconditionally until now, which made stage two unusable end to end.** A GM could
