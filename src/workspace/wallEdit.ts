@@ -72,6 +72,15 @@ export type WallTool = "move" | "draw" | "erase";
 const GRAB_RADIUS_PX = 9;
 const SNAP_RADIUS_PX = 14;
 const ERASE_RADIUS_PX = 8;
+/**
+ * The shortest wall the draw tool will put down, in screen pixels.
+ *
+ * From a room: two clicks in nearly the same place made a wall too short to see and painfully hard
+ * to aim the erase tool at, since a longer neighbour wins the nearest-wall query from almost
+ * anywhere near it. Screen pixels rather than a fixed distance, so zooming in to draw finer detail
+ * still works — the floor is on what can be *aimed at*, not on what the map is allowed to contain.
+ */
+const MIN_WALL_PX = 5;
 
 let tool: WallTool = "move";
 
@@ -94,6 +103,15 @@ let hoveredEdge: number | null = null;
  */
 let travelled = false;
 let pressedAt: { u: number; v: number } | null = null;
+/**
+ * Map fractions per screen pixel, from the last event that carried one.
+ *
+ * Kept because the release has no position of its own — the tool has been told where the far end is
+ * on every move, and handing `end` a fresh point would invite a second, subtly different answer
+ * about where the wall lands. The scale is the one thing it still needs from screen space, and it
+ * cannot have changed since the last move without a move to report it.
+ */
+let lastPerPixel = 0;
 /** A write is in flight, so nothing new may start on top of it. */
 let busy = false;
 
@@ -152,6 +170,7 @@ function start(point: MapPoint): boolean {
 
   pressedAt = { u: point.u, v: point.v };
   travelled = false;
+  lastPerPixel = point.perPixel;
 
   if (tool === "move") {
     const found = grabAt(graph, point.u, point.v, GRAB_RADIUS_PX * point.perPixel);
@@ -188,6 +207,7 @@ function start(point: MapPoint): boolean {
 function move(point: MapPoint): void {
   const graph = frozenGraph();
   if (!graph) return;
+  lastPerPixel = point.perPixel;
   if (pressedAt && (Math.abs(point.u - pressedAt.u) > 0.002 || Math.abs(point.v - pressedAt.v) > 0.002)) {
     travelled = true;
   }
@@ -285,9 +305,9 @@ function end(): void {
   clearGesture();
   setGrabTarget(false);
   invalidate();
-  const result = applyDraw(graph, from, to);
+  const result = applyDraw(graph, from, to, MIN_WALL_PX * lastPerPixel);
   if (!result) {
-    say("that wall had no length, so nothing was added");
+    say("too short to be a wall, so nothing was added");
     return;
   }
   commit(result, describeDraw(result.splits, result.overlaps));
@@ -330,6 +350,7 @@ function hover(point: MapPoint | null): void {
     return;
   }
 
+  lastPerPixel = point.perPixel;
   if (tool === "erase") {
     const found = nearestEdge(graph, { x: point.u, y: point.v }, ERASE_RADIUS_PX * point.perPixel);
     if (found === hoveredEdge) return;

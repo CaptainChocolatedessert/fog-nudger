@@ -10,7 +10,7 @@ import {
   drawPoint,
   grabAt,
 } from "./dragGesture";
-import { nearestEdge, removeEdge } from "../trace/planarOps";
+import { nearestEdge, nearestNode, removeEdge } from "../trace/planarOps";
 
 function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): FrozenGraph {
   return {
@@ -19,17 +19,25 @@ function graphOf(points: readonly [number, number][], edges: readonly [number, n
   };
 }
 
-/** Two walls meeting at a corner, plus a third vertex a little way off. */
+/**
+ * Two walls meeting at a corner, and a separate wall whose loose end faces them across a small gap.
+ *
+ * The loose end used to be a bare vertex with no wall on it, which is not a thing that can exist on
+ * screen — nothing draws one and, since 2026-09-05, nothing snaps to one either. A fixture holding a
+ * vertex the tools would refuse to offer is a fixture testing a graph that cannot happen.
+ */
 const CORNER = graphOf(
   [
     [0.2, 0.2],
     [0.5, 0.2],
     [0.5, 0.5],
     [0.55, 0.2],
+    [0.7, 0.2],
   ],
   [
     [0, 1],
     [1, 2],
+    [3, 4],
   ],
 );
 
@@ -113,8 +121,8 @@ describe("releasing", () => {
     const result = applyDrag(CORNER, grab, held)!;
 
     expect(result.graph.nodes[1]).toEqual(documentPoint(0.4, 0.3));
-    // A move keeps both walls and both their ends; only the coordinate changed.
-    expect(result.graph.edges).toHaveLength(2);
+    // A move keeps every wall and every end; only the coordinate changed.
+    expect(result.graph.edges).toHaveLength(3);
     expect(CORNER.nodes[1]).toEqual(documentPoint(0.5, 0.2));
   });
 
@@ -260,6 +268,29 @@ describe("drawing a wall", () => {
     expect(nodeDegrees(result.graph)[meeting]).toBe(4);
   });
 
+  it("refuses a wall too short to see or to aim at", () => {
+    /*
+      From a room: two clicks in nearly the same place made a wall a few thousandths across, which is
+      invisible and which the erase tool could barely be aimed at — a longer neighbour wins the
+      nearest-wall query from almost anywhere near it.
+    */
+    const from = drawPoint(CORNER, 0.3, 0.4, 0, true);
+    const to = drawPoint(CORNER, 0.3005, 0.4, 0, true);
+
+    expect(applyDraw(CORNER, from, to, 0.01)).toBeNull();
+    // The same two points with no floor asked for are a wall, so the floor is what refused it and
+    // not some other degeneracy.
+    expect(applyDraw(CORNER, from, to)).not.toBeNull();
+  });
+
+  it("allows a short wall when the view is zoomed in far enough to aim at one", () => {
+    // The floor is a screen distance the caller converts, so zooming in to draw fine detail works.
+    const from = drawPoint(CORNER, 0.3, 0.4, 0, true);
+    const to = drawPoint(CORNER, 0.3005, 0.4, 0, true);
+
+    expect(applyDraw(CORNER, from, to, 0.0001)).not.toBeNull();
+  });
+
   it("adds nothing when both ends are the same place", () => {
     const loose = drawPoint(CORNER, 0.35, 0.4, NEAR, false);
     expect(applyDraw(CORNER, loose, loose)).toBeNull();
@@ -273,6 +304,29 @@ describe("drawing a wall", () => {
     expect(describeDraw(0, 0)).toBe("drew a wall");
     expect(describeDraw(2, 0)).toBe("drew a wall · split 2 walls at the crossing");
     expect(describeDraw(0, 1)).toBe("drew a wall · 1 wall lies along another");
+  });
+});
+
+describe("snapping to what is actually there", () => {
+  it("ignores a vertex no wall uses, because nothing draws one", () => {
+    /*
+      From a room: erasing a few walls left their vertices behind — deliberately, since ids are the
+      only stable identity here — and drawing nearby then caught on points that were not on screen.
+      The layer skips them and this has to agree, because between them they are what "there is
+      something here" means.
+    */
+    const orphaned = removeEdge(CORNER, 0).graph;
+
+    expect(nodeDegrees(orphaned)[0]).toBe(0);
+    expect(nearestNode(orphaned, { x: 0.2, y: 0.2 }, NEAR)).toBeNull();
+    // Its other end is still in use by the second wall, so that one is still offered.
+    expect(nearestNode(orphaned, { x: 0.5, y: 0.2 }, NEAR)).toBe(1);
+  });
+
+  it("keeps a drawn end from attaching to one either", () => {
+    const orphaned = removeEdge(CORNER, 0).graph;
+
+    expect(drawPoint(orphaned, 0.2, 0.2, NEAR, false).onNode).toBeNull();
   });
 });
 
@@ -290,11 +344,11 @@ describe("erasing a wall", () => {
   it("removes one wall and leaves its vertices, since ids are the only stable identity", () => {
     const result = removeEdge(CORNER, 0);
 
-    expect(result.graph.edges).toHaveLength(1);
+    expect(result.graph.edges).toHaveLength(2);
     expect(result.graph.edges[0]).toEqual({ a: 1, b: 2 });
     // Node 0 now has no walls. It stays, because renumbering would invalidate every id held
-    // elsewhere — and a vertex with no walls draws no handle.
-    expect(result.graph.nodes).toHaveLength(4);
+    // elsewhere — and a vertex with no walls draws no handle and offers no snap.
+    expect(result.graph.nodes).toHaveLength(5);
     expect(nodeDegrees(result.graph)[0]).toBe(0);
   });
 
@@ -306,6 +360,6 @@ describe("erasing a wall", () => {
   });
 
   it("leaves the graph alone when asked for a wall that is not there", () => {
-    expect(removeEdge(CORNER, 7).graph).toBe(CORNER);
+    expect(removeEdge(CORNER, 9).graph).toBe(CORNER);
   });
 });

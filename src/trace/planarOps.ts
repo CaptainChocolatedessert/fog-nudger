@@ -362,10 +362,25 @@ export function nearestNode(
   /** Left out of the search — the vertex being dragged must not snap to itself. */
   exclude?: number,
 ): number | null {
+  /*
+    Vertices with no walls are not offered, and a room is why.
+
+    Erasing and merging both leave their vertices in the table rather than renumbering, because ids
+    are the only stable identity this document has. Nothing draws them — a handle that moves nothing
+    would be a lie about what is there — and until 2026-09-05 this still *snapped* to them: after
+    erasing a few walls, drawing nearby caught on points the GM could not see. The layer's rule and
+    this one have to agree, because between them they are what "there is something here" means.
+  */
+  const referenced = new Uint8Array(graph.nodes.length);
+  for (const edge of graph.edges) {
+    if (edge.a >= 0 && edge.a < referenced.length) referenced[edge.a] = 1;
+    if (edge.b >= 0 && edge.b < referenced.length) referenced[edge.b] = 1;
+  }
+
   let best: number | null = null;
   let bestDistance = radius * radius;
   for (let id = 0; id < graph.nodes.length; id++) {
-    if (id === exclude) continue;
+    if (id === exclude || referenced[id] !== 1) continue;
     const node = graph.nodes[id]!;
     const distance = (node.x - point.x) ** 2 + (node.y - point.y) ** 2;
     if (distance <= bestDistance && (best === null || distance < bestDistance)) {

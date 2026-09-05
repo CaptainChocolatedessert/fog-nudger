@@ -174,16 +174,27 @@ export function drawPoint(
 /**
  * Add the wall, or `null` if there is no wall to add.
  *
- * `null` covers both ways of drawing nothing, **with one test rather than two**: two ends on one
- * spot, and two ends snapped to the same existing vertex. The second looks like it needs a check of
- * its own and does not — snapping reports the target's own coordinate, so two ends on one vertex are
- * two ends on one spot, and a separate id comparison was a branch nothing could reach past this.
+ * **`minLength` is a floor on what can be drawn, and it comes from a room** (2026-09-05): a GM
+ * clicking twice in nearly the same place made a wall a few thousandths of a pixel long, which is
+ * invisible, all but impossible to aim the erase tool at, and does nothing but sit in the document.
+ * It is passed in rather than fixed here for the same reason the radii are — how small is *too*
+ * small is a question about a surface and a zoom, and zooming in to draw finer detail should work.
  *
- * A zero-length segment has no direction, so nothing could sort it into a rotation and the face
- * traversal could not use it. The freeze drops them for the same reason.
+ * `null` also covers the two degenerate cases, **with one test rather than three**: two ends on one
+ * spot and two ends snapped to the same existing vertex are the same thing, because snapping reports
+ * the target's own coordinate. A zero-length segment has no direction, so nothing could sort it into
+ * a rotation and the face traversal could not use it; the freeze drops them for the same reason.
  */
-export function applyDraw(graph: FrozenGraph, from: DrawPoint, to: DrawPoint): EditResult | null {
-  if (from.at.x === to.at.x && from.at.y === to.at.y) return null;
+export function applyDraw(
+  graph: FrozenGraph,
+  from: DrawPoint,
+  to: DrawPoint,
+  minLength = 0,
+): EditResult | null {
+  const dx = to.at.x - from.at.x;
+  const dy = to.at.y - from.at.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0 || length < minLength) return null;
   return insertEdge(graph, [from.at, to.at]);
 }
 
