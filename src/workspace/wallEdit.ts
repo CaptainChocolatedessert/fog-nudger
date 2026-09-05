@@ -96,6 +96,17 @@ let reach: DrawPoint | null = null;
 let hovered: number | null = null;
 let hoveredEdge: number | null = null;
 /**
+ * Where the draw tool would put its next point, before any press.
+ *
+ * **The snap indication belongs on the canvas rather than in the cursor** (user, 2026-09-05). Draw
+ * marked nothing until after the first click, so whether a line would *attach* to the vertex under
+ * the pointer was invisible at the moment it was being decided — and attaching is the whole
+ * difference between closing a break and drawing a line that merely ends near one. The mark is the
+ * same green the drag's merge target uses, which is the channel that already carries "this will
+ * join" on this surface.
+ */
+let drawHover: DrawPoint | null = null;
+/**
  * Whether the press has travelled far enough to be a drag rather than a click.
  *
  * Only the draw tool reads it, and it is what lets one tool serve both ways of drawing a line:
@@ -167,11 +178,17 @@ export function pendingWall(): { readonly from: DrawPoint; readonly to: DrawPoin
   return anchor && reach ? { from: anchor, to: reach } : null;
 }
 
+/** Where a press would put the next point, with no wall started yet. */
+export function pendingPoint(): DrawPoint | null {
+  return anchor ? null : drawHover;
+}
+
 function clearGesture(): void {
   grab = null;
   dragState = null;
   anchor = null;
   reach = null;
+  drawHover = null;
   travelled = false;
   armedBeforePress = false;
   pressedAt = null;
@@ -397,15 +414,22 @@ function hover(point: MapPoint | null): void {
   }
 
   if (tool === "draw") {
+    const landed = drawPoint(graph, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
     // The far end keeps following even between clicks, which is what makes the two-click form
     // legible: the wall being drawn is on screen the whole time rather than only while a button is
-    // held.
-    if (anchor) {
-      reach = drawPoint(graph, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
-      invalidate();
-    }
-    const near = drawPoint(graph, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
-    setGrabTarget(near.onNode !== null);
+    // held. With nothing started, the same point is what a press would place.
+    if (anchor) reach = landed;
+    drawHover = landed;
+    /*
+      Always, because in this tool a press always draws.
+
+      It showed the pan hand except when over a vertex, which is wrong twice over: panning is the
+      *secondary* action here and needs Ctrl, and the cursor was carrying a snap indication that
+      belongs on the canvas. One rule across the three tools — a crosshair means the tool acts at
+      this point, a hand means the surface moves.
+    */
+    setGrabTarget(true);
+    invalidate();
     return;
   }
 

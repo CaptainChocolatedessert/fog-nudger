@@ -31,7 +31,14 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { nodeDegrees, type FrozenGraph } from "../../trace/frozenGraph";
 import { addPainter, type Painter } from "../shell";
 import { frozenGraph } from "../stage";
-import { draggedNode, hoveredNode, hoveredWall, pendingWall, snapTarget } from "../wallEdit";
+import {
+  draggedNode,
+  hoveredNode,
+  hoveredWall,
+  pendingPoint,
+  pendingWall,
+  snapTarget,
+} from "../wallEdit";
 
 /** Kept distinct from the wall lines' red and from the six proposal colours. */
 const WALL_COLOUR = "#2b6bff";
@@ -274,17 +281,26 @@ function paintHandles(
     two states are drawn differently rather than left for the GM to infer from the position.
   */
   const pending = pendingWall();
-  if (pending) {
-    for (const point of [pending.from, pending.to]) {
-      const attaching = point.onNode !== null;
-      dot(
-        x(point.at.x),
-        y(point.at.y),
-        attaching ? MERGE_RADIUS : HOVER_RADIUS,
-        attaching ? MERGE_FILL : ACTIVE_FILL,
-        ACTIVE_RIM,
-      );
-    }
+  const ends = pending ? [pending.from, pending.to] : [];
+  /*
+    With nothing started yet, the point a press *would* place is marked the same way.
+
+    That is the half a room found missing: whether a line would attach to the vertex under the
+    pointer was invisible at the moment it was being decided, which is one press too late. The
+    cursor cannot carry it — a crosshair says "the tool acts here", not "and it will join that".
+  */
+  const next = pendingPoint();
+  if (next) ends.push(next);
+
+  for (const point of ends) {
+    const attaching = point.onNode !== null;
+    dot(
+      x(point.at.x),
+      y(point.at.y),
+      attaching ? MERGE_RADIUS : HOVER_RADIUS,
+      attaching ? MERGE_FILL : ACTIVE_FILL,
+      ACTIVE_RIM,
+    );
   }
 }
 

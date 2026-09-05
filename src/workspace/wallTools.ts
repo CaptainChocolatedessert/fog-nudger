@@ -34,8 +34,9 @@ const TOOLS: readonly ToolChoice[] = [
     id: "draw",
     label: "Draw",
     hint:
-      "Drag to draw a wall, or click both ends. It attaches to a point you finish on, which is how " +
-      "you close a gap — hold Shift to leave it loose. Escape or right-click abandons it.",
+      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>green</b> where it " +
+      "would attach to an existing point, which is how you close a gap — hold Shift to leave it " +
+      "loose. Ctrl-drag pans. Escape or right-click abandons a wall part-drawn.",
   },
   {
     id: "erase",
