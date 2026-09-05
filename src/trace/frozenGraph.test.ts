@@ -19,6 +19,7 @@ import {
   decodeFrozenGraph,
   documentPoint,
   encodeFrozenGraph,
+  compactNodes,
   freezeGraph,
   nodeDegrees,
   wallRuns,
@@ -48,6 +49,72 @@ function frozen(rows: readonly string[], tolerance = 1): FrozenGraph {
   const fitted = fitFaces(resolved.graph, resolved.faces.faces, tolerance);
   return freezeGraph(resolved.graph, fitted.edges).graph;
 }
+
+describe("compactNodes", () => {
+  const graph = (points: readonly [number, number][], edges: readonly [number, number][]) => ({
+    nodes: points.map(([x, y]) => documentPoint(x, y)),
+    edges: edges.map(([a, b]) => ({ a, b })),
+  });
+
+  it("drops the vertices no wall uses and renumbers what is left", () => {
+    // Node 1 is used by nothing — the state erasing and merging leave behind.
+    const withJunk = graph(
+      [
+        [0.1, 0.1],
+        [0.5, 0.5],
+        [0.9, 0.1],
+      ],
+      [[0, 2]],
+    );
+    const tidy = compactNodes(withJunk);
+
+    expect(tidy.nodes).toEqual([documentPoint(0.1, 0.1), documentPoint(0.9, 0.1)]);
+    // The surviving wall still joins the same two places, under the ids they now have.
+    expect(tidy.edges).toEqual([{ a: 0, b: 1 }]);
+  });
+
+  it("keeps every wall pointing at the same coordinates it did", () => {
+    const withJunk = graph(
+      [
+        [0.2, 0.2],
+        [0.3, 0.3],
+        [0.4, 0.4],
+        [0.5, 0.5],
+        [0.6, 0.6],
+      ],
+      [
+        [1, 3],
+        [3, 4],
+      ],
+    );
+    const tidy = compactNodes(withJunk);
+
+    for (const [before, after] of withJunk.edges.map((edge, i) => [edge, tidy.edges[i]!] as const)) {
+      expect(tidy.nodes[after.a]).toEqual(withJunk.nodes[before.a]);
+      expect(tidy.nodes[after.b]).toEqual(withJunk.nodes[before.b]);
+    }
+  });
+
+  it("returns the very same graph when there is nothing to drop", () => {
+    const tight = graph(
+      [
+        [0.1, 0.1],
+        [0.9, 0.9],
+      ],
+      [[0, 1]],
+    );
+
+    // Identity, not equality: the caller can skip a rebuild and a write on it.
+    expect(compactNodes(tight)).toBe(tight);
+  });
+
+  it("survives a graph with no walls at all", () => {
+    const bare = graph([[0.1, 0.1]], []);
+
+    expect(compactNodes(bare).nodes).toEqual([]);
+    expect(compactNodes(bare).edges).toEqual([]);
+  });
+});
 
 describe("freezeGraph", () => {
   it("drops a wall that simplification laid on top of another, and counts it", () => {

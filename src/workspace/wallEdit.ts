@@ -41,6 +41,7 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
+import { compactNodes } from "../trace/frozenGraph";
 import { nearestEdge, removeEdge, type EditResult } from "../trace/planarOps";
 import {
   applyDraw,
@@ -115,6 +116,15 @@ let pressedAt: { u: number; v: number } | null = null;
  * cannot have changed since the last move without a move to report it.
  */
 let lastPerPixel = 0;
+/**
+ * Where the pointer last was, so what is under it can be re-asked after an edit.
+ *
+ * Compacting the node table renumbers everything, and the answer to "hold no ids across it" is not
+ * to translate them but to stop holding them — so after an edit the hover is worked out again from
+ * the pointer rather than carried over. That is also the more correct answer: the graph just
+ * changed, and what is under the cursor may genuinely be something else now.
+ */
+let lastPointer: { u: number; v: number } | null = null;
 /** A write is in flight, so nothing new may start on top of it. */
 let busy = false;
 
@@ -173,6 +183,7 @@ function start(point: MapPoint): boolean {
   if (!graph) return false;
 
   pressedAt = { u: point.u, v: point.v };
+  lastPointer = { u: point.u, v: point.v };
   travelled = false;
   armedBeforePress = anchor !== null;
   lastPerPixel = point.perPixel;
@@ -213,6 +224,7 @@ function move(point: MapPoint): void {
   const graph = frozenGraph();
   if (!graph) return;
   lastPerPixel = point.perPixel;
+  lastPointer = { u: point.u, v: point.v };
   if (pressedAt && (Math.abs(point.u - pressedAt.u) > 0.002 || Math.abs(point.v - pressedAt.v) > 0.002)) {
     travelled = true;
   }
@@ -270,11 +282,15 @@ function end(): void {
     const held = grab;
     const landed = dragState;
     clearGesture();
-    // The pointer has not moved, so whatever was under it still is: a plain move leaves the dragged
-    // vertex there and a merge leaves the one it was folded into. A release ends the gesture, not
-    // the hovering, and clearing the hint here made the cursor fall back mid-aim.
-    hovered = held && landed ? landed.snapTo ?? held.id : null;
-    setGrabTarget(hovered !== null);
+    /*
+      The pointer has not moved, so whatever was under it still is — a release ends the gesture, not
+      the hovering, and clearing the hint here made the cursor fall back mid-aim.
+
+      Held by *position* rather than by id, because `commit` compacts the node table and every id
+      from before it is meaningless afterwards. `hover` re-asks against the new graph once the write
+      lands; this keeps the crosshair steady in the moment between.
+    */
+    setGrabTarget(true);
     invalidate();
     if (!held || !landed) return;
     const result = applyDrag(graph, held, landed);
@@ -326,9 +342,19 @@ function end(): void {
  * the GM with what they had.
  */
 function commit(result: EditResult, message: string): void {
+  /*
+    Compacted here and nowhere else, which is what makes renumbering safe.
+
+    Erasing and merging leave vertices no wall uses, and leaving them for ever grows a stored
+    document that a GM never asked to grow. Renumbering is forbidden *mid-gesture* because ids are
+    the only stable identity here — but this runs after the gesture ended and cleared its state, and
+    `busy` stops another starting until the write lands, so nothing is holding an id to invalidate.
+    The hover is then re-asked from the pointer rather than translated.
+  */
+  const graph = compactNodes(result.graph);
   busy = true;
   say("saving…", "working");
-  void updateFrozen(result.graph)
+  void updateFrozen(graph)
     .then(() => {
       say(message);
     })
@@ -340,6 +366,10 @@ function commit(result: EditResult, message: string): void {
     })
     .finally(() => {
       busy = false;
+      // What is under the pointer, worked out against the graph as it is now.
+      hovered = null;
+      hoveredEdge = null;
+      if (lastPointer) hover({ ...lastPointer, perPixel: lastPerPixel, modifier: false });
       invalidate();
     });
 }
@@ -356,6 +386,7 @@ function hover(point: MapPoint | null): void {
   }
 
   lastPerPixel = point.perPixel;
+  lastPointer = { u: point.u, v: point.v };
   if (tool === "erase") {
     const found = nearestEdge(graph, { x: point.u, y: point.v }, ERASE_RADIUS_PX * point.perPixel);
     if (found === hoveredEdge) return;
