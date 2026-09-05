@@ -4081,8 +4081,11 @@ can judge.
 Stage one is a **stack**, not one filtered reading:
 
 ```
-base ink  −  suppression  +  break repair  +  added ink
+base ink  −  suppression  +  added ink
 ```
+
+**A fourth, derived term sat between them until 2026-09-05** — the break repair — and it became a
+tool that writes into the added-ink layer, which is what leaves the stack at three.
 
 - **A. Process the map image** — multiple parameters, produces the base ink.
 - **B. Suppression** — painting tools now, others could be added later; produces the suppression layer.
@@ -4108,7 +4111,7 @@ repair works on ink the GM has already corrected. So editing suppression changes
 finds, and therefore changes what the *Ink* step draws. That is the one asterisk on "order does not
 matter", and it is in the picture rather than in the documents.
 
-#### The repair is to become a tool inside C — decided 2026-09-05, not yet built
+#### The repair becomes a tool inside C — decided and built 2026-09-05
 
 **It stops being a derived term and becomes something the GM stamps.** The parameters highlight
 candidates and show what would be filled; **nothing is filled by default**; clicking inside a break's
@@ -4145,6 +4148,70 @@ and converting afterwards is self-contained. By then painting will also have cha
 break closed by hand is a two-second stroke, so the automatic tool has to justify itself against a
 real alternative rather than against nothing. A future improvement worth noting: un-selecting
 individual gaps while still in the tool.
+
+#### The repair became a tool — BUILT 2026-09-05, the same day it was designed
+
+**Built as designed, and the deferral held for exactly as long as it was meant to**: until painting
+had been through a room. It had, clean, so the conversion went in behind it.
+
+**The question the deferral raised was answered rather than dropped.** Painting made a break a
+two-second brush stroke, so the automatic search had to justify itself against a real alternative —
+and three options were put: build the tool as designed, keep detection and drop filling entirely so
+the brush does the fixing, or leave it and take the door revisit instead. The user chose the first,
+on a ground I could not have judged: *on a map that has a lot of little gaps, the automated fix is a
+huge time saving.* That is what the accept-all button is for, and it is why detection-only would have
+been the wrong economy.
+
+**What was built**, matching the specification above: selecting the tool runs the search; every break
+is ringed and its pixels shown in purple as a proposal; a click inside a ring accepts that one and
+re-runs the detection immediately; a button accepts every ring shown. Accepted pixels are written
+into the added-ink layer and are thereafter indistinguishable from a brush stroke over the same
+ground.
+
+##### The payoff, which is larger than the feature
+
+The stack is now exactly three layers with nothing derived in it:
+
+```
+base ink  −  suppression  +  added ink
+```
+
+That let the composition come out of the pipeline into a single pure function, `composePaint`. It had
+been inline in `composeInk`, behind the SDK boundary where no headless test can reach it — recorded
+as a stated limitation the day painting landed, with the note that the fix would have to be
+structural rather than another test. It could not be extracted while the repair sat between the two
+terms. It can now, and the order is pinned by a test that a mutation pass confirms fails when the two
+are swapped.
+
+Three things went with it, each because its last reader had gone: the full-raster **gap label array**
+(eight megabytes per search, and the search now re-runs after every accept), **`applyGapFill`**, and
+the point probe's **`invented-ink`** answer — an accepted fill is added ink and says so.
+
+##### A third parameter kind, on the condition the record set
+
+`PARAMETER_KIND` gains `tool`, with four members: the two brush widths and the two gap numbers. The
+value it replaced — `gaps` — lasted one commit and was deleted for having no members, and the note
+that replaced it named the condition for trying again. The test it had to pass was that it differ
+from `display` in *behaviour*: it does, at the freeze. A display control stays live in stage two
+because recolouring while editing walls is ordinary; a tool control is closed, because the tool it
+belongs to is.
+
+##### Costs, stated rather than argued away
+
+- **An accepted fill goes stale where the search self-corrected.** The bad direction is one left
+  across what has since become an open doorway, which Dynamic Fog would derive a wall across. It is a
+  stale mark of added ink, visible in that layer's colour, and hand-painted ink already fails the same
+  way — but it is a trade, and it is the one the conversion bought.
+- **The break rings left the Ink and Walls steps.** Walls therefore loses its severed-wall warning,
+  which was the one argued exception to "each step shows its own layer". On-demand detection leaves
+  nothing to draw in a step that did not ask for it. A wall the minimum-stroke-width filter cut is now
+  found by running the tool rather than by noticing a ring.
+- **The reading's state line no longer counts breaks**, for the same reason: it reported a total on
+  every recompose, which is how a break somewhere nobody was looking got mentioned at all.
+- **`gapFillPx` defaults to 12 rather than 0.** The reason for zero was that this was the only
+  stage-one control that *invented* ink, and it invents nothing now. What zero would cost instead is
+  a tool that shows nothing on arrival, with no way to tell "this map has none" from "the slider is
+  at zero".
 
 #### A raster, not a list of strokes — user, 2026-09-05
 
