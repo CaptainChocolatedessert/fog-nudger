@@ -48,8 +48,10 @@ import { describeError } from "../describeError";
 import { pushToFog, pushWouldChange } from "../emit/emitRegions";
 import { readNominatedMapId } from "../map/mapImage";
 import { encodeFrozenGraph } from "../trace/frozenGraph";
+import { paintRevision } from "../trace/inkPaint";
 import { frozenGraph } from "./stage";
 import { controlsLive } from "./settingRows";
+import { currentPaint } from "./paintState";
 import { currentSettings, persistSettings } from "./settingsState";
 import { say } from "./shell";
 
@@ -66,7 +68,16 @@ async function fingerprint(): Promise<string> {
   // In stage two the settings no longer decide the geometry, so on their own they would report an
   // evening of editing as "nothing changed".
   const edits = graph ? encodeFrozenGraph(graph) : "";
-  return `${map ?? "none"}|${JSON.stringify(currentSettings())}|${edits}`;
+  /*
+    The paint layers are here for the same reason the graph is.
+
+    They are durable inputs the settings say nothing about, so without them an evening of suppressing
+    crosshatching would close reporting "the scene already says this" and push nothing. By content
+    rather than by presence, since editing a layer changes neither its existence nor its map.
+  */
+  const paint = currentPaint();
+  const painted = `${paintRevision(paint.suppress)}/${paintRevision(paint.ink)}`;
+  return `${map ?? "none"}|${JSON.stringify(currentSettings())}|${edits}|${painted}`;
 }
 
 /**

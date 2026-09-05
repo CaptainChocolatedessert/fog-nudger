@@ -229,7 +229,8 @@ export function settingRow(control: Control): HTMLElement {
 
     Disabled rather than confirmed on use. §8 wants the boundary visible *before* it is crossed, and
     a live slider that throws a dialog when you nudge it to see what it does is a trap; the sentence
-    below is the continuous statement, and the deliberate way back is one button in the Regions step.
+    below is the continuous statement, and the deliberate way back is one button in the Edit walls
+    step.
   */
   const frozen = inStageTwo() && PARAMETER_KIND[control.name] === "pipeline";
   input.disabled = !live || frozen;
@@ -237,7 +238,10 @@ export function settingRow(control: Control): HTMLElement {
     row.classList.add("frozen");
     const closed = document.createElement("p");
     closed.className = "hint";
-    closed.textContent = "Closed — the graph is frozen. Start over, under Regions, reopens this.";
+    // Names **Edit walls**, which is where the door is. It said Regions until 2026-09-05, which was
+    // right when the button lived there and became wrong the moment it moved to the step it is the
+    // door to — sending a GM to look for a control that is one step further down.
+    closed.textContent = "Closed — the graph is frozen. Start over, under Edit walls, reopens this.";
     row.append(top, input, closed);
     return row;
   }

@@ -28,7 +28,8 @@
 
 import { devLog } from "../devlog";
 import { advanceTo } from "./accordion";
-import { adoptReading, describeMaskFailure, takeReading } from "./reading";
+import { loadPaint } from "./paintState";
+import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
 import { inStageTwo, loadStage } from "./stage";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
@@ -67,6 +68,24 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   if (stage.corrupt) {
     say("the saved wall editing could not be read and has been ignored — see the console", "bad");
   }
+
+  /*
+    The GM's two paint layers, read for this map for the same reason the graph is.
+
+    **After the reading rather than before it**, which costs one recompose and is the honest order.
+    A layer records which map it belongs to, and the only thing that says which map this is, is the
+    reading that has just resolved it — so loading first would mean guessing. The reading itself is
+    unaffected: what the ink layer draws is the base, which no paint layer touches, so nothing wrong
+    is on screen in the meantime.
+
+    The recompose is skipped when there is nothing to fold in, which is every scene until someone
+    paints.
+  */
+  const paint = await loadPaint(result.mapId);
+  if (paint.corrupt) {
+    say("some saved painting could not be read and has been ignored — see the console", "bad");
+  }
+  if (paint.present) requestRecompose();
   /*
     Where a GM lands, which the stage decides.
 

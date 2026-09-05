@@ -4063,6 +4063,161 @@ are as good as they are going to get.** Every global control has a point past wh
 than it gains, and that point arrives with the map still imperfect. They also survive re-runs by
 being *inputs* rather than outputs, which is what a stage-two hand edit is not.
 
+### Painting — BUILT 2026-09-05, items 4 and 5 above
+
+The two painting features were built together, on one piece of machinery, and the shape they took is
+different from the one items 4 and 5 describe. Those two sections stand as the *motivation*; this is
+what was decided and made.
+
+#### Three stages, each making a layer — the user's framing, 2026-09-05
+
+Stage one is a **stack**, not one filtered reading:
+
+```
+base ink  −  suppression  +  break repair  +  added ink
+```
+
+- **A. Process the map image** — multiple parameters, produces the base ink.
+- **B. Suppression** — painting tools now, others could be added later; produces the suppression layer.
+- **C. Added ink** — the same; produces the added-ink layer.
+
+When any of the three is finished the stack is re-composited, and **that composite is what becomes
+walls**. The three are independent inputs: any can be revisited without disturbing the other two, and
+the order they are *edited* in does not matter.
+
+**What this replaced was a single Paint step with three verbs** — paint ink, suppress, clear — which
+would have made the picker choose *which document a drag writes to*. That is a mode wearing a tool's
+clothes, and it broke the project's own rule that a step is a mode and shows its own layer. With a
+step per layer, a picker chooses **how you edit the layer you are in**, which also leaves room for
+the tools the user named as coming later: suppression by picking a whole ink blob, added ink by
+drawing a straight line.
+
+It also states a requirement that would otherwise have been a note to remember: added ink is immune
+to the stroke-width opening and the island filter *because of where C sits*, not because of a rule.
+
+**The one term that is not one of the three is the break repair.** It is derived rather than made — a
+search with two parameters — and it sits between B and C, taking suppression as input, so that a
+repair works on ink the GM has already corrected. So editing suppression changes what the repair
+finds, and therefore changes what the *Ink* step draws. That is the one asterisk on "order does not
+matter", and it is in the picture rather than in the documents.
+
+#### The repair is to become a tool inside C — decided 2026-09-05, not yet built
+
+**It stops being a derived term and becomes something the GM stamps.** The parameters highlight
+candidates and show what would be filled; **nothing is filled by default**; clicking inside a break's
+ring accepts that ink, effective immediately and therefore changing what the remaining detection
+finds; and a button accepts everything currently shown. Once accepted, the pixels are **added ink,
+indistinguishable from ink painted by hand**.
+
+What it buys:
+
+- The stack becomes exactly three layers with nothing derived in it, and the asterisk goes.
+- **A rule that is currently only nearly true becomes true.** The repair is off by default because
+  nothing should write into the linework unasked — but a nonzero slider is not one-time consent, it
+  re-invents ink on *every* recompose from then on. As a tool the writing is an act.
+- Nothing has to be remembered about gaps across a change underneath them.
+- The rings stop being a by-product of a slider and become the preview the numbers are adjusted
+  against, and the search can see ink the GM has already brushed on — which the pipeline version
+  cannot.
+
+The stated cost, so it is a trade rather than a free simplification: **a stamped fill goes stale
+where the search self-corrects today.** Change the threshold now and a break that closed on its own
+stops being filled; a stamped fill does not. The direction that matters is a fill left across what
+has since become an open **doorway**, which Dynamic Fog would derive a wall across. It is acceptable
+on the user's own argument — a stale mark of added ink, visible in that layer's colour like any
+other, and hand-painted ink already has exactly this failure mode — but it is a real one.
+
+**A behaviour to expect rather than treat as a bug:** accepting one fill re-runs the detection, so
+the remaining rings visibly reshuffle. Channels merge and split as the ink changes, which is the same
+non-monotonicity that collapsed the two-slider design. There it was fatal because a slider changed
+the set invisibly; here the GM watches it happen one accept at a time.
+
+**Deferred deliberately** (user, 2026-09-05). The repair stays exactly where it is until painting is
+in a room: nothing is removed from a working build, painting is purely additive to the composition,
+and converting afterwards is self-contained. By then painting will also have changed the ground — a
+break closed by hand is a two-second stroke, so the automatic tool has to justify itself against a
+real alternative rather than against nothing. A future improvement worth noting: un-selecting
+individual gaps while still in the tool.
+
+#### A raster, not a list of strokes — user, 2026-09-05
+
+The first design stored strokes as polylines in fractions of the map, by analogy with the frozen
+graph. **The analogy was wrong.** The rule the graph obeys is that a document belongs in the space of
+the thing it produces, and the graph produces geometry where this produces **ink pixels** — the same
+rule that killed the raster route at step D, pointing the other way.
+
+What a raster buys, beyond matching the rule:
+
+- **The preview and the effect stop being two computations.** A stroke document is drawn once by the
+  canvas with its line-drawing and stamped again by the pipeline with different arithmetic, so the GM
+  approves one picture and the trace uses another, with nowhere for the divergence to show up. The
+  array the GM is shown **is** the array that composes.
+- Erasing stops needing a definition. It writes zero.
+
+**At the pipeline's raster** (user), which is the mask the layer acts on — so applying it is pixel for
+pixel with no resampling and no rule that would have to differ between adding ink and taking it away
+(and those differ: "any painted pixel counts" adds ink safely and removes it eagerly). That raster
+depends on the decoded image's own pixels and `MEGAPIXEL_BUDGET`, and on nothing about the scene, so
+moving, scaling or rotating the map cannot invalidate a layer. **The document records its own
+dimensions**, which is what turns a replaced image or a changed budget into a reported resample
+rather than a silent one.
+
+#### The size question, measured 2026-09-05 — and the answer is a fact about how people paint
+
+Scene metadata is 512KB and the test raster is 8.4 million pixels, a megabyte at a bit each. So the
+encoding — run-length, base64 — had to earn its place, and the worry was that suppression's motivating
+case is crosshatching, which sounds like the worst case for run-length coding.
+
+**It is not, because nobody paints out crosshatching stroke by stroke** (user): they take a wide brush
+and cover the area solid. Measured at 3300x2550:
+
+| paint | encoded |
+|---|---|
+| untouched | ~0 |
+| a hall covered solid, 11.4% of the map | **4.2KB** |
+| 100 wide strokes | 10.6KB |
+| 500 small scattered dabs | 34KB |
+| a grid traced line by line, map-wide | **1,674KB** |
+
+Covering an area solid is about 400x cheaper than tracing the same area's lines. The last row is the
+one that does not fit and is the one nobody would paint — but it is reachable, so `writePaintLayer`
+refuses above 128KB with a message that says what to do differently, rather than letting an obscure
+metadata failure happen at the moment Done is pressed.
+
+#### A mode with a Done — user, 2026-09-05
+
+Entering a painting step takes a **working copy**; the brush edits that; finishing writes it once and
+recomposites once. A scene write is the better part of a second, so one per stroke would make the
+tool unusable, and this is also what keeps everything underneath from having to track a brush.
+
+**Leaving any other way saves rather than warns.** Closing the workspace warns about nothing because
+nothing is ever lost, and unsaved paint would be the first thing to break that claim — so switching
+step or closing the workspace finishes the mode exactly as Done does. Discard is the only control
+that throws work away, which is the right shape for the one that does.
+
+#### A stroke does not blank the surface, and this is the one change that may not
+
+The standing rule is blank-rather-than-stale. Painting is exempt **structurally**: what the ink layer
+draws is the *base* — the reading after its two filters — and both paint layers compose strictly
+after it, so painting cannot change the picture on screen. There is nothing that goes stale, and
+blanking would take the GM's own map away for the length of a recompose in exchange for nothing.
+
+The stated cost: **the break rings lag one recompose behind a saved suppression**, because they are
+found on the suppressed mask. A lag rather than a lie, bounded, and self-resolving.
+
+#### The layer rule that `paint` breaks, and why
+
+Every other layer is drawn only in the step that is about it. The two paint layers are drawn
+**wherever the ink is drawn** — Ink, both painting steps, and Walls — because a picture of the ink
+that leaves out what the GM has done to it is a picture of something that no longer exists
+downstream. Concretely: the break rings in the Ink step are found on the suppressed mask, so without
+the amber a ring appears beside ink that looks untouched; and the skeleton in Walls is thinned from
+the whole composite, so without both colours the centreline and the ink under it visibly disagree.
+
+Amber for ink taken away, cyan for ink put in, both fixed and both at full alpha whatever the ink
+opacity is — the same arrangement the break fill has, resting on §8: what the map said and what we
+did to it must never look alike.
+
 **How the GM paints was the open question, and the workspace is the answer** (user, 2026-08-23).
 The click-through overlay cannot be painted on: its pointer events are disabled, and that is exactly
 what lets the map be panned while it is up. A mode toggle would mean no panning while painting,

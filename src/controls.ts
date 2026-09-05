@@ -89,6 +89,20 @@ export interface Control {
  * that decide how a step's own layer is *drawn* lead their steps, because looking at the thing comes
  * before tuning it.
  */
+/**
+ * What a brush width says, shared by the two brushes.
+ *
+ * A width in raster pixels means nothing on its own — a GM has no feel for what a pixel of *this*
+ * map is — so it is reported in grid squares where a run has measured the density, and left as bare
+ * pixels where none has. The nullable measurement is why: before a first reading there is no density
+ * and a readout that invented one would be a guess in the voice of a measurement.
+ */
+function brushReadout(value: number, { pxPerSquare }: Measured): string {
+  const px = `${Math.round(value)}px across`;
+  if (pxPerSquare === null || pxPerSquare <= 0) return px;
+  return `${px}, ${(value / pxPerSquare).toFixed(2)} of a square`;
+}
+
 export const CONTROLS: readonly Control[] = [
   {
     name: "inkOpacity",
@@ -157,6 +171,23 @@ export const CONTROLS: readonly Control[] = [
       if (value <= 0) return "off";
       if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;
       return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
+    },
+  },
+  {
+    name: "suppressBrushPx",
+    label: "Brush width",
+    hint: "In raster pixels, so a stroke covers the same amount of map however far you are zoomed out &mdash; zoom in to work finely rather than turning this down. A stroke keeps the width it was painted at.",
+    derive: brushReadout,
+  },
+  {
+    name: "inkBrushPx",
+    label: "Brush width",
+    hint: "In raster pixels. This draws linework, so a width near the map's own ink is usually right &mdash; the readout below says what that measured.",
+    derive: (value, measured) => {
+      const base = brushReadout(value, measured);
+      const { inkWidth } = measured;
+      if (inkWidth === null || inkWidth <= 0) return base;
+      return `${base}, ${(value / inkWidth).toFixed(1)}x the map's ink`;
     },
   },
   {

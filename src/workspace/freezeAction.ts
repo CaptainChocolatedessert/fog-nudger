@@ -31,6 +31,7 @@ import { runTrace } from "../pipeline";
 import { freezeGraph, wallRuns, type Frozen } from "../trace/frozenGraph";
 import { confirmAction } from "./confirmDialog";
 import { controlsLive } from "./settingRows";
+import { currentPaint } from "./paintState";
 import { partitionCheck } from "./regions";
 import { currentSettings } from "./settingsState";
 import { say } from "./shell";
@@ -86,7 +87,7 @@ function freezeReport(stored: Frozen): { readonly text: string; readonly ok: boo
  * the thing the emit path would write rather than a possibly-stale copy beside it.
  */
 async function generate(): Promise<{ readonly text: string; readonly ok: boolean }> {
-  const outcome = await runTrace(currentSettings());
+  const outcome = await runTrace({ settings: currentSettings(), paint: currentPaint() });
   if (!outcome.ok) return { text: outcome.message, ok: false };
 
   const stored = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);

@@ -68,6 +68,24 @@ export type PointKind =
    */
   | "invented-ink"
   /**
+   * Ink the **GM drew** on the added-ink layer.
+   *
+   * Its own kind for the same reason `invented-ink` is: every clause of the ink message points at
+   * the wrong control. The luminance is whatever the map happens to be, the threshold did not put it
+   * here, no filter can take it away, and the thing that would change it is a brush rather than a
+   * slider. This is also the answer that closes the loop on "I painted here and nothing happened".
+   */
+  | "added-ink"
+  /**
+   * Not ink **because the GM suppressed it**, whatever the map says.
+   *
+   * The counterpart, and the more valuable of the two: without it, a suppressed wall reads as plain
+   * space with a luminance that flatly contradicts it — a dark pixel the trace calls ground — and
+   * the obvious conclusion is that the threshold is broken. Naming the layer that did it is the
+   * difference between an hour on the wrong slider and one click of the erase brush.
+   */
+  | "suppressed"
+  /**
    * Not ink, and nothing more can be said yet: no partition has been derived in this frame.
    *
    * The honest answer while the GM is still on the reading steps, where the labelling has not been
@@ -123,6 +141,18 @@ export function readPoint(
    * parallel path. `null` means no repair was running, not that nothing was invented.
    */
   gapLabels: GapLabels | null = null,
+  /**
+   * The GM's two layers, as this run composed them.
+   *
+   * Optional beside the other two and for the identical reason: the same lookup, from the data that
+   * produced the picture rather than from a parallel path. What makes them worth a kind each is that
+   * they are the only inputs here **no slider can explain** — a GM tuning the threshold to fix a
+   * pixel their own brush decided has no way to find that out by looking.
+   */
+  paint: {
+    readonly suppress: { readonly width: number; readonly data: Uint8Array } | null;
+    readonly ink: { readonly width: number; readonly data: Uint8Array } | null;
+  } | null = null,
 ): PointReading {
   const px = Math.floor(x);
   const py = Math.floor(y);
@@ -135,10 +165,45 @@ export function readPoint(
   const ink = mask.data[i] === 1;
   const invented = ink && gapLabels !== null && gapLabels.data[i] === GAP_FILLED;
 
+  /*
+    Whether each of the GM's layers covers this pixel. **Which of them gets to explain it is decided
+    by the order of the chain below, and by nothing else.**
+
+    That is worth stating because a mutation pass found the first version saying it twice, on both
+    flags. Suppression also tested `!ink`, which is what the chain already guarantees: suppression
+    composes before the break repair, so the only way a suppressed pixel is ink at the end is that
+    the repair or the GM's own brush put it back — and both are answered above it. Added ink also
+    tested `ink`, which cannot be false where it covers: it composes **last of everything**, so every
+    pixel it covers is ink by construction. Two statements of one rule is one that can be changed
+    while the other keeps the tests green.
+
+    So both flags mean only "this layer covers this pixel", and composing order decides the rest.
+    Added ink is at the top of the chain because it is last in the composition.
+
+    The width check is not redundant: the pipeline resamples a layer to the run's raster before
+    composing, so these normally match, and a caller handing over the *stored* layer instead would
+    otherwise index it as though it were this raster — reporting about a pixel some distance from the
+    one being asked about.
+  */
+  const layerCovers = (
+    layer: { readonly width: number; readonly data: Uint8Array } | null | undefined,
+  ): boolean => !!layer && layer.width === mask.width && layer.data[i] !== 0;
+
+  const drawn = layerCovers(paint?.ink);
+  const suppressedHere = layerCovers(paint?.suppress);
+
   // No partition to consult. The ink verdict is still worth reporting; the coverage question is not
   // answerable, and saying anything about it here would be inventing one.
   if (!labelled) {
-    const kind = invented ? "invented-ink" : ink ? "ink" : "space";
+    const kind = drawn
+      ? "added-ink"
+      : invented
+        ? "invented-ink"
+        : ink
+          ? "ink"
+          : suppressedHere
+            ? "suppressed"
+            : "space";
     return { x: px, y: py, kind, luminance, region: 0 };
   }
 
@@ -151,8 +216,10 @@ export function readPoint(
     pixel is unlabelled only when it is a centreline pixel itself.
   */
   const region = labelled.labels[i] ?? 0;
+  if (drawn) return { x: px, y: py, kind: "added-ink", luminance, region };
   if (invented) return { x: px, y: py, kind: "invented-ink", luminance, region };
   if (ink) return { x: px, y: py, kind: "ink", luminance, region };
+  if (suppressedHere) return { x: px, y: py, kind: "suppressed", luminance, region };
 
   return { x: px, y: py, kind: region === 0 ? "unlabelled" : "region", luminance, region };
 }
@@ -195,6 +262,18 @@ export function describePoint(reading: PointReading): string {
         `${at}${tone} is ink this run INVENTED — the break repair filled it. The map has no ink ` +
         `here, which is why the luminance is light, and the threshold did not put it there. If this ` +
         `is wrong, lower the largest break to repair rather than touching the threshold.`
+      );
+    case "added-ink":
+      return (
+        `${at}${tone} is ink YOU DREW, on the added-ink layer. The map's own reading does not decide ` +
+        `this and no filter can remove it — added ink goes in last of everything. To change it, use ` +
+        `the erase brush under Add ink rather than any slider.`
+      );
+    case "suppressed":
+      return (
+        `${at}${tone} is not ink because YOU SUPPRESSED it, whatever the map says here. The ` +
+        `threshold is not what did this and moving it will not bring the mark back — use the erase ` +
+        `brush under Suppress ink.`
       );
     case "space":
       return (

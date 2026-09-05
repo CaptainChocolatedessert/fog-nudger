@@ -50,7 +50,15 @@ import {
  * doors stay with Dynamic Fog entirely. `view` is not one of the six: it is the persistent group,
  * which is a step's shape without a mode.
  */
-export type StepId = "map" | "ink" | "walls" | "edit" | "regions" | "view";
+export type StepId =
+  | "map"
+  | "ink"
+  | "suppress"
+  | "addink"
+  | "walls"
+  | "edit"
+  | "regions"
+  | "view";
 
 /**
  * What the canvas can draw over the map.
@@ -60,16 +68,37 @@ export type StepId = "map" | "ink" | "walls" | "edit" | "regions" | "view";
  * Nothing is drawn "because it exists" — a layer is on screen because the step the GM is in is about
  * it.
  */
-export const LAYERS = ["ink", "breaks", "skeleton", "regions", "graph"] as const;
+export const LAYERS = ["ink", "paint", "breaks", "skeleton", "regions", "graph"] as const;
+
+/*
+  One rule about `paint`, because it is the layer that does not follow the convention.
+
+  Everything else here is drawn only in the step that is about it. The GM's two hand-made layers are
+  drawn **wherever the ink is drawn** — Ink, both painting steps, and Walls — and the reason is that
+  a picture of the ink that leaves out what the GM has done to it is a picture of something that no
+  longer exists downstream. Two concrete ways that bites: the break rings in the Ink step are found
+  on the *suppressed* mask, so without the amber a ring appears beside ink that looks untouched; and
+  the skeleton in the Walls step is thinned from the whole composite, so without both colours the
+  centreline and the ink under it visibly disagree.
+
+  They do not compete for the ink's own channel. The mask is drawn in the GM's chosen colour and
+  these two in fixed colours of their own, which is the same arrangement the break fill has and rests
+  on the same rule: what the map said and what we did to it must never look alike (`DESIGN.md` §8).
+*/
 
 export type LayerId = (typeof LAYERS)[number];
 
 /**
  * What a plain left-drag does while a step is open.
  *
- * `edit` is not a third kind of painting: it hands the press to the step's tool, which decides by
- * looking whether there is anything under it. A drag beginning on a vertex moves it and one
- * beginning on empty map pans as usual, which is why this is a mode rather than a mouse button.
+ * `edit` is not a kind of painting: it hands the press to the step's tool, which decides by looking
+ * whether there is anything under it. A drag beginning on a vertex moves it and one beginning on
+ * empty map pans as usual, which is why this is a mode rather than a mouse button.
+ *
+ * `brush` is the one that takes **every** drag, because a stroke has to be able to start anywhere —
+ * which is exactly why Ctrl-pans exists, and why the record's long-standing debt to a trackpad user
+ * comes due in the steps that carry this. The shell has had the branch for it since before anything
+ * used it.
  */
 export type Drag = "pan" | "brush" | "edit";
 
@@ -150,7 +179,7 @@ export const STEPS: readonly Step[] = [
       canvas, the drag and the layers were identical. The name returns as a step when it has a
       skeleton to paint, which is what a wall actually is.
     */
-    layers: ["ink", "breaks"],
+    layers: ["ink", "paint", "breaks"],
     drag: "pan",
     groups: [
       {
@@ -170,6 +199,43 @@ export const STEPS: readonly Step[] = [
         parameters: ["gapFillPx", "gapTravelPx"],
       },
     ],
+  },
+  {
+    id: "suppress",
+    title: "Suppress ink",
+    blurb:
+      "Paint over marks the trace should <b>ignore</b> — meaningless crosshatching, a printed floor " +
+      "grid, a compass rose. The controls above work on every mark at once and cannot tell " +
+      "decoration from linework; you can, by looking. Painted areas are shown in " +
+      "<b class='suppress-key'>amber</b>.",
+    /*
+      The base ink with the paint over it, which is the pairing this step is judged by.
+
+      Suppression is meaningless without the ink it acts on — what a GM is deciding is which of
+      *those* marks are not linework — so the ink is drawn under it and the paint over it in its own
+      colour. The breaks are not here: their controls belong to Ink, and a ring appearing while an
+      area is blocked out would be answering a question nobody is asking yet.
+    */
+    layers: ["ink", "paint"],
+    drag: "brush",
+  },
+  {
+    id: "addink",
+    title: "Add ink",
+    blurb:
+      "Draw linework the map does not have, or does not have clearly: a wall the reading broke, a " +
+      "doorway to close off, a boundary that was never drawn. This goes in <b>last of everything</b>, " +
+      "so no filter above can take it away again. Drawn ink is shown in <b class='addink-key'>cyan</b>.",
+    /*
+      The same pairing as suppression, and for the same reason one question later.
+
+      What is drawn here is judged against the linework it is joining — a wall added to close a break
+      has to meet the ink at both ends — so the ink is underneath and both paint layers are over it,
+      the suppression included: ink the GM has already taken out is not ink a new stroke should be
+      aiming at.
+    */
+    layers: ["ink", "paint"],
+    drag: "brush",
   },
   {
     id: "walls",
@@ -193,7 +259,7 @@ export const STEPS: readonly Step[] = [
       note that put it here was naming the wrong step. The operating notes recorded the layer as the
       intent before the code did.
     */
-    layers: ["ink", "skeleton", "breaks"],
+    layers: ["ink", "paint", "skeleton", "breaks"],
     drag: "pan",
   },
   {
@@ -275,6 +341,10 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   minIslandPx: "ink",
   gapFillPx: "ink",
   gapTravelPx: "ink",
+  // A brush each, in the step whose layer it paints. One shared width would make every switch
+  // between the two tools a resize, and what they are for is an order of magnitude apart.
+  suppressBrushPx: "suppress",
+  inkBrushPx: "addink",
   spurPrunePx: "walls",
   fillOpacity: "regions",
   strokeSquares: "regions",

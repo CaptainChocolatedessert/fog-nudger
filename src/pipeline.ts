@@ -39,6 +39,15 @@
 import { devLog } from "./devlog";
 import { describeSettings, maskFingerprint, readingFingerprint, type Settings } from "./settings";
 import { readSettings } from "./settingsStore";
+import { readPaintLayer } from "./inkPaintStore";
+import {
+  addInk,
+  paintForRaster,
+  paintRevision,
+  paintedCount,
+  suppressInk,
+  type PaintLayer,
+} from "./trace/inkPaint";
 import { loadMapRaster, readGridDpi, resolveTraceMap } from "./map/mapImage";
 import type { Image as ImageItem } from "@owlbear-rodeo/sdk";
 import { megapixels, type RasterPlan } from "./map/rasterPlan";
@@ -142,6 +151,34 @@ const MAX_SIMPLIFY_INK_WIDTHS = 8;
  * still reports every stage in the same order. The only thing that changes is whether the mask was
  * computed just now or a moment ago, and that is stated in the log on every run.
  */
+/**
+ * The GM's two hand-made layers, as everything that traces takes them.
+ *
+ * `null` for a layer nothing has been painted on, which is every scene until someone paints — and it
+ * is the state the whole chain is free in, since applying a layer that marks nothing costs neither a
+ * copy nor a walk.
+ */
+export interface PaintLayers {
+  readonly suppress: PaintLayer | null;
+  readonly ink: PaintLayer | null;
+}
+
+/** Nothing painted on either layer. */
+export const NO_PAINT: PaintLayers = { suppress: null, ink: null };
+
+/**
+ * Everything durable a trace is a function of.
+ *
+ * Bundled rather than passed as two optional arguments, because they are one thing: the inputs the
+ * GM owns, which live in scene metadata and out of which every derived thing here is computed. A
+ * caller that supplied one and forgot the other would trace a mixture of what the workspace is
+ * holding and what the scene last stored, which is a picture neither of them describes.
+ */
+export interface TraceInputs {
+  readonly settings: Settings;
+  readonly paint: PaintLayers;
+}
+
 interface ReadingStage {
   /** Identity of the map and the *reading* settings that produced this. See `readingIdentity`. */
   readonly fingerprint: string;
@@ -172,31 +209,53 @@ interface MaskStage extends ReadingStage {
    */
   readonly maskFingerprint: string;
   /**
-   * The ink as **read**: the reading's mask after the two 1b filters, before anything is invented.
+   * The ink as **read**: the reading's mask after the two 1b filters, and nothing else.
    *
    * This is what the workspace draws as ink, and it is deliberately not the same thing as `mask`.
-   * Drawing the filled version would put invented pixels on screen indistinguishable from read ones,
-   * which `DESIGN.md` §8 forbids — they get their own colour on their own layer instead.
+   * Drawing the composite would put invented pixels on screen indistinguishable from read ones,
+   * which `DESIGN.md` §8 forbids — the repair and the GM's own two layers get their own colours on
+   * their own layers instead.
+   *
+   * **Untouched by paint, which is what lets a stroke avoid blanking the surface.** Suppression and
+   * added ink both act *after* this, so painting cannot change the picture the ink layer is drawing;
+   * only the composite moves, and the composite is not drawn anywhere.
    */
   readonly base: BinaryMask;
   /**
-   * The ink everything downstream derives regions from: `base` plus the breaks the fill repaired.
+   * The ink everything downstream derives regions from: the whole stack, composed.
    *
-   * ## The composition, and where it is going
+   * ## Three hand-made layers and one derived term
    *
-   * The final ink is a stack of layers rather than a single filtered mask (user, 2026-08-23):
+   * Stage one is a stack rather than a single filtered mask (user, 2026-09-05):
    *
    * ```
-   * basic ink  −  GM-suppressed areas  +  gap fills  +  GM-drawn ink
+   * base ink  −  suppression  +  break repair  +  added ink
    * ```
    *
-   * Two of those four exist today — the basic ink and the gap fills — and the other two are
-   * `DESIGN.md` §11 items 4 and 5. The order is not arbitrary: suppression comes before the gap
-   * search so that repairs are derived from the ink the GM has already corrected, and GM-drawn ink
-   * comes last so nothing automatic second-guesses a line drawn deliberately.
+   * The base is what processing the map image produces and is decided by parameters; suppression and
+   * added ink are rasters the GM paints. Those three are **independent inputs** — any can be
+   * revisited without disturbing the others, and the order they are edited in does not matter.
+   *
+   * The order they *compose* in is not free, and each position is load-bearing. Suppression comes
+   * before the break search so a repair works on ink the GM has already corrected. Added ink comes
+   * last, which is what makes it immune to the stroke-width opening and the island filter — the GM
+   * drew it deliberately and no automatic filter may second-guess it.
+   *
+   * The break repair is the one term here that is derived rather than made, which is why editing
+   * suppression changes what it finds. It is expected to become a tool inside the added-ink layer,
+   * stamping what the GM accepts; at that point the stack is exactly three things and nothing in it
+   * depends on anything else.
    */
   readonly mask: BinaryMask;
   readonly gaps: GapFinding;
+  /**
+   * The GM's layers **as this composition used them**, which is at the run's own raster.
+   *
+   * Kept because the point probe reports from the data that produced the picture rather than from a
+   * parallel path, and a layer painted at another raster is resampled on the way in. Reporting the
+   * stored one would answer about a pixel that is not the pixel being asked about.
+   */
+  readonly paint: PaintLayers;
 }
 
 /**
@@ -242,8 +301,30 @@ function mapIdentity(map: ImageItem, dpi: number): string {
   ].join("|");
 }
 
-function maskIdentity(map: ImageItem, dpi: number, settings: Settings): string {
-  return `${mapIdentity(map, dpi)}|${maskFingerprint(settings)}`;
+/**
+ * What a cached *mask* is valid for: the same map, the same reading settings, and the same paint.
+ *
+ * The paint is here and not in `readingIdentity` because both layers compose on top of a reading and
+ * neither can change what binarisation produced — the same split the `POST_READING` parameters get,
+ * arrived at structurally rather than by being listed. So a session of painting re-composes the ink
+ * and never re-reads the map.
+ *
+ * By content rather than by a counter, since the pipeline is reached from two iframes with
+ * independent module state and a counter that agrees with itself in one says nothing about the
+ * other. `paintRevision` walks the layer, which is paid once when a layer changes rather than here.
+ */
+function maskIdentity(
+  map: ImageItem,
+  dpi: number,
+  settings: Settings,
+  paint: PaintLayers,
+): string {
+  return [
+    mapIdentity(map, dpi),
+    maskFingerprint(settings),
+    `suppress:${paintRevision(paint.suppress)}`,
+    `ink:${paintRevision(paint.ink)}`,
+  ].join("|");
 }
 
 /**
@@ -269,6 +350,8 @@ let lastRun: {
   mask: BinaryMask;
   /** Which pixels the repair invented, so the probe can tell them from the map's own ink. */
   gapLabels: GapLabels;
+  /** And which the GM painted, so it can tell those from both. */
+  paint: PaintLayers;
   labelled: LabelledSpace;
   placement: RasterPlacement;
   pxPerSquare: number;
@@ -287,6 +370,7 @@ let lastReading: {
   rawField: ScalarField;
   mask: BinaryMask;
   gapLabels: GapLabels;
+  paint: PaintLayers;
   pxPerSquare: number;
   name: string;
 } | null = null;
@@ -304,18 +388,18 @@ let lastReading: {
  */
 export function probeMapFraction(u: number, v: number): string {
   if (lastRun) {
-    const { rawField, mask, labelled, gapLabels, name } = lastRun;
+    const { rawField, mask, labelled, gapLabels, paint, name } = lastRun;
     const line = describePoint(
-      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height, gapLabels),
+      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height, gapLabels, paint),
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
   }
 
   if (lastReading) {
-    const { rawField, mask, gapLabels, name } = lastReading;
+    const { rawField, mask, gapLabels, paint, name } = lastReading;
     const line = describePoint(
-      readPoint(rawField, mask, null, u * mask.width, v * mask.height, gapLabels),
+      readPoint(rawField, mask, null, u * mask.width, v * mask.height, gapLabels, paint),
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
@@ -720,7 +804,39 @@ async function computeReading(
  * Synchronous, because everything here works on arrays already in hand. That is the same property
  * that lets it be re-run without re-reading the map.
  */
-function composeInk(source: ReadingStage, settings: Settings, identity: string): MaskStage {
+/**
+ * A paint layer at this run's raster, saying so when it was not already.
+ *
+ * A layer is painted at the raster it acts on, and that raster is a function of the source image's
+ * own pixels and `MEGAPIXEL_BUDGET` — so moving, scaling or rotating the map in Owlbear cannot move
+ * it. Only replacing the image or changing our own constant can, and both are rare enough that
+ * passing silently is the wrong behaviour: the GM's marks would land somewhere slightly different
+ * from where they put them, with nothing to say why. Recording the dimensions in the document is
+ * what makes this reachable at all; this is the report it exists for.
+ */
+function fitPaint(
+  layer: PaintLayer | null,
+  plan: RasterPlan,
+  name: string,
+): PaintLayer | null {
+  if (!layer) return null;
+  if (layer.width === plan.width && layer.height === plan.height) return layer;
+  devLog(
+    "warn",
+    `trace: the stored ${name} was painted at ${layer.width}x${layer.height} and this map now ` +
+      `reads at ${plan.width}x${plan.height}, so it has been resampled to fit. That happens when ` +
+      `the map image is replaced, or when this extension's memory budget changes. Marks may have ` +
+      `moved by a pixel; check them before trusting the result.`,
+  );
+  return paintForRaster(layer, plan.width, plan.height);
+}
+
+function composeInk(
+  source: ReadingStage,
+  settings: Settings,
+  paint: PaintLayers,
+  identity: string,
+): MaskStage {
   const { plan, pxPerSquare, reading } = source;
 
   // ## Ink that is not linework
@@ -823,10 +939,31 @@ function composeInk(source: ReadingStage, settings: Settings, identity: string):
     }
   }
 
+  // ## The GM's suppression layer
+  //
+  // Where the global filters are blunt, this is local: the GM can tell meaningless crosshatching
+  // from linework by looking, and no measurement can. It goes in **after** both 1b filters, so what
+  // it acts on is exactly the ink the parameters above produced — which is also what the Ink step
+  // draws, so the two questions stay separable.
+  //
+  // And **before** the break search below, so a repair works on ink the GM has already corrected.
+  // That is the one coupling in an otherwise order-free stack, and it is deliberate: a break the GM
+  // has already dealt with by hand should not also be repaired automatically.
+  const suppressLayer = fitPaint(paint.suppress, plan, "suppression");
+  const suppressed = suppressInk(filteredMask, suppressLayer);
+  if (suppressLayer) {
+    const removed = countInk(filteredMask) - countInk(suppressed);
+    devLog(
+      "info",
+      `trace: suppression — ${paintedCount(suppressLayer)} px painted, of which ${removed} were ` +
+        `ink and are now ground.`,
+    );
+  }
+
   // ## Breaks in the linework, and the repair of the ones the GM asked for
   //
-  // Runs last of the ink stages, and after the minimum stroke width specifically: part of its job
-  // is repairing what that control severed, so it has to see the damage.
+  // Runs after the minimum stroke width specifically: part of its job is repairing what that control
+  // severed, so it has to see the damage.
   //
   // The fill adds the pixels of **marked** breaks and nothing else — never a blanket closing. A
   // blanket closing would also seal channels that failed the travel test, the clearest example being
@@ -836,11 +973,11 @@ function composeInk(source: ReadingStage, settings: Settings, identity: string):
   // channels merge as the radius grows, so the marks are not a stable set to select from. See
   // `gaps.ts`.
   const gapStarted = performance.now();
-  const gaps = findGaps(filteredMask, {
+  const gaps = findGaps(suppressed, {
     fillPx: settings.trace.gapFillPx,
     travelPx: settings.trace.gapTravelPx,
   });
-  const inkedMask = applyGapFill(filteredMask, gaps.labels);
+  const repaired = applyGapFill(suppressed, gaps.labels);
 
   if (gaps.searchRadius > 0) {
     devLog(
@@ -873,6 +1010,27 @@ function composeInk(source: ReadingStage, settings: Settings, identity: string):
     }
   }
 
+  /*
+    ## The GM's added ink, last of everything
+
+    Last is the whole of its meaning. A line drawn deliberately must survive the stroke-width
+    opening, the island filter and anything else automatic, because the GM drew it *knowing* what
+    those had done — so nothing after this point may take it away.
+
+    It also means added ink is what closes a break the repair did not, which is the alternative the
+    automatic search now has to justify itself against.
+  */
+  const inkLayer = fitPaint(paint.ink, plan, "added ink");
+  const inkedMask = addInk(repaired, inkLayer);
+  if (inkLayer) {
+    const added = countInk(inkedMask) - countInk(repaired);
+    devLog(
+      "info",
+      `trace: added ink — ${paintedCount(inkLayer)} px painted, of which ${added} were not already ` +
+        `ink and are now.`,
+    );
+  }
+
   const blobStarted = performance.now();
   const blobs = findInkBlobs(inkedMask, {
     pxPerSquare,
@@ -885,7 +1043,14 @@ function composeInk(source: ReadingStage, settings: Settings, identity: string):
       `${describeInkBlobs(blobs, plan.width, plan.height)}`,
   );
 
-  return { ...source, maskFingerprint: identity, base: filteredMask, mask: inkedMask, gaps };
+  return {
+    ...source,
+    maskFingerprint: identity,
+    base: filteredMask,
+    mask: inkedMask,
+    gaps,
+    paint: { suppress: suppressLayer, ink: inkLayer },
+  };
 }
 
 /**
@@ -900,8 +1065,9 @@ async function resolveMask(
   map: ImageItem,
   dpi: number,
   settings: Settings,
+  paint: PaintLayers,
 ): Promise<{ stage: MaskStage; readingReused: boolean; maskReused: boolean } | null> {
-  const maskPrint = maskIdentity(map, dpi, settings);
+  const maskPrint = maskIdentity(map, dpi, settings, paint);
   if (cachedMask && cachedMask.maskFingerprint === maskPrint) {
     return { stage: cachedMask, readingReused: true, maskReused: true };
   }
@@ -940,8 +1106,24 @@ async function resolveMask(
     it is a Regions-step recompute — which overwrites `lastRun` anyway.
   */
   lastRun = null;
-  cachedMask = composeInk(source, settings, maskPrint);
+  cachedMask = composeInk(source, settings, paint, maskPrint);
   return { stage: cachedMask, readingReused, maskReused: false };
+}
+
+/**
+ * Both of the GM's layers for one map, out of scene metadata.
+ *
+ * Read together, because a trace composed from a fresh suppression layer and a stale added-ink one
+ * is a picture neither of them describes. A layer that will not decode comes back as nothing painted
+ * — the store has already put the loss on the console, and refusing to trace at all would leave the
+ * GM with no map rather than with one layer missing.
+ */
+async function readPaintFor(mapId: string): Promise<PaintLayers> {
+  const [suppress, ink] = await Promise.all([
+    readPaintLayer("suppress", mapId),
+    readPaintLayer("ink", mapId),
+  ]);
+  return { suppress: suppress.layer, ink: ink.layer };
 }
 
 /** What the overlay needs: the mask, and where the raster sits in the world. */
@@ -1027,7 +1209,7 @@ export type MaskOutcome =
  */
 export async function maskForOverlay(
   /*
-    The settings to read with, or scene metadata's if omitted.
+    The durable inputs to read with, or scene metadata's if omitted.
 
     The workspace needs to preview a value the GM is still dragging, and metadata is the wrong place
     to keep one: writing on every drag frame is exactly what the `input`/`change` split exists to
@@ -1036,14 +1218,17 @@ export async function maskForOverlay(
     for. The cache and its fingerprint work unchanged either way, since the fingerprint is computed
     from whatever settings arrive rather than from where they came from.
   */
-  override?: Settings,
+  override?: TraceInputs,
 ): Promise<MaskOutcome> {
-  const settings = override ?? (await readSettings());
+  const settings = override?.settings ?? (await readSettings());
   const map = await resolveTraceMap();
   if (!map) return { ok: false, reason: "no-map" };
 
+  // After the map, because a stored layer records which map it belongs to and one painted against
+  // another image is not paint for this one.
+  const paint = override?.paint ?? (await readPaintFor(map.id));
   const dpi = await readGridDpi();
-  const resolved = await resolveMask(map, dpi, settings);
+  const resolved = await resolveMask(map, dpi, settings, paint);
   // Named rather than collapsed into the case above: the map is chosen and on screen, and what
   // failed is reading its pixels. `loadMapRaster` has already put the detail on the console.
   if (!resolved) return { ok: false, reason: "unreadable", mapName: map.name || "map" };
@@ -1056,6 +1241,7 @@ export async function maskForOverlay(
     rawField: resolved.stage.rawField,
     mask: resolved.stage.mask,
     gapLabels: resolved.stage.gaps.labels,
+    paint: resolved.stage.paint,
     pxPerSquare: resolved.stage.pxPerSquare,
     name: resolved.stage.name,
   };
@@ -1105,14 +1291,14 @@ export async function runTrace(
     the fingerprints work unchanged either way, since they are computed from whatever settings
     arrive rather than from where they came from.
   */
-  override?: Settings,
+  override?: TraceInputs,
 ): Promise<TraceOutcome> {
   const started = performance.now();
 
   // Read before anything else, and log them beside the run they produced. A set of numbers with no
   // record of the settings that made them cannot be compared against the next set, which is the
   // whole claim this project makes for its diagnostics (DESIGN.md §8).
-  const settings = override ?? (await readSettings());
+  const settings = override?.settings ?? (await readSettings());
   devLog("info", `trace: settings — ${describeSettings(settings)}`);
 
   const map = await resolveTraceMap();
@@ -1129,9 +1315,12 @@ export async function runTrace(
   // need it. Not because the mask does: the Sauvola window is in raster pixels, so the grid cannot
   // change what is read. It is still in the mask fingerprint, deliberately over-broad — see
   // `mapIdentity`.
+  // After the map, because a stored layer records which map it belongs to and one painted against
+  // another image is not paint for this one.
+  const paint = override?.paint ?? (await readPaintFor(map.id));
   const dpi = await readGridDpi();
 
-  const resolved = await resolveMask(map, dpi, settings);
+  const resolved = await resolveMask(map, dpi, settings, paint);
   if (!resolved) {
     return {
       ok: false,
@@ -1208,6 +1397,7 @@ export async function runTrace(
     rawField,
     mask: inkMask,
     gapLabels: inkGaps.labels,
+    paint: mask.paint,
     labelled,
     placement,
     pxPerSquare,

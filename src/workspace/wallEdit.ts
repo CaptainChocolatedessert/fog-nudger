@@ -450,5 +450,5 @@ function hover(point: MapPoint | null): void {
 
 /** Wire the tools up. The step declares that a drag means this; the shell offers it every press. */
 export function registerWallEdit(): void {
-  setMapDragHandler({ start, move, end, cancel, hover, escape });
+  setMapDragHandler("edit", { start, move, end, cancel, hover, escape });
 }

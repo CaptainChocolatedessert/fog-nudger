@@ -23,6 +23,7 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { maskForOverlay, type MaskForOverlay, type MaskOutcome } from "../pipeline";
+import { currentPaint } from "./paintState";
 import { currentSettings } from "./settingsState";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { invalidate, isClosing, say, sayIfSettled } from "./shell";
@@ -69,6 +70,44 @@ export function requestReread(): void {
   invalidate();
   void refreshMask();
 }
+
+/**
+ * Recompose the ink because a **paint layer** changed, without blanking what is on screen.
+ *
+ * This is the one change that may not blank, and the reason is structural rather than a concession.
+ * What the ink layer draws is the *base* — the reading after its two filters — and both paint layers
+ * compose strictly after it, so painting cannot change the picture the surface is showing. There is
+ * nothing on screen that goes stale, so blanking it would take the GM's own map away for the length
+ * of a recompose in exchange for nothing.
+ *
+ * **The one thing that does lag is the break rings**, which are found on the suppressed mask, so
+ * after a suppression is saved they describe the ink from just before it for as long as the
+ * recompose takes. A lag rather than a lie, bounded by one recompose, and it resolves with no further
+ * input — where blanking the ink would hide the very thing the GM had just painted onto.
+ *
+ * It is also cheap, which is what makes it bearable at all: paint is composed on top of a reading, so
+ * this re-runs the cheap half of the cache and never re-reads the map.
+ */
+export function requestRecompose(): void {
+  // Fulfilled immediately, so `maskShowing()` stays true and the layers go on drawing what they have
+  // while the new composition is computed. The stamp still **moves**, which is the part that matters:
+  // a reply computed before the paint changed would otherwise be accepted as current.
+  requests.fulfil(requests.request());
+  /*
+    And tracked separately, because `waiting()` cannot see this.
+
+    That flag means "blank and waiting", which is exactly what a recompose is not — so a recompose
+    asked for while a reading was already in flight would be dropped by the retry at the end of
+    `refreshMask`, leaving a composite computed from paint the GM has already replaced and marked
+    current. The stale-diagnostic failure, from the one direction the request state cannot express.
+  */
+  recomposeWanted = true;
+  invalidate();
+  void refreshMask();
+}
+
+/** A recompose was asked for and has not been serviced yet. See `requestRecompose`. */
+let recomposeWanted = false;
 
 function shareOfInk(mask: { data: Uint8Array; width: number; height: number }): number {
   let ink = 0;
@@ -152,6 +191,9 @@ async function refreshMask(): Promise<void> {
   // Whatever is outstanding, not a new stamp: the caller already registered the change, and asking
   // again here would blank the sheet a second time for the same edit.
   const generation = requests.latest();
+  // Cleared here rather than in `requestRecompose`, so a request that arrives while one is in flight
+  // survives the early return above and is picked up by the retry below.
+  recomposeWanted = false;
   inFlight = true;
   invalidate();
   say("reading the map…", "working");
@@ -161,7 +203,7 @@ async function refreshMask(): Promise<void> {
   // current when the request went out. This used to be a shallow spread, which defended against
   // nothing that happens and implied a guard it could not give anyway — `trace`, `review` and
   // `overlay` would have stayed shared references.
-  const wanted = currentSettings();
+  const wanted = { settings: currentSettings(), paint: currentPaint() };
   try {
     const outcome = await maskForOverlay(wanted);
     if (isClosing()) return;
@@ -198,8 +240,9 @@ async function refreshMask(): Promise<void> {
     inFlight = false;
     invalidate();
     // Anything that arrived while this was running is now the current generation, and nothing has
-    // been computed for it. Run again rather than leaving the sheet blank with no work in flight.
-    if (!isClosing() && requests.waiting()) void refreshMask();
+    // been computed for it. Run again rather than leaving the sheet blank with no work in flight —
+    // or, for a recompose, showing ink composed from paint that has since been replaced.
+    if (!isClosing() && (requests.waiting() || recomposeWanted)) void refreshMask();
   }
 }
 
@@ -220,7 +263,7 @@ export function describeMaskFailure(outcome: MaskOutcome & { ok: false }): strin
 
 /** Read the nominated map now. Returns the outcome, because the map name and bounds come with it. */
 export async function takeReading(): Promise<MaskOutcome> {
-  return maskForOverlay(currentSettings());
+  return maskForOverlay({ settings: currentSettings(), paint: currentPaint() });
 }
 
 /**

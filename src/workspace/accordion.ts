@@ -176,6 +176,24 @@ export function onStepOpen(id: StepId, changed: (open: boolean) => void): void {
   openListeners.push({ id, changed });
 }
 
+/**
+ * Told which step is open, rather than whether one particular step is.
+ *
+ * `onStepOpen` is per step, which suits anything whose answer is independent of what the *other*
+ * steps are doing — a derive that entering pays for, a watcher that stops watching. It is the wrong
+ * shape when two steps share one piece of state, because the transition between them arrives as two
+ * separate calls whose order is registration order rather than anything meaningful: moving from one
+ * painting step to the other can announce the arrival before the departure, and a listener acting on
+ * each in turn then closes the mode it has just opened.
+ *
+ * So a listener that owns something shared subscribes here and is told the *destination*, once.
+ */
+const stepListeners: ((step: StepId) => void)[] = [];
+
+export function onStepChange(listener: (step: StepId) => void): void {
+  stepListeners.push(listener);
+}
+
 /** Tell the canvas what the open step wants. The one place a step's declaration becomes behaviour. */
 function applyOpenStep(): void {
   const step = workspaceSteps().find((candidate) => candidate.id === open);
@@ -183,6 +201,7 @@ function applyOpenStep(): void {
   setActiveLayers(step.layers);
   setDrag(step.drag);
   for (const listener of openListeners) listener.changed(listener.id === open);
+  for (const listener of stepListeners) listener(open);
   invalidate();
 }
 

@@ -329,8 +329,9 @@ export async function openOnOwlbearsView(bounds: {
 export function setDrag(next: Drag): void {
   drag = next;
   // Changing step leaves no pointer event behind, so the hint has to be dropped here or a crosshair
-  // survives into a step that has nothing to grab.
-  if (next !== "edit") setGrabTarget(false);
+  // survives into a step that has nothing to act on. A step whose drag is a tool of any kind sets it
+  // again on the first hover.
+  if (next === "pan") setGrabTarget(false);
 }
 
 /**
@@ -413,10 +414,27 @@ export interface MapDragHandler {
   readonly escape?: () => boolean;
 }
 
-let dragHandler: MapDragHandler | null = null;
+/**
+ * One handler per kind of drag, chosen by whichever the open step declared.
+ *
+ * A slot each rather than a single one swapped on every step change. There are two tools on this
+ * surface now — the wall editor and the brush — and a single slot would need something to remember
+ * to put the right one back, in the right order, on every transition. Keying them by the thing that
+ * already decides which is wanted removes that: a step says its drag is `edit` or `brush`, and the
+ * shell reaches for the handler that implements it.
+ */
+const dragHandlers: { edit: MapDragHandler | null; brush: MapDragHandler | null } = {
+  edit: null,
+  brush: null,
+};
 
-export function setMapDragHandler(handler: MapDragHandler | null): void {
-  dragHandler = handler;
+export function setMapDragHandler(kind: Exclude<Drag, "pan">, handler: MapDragHandler | null): void {
+  dragHandlers[kind] = handler;
+}
+
+/** The handler for the drag the open step declared, or `null` in a step that only pans. */
+function activeDragHandler(): MapDragHandler | null {
+  return drag === "pan" ? null : dragHandlers[drag];
 }
 
 /**
@@ -473,7 +491,7 @@ if (canvas instanceof HTMLCanvasElement) {
     event.preventDefault();
     // The gesture most drawing tools use for "not that one". Suppressing the menu was already
     // required; giving the press a meaning costs nothing and saves reaching for the keyboard.
-    if (drag === "edit") dragHandler?.escape?.();
+    activeDragHandler()?.escape?.();
   });
 
   canvas.addEventListener("pointerdown", (event) => {
@@ -491,9 +509,10 @@ if (canvas instanceof HTMLCanvasElement) {
       those apart. Taking the gesture also takes the pointer capture, so a drag that leaves the
       canvas keeps arriving.
     */
-    if (drag === "edit" && !event.ctrlKey && dragHandler) {
+    const handler = activeDragHandler();
+    if (handler && !event.ctrlKey) {
       const point = mapPointFrom(event);
-      if (point && dragHandler.start(point)) {
+      if (point && handler.start(point)) {
         editing = true;
         try {
           canvas.setPointerCapture(event.pointerId);
@@ -506,16 +525,19 @@ if (canvas instanceof HTMLCanvasElement) {
         Declined, so this press is a pan like any other — and **falling through here is the whole
         point of an editing step being liveable**.
 
-        The first version left the guard below as `drag !== "pan"`, which meant the Edit step refused
-        to pan on a plain drag whether or not the tool had taken the gesture. Reported from a room as
-        panning working only with Ctrl. A brush is the case that guard is for: a brush takes *every*
-        drag by definition, so nothing falls through there. This tool takes a press only when there
-        is a vertex under it, which is precisely why the rest must go on panning.
+        There was once a guard below reading `drag !== "pan"`, which meant the Edit step refused to
+        pan on a plain drag whether or not the tool had taken the gesture. Reported from a room as
+        panning working only with Ctrl.
+
+        **A brush press falls through here too, and that is deliberate rather than an oversight.** A
+        live brush takes every press by definition, so the only way one reaches this line is a brush
+        that could not start — a painting step opened before the map has been read, so there is no
+        raster to paint at. Panning is a better answer there than a dead drag, and it costs nothing
+        when the brush is working, because then this is unreachable.
       */
     }
 
     // Ctrl pans in any step, which is what keeps a pan available under a brush.
-    if (drag === "brush" && !event.ctrlKey) return;
     panning = true;
     last = { x: event.clientX, y: event.clientY };
     canvas.classList.add("dragging");
@@ -536,7 +558,7 @@ if (canvas instanceof HTMLCanvasElement) {
       if (mapImage) {
         const drawWidth = mapImage.naturalWidth * view.scale;
         const drawHeight = mapImage.naturalHeight * view.scale;
-        dragHandler?.move({
+        activeDragHandler()?.move({
           u: (event.clientX - view.x) / drawWidth,
           v: (event.clientY - view.y) / drawHeight,
           perPixel: 1 / Math.max(drawWidth, drawHeight),
@@ -545,9 +567,7 @@ if (canvas instanceof HTMLCanvasElement) {
       }
       return;
     }
-    if (!panning && drag === "edit" && dragHandler?.hover) {
-      dragHandler.hover(mapPointFrom(event));
-    }
+    if (!panning) activeDragHandler()?.hover?.(mapPointFrom(event));
     if (!panning || !last) return;
     setView(panBy(view, event.clientX - last.x, event.clientY - last.y));
     last = { x: event.clientX, y: event.clientY };
@@ -574,7 +594,7 @@ if (canvas instanceof HTMLCanvasElement) {
       endPan();
       // No position: the tool has been told where the vertex is on every move, and a release does
       // not move it. Handing it a fresh point would invite a second, subtly different answer.
-      dragHandler?.end();
+      activeDragHandler()?.end();
       return;
     }
     endPan();
@@ -592,14 +612,14 @@ if (canvas instanceof HTMLCanvasElement) {
     // graph is left exactly as it was. Losing an edit is the safe direction against half-applying it.
     if (editing) {
       editing = false;
-      dragHandler?.cancel();
+      activeDragHandler()?.cancel();
     }
     endPan();
   });
 
   // Nothing is being pointed at any more, so nothing is highlighted as grabbable.
   canvas.addEventListener("pointerleave", () => {
-    if (!editing) dragHandler?.hover?.(null);
+    if (!editing) activeDragHandler()?.hover?.(null);
   });
 
   canvas.addEventListener(
@@ -805,7 +825,7 @@ window.addEventListener("keydown", (event) => {
     abandon the wall, and closing the workspace as well would be a surprise they cannot undo — the
     close pushes to the scene.
   */
-  if (drag === "edit" && dragHandler?.escape?.()) return;
+  if (activeDragHandler()?.escape?.()) return;
   void close();
 });
 

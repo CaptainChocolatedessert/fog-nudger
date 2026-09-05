@@ -43,6 +43,7 @@ import type { StepId } from "../steps";
 import { buildFrozenFaces, describeFrozenFaces, wallSegments } from "../trace/frozenFaces";
 import { wallRuns, type FrozenGraph } from "../trace/frozenGraph";
 import { MaskRequests, shouldPaint } from "./maskRequest";
+import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
 import { currentSettings } from "./settingsState";
 import { invalidate, isClosing, say } from "./shell";
@@ -210,12 +211,18 @@ async function derive(): Promise<void> {
   invalidate();
   say("deriving the regions…", "working");
 
-  // No copy. `Settings` is readonly through and through and `setSettings` replaces the whole object
-  // rather than writing into it, so the reference taken here is already a snapshot of what was
-  // current when the request went out. This used to be a shallow spread, which defended against
-  // nothing that happens and implied a guard it could not give anyway — `trace`, `review` and
-  // `overlay` would have stayed shared references.
-  const wanted = currentSettings();
+  /*
+    No copy. `Settings` is readonly through and through and `setSettings` replaces the whole object
+    rather than writing into it, so the reference taken here is already a snapshot of what was
+    current when the request went out. This used to be a shallow spread, which defended against
+    nothing that happens and implied a guard it could not give anyway — `trace`, `review` and
+    `overlay` would have stayed shared references.
+
+    The paint is taken at the same moment and for the same reason. Both are the durable inputs, and
+    a partition derived from this instant's settings and some later instant's paint would be a
+    picture neither of them describes.
+  */
+  const wanted = { settings: currentSettings(), paint: currentPaint() };
   try {
     const outcome = await runTrace(wanted);
     if (isClosing()) return;

@@ -223,6 +223,29 @@ export interface OverlaySettings {
    * "does this line up with the linework underneath".
    */
   readonly inkOpacity: number;
+  /**
+   * How wide the suppression brush is, in raster pixels.
+   *
+   * **A tool setting**, which is a kind of parameter this project has exactly two of, one per brush.
+   * It decides what the *next* stroke lays down and recomputes nothing at all — a stroke already
+   * painted keeps the width it was painted at, because what is stored is the pixels rather than a
+   * recipe for making them again. So it is filed as `display`: not because it is about appearance,
+   * but because `PARAMETER_KIND` asks what a change recomputes and the answer here is nothing.
+   *
+   * In raster pixels, matching the two break controls and for the same reason: stage one stays close
+   * to the raster, and a brush lands in exactly the space the layer is stored in, so what the readout
+   * says is what the stroke covers. Screen pixels were the alternative — a brush of constant size
+   * under the cursor, which is what most painting tools do — and were rejected because the same
+   * gesture would then cover a different amount of map depending on how far the GM was zoomed out.
+   *
+   * **Separate from the added-ink brush rather than shared**, because the two tools do opposite
+   * kinds of work. Suppression covers an area: the motivating case is crosshatching, which a GM
+   * blocks out with a wide brush rather than tracing. Added ink draws a line. One control would make
+   * every switch between the tools a resize, and their sensible defaults are an order apart.
+   */
+  readonly suppressBrushPx: number;
+  /** How wide the added-ink brush is, in raster pixels. See `suppressBrushPx` for the reasoning. */
+  readonly inkBrushPx: number;
 }
 
 export interface Settings {
@@ -272,6 +295,13 @@ export const DEFAULT_SETTINGS: Settings = {
   overlay: {
     inkColour: "#ff2020",
     inkOpacity: 1,
+    // Wide enough to cover an area rather than trace a line, which is what suppression is mostly
+    // for and is also the shape of paint that costs almost nothing to store. Fine work is a matter
+    // of turning it down and zooming in.
+    suppressBrushPx: 24,
+    // Around an ink width on this project's test map, because what this draws is linework and a
+    // wall the GM adds should look like the walls beside it.
+    inkBrushPx: 6,
   },
 };
 
@@ -325,6 +355,13 @@ export const SETTING_LIMITS = {
   // stub and will eat walls whole, which is the same deliberate over-reach the ink filters have and
   // is defensible for the same reason: the skeleton is drawn, so it is visible rather than silent.
   spurPrunePx: { min: 0, max: 60, step: 1 },
+  // From a single pixel — the finest correction a raster can hold — to wide enough to cover a room
+  // in a few strokes. The bottom end is genuinely usable rather than a token: repairing one severed
+  // wall is a one-pixel job.
+  suppressBrushPx: { min: 1, max: 240, step: 1 },
+  // A narrower range than suppression's, and the top end is deliberately below it. This draws
+  // linework, and a brush wider than a doorway would close one without the GM meaning to.
+  inkBrushPx: { min: 1, max: 60, step: 1 },
 } as const;
 
 export type SettingName = keyof typeof SETTING_LIMITS;
@@ -381,6 +418,8 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   gapFillPx: "read",
   gapTravelPx: "read",
   spurPrunePx: "read",
+  suppressBrushPx: "read",
+  inkBrushPx: "read",
   simplifyInkWidths: "derive",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
@@ -428,6 +467,10 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   gapFillPx: "pipeline",
   gapTravelPx: "pipeline",
   spurPrunePx: "pipeline",
+  // Display, and the reasoning is in the field's own doc: a brush changes what the next stroke lays
+  // down and recomputes nothing. Filing either as pipeline would re-binarise the map on every nudge.
+  suppressBrushPx: "display",
+  inkBrushPx: "display",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
   strokeSquares: "display",
@@ -625,6 +668,8 @@ export function normaliseSettings(raw: unknown): Settings {
     overlay: {
       inkColour: normaliseColour(overlay.inkColour, o.inkColour),
       inkOpacity: clamp(overlay.inkOpacity, "inkOpacity", o.inkOpacity),
+      suppressBrushPx: clamp(overlay.suppressBrushPx, "suppressBrushPx", o.suppressBrushPx),
+      inkBrushPx: clamp(overlay.inkBrushPx, "inkBrushPx", o.inkBrushPx),
     },
   };
 }

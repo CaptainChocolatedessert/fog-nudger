@@ -40,15 +40,19 @@ import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devl
 import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
-import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
+import { onStepChange, onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
 import { registerBreaksLayer } from "./workspace/layers/breaks";
 import { registerInkLayer } from "./workspace/layers/ink";
+import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSkeletonLayer } from "./workspace/layers/skeleton";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
+import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
+import { renderPaintActions, renderPaintTools } from "./workspace/paintControls";
+import { finishPaint, registerPaintTool, requestPaintMode } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
@@ -67,6 +71,24 @@ installDevLog("workspace");
 // loses the GM's whole tuning, which is not something to leave in the log alone.
 onSettingsWriteFailure((message) => {
   say(message, "bad");
+});
+
+// The same arrangement for the paint layers, and the same reason: a failed write means the GM goes
+// on painting into something that is not being saved, which the log alone cannot tell them.
+onPaintWriteFailure((message) => {
+  say(message, "bad");
+});
+
+/*
+  A paint layer is the size of the mask it acts on, so the reading is what says how big to make one.
+
+  Registered before the layers for the reason the two invalidations above it are: this cannot fail
+  and does not draw anything, so it must not be skipped by a layer that could not allocate. A paint
+  mode opened before this has ever run has no raster and declines, which is what lets the press pan
+  instead.
+*/
+onReading((result) => {
+  noteRaster(result.mask.width, result.mask.height);
 });
 
 /*
@@ -94,6 +116,15 @@ registerSkeletonInvalidation();
   what exists and in what order.
 */
 registerInkLayer();
+/*
+  Over the ink and under the breaks, which is the order the three compose in.
+
+  A pixel the GM suppressed and the repair then filled **is** ink downstream — suppression runs
+  before the break search — so the purple has to sit over the amber or the picture would claim a
+  removal the mask did not make. Added ink is drawn by the same painter and wins over suppression
+  within it, matching its place at the end of the composition.
+*/
+registerPaintLayer();
 registerBreaksLayer();
 registerSkeletonLayer();
 registerRegionsLayer();
@@ -107,6 +138,15 @@ registerGraphLayer();
   this; the shell offers every press to it and it takes the ones that land on a vertex.
 */
 registerWallEdit();
+/*
+  The brush, which is the other tool on this surface.
+
+  Registered against the `brush` drag rather than against a step, so the two tools cannot be swapped
+  into the wrong slot: a step declares which kind of drag it wants and the shell reaches for the
+  handler that implements it. Both painting steps share this one — which layer it writes into is the
+  mode that is open, not a second handler.
+*/
+registerPaintTool();
 // Deriving costs the better part of a second in stage one and is visible in two steps, so entering
 // one of them is what pays for it. Both are told on every change, which is why the module keeps a
 // set rather than a flag.
@@ -114,10 +154,32 @@ onStepOpen("regions", (open) => watchRegions("regions", open));
 onStepOpen("edit", (open) => watchRegions("edit", open));
 // Thinning is the same shape of cost and gets the same answer: entering the step pays for it.
 onStepOpen("walls", watchSkeleton);
+/*
+  Which paint layer is open, told as a destination rather than as two separate arrivals.
+
+  `onStepOpen` would deliver a move between the two painting steps as one call saying "suppression
+  closed" and another saying "added ink opened", in registration order — which is the wrong order
+  half the time, and acting on each in turn closes the mode it has just opened. `onStepChange` says
+  where the GM now *is*, once, and `requestPaintMode` serialises the write-then-open that follows.
+*/
+onStepChange((step) => {
+  requestPaintMode(step === "suppress" ? "suppress" : step === "addink" ? "ink" : null);
+});
 
 // The one step whose body is not built from parameters: choosing a map is a list of what the scene
 // holds, not a number to turn.
 registerStepContent("map", renderMapPicker);
+/*
+  The two painting steps, each a tool picker over its width control and its buttons under it.
+
+  The step id and the layer name differ — `addink` against `ink` — and they are different namespaces
+  rather than a slip: a step is a place in the accordion and a layer is a document in the scene, and
+  the layer's name is what appears in a message about saving it.
+*/
+registerStepContent("suppress", renderPaintTools("suppress"));
+registerStepContent("suppress", renderPaintActions("suppress"), "bottom");
+registerStepContent("addink", renderPaintTools("ink"));
+registerStepContent("addink", renderPaintActions("ink"), "bottom");
 // The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
 // particular map is change the colour, and it is not a number so it cannot be a row.
 registerStepContent("ink", renderSwatches);
@@ -149,7 +211,19 @@ registerStepContent("regions", renderPushAction, "bottom");
   Exit anyway button calls, and it lives here rather than in the shell for the same reason
   `pushOnClose` does: the shell owns the way out and must not know what leaving writes.
 */
-setCloseAction(pushOnClose, requestPushStop);
+setCloseAction(async () => {
+  /*
+    The paint is written **before** the push, and the order is the whole of it.
+
+    A push re-runs the trace from what scene metadata holds, so a layer still sitting in a paint
+    mode's working copy would simply not be in what goes on the map — the GM would have painted,
+    closed, and got fog derived from ink without their edits. Sequenced here rather than inside the
+    push, because the shell owns the way out and the push has no business knowing that a brush
+    exists.
+  */
+  await finishPaint("leaving");
+  await pushOnClose();
+}, requestPushStop);
 
 /*
   "What is here?" is a click on the map now, in every step.

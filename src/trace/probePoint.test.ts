@@ -13,6 +13,13 @@ function repaired(width: number, height: number, indices: readonly number[]) {
   return { width, height, data };
 }
 
+/** A paint layer of the same size as a fixture, with the listed indices painted. */
+function painted(width: number, height: number, indices: readonly number[]) {
+  const data = new Uint8Array(width * height);
+  for (const index of indices) data[index] = 1;
+  return { width, data };
+}
+
 const rows = [
   "#####",
   "#...#",
@@ -205,6 +212,77 @@ describe("describePoint", () => {
     expect(line).toContain("break repair");
     // The ink message's advice is the wrong advice here and must not appear.
     expect(line).not.toContain("binariser is wrong");
+  });
+
+  it("sends a GM to the erase brush rather than the threshold for ink they drew", () => {
+    // Ink over a *pale* pixel, which is the case that would otherwise read as the binariser going
+    // wrong: the tone flatly contradicts the verdict, and only naming the layer explains it.
+    const line = describePoint(
+      readPoint(wall.field, wall.ink, wall.labelled, 4, 3, null, {
+        suppress: null,
+        ink: painted(9, 7, [3 * 9 + 4]),
+      }),
+    );
+
+    expect(line).toContain("YOU DREW");
+    expect(line).toContain("Add ink");
+    // Every one of the ink message's clauses points at the wrong control here.
+    expect(line).not.toContain("binariser is wrong");
+    expect(line).not.toContain("break repair");
+  });
+
+  it("sends a GM to the erase brush rather than the threshold for ink they suppressed", () => {
+    /*
+      The more valuable of the pair, and the reason it is worth a kind of its own.
+
+      This is a **dark** pixel the trace calls ground — the picture and the reading contradicting each
+      other — which reads exactly like a broken threshold. Without naming the layer, the obvious next
+      move is an hour on the wrong slider.
+    */
+    const line = describePoint(
+      readPoint(wall.field, wall.ink, wall.labelled, 5, 5, null, {
+        suppress: painted(9, 7, [5 * 9 + 5]),
+        ink: null,
+      }),
+    );
+
+    expect(line).toContain("YOU SUPPRESSED");
+    expect(line).toContain("Suppress ink");
+    expect(line).toContain("moving it will not bring the mark back");
+  });
+
+  it("calls a suppressed pixel the repair filled back in ink, not suppressed", () => {
+    /*
+      Attribution where the two layers disagree, and the composition settles it: suppression runs
+      *before* the break search, so a channel it opened can be repaired, and the pixel really is ink.
+      Reporting it as suppressed would send a GM to erase a mark that is not what is covering it.
+    */
+    const at = 3 * 9 + 4;
+    const line = describePoint(
+      readPoint(wall.field, wall.ink, wall.labelled, 4, 3, repaired(9, 7, [at]), {
+        suppress: painted(9, 7, [at]),
+        ink: null,
+      }),
+    );
+
+    expect(line).toContain("INVENTED");
+    expect(line).not.toContain("YOU SUPPRESSED");
+  });
+
+  it("ignores a paint layer that is not this raster rather than mis-indexing it", () => {
+    /*
+      The pipeline resamples a layer to the run's raster before composing, so these normally agree.
+      A caller handing over the *stored* layer instead would otherwise read index 50 of a narrower
+      raster — some distance from the pixel being asked about — and report confidently about it.
+    */
+    const line = describePoint(
+      readPoint(wall.field, wall.ink, wall.labelled, 5, 5, null, {
+        suppress: painted(4, 4, [5 * 4 + 5]),
+        ink: null,
+      }),
+    );
+
+    expect(line).not.toContain("YOU SUPPRESSED");
   });
 
   it("flags ink that has no business being ink", () => {
