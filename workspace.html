@@ -59,6 +59,17 @@
       #canvas.dragging {
         cursor: grabbing;
       }
+      /*
+        Over a vertex you can take hold of.
+
+        A crosshair rather than a hand, and the reason came from a room: the grab cursor's fingers
+        sit exactly over the dot being aimed at, so the target disappears at the moment of aiming
+        (user, 2026-09-05). A crosshair is centred and open, so the handle stays visible under it.
+      */
+      #canvas.grab-target,
+      #canvas.grab-target.dragging {
+        cursor: crosshair;
+      }
 
       /* ----------------------------------------------------------------------------------------
          The controls, docked rather than floating.

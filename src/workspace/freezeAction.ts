@@ -28,12 +28,55 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { runTrace } from "../pipeline";
-import { freezeGraph, wallRuns } from "../trace/frozenGraph";
+import { freezeGraph, wallRuns, type Frozen } from "../trace/frozenGraph";
 import { confirmAction } from "./confirmDialog";
 import { controlsLive } from "./settingRows";
+import { partitionCheck } from "./regions";
 import { currentSettings } from "./settingsState";
 import { say } from "./shell";
 import { freezeTo, frozenGraph, inStageTwo, startOver } from "./stage";
+
+/**
+ * What freezing says afterwards, and why it is assembled rather than fixed.
+ *
+ * **The freeze message used to overwrite the traversal's, and that hid a failing check for a day**
+ * (found in a room, 2026-09-05). Crossing the door triggers the stage change, which re-derives the
+ * partition, which says its own line — and this one, written a moment later, replaced it. So the
+ * numbers a GM needs and the one warning stage two has were both written into a channel and
+ * immediately painted over.
+ *
+ * It carries them now. The traversal has already run by the time this is composed, synchronously,
+ * inside the stage change; `partitionCheck` is where it left its answer.
+ */
+function freezeReport(stored: Frozen): { readonly text: string; readonly ok: boolean } {
+  const check = partitionCheck();
+  const parts: string[] = [];
+  if (check) parts.push(`${check.rooms} room${check.rooms === 1 ? "" : "s"}`);
+  // Walls rather than segments, because that is the unit a GM counts. A wall is a run of segments
+  // chained through its bends, which is what the polyline used to be before it stopped being stored.
+  parts.push(`${wallRuns(stored.graph).length} walls`);
+  parts.push(`${stored.graph.nodes.length} points`);
+
+  const notes: string[] = [];
+  // Each of these is a room the map has and the document does not, so it is named rather than
+  // buried in the log. Expected to be zero; the first map tried had one.
+  if (stored.duplicates > 0) {
+    notes.push(
+      `${stored.duplicates} wall${stored.duplicates === 1 ? "" : "s"} dropped for lying on another ` +
+        "— rooms thinner than the smoothing are gone",
+    );
+  }
+  if (stored.zeroLength > 0) {
+    notes.push(`${stored.zeroLength} wall${stored.zeroLength === 1 ? "" : "s"} of no length dropped`);
+  }
+  if (check && !check.ok) notes.push("CHECK FAILED, see the log");
+
+  const head = `Graph frozen — ${parts.join(", ")}.`;
+  const tail = notes.length === 0 ? " The reading is closed; Start over reopens it." : ` ${notes.join(" · ")}.`;
+  // Any note at all is bad news: a dropped wall is a room the map has and the document does not,
+  // and a failed check means the traversal is not to be trusted. Neither is a neutral figure.
+  return { text: head + tail, ok: notes.length === 0 };
+}
 
 /**
  * Freeze what the current settings derive.
@@ -42,18 +85,20 @@ import { freezeTo, frozenGraph, inStageTwo, startOver } from "./stage";
  * reason "Put on the map" does: one implementation of the chain, and the thing stored is provably
  * the thing the emit path would write rather than a possibly-stale copy beside it.
  */
-async function generate(): Promise<string> {
+async function generate(): Promise<{ readonly text: string; readonly ok: boolean }> {
   const outcome = await runTrace(currentSettings());
-  if (!outcome.ok) return outcome.message;
+  if (!outcome.ok) return { text: outcome.message, ok: false };
 
   const stored = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
-  await freezeTo(stored);
-  // Walls rather than segments, because that is the unit a GM counts. A wall is a run of segments
-  // chained through its bends, which is what the polyline used to be before it stopped being stored.
-  return (
-    `Graph frozen — ${wallRuns(stored).length} walls, ${stored.nodes.length} points. ` +
-    "The reading is closed; Start over reopens it."
-  );
+  if (stored.duplicates > 0 || stored.zeroLength > 0) {
+    devLog(
+      "warn",
+      `freeze: dropped ${stored.duplicates} duplicate and ${stored.zeroLength} zero-length ` +
+        "segments — simplification collapsed a room to a doubled wall",
+    );
+  }
+  await freezeTo(stored.graph);
+  return freezeReport(stored);
 }
 
 export function renderFreezeAction(body: HTMLElement): void {
@@ -117,7 +162,8 @@ export function renderFreezeAction(body: HTMLElement): void {
           await startOver();
           say("back to stage one — the reading is live again");
         } else {
-          say(await generate());
+          const report = await generate();
+          say(report.text, report.ok ? "" : "bad");
         }
       } catch (error) {
         const detail = describeError(error);

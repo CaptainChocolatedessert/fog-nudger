@@ -76,6 +76,32 @@ export interface FrozenEdge {
   readonly b: number;
 }
 
+/** What freezing produced, and what it had to throw away to produce it. */
+export interface Frozen {
+  readonly graph: FrozenGraph;
+  /**
+   * Segments dropped for lying exactly on one already stored.
+   *
+   * **Each one is a room the map has and the document does not**, so the count is reported rather
+   * than swallowed. Found in a room on 2026-09-05: the traversal said its arithmetic check had
+   * failed, and the numbers were off by exactly what one doubled wall produces — 34 faces where the
+   * trace had found 35.
+   *
+   * The cause is simplification, not the graph. Two walls bounding a room thinner than the smoothing
+   * tolerance both fit to the *same* straight line between the same two corners, so the room closes
+   * up. Stage one has a guard for this at the ring — it keeps the unfitted ring when fitting would
+   * collapse it, and says so in the log — and the freeze stores fitted edges with no equivalent.
+   *
+   * **Dropping is the GM's decision** (user, 2026-09-05), taken over restoring the unfitted chain
+   * for one of the pair. What it costs is stated rather than argued away: the thin room is gone from
+   * the document and will not be emitted. What it buys is an embedding a traversal can mean
+   * something over, since two coincident segments enclose nothing and make Euler's identity fail.
+   */
+  readonly duplicates: number;
+  /** Segments whose ends quantised onto the same point. Same family, same treatment. */
+  readonly zeroLength: number;
+}
+
 /**
  * Bumped whenever the byte layout changes.
  *
@@ -116,13 +142,46 @@ export function documentPoint(x: number, y: number): Vector2 {
  * the division, and are not stored, because the whole point is that the document does not know what
  * raster it came from.
  */
-export function freezeGraph(graph: WallGraph, fitted: readonly FittedEdge[]): FrozenGraph {
+export function freezeGraph(graph: WallGraph, fitted: readonly FittedEdge[]): Frozen {
   const width = Math.max(1, graph.width);
   const height = Math.max(1, graph.height);
   const nodes: Vector2[] = graph.nodes.map((node) =>
     documentPoint(node.x / width, node.y / height),
   );
   const edges: FrozenEdge[] = [];
+
+  /*
+    Every pair of vertices a segment has already been stored between.
+
+    Unordered, because a wall from A to B and one from B to A are the same wall drawn twice. Held as
+    a string rather than an arithmetic key because the node table grows while this runs, so there is
+    no bound to multiply by that is still true at the end.
+  */
+  const stored = new Set<string>();
+  let duplicates = 0;
+  let zeroLength = 0;
+
+  const keep = (a: number, b: number): void => {
+    if (a === b) {
+      zeroLength += 1;
+      return;
+    }
+    const from = nodes[a]!;
+    const to = nodes[b]!;
+    // Two distinct ids can quantise onto one point on a large map, and a segment between them has
+    // no direction — nothing can sort it into a rotation, so the traversal cannot use it.
+    if (from.x === to.x && from.y === to.y) {
+      zeroLength += 1;
+      return;
+    }
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+    if (stored.has(key)) {
+      duplicates += 1;
+      return;
+    }
+    stored.add(key);
+    edges.push({ a, b });
+  };
 
   for (let i = 0; i < graph.edges.length; i++) {
     const edge = graph.edges[i]!;
@@ -132,13 +191,13 @@ export function freezeGraph(graph: WallGraph, fitted: readonly FittedEdge[]): Fr
     for (let p = 1; p < points.length - 1; p++) {
       const id = nodes.length;
       nodes.push(documentPoint(points[p]!.x / width, points[p]!.y / height));
-      edges.push({ a: previous, b: id });
+      keep(previous, id);
       previous = id;
     }
-    edges.push({ a: previous, b: edge.b });
+    keep(previous, edge.b);
   }
 
-  return { nodes, edges };
+  return { graph: { nodes, edges }, duplicates, zeroLength };
 }
 
 /**

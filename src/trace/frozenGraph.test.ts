@@ -46,10 +46,77 @@ function frozen(rows: readonly string[], tolerance = 1): FrozenGraph {
   const labelled = labelSpace(graph.framed, { minArea: 0 });
   const resolved = resolveFaces(graph, labelled);
   const fitted = fitFaces(resolved.graph, resolved.faces.faces, tolerance);
-  return freezeGraph(resolved.graph, fitted.edges);
+  return freezeGraph(resolved.graph, fitted.edges).graph;
 }
 
 describe("freezeGraph", () => {
+  it("drops a wall that simplification laid on top of another, and counts it", () => {
+    /*
+      The defect a room found on 2026-09-05, in the shape it actually took.
+
+      Two walls bound a room thinner than the smoothing tolerance, so both fit to the *same* straight
+      line between the same two corners. Kept, they are coincident segments enclosing nothing: the
+      face traversal reports Euler's identity failing, and the trace's room count and the document's
+      differ by one. Dropped, the thin room is gone — which is the cost, and why the count is
+      returned rather than swallowed (user, 2026-09-05).
+    */
+    const wall = (a: number, b: number, points: readonly { x: number; y: number }[]) => ({
+      a,
+      b,
+      points,
+    });
+    const derived = {
+      width: 100,
+      height: 100,
+      nodes: [
+        { x: 10, y: 50 },
+        { x: 90, y: 50 },
+      ],
+      edges: [
+        wall(0, 1, [
+          { x: 10, y: 50 },
+          { x: 50, y: 49 },
+          { x: 90, y: 50 },
+        ]),
+        wall(0, 1, [
+          { x: 10, y: 50 },
+          { x: 50, y: 51 },
+          { x: 90, y: 50 },
+        ]),
+      ],
+    } as unknown as Parameters<typeof freezeGraph>[0];
+
+    // Both chains fitted down to their two shared endpoints, which is what collapses the room.
+    const fitted = [
+      { points: [{ x: 10, y: 50 }, { x: 90, y: 50 }] },
+      { points: [{ x: 10, y: 50 }, { x: 90, y: 50 }] },
+    ];
+
+    const frozen = freezeGraph(derived, fitted);
+
+    expect(frozen.graph.edges).toHaveLength(1);
+    expect(frozen.duplicates).toBe(1);
+    expect(frozen.zeroLength).toBe(0);
+  });
+
+  it("drops a wall whose ends quantised onto one point", () => {
+    const derived = {
+      width: 100,
+      height: 100,
+      nodes: [
+        { x: 10, y: 50 },
+        { x: 10, y: 50 },
+      ],
+      edges: [{ a: 0, b: 1, points: [{ x: 10, y: 50 }, { x: 10, y: 50 }] }],
+    } as unknown as Parameters<typeof freezeGraph>[0];
+
+    // No direction, so nothing can sort it into a rotation and the traversal cannot use it.
+    const frozen = freezeGraph(derived, [{ points: [{ x: 10, y: 50 }, { x: 10, y: 50 }] }]);
+
+    expect(frozen.graph.edges).toEqual([]);
+    expect(frozen.zeroLength).toBe(1);
+  });
+
   it("stores fractions of the map, never raster pixels", () => {
     // The whole point of the change: the raster is an artefact of the megapixel cap, so a document
     // denominated in it is a document that goes stale when a budget constant moves.

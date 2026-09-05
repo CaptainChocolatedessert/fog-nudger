@@ -29,7 +29,7 @@
 import { devLog } from "../devlog";
 import { advanceTo } from "./accordion";
 import { adoptReading, describeMaskFailure, takeReading } from "./reading";
-import { loadStage } from "./stage";
+import { inStageTwo, loadStage } from "./stage";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
 /**
@@ -67,7 +67,15 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   if (stage.corrupt) {
     say("the saved wall editing could not be read and has been ignored — see the console", "bad");
   }
-  if (opening) advanceTo("ink");
+  /*
+    Where a GM lands, which the stage decides.
+
+    Ink is where stage one starts, and it is the wrong place to open a scene that is already frozen:
+    every control there is disabled, so the surface opens on a wall of dimmed sliders explaining
+    what the GM cannot do (reported from a room, 2026-09-05). In stage two the step that matters is
+    the one holding the graph.
+  */
+  if (opening) advanceTo(inStageTwo() ? "edit" : "ink");
 
   // The map image, drawn by us rather than by Owlbear. `crossOrigin` matches the pipeline's loader:
   // it proves the CDN sends the headers, and matching it means this cannot succeed where a trace

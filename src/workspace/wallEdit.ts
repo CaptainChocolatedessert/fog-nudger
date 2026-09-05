@@ -37,7 +37,7 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { applyDrag, describeEdit, dragTo, grabAt, type DragState, type Grab } from "./dragGesture";
-import { invalidate, say, setMapDragHandler, type MapPoint } from "./shell";
+import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
 import { frozenGraph, updateFrozen } from "./stage";
 
 /**
@@ -45,7 +45,7 @@ import { frozenGraph, updateFrozen } from "./stage";
  *
  * Screen pixels. The grab radius is the smaller of the two on purpose: grabbing is a gesture the GM
  * aims, and a generous target would make it hard to pan by dragging near a wall. Merging is one they
- * are *shown* mid-drag and can back out of by moving away or holding ALT, so it can afford to reach
+ * are *shown* mid-drag and can back out of by moving away or holding Shift, so it can afford to reach
  * further.
  */
 const GRAB_RADIUS_PX = 9;
@@ -83,6 +83,8 @@ function start(point: MapPoint): boolean {
   grab = found;
   state = { at: graph.nodes[found.id]!, snapTo: null };
   hovered = null;
+  // Held through the drag: what is under the cursor is still the thing being carried.
+  setGrabTarget(true);
   invalidate();
   return true;
 }
@@ -90,13 +92,14 @@ function start(point: MapPoint): boolean {
 function move(point: MapPoint): void {
   const graph = frozenGraph();
   if (!grab || !graph) return;
-  state = dragTo(graph, grab, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.altKey);
+  state = dragTo(graph, grab, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
   invalidate();
 }
 
 function cancel(): void {
   grab = null;
   state = null;
+  setGrabTarget(false);
   invalidate();
 }
 
@@ -106,6 +109,7 @@ function end(): void {
   const landed = state;
   grab = null;
   state = null;
+  setGrabTarget(false);
   invalidate();
   if (!held || !landed || !graph) return;
 
@@ -139,6 +143,7 @@ function hover(point: MapPoint | null): void {
     point && graph ? grabAt(graph, point.u, point.v, GRAB_RADIUS_PX * point.perPixel)?.id ?? null : null;
   if (found === hovered) return;
   hovered = found;
+  setGrabTarget(found !== null);
   invalidate();
 }
 

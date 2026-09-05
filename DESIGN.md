@@ -3480,7 +3480,7 @@ looking in order to pay for the editing.
 **Snapping is shown by moving the wall, not by colouring a dot.** While a release would merge, the
 dragged vertex is drawn in the target's position — which is exactly what releasing produces. §8 wants
 a boundary visible *before* it is crossed, and a merge cannot be undone; showing the outcome is a
-stronger statement than announcing that one is available. ALT suppresses it, and the suppression is
+stronger statement than announcing that one is available. Shift suppresses it, and the suppression is
 simply not asking.
 
 **A snap is a merge and not a move**, and the distinction is the reason the document exists. Merging
@@ -3497,6 +3497,31 @@ re-derived, as decided.
 **A failed write loses the drag, loudly.** The graph is stored before what is in hand changes, so a
 failure leaves the GM with the graph they had rather than one the scene does not agree with. Losing a
 single drag is the safe direction against editing for an hour against something unsaved.
+
+#### Simplification can close a room up, and the freeze drops what is left — 2026-09-05
+
+**Found in the first stage-two room run, by the check rather than by eye.** The traversal reported
+Euler's identity failing on every run, and the trace in the same session found 35 regions where the
+traversal found 34. Both discrepancies are exactly what one pair of coincident segments produces.
+
+**The cause is the smoothing, not the graph.** Two walls bounding a room thinner than the
+simplification tolerance each fit to the same straight line between the same two corners, so the room
+closes up and its two walls land on top of each other. Stage one already guards against this at the
+*ring* — it keeps the unfitted ring when fitting would collapse it, and says so in the log — and the
+freeze stores fitted *edges*, where no equivalent guard existed.
+
+**The freeze drops coincident and zero-length segments, counts them, and says so** (user, 2026-09-05,
+choosing this over restoring the unfitted chain for one of the pair). The cost is stated rather than
+argued away: the thin room is gone from the document and will not be emitted. What it buys is an
+embedding the traversal can mean something over — two coincident segments enclose nothing, and a
+graph containing them is not one Euler's identity describes.
+
+**The more expensive half of this finding was where the warning went.** Crossing the door re-derives
+the partition, which writes its own line to the state line; the freeze's message is composed a moment
+later and replaced it. So stage two's only invariant was reporting into a channel that was painted
+over within milliseconds, and it went unread for a day — §8 in its purest form, and a reminder that a
+check is only as good as the place it reports to. The freeze message carries the check now, and
+entering a step that draws the partition re-states its figures.
 
 #### Degenerate and near-degenerate faces — decided 2026-09-02 (user)
 

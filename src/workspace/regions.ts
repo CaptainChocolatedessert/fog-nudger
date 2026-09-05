@@ -129,6 +129,25 @@ export function regionsShowing(): boolean {
 
 /** The last figures, for the state line. */
 let lastSummary = "";
+/** Whether that summary is bad news, so re-saying it keeps its tone. */
+let lastSummaryOk = true;
+
+/**
+ * The frozen partition's room count and whether its arithmetic check held, or `null` in stage one.
+ *
+ * Exposed because the freeze needs it and cannot compute it: the traversal runs *inside* the stage
+ * change the freeze triggers, so by the time the freeze has a graph the answer already exists.
+ *
+ * **This is here because a room found the check reporting into a channel nobody could see**
+ * (2026-09-05). The traversal said EULER FAILED on every run and the freeze's own message, written
+ * a moment later, overwrote it — so the one warning stage two has went unread for a day. A check
+ * that fires where nothing shows it is the §8 failure in its purest form.
+ */
+export function partitionCheck(): { readonly rooms: number; readonly ok: boolean } | null {
+  return frozenCheck;
+}
+
+let frozenCheck: { readonly rooms: number; readonly ok: boolean } | null = null;
 
 /**
  * Mark the partition out of date, and rebuild it if anyone is looking.
@@ -158,7 +177,19 @@ export function watchRegions(step: StepId, open: boolean): void {
   if (open) lookers.add(step);
   else lookers.delete(step);
   watching = lookers.size > 0;
-  if (watching && stale) void derive();
+  if (!watching) return;
+  if (stale) {
+    void derive();
+    return;
+  }
+  /*
+    Nothing to recompute, so say what is already on screen.
+
+    Without this, entering a step whose partition is current says nothing at all, and the figures
+    that describe what the GM is looking at are only ever visible in the instant they were derived.
+    A room asked for the room count and there was no way to get it back.
+  */
+  if (lastSummary !== "") say(lastSummary, lastSummaryOk ? "" : "bad");
 }
 
 async function derive(): Promise<void> {
@@ -204,6 +235,7 @@ async function derive(): Promise<void> {
     raster = outcome.run.raster;
     // Rings are in raster pixels here, so a grid square is however many pixels the run measured.
     unitsPerSquare = lastPixelsPerSquare() ?? 0;
+    frozenCheck = null;
     stale = false;
     // The wall count belongs here as much as the region count: they are staged together, and when
     // the lines were being drawn invisibly there was nothing on this surface that could say so.
@@ -213,6 +245,7 @@ async function derive(): Promise<void> {
       (walls.length === 0
         ? " · no separate walls"
         : ` · ${walls.length} wall${walls.length === 1 ? "" : "s"} in ${segments} segments`);
+    lastSummaryOk = true;
     say(lastSummary);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
   } catch (error) {
@@ -254,9 +287,11 @@ function deriveFrozen(graph: FrozenGraph): void {
 
   const rooms = `${regions.length} room${regions.length === 1 ? "" : "s"}`;
   const points = graph.nodes.length;
+  frozenCheck = { rooms: regions.length, ok: result.eulerHolds };
   lastSummary =
     `${rooms} · ${wallRuns(graph).length} walls in ${graph.edges.length} segments · ${points} points` +
     (result.eulerHolds ? "" : " · CHECK FAILED, see the log");
+  lastSummaryOk = result.eulerHolds;
   say(lastSummary, result.eulerHolds ? "" : "bad");
   devLog("info", `workspace: frozen partition — ${describeFrozenFaces(result)}`);
   invalidate();

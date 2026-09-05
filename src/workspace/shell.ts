@@ -328,6 +328,9 @@ export async function openOnOwlbearsView(bounds: {
 /** What a plain drag means from here on. Set by opening a step, and by nothing else. */
 export function setDrag(next: Drag): void {
   drag = next;
+  // Changing step leaves no pointer event behind, so the hint has to be dropped here or a crosshair
+  // survives into a step that has nothing to grab.
+  if (next !== "edit") setGrabTarget(false);
 }
 
 /**
@@ -364,8 +367,14 @@ export interface MapPoint {
    * one they have to aim for.
    */
   readonly perPixel: number;
-  /** Held to suppress snapping. Read at the moment of the event, never remembered. */
-  readonly altKey: boolean;
+  /**
+   * The tool's modifier — **Shift** — held at the moment of the event, never remembered.
+   *
+   * Named for its role rather than for the key, so which key it is stays decided in one place. It
+   * was ALT until a room found that Firefox raises its menu bar on ALT, which takes the keyboard
+   * away mid-drag (user, 2026-09-05). Ctrl was never available: it pans.
+   */
+  readonly modifier: boolean;
 }
 
 /**
@@ -402,6 +411,17 @@ export function setMapDragHandler(handler: MapDragHandler | null): void {
   dragHandler = handler;
 }
 
+/**
+ * Whether the pointer is over something the step's tool would take hold of.
+ *
+ * A named hint rather than a cursor string, so a tool cannot reach through the shell and set
+ * arbitrary CSS: what a tool knows is that it has a target under the pointer, and what that looks
+ * like is the surface's business.
+ */
+export function setGrabTarget(on: boolean): void {
+  canvas?.classList.toggle("grab-target", on);
+}
+
 /*
   The navigation listens on the **canvas**, not on the surface that contains everything.
 
@@ -430,7 +450,7 @@ if (canvas instanceof HTMLCanvasElement) {
     const u = (event.clientX - view.x) / drawWidth;
     const v = (event.clientY - view.y) / drawHeight;
     if (u < 0 || v < 0 || u > 1 || v > 1) return null;
-    return { u, v, perPixel: 1 / Math.max(drawWidth, drawHeight), altKey: event.altKey };
+    return { u, v, perPixel: 1 / Math.max(drawWidth, drawHeight), modifier: event.shiftKey };
   };
 
   // Where the press landed and whether it has moved since, which is what separates a click from a
@@ -471,10 +491,20 @@ if (canvas instanceof HTMLCanvasElement) {
         }
         return;
       }
+      /*
+        Declined, so this press is a pan like any other — and **falling through here is the whole
+        point of an editing step being liveable**.
+
+        The first version left the guard below as `drag !== "pan"`, which meant the Edit step refused
+        to pan on a plain drag whether or not the tool had taken the gesture. Reported from a room as
+        panning working only with Ctrl. A brush is the case that guard is for: a brush takes *every*
+        drag by definition, so nothing falls through there. This tool takes a press only when there
+        is a vertex under it, which is precisely why the rest must go on panning.
+      */
     }
 
-    // Ctrl pans in any step, which is what keeps a pan available once the plain drag is a brush.
-    if (drag !== "pan" && !event.ctrlKey) return;
+    // Ctrl pans in any step, which is what keeps a pan available under a brush.
+    if (drag === "brush" && !event.ctrlKey) return;
     panning = true;
     last = { x: event.clientX, y: event.clientY };
     canvas.classList.add("dragging");
@@ -499,7 +529,7 @@ if (canvas instanceof HTMLCanvasElement) {
           u: (event.clientX - view.x) / drawWidth,
           v: (event.clientY - view.y) / drawHeight,
           perPixel: 1 / Math.max(drawWidth, drawHeight),
-          altKey: event.altKey,
+          modifier: event.shiftKey,
         });
       }
       return;
