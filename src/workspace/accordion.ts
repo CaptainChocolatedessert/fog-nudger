@@ -13,8 +13,19 @@
  *   into a row, and six tabs in a 22rem column would wrap or shrink to abbreviations.
  * - **A tall narrow column is what vertical stacking is good at.**
  *
- * The property the tab strip was chosen to guarantee is kept exactly: one open step, one set of
- * layers on the canvas, one meaning for a drag.
+ * The property the tab strip was chosen to guarantee is kept exactly: **at most** one open step, one
+ * set of layers on the canvas, one meaning for a drag.
+ *
+ * ## Clicking the open header closes it — user, 2026-09-05
+ *
+ * "At most" rather than "exactly", which is the one thing an accordion can do that a tab strip
+ * cannot. A tab strip has no closed state at all, and neither did this: some step was always open,
+ * so its layers were always on the map and its controls always over part of it. On a surface whose
+ * whole job is looking at a map, being unable to see the map plainly is the state it most needed and
+ * did not have.
+ *
+ * Nothing open is a coherent mode rather than a gap: no layers, and a plain drag pans. Every listener
+ * is told, which is also how a paint mode in progress is finished and written rather than abandoned.
  *
  * **The cost, stated rather than argued away:** an accordion header is a weaker "you are here" than
  * a selected tab, and a mis-click collapses what you were working in. The open header is styled
@@ -43,13 +54,21 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setActiveLayers, setDrag } from "./shell";
 
 /**
- * Which step is open. Not stored in the scene: it is where the GM is looking, not a setting, and a
- * workspace that reopened in the step you left last session would be guessing.
+ * Which step is open, or `null` for none.
+ *
+ * Not stored in the scene: it is where the GM is looking, not a setting, and a workspace that
+ * reopened in the step you left last session would be guessing.
  *
  * It starts at the first step — Map — because that is the only honest place to be before anything is
  * known about the scene, and the one step that can do something about there being no map.
+ *
+ * **`null` became reachable 2026-09-05** (user): clicking an open header closes it. The accordion
+ * was exclusive-open with no way to shut, so the whole map could never be seen without the controls
+ * over part of it — and on a surface whose entire job is looking at a map, that is the one state it
+ * could not reach. Nothing open means no layers and a plain pan, which is a coherent mode rather
+ * than a gap: the map, and nothing of ours on top of it.
  */
-let open: StepId = workspaceSteps()[0]?.id ?? "ink";
+let open: StepId | null = workspaceSteps()[0]?.id ?? null;
 
 /**
  * Whether the GM has opened a step themselves.
@@ -81,7 +100,13 @@ export function registerStepContent(
   content.set(id, { ...content.get(id), [place]: render });
 }
 
-/** Move to a step, unless the GM has already chosen one. */
+/**
+ * Move to a step, unless the GM has already chosen one.
+ *
+ * **`touched` covers closing as well as opening**, which is what stops start-up reopening a step the
+ * GM has just shut. It is set by any header click, and a click that closes is still a choice about
+ * where to be.
+ */
 export function advanceTo(id: StepId): void {
   if (touched || open === id) return;
   open = id;
@@ -188,18 +213,25 @@ export function onStepOpen(id: StepId, changed: (open: boolean) => void): void {
  *
  * So a listener that owns something shared subscribes here and is told the *destination*, once.
  */
-const stepListeners: ((step: StepId) => void)[] = [];
+const stepListeners: ((step: StepId | null) => void)[] = [];
 
-export function onStepChange(listener: (step: StepId) => void): void {
+export function onStepChange(listener: (step: StepId | null) => void): void {
   stepListeners.push(listener);
 }
 
-/** Tell the canvas what the open step wants. The one place a step's declaration becomes behaviour. */
+/**
+ * Tell the canvas what the open step wants. The one place a step's declaration becomes behaviour.
+ *
+ * **With nothing open it says so rather than returning early**, which is the whole of what makes
+ * closing a step safe. An early return would leave the last step's layers drawn and its drag bound,
+ * so a closed accordion would show a mode the GM had just left and hand a brush every press with no
+ * tool picker on screen to say so. Nothing open is no layers and a plain pan, told to everyone who
+ * subscribes — which is also how a paint mode gets finished and its work saved.
+ */
 function applyOpenStep(): void {
   const step = workspaceSteps().find((candidate) => candidate.id === open);
-  if (!step) return;
-  setActiveLayers(step.layers);
-  setDrag(step.drag);
+  setActiveLayers(step?.layers ?? []);
+  setDrag(step?.drag ?? "pan");
   for (const listener of openListeners) listener.changed(listener.id === open);
   for (const listener of stepListeners) listener(open);
   invalidate();
@@ -232,7 +264,9 @@ export function renderPanel(): void {
       header.textContent = step.title;
       header.setAttribute("aria-expanded", String(step.id === open));
       header.addEventListener("click", () => {
-        open = step.id;
+        // Clicking the open one closes it. Exclusivity is unchanged — there is still never more than
+        // one open — and what this adds is the state where there is none.
+        open = open === step.id ? null : step.id;
         touched = true;
         renderPanel();
       });
