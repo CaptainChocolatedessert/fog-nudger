@@ -29,12 +29,25 @@ import { devLog } from "../devlog";
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
 import { paintStroke, paintedCount } from "../trace/inkPaint";
 import { refreshPaintRegion, setBrushPosition } from "./layers/paint";
+import { describeAccepted, describeSearch, markAt } from "./breakGesture";
+import {
+  acceptAllBreaks,
+  acceptBreak,
+  breakMarks,
+  breakRaster,
+  clearBreakSearch,
+  fillableCount,
+  runBreakSearch,
+} from "./breakSearch";
+import { breaksChanged } from "./layers/breaks";
 import {
   brushRadius,
+  brushVerb,
   rasterPoint,
   strokeSegment,
   verbFor,
   type BrushPoint,
+  type PaintTool,
   type PaintVerb,
 } from "./paintGesture";
 import {
@@ -51,7 +64,7 @@ import { inStageTwo } from "./stage";
 import { currentSettings } from "./settingsState";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
 
-let tool: PaintVerb = "paint";
+let tool: PaintTool = "paint";
 
 /** The last sample of the stroke in progress. `null` between gestures, which is what keeps them apart. */
 let last: BrushPoint | null = null;
@@ -62,13 +75,38 @@ let strokePixels = 0;
 /** A write is in flight, so nothing may start on top of it. */
 let busy = false;
 
-export function currentPaintTool(): PaintVerb {
+export function currentPaintTool(): PaintTool {
   return tool;
 }
 
-export function setPaintTool(next: PaintVerb): void {
+/**
+ * Switch tools, and run the search when the one arrived at is the break tool.
+ *
+ * Running on arrival rather than making the GM press a button first: the tool has exactly one thing
+ * to show and no reason to withhold it, and a step that opened on an empty canvas with a "search"
+ * button would be a click between the GM and the only thing there. Leaving it drops the marks, so
+ * a ring is never on screen while some other tool is in hand and cannot act on it.
+ */
+export function setPaintTool(next: PaintTool): void {
   tool = next;
+  if (next === "breaks") {
+    if (runBreakSearch()) {
+      say(describeSearch(breakMarks().length, fillableCount()));
+    } else {
+      say("nothing has been read from the map yet, so there is nothing to search");
+    }
+  } else {
+    clearBreakSearch();
+  }
+  breaksChanged();
   invalidate();
+}
+
+/** Search again, because a gap setting moved. Silent when the break tool is not the one in hand. */
+export function refreshBreakSearch(): void {
+  if (tool !== "breaks") return;
+  if (runBreakSearch()) say(describeSearch(breakMarks().length, fillableCount()));
+  breaksChanged();
 }
 
 /** The brush width for whichever layer is open, in raster pixels. */
@@ -112,7 +150,19 @@ function start(point: MapPoint): boolean {
   // the map has been read. Declining lets the press pan instead of doing nothing at all.
   if (!layer || !kind) return false;
 
-  verb = verbFor(tool, point.modifier);
+  /*
+    The break tool decides by looking, where the brushes take every press.
+
+    It is the wall tools' rule rather than the brush's, and for the wall tools' reason: this is a
+    step spent mostly *looking* at what the search proposed, so a tool that swallowed every drag
+    would make the looking part cost a modifier. A press inside a ring accepts that break; a press
+    anywhere else is a pan.
+  */
+  if (tool === "breaks") return acceptAt(point);
+
+  const brush = brushVerb(tool);
+  if (!brush) return false;
+  verb = verbFor(brush, point.modifier);
   last = null;
   strokePixels = 0;
   apply(rasterPoint(point.u, point.v, layer));
@@ -120,7 +170,50 @@ function start(point: MapPoint): boolean {
   return true;
 }
 
+/**
+ * Accept the break whose ring this press landed in, or decline so the press pans.
+ *
+ * **Declining is what keeps the step usable**, not a fallback: a map with forty rings on it is one a
+ * GM will spend most of their time moving around, and a tool that took every drag would put panning
+ * behind Ctrl for the whole of it.
+ */
+function acceptAt(point: MapPoint): boolean {
+  const raster = breakRaster();
+  if (!raster) return false;
+
+  const index = markAt(breakMarks(), raster, point.u, point.v, point.perPixel);
+  if (index === null) return false;
+
+  const result = acceptBreak(index);
+  if (result.bounds) refreshPaintRegion(result.bounds);
+  breaksChanged();
+  say(describeAccepted(result.accepted, result.pixels, fillableCount()));
+  return true;
+}
+
+/**
+ * Accept every break currently on offer.
+ *
+ * The reason the automatic search still earns its place (user, 2026-09-05): on a map with a lot of
+ * little gaps, closing each by hand is the cost the search exists to remove. One click, one re-run,
+ * and what is left is whatever the newly-closed ink turned into.
+ */
+export function acceptAllShownBreaks(): void {
+  if (tool !== "breaks") return;
+  const result = acceptAllBreaks();
+  if (result.accepted === 0) {
+    say("nothing here can be accepted — the rings left are guesses the search could not finish");
+    return;
+  }
+  if (result.bounds) refreshPaintRegion(result.bounds);
+  breaksChanged();
+  say(describeAccepted(result.accepted, result.pixels, fillableCount()));
+}
+
 function move(point: MapPoint): void {
+  // An accept is finished at the press. Nothing follows the pointer, so a drag that began on a ring
+  // is over — and treating it as a brush stroke would paint a line out of a break the GM only clicked.
+  if (tool === "breaks") return;
   const layer = workingLayer();
   if (!layer) return;
   apply(rasterPoint(point.u, point.v, layer));
@@ -128,6 +221,7 @@ function move(point: MapPoint): void {
 }
 
 function end(): void {
+  if (tool === "breaks") return;
   const kind = openPaintKind();
   last = null;
   if (!kind || strokePixels === 0) return;
@@ -156,7 +250,9 @@ function escape(): boolean {
 }
 
 function hover(point: MapPoint | null): void {
-  setBrushPosition(point ? { u: point.u, v: point.v } : null);
+  // No brush ring while the break tool is in hand: it says how much map the next *stroke* covers,
+  // and in this tool there is no stroke. The rings the search drew are what to aim at.
+  setBrushPosition(point && tool !== "breaks" ? { u: point.u, v: point.v } : null);
   // A crosshair wherever the tool will act, which under a brush is everywhere on the map. The rule
   // this follows was settled for the wall tools: a crosshair means the tool acts at this point, a
   // hand means the surface moves — and here panning is the secondary action, behind Ctrl.
@@ -205,7 +301,12 @@ async function openPaintMode(kind: PaintKind | null): Promise<void> {
     like the tool had stopped working rather than like something was still saving.
   */
   await finishPaint("leaving");
+  // The marks describe a composite that belonged to the layer just closed. Carrying them into the
+  // next mode would offer breaks against ink the tool there cannot write into.
+  clearBreakSearch();
+  tool = "paint";
   if (!kind) {
+    breaksChanged();
     invalidate();
     return;
   }

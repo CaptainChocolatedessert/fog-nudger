@@ -76,10 +76,12 @@ export const LAYERS = ["ink", "paint", "breaks", "skeleton", "regions", "graph"]
   Everything else here is drawn only in the step that is about it. The GM's two hand-made layers are
   drawn **wherever the ink is drawn** — Ink, both painting steps, and Walls — and the reason is that
   a picture of the ink that leaves out what the GM has done to it is a picture of something that no
-  longer exists downstream. Two concrete ways that bites: the break rings in the Ink step are found
-  on the *suppressed* mask, so without the amber a ring appears beside ink that looks untouched; and
-  the skeleton in the Walls step is thinned from the whole composite, so without both colours the
-  centreline and the ink under it visibly disagree.
+  longer exists downstream. The concrete bite is the Walls step: its skeleton is thinned from the
+  whole composite, so without both colours the centreline and the ink under it visibly disagree.
+
+  `breaks` is drawn in exactly one step, Add ink, which is where its tool runs. It was in Ink and
+  Walls while the search ran on every recompose and there was always something to show; on demand,
+  those steps would carry an empty layer in the ordinary case.
 
   They do not compete for the ink's own channel. The mask is drawn in the GM's chosen colour and
   these two in fixed colours of their own, which is the same arrangement the break fill has and rests
@@ -179,7 +181,7 @@ export const STEPS: readonly Step[] = [
       canvas, the drag and the layers were identical. The name returns as a step when it has a
       skeleton to paint, which is what a wall actually is.
     */
-    layers: ["ink", "paint", "breaks"],
+    layers: ["ink", "paint"],
     drag: "pan",
     groups: [
       {
@@ -189,14 +191,6 @@ export const STEPS: readonly Step[] = [
         title: "Linework",
         blurb: "Filtering those marks down to linework. Both go far past useful, so the edge is findable.",
         parameters: ["minStrokeInkWidths", "minIslandPx"],
-      },
-      {
-        title: "Breaks in the linework",
-        blurb:
-          "A wall with a section missing merges two rooms, which is the worst this can get wrong. " +
-          "Breaks up to the width below are filled in <b class='gap-key'>purple</b> and ringed. " +
-          "Purple is ink that is not on the map.",
-        parameters: ["gapFillPx", "gapTravelPx"],
       },
     ],
   },
@@ -234,8 +228,20 @@ export const STEPS: readonly Step[] = [
       the suppression included: ink the GM has already taken out is not ink a new stroke should be
       aiming at.
     */
-    layers: ["ink", "paint"],
+    layers: ["ink", "paint", "breaks"],
     drag: "brush",
+    groups: [
+      {
+        title: "Finding breaks",
+        blurb:
+          "A wall with a section missing merges two rooms, which is the worst this can get wrong &mdash; " +
+          "and a crack four pixels wide is not something anyone finds by scanning a map. The " +
+          "<b>Breaks</b> tool searches for them and proposes each one in " +
+          "<b class='gap-key'>purple</b>; nothing is added until you accept it, and what you accept " +
+          "becomes ordinary added ink.",
+        parameters: ["gapFillPx", "gapTravelPx"],
+      },
+    ],
   },
   {
     id: "walls",
@@ -251,15 +257,18 @@ export const STEPS: readonly Step[] = [
       of the wall it came from, and whether the hairs on it are artefacts of a ragged edge or stubs
       that are really there. Both are comparisons against the ink, so the ink is drawn under it.
 
-      **The breaks are here too, which is the one argued exception to "each step shows its own
-      layer".** A severed wall IS a break, and this is the step where one becomes visible: a gap in
-      the ink is a gap in the skeleton, and without the rings a GM looking at a broken centreline
-      cannot tell a doorway from something their own filter cut. The control that does the cutting —
-      the minimum stroke width — is an *Ink* parameter, not one of this step's; the version of this
-      note that put it here was naming the wrong step. The operating notes recorded the layer as the
-      intent before the code did.
+      **The breaks were here too, and are not any more** (2026-09-05). That was the one argued
+      exception to "each step shows its own layer", on the grounds that a severed wall becomes
+      visible here — a gap in the ink is a gap in the skeleton, and the rings told a GM whether a
+      break was a doorway or something their own filter had cut.
+
+      What retired it is that the search is a **tool** now, run when the GM asks rather than on every
+      recompose. There is nothing to draw here unless something ran it, so a layer declared here
+      would be empty in the ordinary case and stale in every other. **The cost is real and is the one
+      to watch in a room**: a wall this step's own filter severed no longer announces itself, and
+      finding it means going to Add ink and running the search.
     */
-    layers: ["ink", "paint", "skeleton", "breaks"],
+    layers: ["ink", "paint", "skeleton"],
     drag: "pan",
   },
   {
@@ -339,12 +348,15 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   sauvolaRadiusPx: "ink",
   minStrokeInkWidths: "ink",
   minIslandPx: "ink",
-  gapFillPx: "ink",
-  gapTravelPx: "ink",
+
   // A brush each, in the step whose layer it paints. One shared width would make every switch
   // between the two tools a resize, and what they are for is an order of magnitude apart.
   suppressBrushPx: "suppress",
   inkBrushPx: "addink",
+  // With the search that uses them, which is a tool inside Add ink. They were under Ink while the
+  // repair was a stage of the pipeline; a control belongs to the step that runs it.
+  gapFillPx: "addink",
+  gapTravelPx: "addink",
   spurPrunePx: "walls",
   fillOpacity: "regions",
   strokeSquares: "regions",

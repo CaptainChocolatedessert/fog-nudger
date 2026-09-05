@@ -272,6 +272,76 @@ export function addInk(mask: BinaryMask, layer: PaintLayer | null): BinaryMask {
   return combine(mask, layer, 1);
 }
 
+/** Both of the GM's layers, as everything that composes them takes them. */
+export interface PaintPair {
+  readonly suppress: PaintLayer | null;
+  readonly ink: PaintLayer | null;
+}
+
+/**
+ * The whole stack, composed: base ink, less suppression, plus added ink.
+ *
+ * **One statement of the order, and that is the point of the function existing.** The order is not
+ * free — suppression before anything else so a later stage works on ink the GM already corrected,
+ * added ink last so no filter can second-guess a line drawn deliberately — and until 2026-09-05 it
+ * lived inline in `composeInk`, which sits behind the SDK boundary where no headless test can reach
+ * it. The pieces were each tested and their *order* was checked by reading.
+ *
+ * It could be pulled out because the break repair stopped being a term in the middle. While it was
+ * derived it had to run between the two, so the composition was not one expression; as a tool that
+ * writes into the added-ink layer, it is not part of this at all. That was the user's argument for
+ * the three-layer stack, and this is where it pays.
+ *
+ * The two callers are the pipeline, which composes what becomes walls, and the break tool, which
+ * needs the same composite to search for breaks in. Two implementations of that would be the
+ * harness-versus-room failure this project has already paid for once.
+ */
+export function composePaint(base: BinaryMask, paint: PaintPair): BinaryMask {
+  return addInk(suppressInk(base, paint.suppress), paint.ink);
+}
+
+/**
+ * Lay a set of raster indices into a layer, and say how many changed.
+ *
+ * What accepting a break does: the search hands over exactly the pixels of one channel, and they
+ * become added ink indistinguishable from a brush stroke over the same ground. Indices rather than a
+ * mask, because a channel is a few hundred pixels scattered in an eight-million-pixel raster and
+ * walking the raster to find them would cost more than the accept.
+ *
+ * Out-of-range indices are skipped rather than trusted. They cannot arise from a search run against
+ * this layer's own raster, and silently writing past the end of a typed array is a no-op that would
+ * make a real mismatch look like it worked.
+ *
+ * Reports the same `StrokeResult` a brush stroke does, so the surface repaints an accepted break the
+ * way it repaints a stroke — which is what "an accepted break is added ink like any other" has to
+ * mean in the code as well as in the prose.
+ */
+export function paintPixels(layer: PaintLayer, indices: ArrayLike<number>): StrokeResult {
+  const { width, height, data } = layer;
+  const limit = width * height;
+  let changed = 0;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let i = 0; i < indices.length; i++) {
+    const at = indices[i]!;
+    if (at < 0 || at >= limit || data[at] === 1) continue;
+    data[at] = 1;
+    changed += 1;
+    const x = at % width;
+    const y = (at - x) / width;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+
+  if (changed === 0) return NOTHING_CHANGED;
+  return { changed, bounds: { left: minX, top: minY, right: maxX, bottom: maxY } };
+}
+
 function combine(mask: BinaryMask, layer: PaintLayer | null, value: 0 | 1): BinaryMask {
   if (!layer) return mask;
   const at = paintForRaster(layer, mask.width, mask.height);

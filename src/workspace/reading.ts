@@ -50,9 +50,16 @@ let inFlight = false;
 /** The last reading's headline figures, so the two paths that report them cannot word it differently. */
 let lastInkShare: number | null = null;
 let lastReused = false;
-/** How many breaks the last reading found, and how many of them it repaired. */
-let gapTotal = 0;
-let gapFilled = 0;
+
+/*
+  The break counts were here, and they went with the search (2026-09-05).
+
+  A reading no longer finds breaks — the search is a tool inside Add ink, run when the GM asks — so
+  there is nothing here to count. That is a real loss and worth naming: this line reported a total on
+  every recompose, which is how a break on a part of the map nobody was looking at got mentioned at
+  all. Now nothing mentions one until the tool is opened. The record already accepted the smaller
+  version of this cost when the repair was defaulted off; this is the same cost, one step further.
+*/
 
 /** Whether a mask current for the applied settings exists, which is what a painter must check. */
 export function maskShowing(): boolean {
@@ -80,10 +87,10 @@ export function requestReread(): void {
  * nothing on screen that goes stale, so blanking it would take the GM's own map away for the length
  * of a recompose in exchange for nothing.
  *
- * **The one thing that does lag is the break rings**, which are found on the suppressed mask, so
- * after a suppression is saved they describe the ink from just before it for as long as the
- * recompose takes. A lag rather than a lie, bounded by one recompose, and it resolves with no further
- * input — where blanking the ink would hide the very thing the GM had just painted onto.
+ * **Nothing on screen lags this any more.** There was one thing that did — the break rings, found on
+ * the suppressed mask, so a saved suppression left them describing the ink from just before it. The
+ * search is a tool now and holds its own marks, re-running them when the GM asks, so the reading has
+ * nothing left that a paint change could make stale.
  *
  * It is also cheap, which is what makes it bearable at all: paint is composed on top of a reading, so
  * this re-runs the cheap half of the cache and never re-reads the map.
@@ -131,41 +138,13 @@ function publish(result: MaskForOverlay, generation: number): boolean {
 
   lastInkShare = shareOfInk(result.mask);
   lastReused = result.reused;
-  gapTotal = result.gaps.marks.length;
-  gapFilled = result.gaps.filled;
   sayReading();
   return true;
 }
 
 function sayReading(): void {
   if (lastInkShare === null) return;
-  const ink = `ink ${(lastInkShare * 100).toFixed(1)}%${lastReused ? " (cached)" : ""}`;
-  if (gapTotal === 0) {
-    sayIfSettled(ink);
-    return;
-  }
-  /*
-    Reported in the neutral tone, not as an error.
-
-    A found break is a finding rather than a fault — most maps will have a few, and a status line
-    that is permanently red is a status line nobody reads, which is the failure §8 is about. The
-    rings are the channel that has to be noticed; this is the count that tells a GM whether the
-    ones they can see are all of them.
-
-    The count is deliberately not offered as a tally of distinct faults. Channels merge as the
-    repair width grows, so it moves around for reasons that have nothing to do with the map getting
-    better or worse — which is the fact that collapsed the two-slider design.
-  */
-  // `gapTotal` is every mark and `gapFilled` is the subset repaired, so the counts have to be named
-  // separately when they differ. This read "5 breaks repaired, 2 not examined" for five found and
-  // three repaired — stating five repaired, and implying a total of seven.
-  const found = gapTotal === 1 ? "1 break" : `${gapTotal} breaks`;
-  const unrepaired = gapTotal - gapFilled;
-  sayIfSettled(
-    unrepaired > 0
-      ? `${ink} · ${found}, ${gapFilled} repaired, ${unrepaired} not examined`
-      : `${ink} · ${found} repaired`,
-  );
+  sayIfSettled(`ink ${(lastInkShare * 100).toFixed(1)}%${lastReused ? " (cached)" : ""}`);
 }
 
 /** How a reading was arrived at, for the log. */
@@ -227,7 +206,7 @@ async function refreshMask(): Promise<void> {
       "info",
       `workspace: mask ${generation} painted for "${result.mapName}" — ` +
         `${result.mask.width}x${result.mask.height}, ink ${((lastInkShare ?? 0) * 100).toFixed(1)}%, ` +
-        `${gapTotal} breaks of which ${gapFilled} repaired, ${describeReuse(result)}`,
+        `${describeReuse(result)}`,
     );
   } catch (error) {
     if (requests.fail(generation)) {
@@ -278,7 +257,7 @@ export function adoptReading(result: MaskForOverlay): void {
     devLog(
       "info",
       `workspace: showing "${result.mapName}" — mask ${result.mask.width}x${result.mask.height}, ` +
-        `ink ${((lastInkShare ?? 0) * 100).toFixed(1)}%, ${gapTotal} breaks of which ${gapFilled} repaired, ` +
+        `ink ${((lastInkShare ?? 0) * 100).toFixed(1)}%, ` +
         `${result.reused ? "reused from cache" : "recomputed"}`,
     );
   }

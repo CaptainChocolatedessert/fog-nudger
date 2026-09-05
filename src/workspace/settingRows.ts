@@ -21,6 +21,7 @@ import {
 } from "../settings";
 import type { SettingName } from "../settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
+import { refreshBreakSearch } from "./paintTool";
 import { requestReread } from "./reading";
 import { inStageTwo } from "./stage";
 import { invalidateRegions } from "./regions";
@@ -88,6 +89,17 @@ export function setControlsLive(next: boolean): void {
  * exclusive rather than cumulative.
  */
 export function recomputeFor(names: readonly SettingName[]): void {
+  /*
+    A `tool` parameter recomputes nothing and tells its tool instead.
+
+    That is the whole of the third kind's behaviour on this side. A brush width has no one to tell —
+    the next stroke simply reads it — but the break search is holding a set of marks that the numbers
+    it was run with have just stopped describing, and marks on screen that no longer match the
+    settings beside them are the stale-diagnostic failure in miniature. Re-running is cheap by
+    comparison with a re-read and is what the GM is asking for by moving the slider at all.
+  */
+  if (names.some((name) => PARAMETER_KIND[name] === "tool")) refreshBreakSearch();
+
   const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
   // Graph-only first: pruning a spur costs a branch walk and a face traversal where a re-read costs
   // 690ms and would produce an identical mask. `GRAPH_ONLY` is what makes that safe, and it has
@@ -232,7 +244,15 @@ export function settingRow(control: Control): HTMLElement {
     below is the continuous statement, and the deliberate way back is one button in the Edit walls
     step.
   */
-  const frozen = inStageTwo() && PARAMETER_KIND[control.name] === "pipeline";
+  /*
+    Both kinds that the freeze closes, which is not the same set as "everything that is not display".
+
+    `pipeline` closes because the reading is closed. `tool` closes because the tool it belongs to is —
+    a brush and the break search are both stage one's, and the frozen graph does not re-derive from
+    ink. Leaving one live would be a slider that moves under a step whose own notice says its tools
+    are shut, which is the untidiness the third kind was added to end.
+  */
+  const frozen = inStageTwo() && (kind === "pipeline" || kind === "tool");
   input.disabled = !live || frozen;
   if (frozen) {
     row.classList.add("frozen");

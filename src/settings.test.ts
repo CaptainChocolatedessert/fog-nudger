@@ -116,19 +116,26 @@ describe("isDefault and describeSettings", () => {
     for (const part of ["blur", "k ", "window", "min stroke", "min island", "prune", "simplify"]) {
       expect(line, `no "${part}" in: ${line}`).toContain(part);
     }
-    // The breaks term is one phrase covering two settings, and it collapses to "off" at the
-    // default because reporting a travel distance for a repair that is not running is noise.
-    expect(line).toContain("breaks off");
-  });
+    /*
+      The breaks term is one phrase covering two settings, and the **default now reports both**.
 
-  it("reports the break settings once the repair is actually on", () => {
-    // The other half of the conditional above, which the default line cannot reach. Without this
-    // the two gap settings are absent from every assertion in the suite.
-    const on = normaliseSettings({ trace: { gapFillPx: 12, gapTravelPx: 40 } });
-    const line = describeSettings(on);
-
+      It collapsed to "off" while zero was the default, because a travel distance for a repair that
+      was not running was noise. Zero stopped being the default on 2026-09-05: the search proposes
+      rather than writes, so nothing needed protecting from a nonzero value, and a tool that shows
+      nothing until a slider is found is one nobody finds.
+    */
     expect(line).toContain("breaks up to 12px");
     expect(line).toContain("travel 40px");
-    expect(line).not.toContain("breaks off");
+  });
+
+  it("collapses the break settings to off when the search is switched off", () => {
+    // The other half of the conditional, which the default line no longer reaches. Zero is a
+    // legitimate setting — it is how a GM silences the search — and reporting a travel distance
+    // beside it would describe a search that is not looking for anything.
+    const off = normaliseSettings({ trace: { gapFillPx: 0, gapTravelPx: 40 } });
+    const line = describeSettings(off);
+
+    expect(line).toContain("breaks off");
+    expect(line).not.toContain("travel 40px");
   });
 });

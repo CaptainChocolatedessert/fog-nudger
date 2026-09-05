@@ -25,7 +25,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
-import { findGaps, GAP_FILLED, GAP_NONE, GAP_OPEN } from "./gaps";
+import { findGaps } from "./gaps";
 
 /** Seals breaks up to two pixels; treats ink more than six pixels apart along itself as separate. */
 const NEAR = { fillPx: 2, travelPx: 6 };
@@ -43,6 +43,26 @@ const BROKEN_WALL = [
   "#..........#",
   "#..........#",
   "############",
+];
+
+/**
+ * Two broken boxes side by side, with a corridor between them.
+ *
+ * The only fixture here that yields more than one mark, which is what makes it the one that can tell
+ * a per-mark pixel list from a shared buffer every mark points at. Two *copies* of `BROKEN_WALL`
+ * rather than two walls in one box: banks that can reach each other round a shared border group as
+ * one piece and read as a dead end, so a second break has to be somewhere genuinely separate.
+ */
+const TWO_BREAKS = [
+  "############.############",
+  "#..........#.#..........#",
+  "#..........#.#..........#",
+  "#..........#.#..........#",
+  "#####..#####.#####..#####",
+  "#..........#.#..........#",
+  "#..........#.#..........#",
+  "#..........#.#..........#",
+  "############.############",
 ];
 
 /** The same shape one size up, with a four-pixel break — wide enough to need a wider setting. */
@@ -281,18 +301,16 @@ describe("findGaps", () => {
     expect(mark!.y).toBeCloseTo(9, 5);
   });
 
-  it("labels the marked channels and nothing else", () => {
+  it("proposes the marked channels and nothing else", () => {
     const found = findGaps(maskFromRows(BROKEN_WALL), NEAR);
-    const lit: number[] = [];
-    for (let i = 0; i < found.labels.data.length; i++) {
-      if (found.labels.data[i] !== GAP_NONE) lit.push(i);
-    }
+    const lit = found.marks.flatMap((mark) => [...mark.pixels]).sort((a, b) => a - b);
+
     // Row 4, columns 5 and 6 — the break itself. Ink is never included: what gets painted in the
     // gap colour has to be ground the trace found nothing in, or the mark would sit on top of the
     // linework it is complaining about.
     expect(lit).toEqual([4 * 12 + 5, 4 * 12 + 6]);
-    // Repaired, which is what everything found is unless the search ran out of budget examining it.
-    expect(lit.map((i) => found.labels.data[i])).toEqual([GAP_FILLED, GAP_FILLED]);
+    // Acceptable, which is what everything found is unless the search ran out of budget examining it.
+    expect(found.marks.every((mark) => mark.fillable)).toBe(true);
   });
 
   it("does not turn the map's border into a break", () => {
@@ -333,7 +351,7 @@ describe("findGaps", () => {
   it("survives an empty raster", () => {
     const found = findGaps(maskFromRows([]), NEAR);
     expect(found.marks).toEqual([]);
-    expect(found.labels.width).toBe(0);
+    expect(found.candidateArea).toBe(0);
   });
 });
 
@@ -354,12 +372,51 @@ describe("findGaps, repairing", () => {
   it("repairs the break it finds and says so on the mark", () => {
     const found = findGaps(maskFromRows(BROKEN_WALL), NEAR);
     expect(found.marks).toHaveLength(1);
-    expect(found.marks[0]!.filled).toBe(true);
-    expect(found.filled).toBe(1);
-    // The two pixels of the break, and they are exactly what the pipeline adds to the ink.
-    expect(found.filledArea).toBe(2);
-    expect(found.labels.data[4 * 12 + 5]).toBe(GAP_FILLED);
-    expect(found.labels.data[4 * 12 + 6]).toBe(GAP_FILLED);
+    expect(found.marks[0]!.fillable).toBe(true);
+    expect(found.fillable).toBe(1);
+    // The two pixels of the break, and they are exactly what accepting it adds to the added-ink layer.
+    expect(found.candidateArea).toBe(2);
+    expect([...found.marks[0]!.pixels].sort((a, b) => a - b)).toEqual([4 * 12 + 5, 4 * 12 + 6]);
+  });
+
+  it("carries the channel's own pixels on the mark, which is what accepting one writes", () => {
+    /*
+      Per mark, because accepting is one break at a time now.
+
+      The labels array cannot say which pixels belong to which mark — it is one raster with a state
+      per pixel — so re-deriving a single channel from it would mean flood-filling the labels, which
+      is a second implementation of the channel identity this module already computed. It would drift,
+      and the drift would be a GM accepting a ring and getting some other break's pixels.
+    */
+    const found = findGaps(maskFromRows(BROKEN_WALL), NEAR);
+    const mark = found.marks[0]!;
+
+    expect([...mark.pixels].sort((a, b) => a - b)).toEqual([4 * 12 + 5, 4 * 12 + 6]);
+    // And they add up to what the finding reports, since both come from the one walk.
+    expect(mark.pixels.length).toBe(found.candidateArea);
+  });
+
+  it("gives each mark its own pixels rather than a shared buffer", () => {
+    /*
+      `findGaps` reuses one array across every channel it walks, so a mark holding a reference to it
+      would describe whichever channel was walked **last** — and every mark would describe the same
+      one. Invisible with a single break, which is what every other fixture here has.
+
+      Asserted as *no two marks share a pixel* rather than as a comparison of the first two, because
+      the channels are found in raster scan order and pinning which is which would be pinning the
+      scan rather than the claim.
+    */
+    const found = findGaps(maskFromRows(TWO_BREAKS), NEAR);
+    expect(found.marks.length).toBeGreaterThan(2);
+
+    const seen = new Set<number>();
+    for (const mark of found.marks) {
+      expect(mark.pixels.length).toBeGreaterThan(0);
+      for (const index of mark.pixels) {
+        expect(seen.has(index), `pixel ${index} claimed by two marks`).toBe(false);
+        seen.add(index);
+      }
+    }
   });
 
   it("repairs more as the width grows, and never less", () => {
@@ -385,7 +442,7 @@ describe("findGaps, repairing", () => {
       "##################",
     ]);
     const areas = [1, 2, 3, 4, 6].map(
-      (fillPx) => findGaps(mask, { fillPx, travelPx: 6 }).filledArea,
+      (fillPx) => findGaps(mask, { fillPx, travelPx: 6 }).candidateArea,
     );
     for (let i = 1; i < areas.length; i++) {
       expect(areas[i]!).toBeGreaterThanOrEqual(areas[i - 1]!);
@@ -396,8 +453,8 @@ describe("findGaps, repairing", () => {
 
   it("repairs nothing when the width is off", () => {
     const found = findGaps(maskFromRows(BROKEN_WALL), { fillPx: 0, travelPx: 6 });
-    expect(found.filled).toBe(0);
-    expect(found.filledArea).toBe(0);
+    expect(found.fillable).toBe(0);
+    expect(found.candidateArea).toBe(0);
     expect(found.marks).toEqual([]);
   });
 
@@ -407,19 +464,20 @@ describe("findGaps, repairing", () => {
     const mask = maskFromRows(BROKEN_WALL);
     for (const fillPx of [0, 1, 2, 4, 8]) {
       const found = findGaps(mask, { fillPx, travelPx: 6 });
-      let repairedPixels = 0;
-      for (const value of found.labels.data) if (value === GAP_FILLED) repairedPixels += 1;
-      expect(repairedPixels).toBe(found.filledArea);
-      expect(found.filled > 0).toBe(repairedPixels > 0);
-      expect(found.marks.filter((m) => m.filled)).toHaveLength(found.filled);
+      const proposed = found.marks
+        .filter((mark) => mark.fillable)
+        .reduce((total, mark) => total + mark.pixels.length, 0);
+      expect(proposed).toBe(found.candidateArea);
+      expect(found.fillable > 0).toBe(proposed > 0);
+      expect(found.marks.filter((m) => m.fillable)).toHaveLength(found.fillable);
     }
   });
 
   it("marks a break it could not examine, and refuses to fill it", () => {
     /*
       The guessed-break state, which nothing in this suite could reach until the flood budget became
-      injectable — `GAP_OPEN` appeared in no test at all, and `budgetHits` was only ever asserted to
-      be zero.
+      injectable — the unproven state appeared in no test at all, and `budgetHits` was only ever
+      asserted to be zero.
 
       It matters because it is the one place the design's central invariant is *deliberately* one-
       sided. A channel whose flood ran out was never proved broken, so it carries a mark and no fill:
@@ -436,13 +494,12 @@ describe("findGaps, repairing", () => {
 
     expect(found.budgetHits).toBeGreaterThan(0);
     expect(found.marks.length, "a guess is still marked").toBeGreaterThan(0);
-    expect(found.marks.every((mark) => !mark.filled), "and never filled").toBe(true);
-    expect(found.filled).toBe(0);
-    expect(found.filledArea).toBe(0);
-
-    const values = new Set(found.labels.data);
-    expect(values.has(GAP_OPEN), "painted as an open break").toBe(true);
-    expect(values.has(GAP_FILLED), "and nothing painted as repaired").toBe(false);
+    expect(found.marks.every((mark) => !mark.fillable), "and never filled").toBe(true);
+    expect(found.fillable).toBe(0);
+    expect(found.candidateArea).toBe(0);
+    // It still carries its pixels, so the surface can ring it — what it does not carry is any offer
+    // to add them.
+    expect(found.marks[0]!.pixels.length).toBeGreaterThan(0);
   });
 
   it("does not repair a dead end", () => {
@@ -464,7 +521,7 @@ describe("findGaps, repairing", () => {
       NEAR,
     );
     expect(found.channels).toBe(1);
-    expect(found.filledArea).toBe(0);
+    expect(found.candidateArea).toBe(0);
     expect(found.marks).toEqual([]);
   });
 });

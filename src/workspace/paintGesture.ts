@@ -83,6 +83,27 @@ export function strokeSegment(previous: BrushPoint | null, at: BrushPoint): Stro
 export type PaintVerb = "paint" | "erase";
 
 /**
+ * Which tool the Add ink step has in hand.
+ *
+ * A superset of the brush verbs rather than a separate axis, because the picker offers all three in
+ * one row and a GM switching between them is making one choice. `breaks` is not a brush at all — it
+ * takes a click on a ring rather than a drag — which is why the brush code asks for a `PaintVerb`
+ * and gets one only when the tool is one.
+ */
+export type PaintTool = PaintVerb | "breaks";
+
+/**
+ * The brush verb a tool implies, or `null` when the tool is not a brush.
+ *
+ * Narrowing in one place, so no caller has to remember that `breaks` is in the union. A brush handed
+ * `null` declines the press, which is what lets a drag in the break tool pan as usual — nothing is
+ * painted by dragging there.
+ */
+export function brushVerb(tool: PaintTool): PaintVerb | null {
+  return tool === "breaks" ? null : tool;
+}
+
+/**
  * What this press does, given the tool in hand and whether the modifier is down.
  *
  * Shift **inverts** rather than meaning "erase", which is the convention every painting tool has and

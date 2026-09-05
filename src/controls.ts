@@ -148,8 +148,8 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "gapFillPx",
-    label: "Largest break to repair",
-    hint: "Finds narrow breaks in the linework — what merge two rooms into one — and fills them, in <b class='gap-key'>purple</b>. In pixels; <b>zero is off</b>. Past a doorway's width it starts sealing doorways, and no measurement can tell those apart.",
+    label: "Largest break to look for",
+    hint: "How wide a break the search will find, in pixels; <b>zero finds none</b>. Each one is ringed and shown in <b class='gap-key'>purple</b> &mdash; <b>nothing is added until you accept it</b>. Past a doorway's width it starts proposing doorways, and no measurement can tell those apart.",
     derive: (value, { pxPerSquare }) => {
       if (value <= 0) return "off";
       if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;
@@ -159,9 +159,9 @@ export const CONTROLS: readonly Control[] = [
   {
     name: "gapTravelPx",
     label: "Same-wall distance",
-    hint: "How far apart two edges of a break can be <b>along the ink</b> and still count as one piece of wall. Low repairs more: a crack beside a corner starts counting. High treats distant linework as connected and goes quiet.",
+    hint: "How far apart two edges of a break can be <b>along the ink</b> and still count as one piece of wall. Low proposes more: a crack beside a corner starts counting. High treats distant linework as connected and goes quiet.",
     derive: (value) =>
-      value <= 0 ? "repair every break" : `${Math.round(value)}px along the ink`,
+      value <= 0 ? "propose every break" : `${Math.round(value)}px along the ink`,
   },
   {
     name: "spurPrunePx",

@@ -108,18 +108,22 @@ export interface TraceSettings {
    */
   readonly minIslandPx: number;
   /**
-   * The widest break in the linework to find and repair, in raster pixels. Zero is off.
+   * The widest break in the linework the search will **look for**, in raster pixels. Zero finds none.
    *
-   * Repairs walls thinned or severed upstream, so two rooms do not merge across a break the map has
-   * not actually got. Morphologically a closing — the exact inverse of the minimum stroke width —
-   * but applied only to breaks the detector has **marked**, never as a blanket operation.
+   * Finds walls thinned or severed upstream, so two rooms do not merge across a break the map has not
+   * actually got. Morphologically a closing — the exact inverse of the minimum stroke width — over
+   * only the channels the detector marks, never as a blanket operation.
    *
-   * **That restriction is the safety property, not an optimisation.** A blanket closing also seals
-   * through-channels that failed the travel test, and the clearest example of one is a narrow
-   * doorway beside a corner, where the two banks meet round the corner within a short travel. That
-   * would be sealed with nothing to see — and Dynamic Fog would then derive a wall across an open
-   * door and block line of sight through it, silently. Filling only marked breaks gives the
-   * invariant instead: **every pixel the fill invents belongs to a break with a ring on it.**
+   * **It proposes; it does not write** (2026-09-05). Every break found is ringed and shown, and the
+   * GM accepts one or all of them; what is accepted goes into the added-ink layer. The old invariant
+   * — *every pixel the fill invents belongs to a break with a ring on it* — is now true by a stronger
+   * route, since nothing is invented at all until a click asks for it.
+   *
+   * **That restriction was the safety property, and it still is.** A blanket closing also seals
+   * through-channels that failed the travel test, and the clearest example is a narrow doorway beside
+   * a corner, where the two banks meet round the corner within a short travel. That would be sealed
+   * with nothing to see — and Dynamic Fog would then derive a wall across an open door and block line
+   * of sight through it, silently.
    *
    * In pixels rather than measured ink widths (user, 2026-08-23): stage one stays close to the
    * raster, and a threshold that moved with a measurement would change what is repaired for reasons
@@ -261,12 +265,23 @@ export const DEFAULT_SETTINGS: Settings = {
     sauvolaRadiusPx: 13,
     minStrokeInkWidths: 0,
     minIslandPx: 0,
-    // **Off by default** (user, 2026-08-23). This is the only control in stage one that invents
-    // ink rather than deciding what to make of ink the map already has, and nothing should write
-    // into a map's linework before a GM has asked it to. The cost is that a break goes unreported
-    // until the control is reached for; the marks were briefly a separate always-on warning that
-    // would have covered that, and they went when the two-slider split did.
-    gapFillPx: 0,
+    /*
+      **On by default now, and the reason it was off has gone** (2026-09-05).
+
+      It was zero because this was the only control in stage one that *invented* ink rather than
+      deciding what to make of the map's own, and nothing should write into a map's linework before a
+      GM has asked. That is no longer what it does: the search proposes, and only an accept writes. So
+      the thing the default was protecting against cannot happen at whatever value this holds.
+
+      What zero would cost is now a real cost rather than a safe one — a GM opening the Breaks tool
+      would be shown nothing, with no way to tell "this map has none" from "the slider is at zero".
+      A tool that has to be switched on before it does anything is one nobody finds.
+
+      Twelve pixels because it is the value this briefly held before, when it was defended on a
+      warning argument; it is wide enough to catch a severed wall and well short of a doorway. Nothing
+      about a default can be right for every map, which is what the slider is for.
+    */
+    gapFillPx: 12,
     gapTravelPx: 40,
     // Off by default, like every other control that removes something a GM has not looked at yet.
     // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a budget longer
@@ -455,8 +470,22 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
  * cost it was avoiding is answered instead by caching the reading separately from what is composed
  * on top of it, which is a better answer anyway: it makes the 1b filters cheaper as well.
  */
-export type ParameterKind = "pipeline" | "display";
+export type ParameterKind = "pipeline" | "display" | "tool";
 
+/*
+  ## The third value, added 2026-09-05 — and the record set the condition for it
+
+  `gaps` was the last third value and lasted one commit, deleted for having no members once the fill
+  made every gap parameter feed the mask. The note that replaced it said to revisit *if the repair
+  became a tool, at which point there would be four*. It did, and there are.
+
+  **`tool` is not a synonym for `display`, and that is the whole test it had to pass.** Both
+  recompute nothing, so neither reaches the mask fingerprint. What separates them is the freeze: a
+  display control stays live in stage two because recolouring while editing walls is ordinary, and a
+  tool control belongs to a tool the freeze has closed — so leaving one live is a slider that moves
+  under a step whose tools say they are shut. That was already untidy for the two brush widths and
+  would have been four.
+*/
 export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   sauvolaK: "pipeline",
   blurSigma: "pipeline",
@@ -464,13 +493,13 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   minStrokeInkWidths: "pipeline",
   minIslandPx: "pipeline",
   inkOpacity: "display",
-  gapFillPx: "pipeline",
-  gapTravelPx: "pipeline",
+  // The break search proposes and the GM accepts; nothing is recomputed until the tool is run, and
+  // what it writes goes into the added-ink layer rather than into a term of the composition.
+  gapFillPx: "tool",
+  gapTravelPx: "tool",
   spurPrunePx: "pipeline",
-  // Display, and the reasoning is in the field's own doc: a brush changes what the next stroke lays
-  // down and recomputes nothing. Filing either as pipeline would re-binarise the map on every nudge.
-  suppressBrushPx: "display",
-  inkBrushPx: "display",
+  suppressBrushPx: "tool",
+  inkBrushPx: "tool",
   simplifyInkWidths: "pipeline",
   fillOpacity: "display",
   strokeSquares: "display",
@@ -552,8 +581,10 @@ export function maskFingerprint(settings: Settings): string {
 const POST_READING: readonly SettingName[] = [
   "minStrokeInkWidths",
   "minIslandPx",
-  "gapFillPx",
-  "gapTravelPx",
+  // The two gap parameters were here until 2026-09-05 and left with the search. This list splits the
+  // *pipeline* parameters of the read stage, and they are `tool` parameters now — so naming them
+  // here would be naming non-members, and the test that every excluded one still moves the mask
+  // fingerprint would fail, correctly.
   "spurPrunePx",
 ];
 

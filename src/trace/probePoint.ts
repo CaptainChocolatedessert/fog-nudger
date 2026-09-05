@@ -46,7 +46,6 @@
 
 import type { BinaryMask } from "./binarize";
 import type { ScalarField } from "./field";
-import { GAP_FILLED, type GapLabels } from "./gaps";
 import type { LabelledSpace } from "./label";
 
 export type PointKind =
@@ -66,7 +65,15 @@ export type PointKind =
    * did not call it ink, and the binariser is not wrong. The old answer sent a GM to tune the
    * threshold when the control that did this is the break repair.
    */
-  | "invented-ink"
+  /*
+    `invented-ink` was here, and it is gone rather than merely unused (2026-09-05).
+
+    It meant ink the break repair filled in, which the map does not have — and every clause of the
+    plain ink answer was misdirection for it, which is why it earned a kind. That case cannot arise
+    any more: the repair became a tool, and what it fills is written into the **added-ink layer**, so
+    a pixel that was once "invented" now reports as ink the GM drew. Which is true — they accepted
+    it — and is the design saying that an accepted fill is paint like any other.
+  */
   /**
    * Ink the **GM drew** on the added-ink layer.
    *
@@ -134,14 +141,6 @@ export function readPoint(
   x: number,
   y: number,
   /**
-   * Which pixels the break repair invented, if a repair ran.
-   *
-   * Optional beside `labelled` and for the same reason: it is the same lookup, and the whole value of
-   * this diagnostic is that it reports from the data that produced the picture rather than from a
-   * parallel path. `null` means no repair was running, not that nothing was invented.
-   */
-  gapLabels: GapLabels | null = null,
-  /**
    * The GM's two layers, as this run composed them.
    *
    * Optional beside the other two and for the identical reason: the same lookup, from the data that
@@ -163,7 +162,6 @@ export function readPoint(
   const i = py * mask.width + px;
   const luminance = field.data[i] ?? 0;
   const ink = mask.data[i] === 1;
-  const invented = ink && gapLabels !== null && gapLabels.data[i] === GAP_FILLED;
 
   /*
     Whether each of the GM's layers covers this pixel. **Which of them gets to explain it is decided
@@ -195,15 +193,7 @@ export function readPoint(
   // No partition to consult. The ink verdict is still worth reporting; the coverage question is not
   // answerable, and saying anything about it here would be inventing one.
   if (!labelled) {
-    const kind = drawn
-      ? "added-ink"
-      : invented
-        ? "invented-ink"
-        : ink
-          ? "ink"
-          : suppressedHere
-            ? "suppressed"
-            : "space";
+    const kind = drawn ? "added-ink" : ink ? "ink" : suppressedHere ? "suppressed" : "space";
     return { x: px, y: py, kind, luminance, region: 0 };
   }
 
@@ -217,7 +207,6 @@ export function readPoint(
   */
   const region = labelled.labels[i] ?? 0;
   if (drawn) return { x: px, y: py, kind: "added-ink", luminance, region };
-  if (invented) return { x: px, y: py, kind: "invented-ink", luminance, region };
   if (ink) return { x: px, y: py, kind: "ink", luminance, region };
   if (suppressedHere) return { x: px, y: py, kind: "suppressed", luminance, region };
 
@@ -256,12 +245,6 @@ export function describePoint(reading: PointReading): string {
         `${at}${tone} is INK, and it sits inside face ${reading.region} — a face boundary is the ` +
         `wall's centreline, so about half a wall's thickness is inside the room beside it. This ` +
         `point IS covered.${inkTone}`
-      );
-    case "invented-ink":
-      return (
-        `${at}${tone} is ink this run INVENTED — the break repair filled it. The map has no ink ` +
-        `here, which is why the luminance is light, and the threshold did not put it there. If this ` +
-        `is wrong, lower the largest break to repair rather than touching the threshold.`
       );
     case "added-ink":
       return (

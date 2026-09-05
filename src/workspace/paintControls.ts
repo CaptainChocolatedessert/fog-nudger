@@ -14,26 +14,47 @@
 
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
 import { confirmAction } from "./confirmDialog";
-import type { PaintVerb } from "./paintGesture";
+import type { PaintTool } from "./paintGesture";
 import { hasUnsavedPaint, paintRaster, workingLayer } from "./paintState";
-import { currentPaintTool, finishPaint, abandonPaint, setPaintTool } from "./paintTool";
+import {
+  acceptAllShownBreaks,
+  currentPaintTool,
+  finishPaint,
+  abandonPaint,
+  setPaintTool,
+} from "./paintTool";
 import { paintStroke } from "../trace/inkPaint";
 import { refreshPaintRegion } from "./layers/paint";
 import { invalidate, say } from "./shell";
 import { inStageTwo } from "./stage";
 
 interface ToolChoice {
-  readonly id: PaintVerb;
+  readonly id: PaintTool;
   readonly label: string;
 }
 
-const TOOLS: readonly ToolChoice[] = [
-  { id: "paint", label: "Paint" },
-  { id: "erase", label: "Erase" },
-];
+/**
+ * Which verbs each layer offers.
+ *
+ * Suppression has two, because there are only two things to do to it. Added ink has three: the break
+ * search writes into *this* layer and nowhere else, so it belongs here rather than as a step of its
+ * own — what it produces is added ink, and once accepted it is indistinguishable from a brush stroke
+ * over the same ground.
+ */
+const TOOLS: Readonly<Record<PaintKind, readonly ToolChoice[]>> = {
+  suppress: [
+    { id: "paint", label: "Paint" },
+    { id: "erase", label: "Erase" },
+  ],
+  ink: [
+    { id: "paint", label: "Paint" },
+    { id: "erase", label: "Erase" },
+    { id: "breaks", label: "Breaks" },
+  ],
+};
 
-/** What each layer's brush is for, in the fewest words that still say what a press does. */
-const HINTS: Readonly<Record<PaintKind, Readonly<Record<PaintVerb, string>>>> = {
+/** What each layer's tools are for, in the fewest words that still say what a press does. */
+const HINTS: Readonly<Record<PaintKind, Readonly<Record<PaintTool, string>>>> = {
   suppress: {
     paint:
       "Drag to cover marks the trace should ignore. Hold <b>Shift</b> to erase while you drag, " +
@@ -41,14 +62,22 @@ const HINTS: Readonly<Record<PaintKind, Readonly<Record<PaintVerb, string>>>> = 
     erase:
       "Drag to uncover what you suppressed, putting those marks back. Hold <b>Shift</b> to " +
       "suppress instead, <b>Ctrl</b> to pan.",
+    // Unreachable: this layer does not offer the tool. Present because the record is typed as total
+    // over both, and a partial record would let a missing hint read as an empty one.
+    breaks: "",
   },
   ink: {
     paint:
       "Drag to draw linework the map does not have. Hold <b>Shift</b> to erase while you drag, " +
       "<b>Ctrl</b> to pan. Zoom in and turn the width down for fine work.",
     erase:
-      "Drag to remove ink you drew. This does not touch the map's own linework — only what you " +
+      "Drag to remove ink you drew. This does not touch the map's own linework &mdash; only what you " +
       "added here. Hold <b>Shift</b> to draw instead, <b>Ctrl</b> to pan.",
+    breaks:
+      "Searches for breaks in the linework and rings each one. <b>Click inside a ring</b> to close " +
+      "that break, or use the button below to close them all. <b>Nothing is added until you " +
+      "accept it</b>, and what you accept becomes ordinary added ink. A <b>dashed</b> ring is a " +
+      "channel the search could not finish examining and will not offer. Dragging pans.",
   },
 };
 
@@ -65,7 +94,7 @@ export function renderPaintTools(kind: PaintKind): (body: HTMLElement) => void {
     const hint = document.createElement("p");
     hint.className = "sub";
 
-    const buttons = TOOLS.map((choice) => {
+    const buttons = TOOLS[kind].map((choice) => {
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = choice.label;
@@ -87,10 +116,34 @@ export function renderPaintTools(kind: PaintKind): (body: HTMLElement) => void {
         button.setAttribute("aria-pressed", String(choice.id === active));
       }
       hint.innerHTML = HINTS[kind][active];
+      // Shown only while the tool that draws the rings is in hand. Hidden rather than disabled: it
+      // means nothing in the other tools, and a permanently greyed control teaches a GM to stop
+      // reading this row.
+      if (acceptAll) acceptAll.hidden = active !== "breaks";
+    }
+
+    /*
+      Built only for the layer whose tools include the search, rather than built and hidden for ever.
+
+      Suppression has no break tool, so the button there could never be shown — and a control that
+      exists in the markup but has no state that reveals it is exactly what an export sweep or a
+      reading of the code flags as dead. Absent is a clearer statement than permanently hidden.
+    */
+    const acceptAll = TOOLS[kind].some((choice) => choice.id === "breaks")
+      ? document.createElement("button")
+      : null;
+    if (acceptAll) {
+      acceptAll.type = "button";
+      acceptAll.className = "chip";
+      acceptAll.textContent = "Close every break shown";
+      acceptAll.addEventListener("click", () => {
+        acceptAllShownBreaks();
+      });
     }
 
     paint();
     body.append(row, hint);
+    if (acceptAll) body.append(acceptAll);
   };
 }
 

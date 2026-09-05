@@ -50,6 +50,7 @@ import { registerSkeletonLayer } from "./workspace/layers/skeleton";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
+import { noteReadingForBreaks } from "./workspace/breakSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderPaintActions, renderPaintTools } from "./workspace/paintControls";
 import { finishPaint, registerPaintTool, requestPaintMode } from "./workspace/paintTool";
@@ -89,6 +90,15 @@ onPaintWriteFailure((message) => {
 */
 onReading((result) => {
   noteRaster(result.mask.width, result.mask.height);
+  /*
+    And the break search takes its base ink from the same reading, dropping whatever it had found.
+
+    **Dropping rather than keeping** is the part that matters: the marks describe ink that has just
+    been replaced, and there is no way to know they are still where they were without searching
+    again. A ring left over a map whose reading has moved is exactly the failure this project has
+    already paid for once — a diagnostic that looked clean and was answering about something else.
+  */
+  noteReadingForBreaks(result.mask);
 });
 
 /*

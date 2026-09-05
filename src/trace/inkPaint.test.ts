@@ -15,6 +15,7 @@ import type { BinaryMask } from "./binarize";
 import { maskFromRows } from "./fixtures";
 import {
   addInk,
+  composePaint,
   copyPaint,
   decodePaint,
   emptyPaint,
@@ -22,6 +23,7 @@ import {
   isPaintEmpty,
   paintForRaster,
   paintRevision,
+  paintPixels,
   paintStroke,
   paintedCount,
   resamplePaint,
@@ -231,6 +233,80 @@ describe("applying a layer to a mask", () => {
 
     expect(rows(layer)).toEqual(["......", "..##..", "......"]);
     expect(maskRows(mask)).toEqual(MASK);
+  });
+});
+
+describe("the whole stack, composed", () => {
+  const MASK = [
+    ".####.",
+    ".#..#.",
+    ".####.",
+  ];
+
+  it("takes suppression out and puts added ink in", () => {
+    const mask = maskFromRows(MASK);
+    const composed = composePaint(mask, {
+      suppress: paintFromRows(["......", "......", ".####."]),
+      ink: paintFromRows(["......", "..##..", "......"]),
+    });
+
+    expect(maskRows(composed)).toEqual([".####.", ".####.", "......"]);
+  });
+
+  it("lets added ink win where the two layers cover the same pixel", () => {
+    /*
+      **The order, and the only assertion that can catch it being wrong.**
+
+      Added ink composes last, so a pixel the GM suppressed and then drew back over is ink. Reverse
+      the two and it is ground — which is the same picture everywhere else on the map, so nothing but
+      an overlap distinguishes them.
+
+      This is what could not be tested until 2026-09-05. The order lived inline in `composeInk`,
+      behind the SDK boundary, with the break repair sitting between the two terms so it could not be
+      pulled out. The repair became a tool, the middle term went, and the order became one function.
+    */
+    const mask = maskFromRows([".##.", ".##."]);
+    const both = paintFromRows([".#..", "...."]);
+
+    const composed = composePaint(mask, { suppress: both, ink: both });
+
+    expect(maskRows(composed)).toEqual([".##.", ".##."]);
+  });
+
+  it("is the mask itself when neither layer has anything on it", () => {
+    const mask = maskFromRows(MASK);
+
+    expect(composePaint(mask, { suppress: null, ink: null })).toBe(mask);
+  });
+});
+
+describe("laying a set of pixels down", () => {
+  it("marks exactly the indices given, and reports the rectangle they lie in", () => {
+    const layer = emptyPaint(6, 4);
+    const result = paintPixels(layer, [1 * 6 + 2, 1 * 6 + 3, 2 * 6 + 2]);
+
+    expect(result.changed).toBe(3);
+    expect(result.bounds).toEqual({ left: 2, top: 1, right: 3, bottom: 2 });
+    expect(rows(layer)).toEqual(["......", "..##..", "..#...", "......"]);
+  });
+
+  it("counts only what it changed, so accepting the same break twice adds nothing", () => {
+    const layer = emptyPaint(6, 4);
+    paintPixels(layer, [8, 9]);
+    const again = paintPixels(layer, [8, 9]);
+
+    expect(again.changed).toBe(0);
+    expect(again.bounds).toBeNull();
+  });
+
+  it("skips an index outside the raster rather than writing past the end", () => {
+    // Cannot arise from a search run against this layer's own raster. Silently writing past the end
+    // of a typed array is a no-op, which would make a real mismatch look like it had worked.
+    const layer = emptyPaint(4, 2);
+    const result = paintPixels(layer, [-1, 3, 99]);
+
+    expect(result.changed).toBe(1);
+    expect(rows(layer)).toEqual(["...#", "...."]);
   });
 });
 

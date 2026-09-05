@@ -41,7 +41,7 @@ import { describeSettings, maskFingerprint, readingFingerprint, type Settings } 
 import { readSettings } from "./settingsStore";
 import { readPaintLayer } from "./inkPaintStore";
 import {
-  addInk,
+  composePaint,
   paintForRaster,
   paintRevision,
   paintedCount,
@@ -79,7 +79,6 @@ import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
 import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
-import { applyGapFill, findGaps, type GapFinding, type GapLabels } from "./trace/gaps";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { describeAreaCheck, type FittedEdge } from "./trace/faces";
 import type { WallGraph } from "./trace/wallGraph";
@@ -247,7 +246,6 @@ interface MaskStage extends ReadingStage {
    * depends on anything else.
    */
   readonly mask: BinaryMask;
-  readonly gaps: GapFinding;
   /**
    * The GM's layers **as this composition used them**, which is at the run's own raster.
    *
@@ -348,9 +346,6 @@ function readingIdentity(map: ImageItem, dpi: number, settings: Settings): strin
 let lastRun: {
   rawField: ScalarField;
   mask: BinaryMask;
-  /** Which pixels the repair invented, so the probe can tell them from the map's own ink. */
-  gapLabels: GapLabels;
-  /** And which the GM painted, so it can tell those from both. */
   paint: PaintLayers;
   labelled: LabelledSpace;
   placement: RasterPlacement;
@@ -369,7 +364,6 @@ let lastRun: {
 let lastReading: {
   rawField: ScalarField;
   mask: BinaryMask;
-  gapLabels: GapLabels;
   paint: PaintLayers;
   pxPerSquare: number;
   name: string;
@@ -388,18 +382,18 @@ let lastReading: {
  */
 export function probeMapFraction(u: number, v: number): string {
   if (lastRun) {
-    const { rawField, mask, labelled, gapLabels, paint, name } = lastRun;
+    const { rawField, mask, labelled, paint, name } = lastRun;
     const line = describePoint(
-      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height, gapLabels, paint),
+      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height, paint),
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
   }
 
   if (lastReading) {
-    const { rawField, mask, gapLabels, paint, name } = lastReading;
+    const { rawField, mask, paint, name } = lastReading;
     const line = describePoint(
-      readPoint(rawField, mask, null, u * mask.width, v * mask.height, gapLabels, paint),
+      readPoint(rawField, mask, null, u * mask.width, v * mask.height, paint),
     );
     devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
     return line;
@@ -418,13 +412,13 @@ export function probeMapFraction(u: number, v: number): string {
 export function probeWorldPoint(x: number, y: number): string {
   if (!lastRun) return "Nothing traced yet in this session — run a trace first, then probe.";
 
-  const { rawField, mask, labelled, gapLabels, placement, name } = lastRun;
+  const { rawField, mask, labelled, paint, placement, name } = lastRun;
   const rasterX =
     placement.unitsPerPixelX === 0 ? 0 : (x - placement.origin.x) / placement.unitsPerPixelX;
   const rasterY =
     placement.unitsPerPixelY === 0 ? 0 : (y - placement.origin.y) / placement.unitsPerPixelY;
 
-  const line = describePoint(readPoint(rawField, mask, labelled, rasterX, rasterY, gapLabels));
+  const line = describePoint(readPoint(rawField, mask, labelled, rasterX, rasterY, paint));
   devLog("info", `probe: world (${x.toFixed(0)}, ${y.toFixed(0)}) on "${name}" — ${line}`);
   return line;
 }
@@ -939,95 +933,38 @@ function composeInk(
     }
   }
 
-  // ## The GM's suppression layer
-  //
-  // Where the global filters are blunt, this is local: the GM can tell meaningless crosshatching
-  // from linework by looking, and no measurement can. It goes in **after** both 1b filters, so what
-  // it acts on is exactly the ink the parameters above produced — which is also what the Ink step
-  // draws, so the two questions stay separable.
-  //
-  // And **before** the break search below, so a repair works on ink the GM has already corrected.
-  // That is the one coupling in an otherwise order-free stack, and it is deliberate: a break the GM
-  // has already dealt with by hand should not also be repaired automatically.
+  /*
+    ## The GM's two layers, composed
+
+    Where the global filters are blunt, these are local: the GM can tell meaningless crosshatching
+    from linework by looking, and no measurement can. Both go in **after** the 1b filters, so what
+    they act on is exactly the ink the parameters above produced — which is also what the Ink step
+    draws, so the two questions stay separable.
+
+    **The order lives in `composePaint` rather than here**, which is what lets a headless test pin
+    it. That became possible on 2026-09-05 when the break repair stopped being a term between the
+    two: while it was derived it had to run in the middle, so the composition could not be one
+    expression. As a tool writing into the added-ink layer it is not part of this at all, and what
+    is left is three independent layers and one function that says how they stack.
+  */
   const suppressLayer = fitPaint(paint.suppress, plan, "suppression");
-  const suppressed = suppressInk(filteredMask, suppressLayer);
+  const inkLayer = fitPaint(paint.ink, plan, "added ink");
+  const fitted = { suppress: suppressLayer, ink: inkLayer };
+  const inkedMask = composePaint(filteredMask, fitted);
+
   if (suppressLayer) {
-    const removed = countInk(filteredMask) - countInk(suppressed);
+    const removed = countInk(filteredMask) - countInk(suppressInk(filteredMask, suppressLayer));
     devLog(
       "info",
       `trace: suppression — ${paintedCount(suppressLayer)} px painted, of which ${removed} were ` +
         `ink and are now ground.`,
     );
   }
-
-  // ## Breaks in the linework, and the repair of the ones the GM asked for
-  //
-  // Runs after the minimum stroke width specifically: part of its job is repairing what that control
-  // severed, so it has to see the damage.
-  //
-  // The fill adds the pixels of **marked** breaks and nothing else — never a blanket closing. A
-  // blanket closing would also seal channels that failed the travel test, the clearest example being
-  // a narrow doorway beside a corner, and it would do so with nothing to see. See `gaps.ts`.
-  //
-  // One width, not two. Finding and repairing were briefly separate controls; a room showed that
-  // channels merge as the radius grows, so the marks are not a stable set to select from. See
-  // `gaps.ts`.
-  const gapStarted = performance.now();
-  const gaps = findGaps(suppressed, {
-    fillPx: settings.trace.gapFillPx,
-    travelPx: settings.trace.gapTravelPx,
-  });
-  const repaired = applyGapFill(suppressed, gaps.labels);
-
-  if (gaps.searchRadius > 0) {
-    devLog(
-      "info",
-      `trace: breaks in ${Math.round(performance.now() - gapStarted)}ms — search radius ` +
-        `${gaps.searchRadius}px found ${gaps.channels} narrow channels, ${gaps.through} passing ` +
-        `through; ${gaps.marks.length} had banks more than ${settings.trace.gapTravelPx}px apart ` +
-        `along the ink and are breaks. Repaired ${gaps.filled} of them, inventing ` +
-        `${gaps.filledArea} px of ink.`,
-    );
-    // The number that says whether the marks are worth reading. A map reporting hundreds is either
-    // drawn with hollow walls or has a reading that is falling apart, and either way the count is
-    // the signal rather than any individual ring.
-    if (gaps.marks.length > 200) {
-      devLog(
-        "warn",
-        `trace: ${gaps.marks.length} breaks is a great many for one map. Two usual causes: walls ` +
-          `drawn as two parallel strokes, whose hollow interiors are all narrow channels, or a ` +
-          `reading that is breaking the linework up. Narrow the largest break to repair, or look ` +
-          `at the ink before trusting the result. The count also moves around as channels merge, ` +
-          `so it is not a tally of distinct faults.`,
-      );
-    }
-    if (gaps.budgetHits > 0) {
-      devLog(
-        "warn",
-        `trace: ${gaps.budgetHits} breaks were marked because the search ran out of budget rather ` +
-          `than because the ink was broken. They are never filled. Lower the same-wall distance.`,
-      );
-    }
-  }
-
-  /*
-    ## The GM's added ink, last of everything
-
-    Last is the whole of its meaning. A line drawn deliberately must survive the stroke-width
-    opening, the island filter and anything else automatic, because the GM drew it *knowing* what
-    those had done — so nothing after this point may take it away.
-
-    It also means added ink is what closes a break the repair did not, which is the alternative the
-    automatic search now has to justify itself against.
-  */
-  const inkLayer = fitPaint(paint.ink, plan, "added ink");
-  const inkedMask = addInk(repaired, inkLayer);
   if (inkLayer) {
-    const added = countInk(inkedMask) - countInk(repaired);
     devLog(
       "info",
-      `trace: added ink — ${paintedCount(inkLayer)} px painted, of which ${added} were not already ` +
-        `ink and are now.`,
+      `trace: added ink — ${paintedCount(inkLayer)} px painted, including anything accepted from ` +
+        `the break search, which writes into this layer like a brush stroke.`,
     );
   }
 
@@ -1048,8 +985,7 @@ function composeInk(
     maskFingerprint: identity,
     base: filteredMask,
     mask: inkedMask,
-    gaps,
-    paint: { suppress: suppressLayer, ink: inkLayer },
+    paint: fitted,
   };
 }
 
@@ -1131,9 +1067,9 @@ export interface MaskForOverlay {
   /**
    * The ink as **read**, before anything was invented — what the surface draws as ink.
    *
-   * Deliberately not the filled mask. The filled pixels are handed over separately in `gaps`, so
-   * they can be drawn in their own colour: `DESIGN.md` §8 requires that invented ink never look
-   * like read ink, and a surface handed only the composite could not tell them apart.
+   * Deliberately not the composite. What the GM's own two layers did is drawn separately in their
+   * own colours: `DESIGN.md` §8 requires that ink this stage did not read never look like ink it
+   * did, and a surface handed only the composite could not tell them apart.
    */
   readonly mask: BinaryMask;
   /**
@@ -1144,8 +1080,6 @@ export interface MaskForOverlay {
    * would show them as two — which is the assertion being thrown away at the point it matters most.
    */
   readonly composed: BinaryMask;
-  /** The breaks found, each carrying whether the fill closed it. */
-  readonly gaps: GapFinding;
   readonly bounds: WorldBounds;
   readonly mapName: string;
   /** The resolved map's id, so the frozen graph can record which map it describes. */
@@ -1240,7 +1174,6 @@ export async function maskForOverlay(
   lastReading = {
     rawField: resolved.stage.rawField,
     mask: resolved.stage.mask,
-    gapLabels: resolved.stage.gaps.labels,
     paint: resolved.stage.paint,
     pxPerSquare: resolved.stage.pxPerSquare,
     name: resolved.stage.name,
@@ -1251,7 +1184,6 @@ export async function maskForOverlay(
     reading: {
       mask: resolved.stage.base,
       composed: resolved.stage.mask,
-      gaps: resolved.stage.gaps,
       bounds: resolved.stage.bounds,
       mapName: resolved.stage.name,
       mapId: map.id,
@@ -1354,7 +1286,6 @@ export async function runTrace(
     rawField,
     reading,
     mask: inkMask,
-    gaps: inkGaps,
     chosenCoverage,
     name: mapName,
     mapId,
@@ -1396,7 +1327,6 @@ export async function runTrace(
   lastRun = {
     rawField,
     mask: inkMask,
-    gapLabels: inkGaps.labels,
     paint: mask.paint,
     labelled,
     placement,

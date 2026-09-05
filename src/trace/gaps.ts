@@ -131,25 +131,20 @@
 import type { BinaryMask } from "./binarize";
 import { closeMask, radiusForWidth } from "./morphology";
 
-/** Nothing here. */
-export const GAP_NONE = 0;
-/** A break that was found but not repaired — the flood ran out of budget, so it is only a guess. */
-export const GAP_OPEN = 1;
-/** A break that was found and repaired — ink this stage invented. */
-export const GAP_FILLED = 2;
+/*
+  `GapLabels` and its three states were here, and are gone (2026-09-05).
 
-/**
- * One value per pixel: `GAP_NONE`, `GAP_OPEN` or `GAP_FILLED`.
- *
- * Three states rather than two masks, because the two sets are disjoint by construction and the
- * surface draws them in one pass. It is also what the pipeline reads to decide which pixels to add
- * to the ink — exactly the `GAP_FILLED` ones.
- */
-export interface GapLabels {
-  readonly width: number;
-  readonly height: number;
-  readonly data: Uint8Array;
-}
+  They were a full-raster array with a value per pixel: the pipeline read it to decide which pixels
+  to add to the ink, and the surface drew it. **Neither reader exists now.** The repair became a tool
+  that writes into the added-ink layer, and what a mark proposes is carried on the mark itself,
+  because accepting is one break at a time and a shared raster cannot say which pixels belong to
+  which mark.
+
+  Deleted rather than kept for the tests, which were its only remaining callers. It is an allocation
+  the size of the whole raster — eight megabytes on this project's test map — and the search now runs
+  again after **every accept**, so keeping a dead one would have meant paying for it forty times on
+  the map this feature exists for.
+*/
 
 /** One break, as the surface needs to draw it. */
 export interface GapMark {
@@ -160,8 +155,26 @@ export interface GapMark {
   readonly span: number;
   /** How many ground pixels the channel holds. */
   readonly area: number;
-  /** Whether the fill closed this one. Decides the ring's colour. */
-  readonly filled: boolean;
+  /**
+   * Whether this one can be accepted, or is only a guess the flood ran out of budget on.
+   *
+   * **Was `filled`, and the rename is the meaning changing rather than tidying.** Nothing is filled
+   * at detection time any more: the search proposes and the GM accepts, so what this says is that
+   * the break was *proved* broken and may be closed. A guess is ringed and never offered.
+   */
+  readonly fillable: boolean;
+  /**
+   * Every ground pixel of this channel, as raster indices.
+   *
+   * Carried per mark because accepting is **one break at a time**. There was a full-raster label
+   * array until 2026-09-05 with a state per pixel, and it could not say which pixels belonged to
+   * which mark — re-deriving one channel from it would have meant flood-filling it, a second
+   * implementation of the channel identity this module already computed, free to drift from it.
+   *
+   * Bounded by what a closing turns from ground to ink, which is small: on the test map's worst
+   * measured settings the whole set is a few thousand pixels across every mark.
+   */
+  readonly pixels: Uint32Array;
 }
 
 export interface GapOptions {
@@ -191,7 +204,6 @@ export interface GapOptions {
 }
 
 export interface GapFinding {
-  readonly labels: GapLabels;
   readonly marks: readonly GapMark[];
   /** The closing radius the search ran at. Zero means the control rounded to nothing, or is off. */
   readonly searchRadius: number;
@@ -199,10 +211,10 @@ export interface GapFinding {
   readonly channels: number;
   /** Of those, how many pass through rather than being a dead end. */
   readonly through: number;
-  /** How many marks were filled. */
-  readonly filled: number;
-  /** How many pixels of ink the fill invented. */
-  readonly filledArea: number;
+  /** How many marks can be accepted, as against ringed guesses. */
+  readonly fillable: number;
+  /** How many pixels of ink accepting all of them would add. */
+  readonly candidateArea: number;
   /** Channels marked because the flood budget ran out rather than because the ink was broken. */
   readonly budgetHits: number;
 }
@@ -227,14 +239,14 @@ export interface GapFinding {
  *   overshoots by at most one frontier expansion. Harmless, and clamped at zero below so that
  *   "exhausted" is a state arrived at deliberately rather than through a negative number.
  * - **Once it is spent, every remaining channel exhausts at depth zero** — the first bank group is at
- *   least one pixel, so the very first check fails. Those channels are marked `GAP_OPEN` and never
+ *   least one pixel, so the very first check fails. Those channels are marked **unproven** and never
  *   filled, without a single step of flood having been walked. So exhaustion does not degrade the
  *   answer gradually; it converts every channel after it into a guess.
  * - **Channel order therefore decides which ones get a real answer.** The scan is raster order, so on
  *   a map that exhausts the budget the top is examined properly and the bottom is guessed, with
  *   nothing in the output saying where the line fell.
  *
- * **This is why the `GAP_OPEN` state is not a candidate for deletion.** The record had it as a state
+ * **This is why the unproven state is not a candidate for deletion.** The record had it as a state
  * never observed, and therefore possibly machinery for a case that does not happen. It is reachable in
  * bulk: a map with hundreds of through-channels at a high travel setting spends 40M and guesses the
  * rest.
@@ -246,20 +258,17 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
   const searchRadius = radiusForWidth(options.fillPx);
 
   const empty: GapFinding = {
-    labels: { width, height, data: new Uint8Array(width * height) },
     marks: [],
     searchRadius,
     channels: 0,
     through: 0,
-    filled: 0,
-    filledArea: 0,
+    fillable: 0,
+    candidateArea: 0,
     budgetHits: 0,
   };
   if (searchRadius <= 0 || width === 0 || height === 0) return empty;
 
   const closed = closeMask(mask, searchRadius);
-
-  const labels = new Uint8Array(width * height);
 
   // Which channel pixels have been claimed already. Ground that the closing left alone is never a
   // candidate, so this doubles as the candidate test.
@@ -270,8 +279,8 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
   const marks: GapMark[] = [];
   let channels = 0;
   let through = 0;
-  let filledCount = 0;
-  let filledArea = 0;
+  let fillableCount = 0;
+  let candidateArea = 0;
   let budgetHits = 0;
   let budget = options.floodBudget ?? FLOOD_BUDGET;
 
@@ -309,50 +318,43 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
     // never *proved* broken, and marking on a guess is a warning where inventing ink on a guess is
     // not. Those carry a mark and no fill, which reads on the surface as a ring with nothing in it.
     const fills = !spent.exhausted;
-    const state = fills ? GAP_FILLED : GAP_OPEN;
-    for (const index of pixels) labels[index] = state;
     if (fills) {
-      filledCount += 1;
-      filledArea += pixels.length;
+      fillableCount += 1;
+      candidateArea += pixels.length;
     }
 
     marks.push(describe(pixels, width, fills));
   }
 
   return {
-    labels: { width, height, data: labels },
     marks,
     searchRadius,
     channels,
     through,
-    filled: filledCount,
-    filledArea,
+    fillable: fillableCount,
+    candidateArea,
     budgetHits,
   };
 }
 
-/**
- * Add the filled breaks to the ink.
- *
- * The whole of what the repair writes. Returns the input untouched when nothing was filled, which
- * is the default and has to stay exactly true — a map whose GM never reaches for the fill must get
- * the same mask it got before this existed.
- */
-export function applyGapFill(mask: BinaryMask, labels: GapLabels): BinaryMask {
-  let filled = 0;
-  for (let i = 0; i < labels.data.length; i++) if (labels.data[i] === GAP_FILLED) filled += 1;
-  if (filled === 0) return mask;
+/*
+  `applyGapFill` was here, and its deletion is the whole of what changed 2026-09-05.
 
-  const out: BinaryMask = {
-    width: mask.width,
-    height: mask.height,
-    data: Uint8Array.from(mask.data),
-  };
-  for (let i = 0; i < labels.data.length; i++) {
-    if (labels.data[i] === GAP_FILLED) out.data[i] = 1;
-  }
-  return out;
-}
+  It added every marked pixel to the ink, inside the pipeline, on every recompose. That made the
+  repair a standing condition rather than an act: once the width was nonzero it re-invented ink for
+  ever, whatever else moved underneath it — which is only *nearly* the rule the default-off setting
+  was chosen to keep.
+
+  What replaces it is a tool. The search proposes, the GM accepts one break or all of them, and what
+  is accepted is written into the **added-ink layer** — so from then on it is paint like any other,
+  with no separate term in the composition and nothing that can re-invent itself.
+
+  The cost is stated rather than argued away: an accepted fill goes stale where this self-corrected.
+  Change the threshold now and a break that closed on its own stops being filled; an accepted one
+  does not, and the direction that matters is a fill left across what has since become an open
+  doorway. It is a stale mark of added ink, visible in that layer's colour, and hand-painted ink
+  already fails the same way — but it is a trade.
+*/
 
 /**
  * Gather one channel and the ink around it.
@@ -543,7 +545,7 @@ function floodFromFirstGroup(
 }
 
 /** Where to draw the mark, how big the thing it is marking is, and whether it was repaired. */
-function describe(pixels: readonly number[], width: number, filled: boolean): GapMark {
+function describe(pixels: readonly number[], width: number, fillable: boolean): GapMark {
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -570,6 +572,8 @@ function describe(pixels: readonly number[], width: number, filled: boolean): Ga
     y: (minY + maxY) / 2,
     span: Math.max(maxX - minX + 1, maxY - minY + 1),
     area,
-    filled,
+    fillable,
+    // Copied, because `findGaps` reuses one array across every channel it walks.
+    pixels: Uint32Array.from(pixels),
   };
 }
