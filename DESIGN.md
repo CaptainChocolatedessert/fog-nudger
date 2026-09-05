@@ -4063,11 +4063,18 @@ are as good as they are going to get.** Every global control has a point past wh
 than it gains, and that point arrives with the map still imperfect. They also survive re-runs by
 being *inputs* rather than outputs, which is what a stage-two hand edit is not.
 
-### Painting — BUILT 2026-09-05, items 4 and 5 above
+### Painting — BUILT and confirmed in a room, 2026-09-05, items 4 and 5 above
 
 The two painting features were built together, on one piece of machinery, and the shape they took is
 different from the one items 4 and 5 describe. Those two sections stand as the *motivation*; this is
 what was decided and made.
+
+**A room confirmed it working on the day it was built, with no defects** — the only feature here to
+manage that first time. What that establishes is narrower than it sounds and is worth stating: the
+mechanism is right and the surface behaves. It says nothing yet about the conventions layered on top
+— a brush width per tool, Shift inverting the verb, and Done beside Discard and Clear — which are
+decisions taken during the build rather than asked for, and which only a session of real correction
+can judge.
 
 #### Three stages, each making a layer — the user's framing, 2026-09-05
 
