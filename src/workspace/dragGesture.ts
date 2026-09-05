@@ -25,7 +25,13 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { documentPoint, type FrozenGraph } from "../trace/frozenGraph";
-import { mergeNodes, moveNode, nearestNode, type EditResult } from "../trace/planarOps";
+import {
+  insertEdge,
+  mergeNodes,
+  moveNode,
+  nearestNode,
+  type EditResult,
+} from "../trace/planarOps";
 
 /** A vertex under the cursor, and where it sits relative to it. */
 export interface Grab {
@@ -129,4 +135,70 @@ export function describeEdit(merged: boolean, splits: number, overlaps: number):
     notes.push(`${overlaps} wall${overlaps === 1 ? " lies" : "s lie"} along another`);
   }
   return notes.length === 0 ? head : `${head} · ${notes.join(" · ")}`;
+}
+
+/**
+ * One end of a wall being drawn: where it would land, and what it would attach to.
+ *
+ * `onNode` is the whole reason drawing needs snapping at all. A wall that merely *ends* where
+ * another begins is two coincident points that agree until one of them moves; a wall that shares a
+ * node **is** joined, permanently, which is what closing a break in the linework has to mean. So the
+ * tool snaps by default and the layer marks it, exactly as the vertex drag does.
+ */
+export interface DrawPoint {
+  readonly at: Vector2;
+  /** The existing vertex it would attach to, or `null` for a new one. */
+  readonly onNode: number | null;
+}
+
+/**
+ * Where one end of a new wall lands, snapped to a nearby vertex unless suppressed.
+ *
+ * The snapped position is the target's own coordinate rather than something near it, which is what
+ * lets `insertEdge` recognise the attachment: it matches vertices by **exact** coordinate and never
+ * by proximity, precisely so that "close enough to join" is decided here, once, where the GM is
+ * shown it happening.
+ */
+export function drawPoint(
+  graph: FrozenGraph,
+  u: number,
+  v: number,
+  snapRadius: number,
+  suppressSnap: boolean,
+): DrawPoint {
+  const onNode = suppressSnap ? null : nearestNode(graph, { x: u, y: v }, snapRadius);
+  if (onNode === null) return { at: documentPoint(u, v), onNode: null };
+  return { at: graph.nodes[onNode]!, onNode };
+}
+
+/**
+ * Add the wall, or `null` if there is no wall to add.
+ *
+ * `null` covers both ways of drawing nothing, **with one test rather than two**: two ends on one
+ * spot, and two ends snapped to the same existing vertex. The second looks like it needs a check of
+ * its own and does not — snapping reports the target's own coordinate, so two ends on one vertex are
+ * two ends on one spot, and a separate id comparison was a branch nothing could reach past this.
+ *
+ * A zero-length segment has no direction, so nothing could sort it into a rotation and the face
+ * traversal could not use it. The freeze drops them for the same reason.
+ */
+export function applyDraw(graph: FrozenGraph, from: DrawPoint, to: DrawPoint): EditResult | null {
+  if (from.at.x === to.at.x && from.at.y === to.at.y) return null;
+  return insertEdge(graph, [from.at, to.at]);
+}
+
+/**
+ * What the wall tools did, in the GM's terms.
+ *
+ * Separate from `describeEdit` rather than folded into it: that one is about moving a point and this
+ * one is about walls appearing and disappearing, and a single function taking a verb enum would read
+ * as one thing happening in four ways when it is four things.
+ */
+export function describeDraw(splits: number, overlaps: number): string {
+  const notes: string[] = [];
+  if (splits > 0) notes.push(`split ${splits} wall${splits === 1 ? "" : "s"} at the crossing`);
+  if (overlaps > 0) {
+    notes.push(`${overlaps} wall${overlaps === 1 ? " lies" : "s lie"} along another`);
+  }
+  return notes.length === 0 ? "drew a wall" : `drew a wall · ${notes.join(" · ")}`;
 }

@@ -3498,6 +3498,38 @@ re-derived, as decided.
 failure leaves the GM with the graph they had rather than one the scene does not agree with. Losing a
 single drag is the safe direction against editing for an hour against something unsaved.
 
+#### Three verbs, so the step grew a tool — BUILT 2026-09-05
+
+**A drag can only mean one thing, and stage two has three things to do with one.** Moving a point,
+drawing a wall and erasing a wall cannot all be a press, so the Edit walls step carries a picker:
+Move, Draw, Erase, sticky, Move by default.
+
+**A step is still the mode; the tool says which verb within it** (user, 2026-09-05). The alternative
+was gestures with no visible tool — a right-click to delete, a modifier to draw — and it was rejected
+for two reasons: it puts a destructive action on an unannounced single click, and it leaves both
+verbs undiscoverable on a surface that already says nothing about being interactive.
+
+**Two of the three still decide by looking.** Move takes a press only when there is a vertex under
+it, erase only when there is a wall, so a plain drag on empty map still pans. Draw is the exception
+and takes every press, because a wall must be able to start on empty ground; Ctrl pans regardless.
+That is the "brush" case the shell was written to expect.
+
+**Drawing snaps at both ends, and that is the point of it rather than a convenience.** A wall that
+merely ends where another begins is two coincident points that agree until one of them moves; a wall
+that shares a vertex is joined permanently. Closing a break in the linework means the second, so
+attaching ends are marked differently from loose ones while the wall is still being drawn. This is
+also the gesture expected to shrink step F: a GM pointing at two ends is a better answer than a
+threshold guessing which ends belong together.
+
+**Erasing removes one segment rather than the whole wall** (user, 2026-09-05). The cost is real and
+is stated in the interface rather than left to be discovered — a long wall drawn as many segments
+takes a click each. What it buys is that punching a doorway through a room's boundary, which is a
+thing GMs will want, is an ordinary click rather than a modifier on a destructive action.
+
+**Escape belongs to the tool before it belongs to the surface.** Abandoning a half-drawn wall must
+not also close the workspace, because closing pushes to the scene — one keystroke would mean two
+things, and the second cannot be taken back.
+
 #### Putting stage two on the map — BUILT 2026-09-05
 
 **The push traced unconditionally until now, which made stage two unusable end to end.** A GM could

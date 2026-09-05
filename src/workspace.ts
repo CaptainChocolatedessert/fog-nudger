@@ -55,6 +55,7 @@ import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleto
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { registerWallEdit } from "./workspace/wallEdit";
+import { renderWallTools } from "./workspace/wallTools";
 import { renderFreezeAction } from "./workspace/freezeAction";
 import { onStageChange } from "./workspace/stage";
 import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
@@ -128,6 +129,8 @@ registerStepContent("ink", renderSwatches);
   from inside it: in stage one the step has nothing in it and the button is what puts something
   there, and in stage two it is the way back out. A door at the boundary rather than one room away.
 */
+// What you do with the walls, above the way out of the step that holds them.
+registerStepContent("edit", renderWallTools);
 registerStepContent("edit", renderFreezeAction, "bottom");
 // Pushing stays with the partition, which is the thing it writes and the thing being judged.
 registerStepContent("regions", renderPushAction, "bottom");

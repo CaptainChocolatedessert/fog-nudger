@@ -278,6 +278,72 @@ export function mergeNodes(graph: FrozenGraph, from: number, into: number): Edit
 }
 
 /**
+ * Delete one wall.
+ *
+ * **No sweep, because deleting cannot break planarity** — the same argument sliver removal already
+ * rests on. Taking a segment away moves no point and creates no crossing, so a graph that was planar
+ * before still is, and the crossing machinery has nothing to do.
+ *
+ * **The vertices are left behind, even when nothing else uses them.** That matches what merging
+ * does, and for the same reason: ids are the only stable identity this document has, and renumbering
+ * to close a gap invalidates every one the caller is holding. A vertex with no walls draws no handle,
+ * so it costs eight bytes and nothing else.
+ *
+ * Out of range is a no-op rather than a throw, like every other edit here: an edit that cannot be
+ * made must leave the GM exactly where they were.
+ */
+export function removeEdge(graph: FrozenGraph, index: number): EditResult {
+  if (index < 0 || index >= graph.edges.length) return { graph, splits: 0, overlaps: 0 };
+  return {
+    graph: {
+      nodes: graph.nodes,
+      edges: graph.edges.filter((_, at) => at !== index),
+    },
+    splits: 0,
+    overlaps: 0,
+  };
+}
+
+/**
+ * The nearest wall within `radius` of a point, or `null` — the erase tool's query.
+ *
+ * Distance to the *segment*, not to its ends: a GM aims at the middle of a wall, which is the part
+ * furthest from every vertex. `nearestNode` is the other half of the pair and they are deliberately
+ * separate — a press near a corner should take the corner, and the tool asks in that order.
+ *
+ * Ties go to the lower index, for the reason `nearestNode` gives: two walls the same distance away
+ * are indistinguishable to the GM, and an arbitrary-but-repeatable answer beats one that changes
+ * between frames while they hold still.
+ */
+export function nearestEdge(graph: FrozenGraph, point: Vector2, radius: number): number | null {
+  let best: number | null = null;
+  let bestDistance = radius * radius;
+
+  for (let index = 0; index < graph.edges.length; index++) {
+    const edge = graph.edges[index]!;
+    const from = graph.nodes[edge.a];
+    const to = graph.nodes[edge.b];
+    if (!from || !to) continue;
+
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const span = dx * dx + dy * dy;
+    // A wall of no length has no interior to be near; its ends are `nearestNode`'s business.
+    const along = span > 0 ? ((point.x - from.x) * dx + (point.y - from.y) * dy) / span : 0;
+    const clamped = along < 0 ? 0 : along > 1 ? 1 : along;
+    const offX = point.x - (from.x + clamped * dx);
+    const offY = point.y - (from.y + clamped * dy);
+    const distance = offX * offX + offY * offY;
+
+    if (distance <= bestDistance && (best === null || distance < bestDistance)) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/**
  * The nearest vertex within `radius`, or `null`.
  *
  * The snapping query. It lives here so it can be tested, but **the decision is still the tool's**: it

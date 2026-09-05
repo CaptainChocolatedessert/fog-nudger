@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { documentPoint, nodeDegrees, type FrozenGraph } from "../trace/frozenGraph";
-import { applyDrag, describeEdit, dragTo, grabAt } from "./dragGesture";
+import {
+  applyDraw,
+  applyDrag,
+  describeDraw,
+  describeEdit,
+  dragTo,
+  drawPoint,
+  grabAt,
+} from "./dragGesture";
+import { nearestEdge, removeEdge } from "../trace/planarOps";
 
 function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): FrozenGraph {
   return {
@@ -183,5 +192,120 @@ describe("saying what happened", () => {
     expect(describeEdit(false, 2, 0)).toBe("moved a point · split 2 walls at the crossing");
     expect(describeEdit(true, 0, 1)).toBe("joined two points · 1 wall lies along another");
     expect(describeEdit(true, 0, 3)).toBe("joined two points · 3 walls lie along another");
+  });
+});
+
+describe("drawing a wall", () => {
+  it("attaches an end to a vertex it lands near, by that vertex's own coordinate", () => {
+    const end = drawPoint(CORNER, 0.505, 0.205, NEAR, false);
+
+    // The exact coordinate matters and is not a nicety: `insertEdge` reuses a vertex only on an
+    // exact match, so a point merely *near* the corner would make a second one on top of it.
+    expect(end.onNode).toBe(1);
+    expect(end.at).toEqual(CORNER.nodes[1]);
+  });
+
+  it("leaves an end loose where there is nothing near it, and where the modifier is held", () => {
+    expect(drawPoint(CORNER, 0.35, 0.4, NEAR, false).onNode).toBeNull();
+
+    const suppressed = drawPoint(CORNER, 0.505, 0.205, NEAR, true);
+    expect(suppressed.onNode).toBeNull();
+    expect(suppressed.at).toEqual(documentPoint(0.505, 0.205));
+  });
+
+  it("joins two existing vertices into one piece of linework, which is how a break closes", () => {
+    // Two separate walls whose loose ends face each other across a gap.
+    const broken = graphOf(
+      [
+        [0.1, 0.5],
+        [0.4, 0.5],
+        [0.6, 0.5],
+        [0.9, 0.5],
+      ],
+      [
+        [0, 1],
+        [2, 3],
+      ],
+    );
+    const from = drawPoint(broken, 0.401, 0.5, NEAR, false);
+    const to = drawPoint(broken, 0.599, 0.5, NEAR, false);
+    const result = applyDraw(broken, from, to)!;
+
+    expect(from.onNode).toBe(1);
+    expect(to.onNode).toBe(2);
+    // No new vertices: the new wall runs between the two that were already there.
+    expect(result.graph.nodes).toHaveLength(4);
+    expect(result.graph.edges).toHaveLength(3);
+    expect(nodeDegrees(result.graph)).toEqual([1, 2, 2, 1]);
+  });
+
+  it("splits whatever the new wall crosses, so the graph stays one a traversal can read", () => {
+    const crossed = graphOf(
+      [
+        [0.5, 0.1],
+        [0.5, 0.9],
+      ],
+      [[0, 1]],
+    );
+    const from = drawPoint(crossed, 0.1, 0.5, NEAR, false);
+    const to = drawPoint(crossed, 0.9, 0.5, NEAR, false);
+    const result = applyDraw(crossed, from, to)!;
+
+    expect(result.splits).toBe(1);
+    expect(describeDraw(result.splits, result.overlaps)).toBe(
+      "drew a wall · split 1 wall at the crossing",
+    );
+    // The crossing is a real vertex now, met by four walls rather than passed through by two.
+    const meeting = result.graph.nodes.findIndex((n) => n.x === documentPoint(0.5, 0.5).x && n.y === documentPoint(0.5, 0.5).y);
+    expect(nodeDegrees(result.graph)[meeting]).toBe(4);
+  });
+
+  it("adds nothing when both ends are the same place", () => {
+    const loose = drawPoint(CORNER, 0.35, 0.4, NEAR, false);
+    expect(applyDraw(CORNER, loose, loose)).toBeNull();
+
+    // And when both ends snapped to the same existing vertex, which looks different and is not.
+    const onNode = drawPoint(CORNER, 0.5, 0.2, NEAR, false);
+    expect(applyDraw(CORNER, onNode, { ...onNode })).toBeNull();
+  });
+
+  it("says what it drew, and stays quiet when there is nothing to add", () => {
+    expect(describeDraw(0, 0)).toBe("drew a wall");
+    expect(describeDraw(2, 0)).toBe("drew a wall · split 2 walls at the crossing");
+    expect(describeDraw(0, 1)).toBe("drew a wall · 1 wall lies along another");
+  });
+});
+
+describe("erasing a wall", () => {
+  it("finds the wall under the pointer by distance to the segment, not to its ends", () => {
+    // The middle of the first wall, which is the part furthest from either of its vertices.
+    expect(nearestEdge(CORNER, { x: 0.35, y: 0.2 }, NEAR)).toBe(0);
+    expect(nearestEdge(CORNER, { x: 0.5, y: 0.35 }, NEAR)).toBe(1);
+  });
+
+  it("finds nothing out in the open, so a press there can still pan", () => {
+    expect(nearestEdge(CORNER, { x: 0.3, y: 0.4 }, NEAR)).toBeNull();
+  });
+
+  it("removes one wall and leaves its vertices, since ids are the only stable identity", () => {
+    const result = removeEdge(CORNER, 0);
+
+    expect(result.graph.edges).toHaveLength(1);
+    expect(result.graph.edges[0]).toEqual({ a: 1, b: 2 });
+    // Node 0 now has no walls. It stays, because renumbering would invalidate every id held
+    // elsewhere — and a vertex with no walls draws no handle.
+    expect(result.graph.nodes).toHaveLength(4);
+    expect(nodeDegrees(result.graph)[0]).toBe(0);
+  });
+
+  it("cannot break planarity, so it reports no splits and sweeps nothing", () => {
+    const result = removeEdge(CORNER, 0);
+
+    expect(result.splits).toBe(0);
+    expect(result.overlaps).toBe(0);
+  });
+
+  it("leaves the graph alone when asked for a wall that is not there", () => {
+    expect(removeEdge(CORNER, 7).graph).toBe(CORNER);
   });
 });

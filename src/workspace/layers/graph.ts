@@ -31,7 +31,7 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { nodeDegrees, type FrozenGraph } from "../../trace/frozenGraph";
 import { addPainter, type Painter } from "../shell";
 import { frozenGraph } from "../stage";
-import { draggedNode, hoveredNode, snapTarget } from "../wallEdit";
+import { draggedNode, hoveredNode, hoveredWall, pendingWall, snapTarget } from "../wallEdit";
 
 /** Kept distinct from the wall lines' red and from the six proposal colours. */
 const WALL_COLOUR = "#2b6bff";
@@ -50,13 +50,25 @@ const HANDLE_RADIUS = 3;
  * or pans, and without this the GM finds out which by doing it. **Moving** marks the one point the
  * gesture is carrying. **Joining** is the one §8 actually demands — a merge is not undoable and the
  * boundary has to be visible *before* it is crossed, so the target changes colour and grows while
- * there is still a chance to move away or hold ALT.
+ * there is still a chance to move away or hold Shift.
  */
 const HOVER_RADIUS = 5;
 const ACTIVE_FILL = "#ffcc00";
 const MERGE_FILL = "#00e06a";
 const ACTIVE_RIM = "#20242c";
 const MERGE_RADIUS = 6;
+
+/**
+ * The wall about to be erased, and the wall about to be drawn.
+ *
+ * Both are the §8 rule doing the same job in two places: an erase cannot be undone and a drawn wall
+ * changes which rooms exist, so what is about to happen is on screen before the click that does it.
+ * Red for the one that removes and green for the one that adds, which is the only pair of meanings
+ * on this canvas that a colour can carry without being learned.
+ */
+const ERASE_COLOUR = "#ff3b30";
+const ERASE_WIDTH_PX = 5;
+const DRAW_COLOUR = "#00e06a";
 
 /**
  * Past this many handles *on screen*, none are drawn.
@@ -118,6 +130,45 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   context.strokeStyle = WALL_COLOUR;
   context.lineWidth = WALL_WIDTH_PX;
   context.stroke();
+
+  // The wall a click would erase, marked before it goes rather than reported after.
+  const erasing = hoveredWall();
+  if (erasing !== null) {
+    const edge = graph.edges[erasing];
+    const from = edge ? at(edge.a) : undefined;
+    const to = edge ? at(edge.b) : undefined;
+    if (from && to) {
+      context.beginPath();
+      context.moveTo(x(from.x), y(from.y));
+      context.lineTo(x(to.x), y(to.y));
+      context.strokeStyle = ERASE_COLOUR;
+      context.lineWidth = ERASE_WIDTH_PX;
+      context.stroke();
+    }
+  }
+
+  /*
+    The wall being drawn, following the cursor.
+
+    Dashed, because it is the one line on this canvas that is not there yet — every other stroke
+    describes something the document already holds, and a solid rubber band would claim the same
+    standing as a wall that exists.
+  */
+  const pending = pendingWall();
+  if (pending) {
+    context.save();
+    context.setLineDash([6, 4]);
+    context.beginPath();
+    context.moveTo(x(pending.from.at.x), y(pending.from.at.y));
+    context.lineTo(x(pending.to.at.x), y(pending.to.at.y));
+    context.strokeStyle = WALL_CASING;
+    context.lineWidth = WALL_WIDTH_PX + 2;
+    context.stroke();
+    context.strokeStyle = DRAW_COLOUR;
+    context.lineWidth = WALL_WIDTH_PX;
+    context.stroke();
+    context.restore();
+  }
 
   // The walls the gesture is carrying, over the rest, so what is moving is never in doubt.
   if (dragged !== null) {
@@ -213,6 +264,27 @@ function paintHandles(
   if (snap !== null) {
     const point = graph.nodes[snap];
     if (point) dot(x(point.x), y(point.y), MERGE_RADIUS, MERGE_FILL, ACTIVE_RIM);
+  }
+
+  /*
+    Either end of a wall being drawn, marked green where it would **attach**.
+
+    Attaching is the whole difference between a wall that closes a break and one that merely ends
+    near it — a shared vertex is joined for ever, two coincident points agree until one moves. So the
+    two states are drawn differently rather than left for the GM to infer from the position.
+  */
+  const pending = pendingWall();
+  if (pending) {
+    for (const point of [pending.from, pending.to]) {
+      const attaching = point.onNode !== null;
+      dot(
+        x(point.at.x),
+        y(point.at.y),
+        attaching ? MERGE_RADIUS : HOVER_RADIUS,
+        attaching ? MERGE_FILL : ACTIVE_FILL,
+        ACTIVE_RIM,
+      );
+    }
   }
 }
 

@@ -403,6 +403,14 @@ export interface MapDragHandler {
   readonly cancel: () => void;
   /** Where the pointer is while no gesture is running; `null` when it leaves the map or the canvas. */
   readonly hover?: (point: MapPoint | null) => void;
+  /**
+   * Abandon anything half-done, and say whether there was anything to abandon.
+   *
+   * Asked before Escape closes the surface and before a right-click is swallowed. Returning true
+   * means the key or the click was *used* — which is what stops Escape throwing away a half-drawn
+   * wall and the workspace with it, in one keystroke that only meant the first.
+   */
+  readonly escape?: () => boolean;
 }
 
 let dragHandler: MapDragHandler | null = null;
@@ -463,6 +471,9 @@ if (canvas instanceof HTMLCanvasElement) {
   // and the workspace did not inherit it.
   canvas.addEventListener("contextmenu", (event) => {
     event.preventDefault();
+    // The gesture most drawing tools use for "not that one". Suppressing the menu was already
+    // required; giving the press a meaning costs nothing and saves reaching for the keyboard.
+    if (drag === "edit") dragHandler?.escape?.();
   });
 
   canvas.addEventListener("pointerdown", (event) => {
@@ -785,10 +796,17 @@ document.getElementById("toggle-panel")?.addEventListener("click", (event) => {
   dirty = true;
 });
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    void close();
-  }
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  /*
+    The step's tool gets the key first, and only when it does not want it does the sheet close.
+
+    One keystroke must not mean two things. A GM half way through drawing a wall presses Escape to
+    abandon the wall, and closing the workspace as well would be a surprise they cannot undo — the
+    close pushes to the scene.
+  */
+  if (drag === "edit" && dragHandler?.escape?.()) return;
+  void close();
 });
 
 /**
