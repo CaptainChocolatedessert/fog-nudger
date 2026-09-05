@@ -3498,6 +3498,36 @@ re-derived, as decided.
 failure leaves the GM with the graph they had rather than one the scene does not agree with. Losing a
 single drag is the safe direction against editing for an hour against something unsaved.
 
+#### Putting stage two on the map — BUILT 2026-09-05
+
+**The push traced unconditionally until now, which made stage two unusable end to end.** A GM could
+edit their walls all evening and the scene would receive the rooms as read from the map. The second
+half of the same defect was quieter: the "has anything changed?" fingerprint was the map plus the
+settings, and a vertex drag changes neither, so closing after an edit could decide there was nothing
+to push at all.
+
+**The frozen graph is a second *source*, not a second emit path.** The deletion order, the batching,
+the rate limiting, the stop, the provenance and the item shapes are all the existing ones — that is
+where this project's hard-won scene behaviour lives, and a parallel route into the scene would be a
+second implementation of it, drifting until a room disagreed with a preview.
+
+**Placement reuses the raster's own transform at a raster of one by one.** A frozen graph is stored
+in fractions of the map, and `createPlacement` maps a raster linearly onto the map's world box — so a
+1×1 raster *is* fraction space. That is worth more than the arithmetic it saves: the placement path
+carries per-axis scaling and a stated position on rotation, and a separate "fractions to world"
+routine would be a second opinion about both. The workspace's partition layer already leans on the
+same identity.
+
+**Which stage it is in is the caller's question, not the emit path's.** The graph is handed in. Emit
+has no business knowing about a workspace's stage holder, and a push driven from the panel could not
+answer it.
+
+**An oversized face is skipped and named, never simplified.** Stage one meets the command cap by
+smoothing harder and refitting everything; stage two must not, because the vertices are the GM's and
+moving them to fit a transport limit would be editing their work in order to make it sendable. This
+should not arise — the freeze stores the escalated fitted set, so what fitted at the freeze still
+fits — but it is handled rather than assumed away.
+
 #### Simplification can close a room up, and the freeze drops what is left — 2026-09-05
 
 **Found in the first stage-two room run, by the check rather than by eye.** The traversal reported

@@ -31,6 +31,11 @@ import { devLog } from "../devlog";
 import { describeError, isRateLimited } from "../describeError";
 import { PathOp, type PathCommandLike } from "../geometry/ring";
 import { runTrace } from "../pipeline";
+import { readGridDpi, readMapBounds, resolveTraceMap } from "../map/mapImage";
+import type { Point } from "../map/placement";
+import { describeFrozenFaces } from "../trace/frozenFaces";
+import type { FrozenGraph } from "../trace/frozenGraph";
+import { frozenEmission } from "./frozenEmission";
 import {
   ACCEPTED_FILL_OPACITY,
   ACCEPTED_STROKE_WIDTH,
@@ -41,6 +46,7 @@ import {
   stageShapes,
   totalCommands,
   type FogShapeSpec,
+  type StageableRegion,
 } from "./fogShapes";
 import {
   ACCEPTED_WALL_STROKE,
@@ -158,20 +164,86 @@ export function requestPushStop(): void {
  * *If a push is ever seen to flash the map visible, that premise is wrong and inverting the order is
  * the whole of the fix.*
  */
-export async function pushToFog(fingerprint?: string): Promise<string> {
+/**
+ * What a push is made of, from whichever of the two sources produced it.
+ *
+ * **Stage two has to emit the GM's graph, not the map** — the whole point of the freeze is that the
+ * map stops being what the rooms are made of. So the *source* varies and nothing downstream does:
+ * the deletion order, the batching, the provenance, the rate limiting and the stop are the same
+ * apparatus either way, and they are where this file's hard-won behaviour lives.
+ *
+ * The caller passes the graph rather than this file asking which stage it is in. The emit path has
+ * no business knowing about a workspace's stage holder, and a push driven from the panel would have
+ * no way to answer.
+ */
+interface PushSource {
+  readonly mapId: string;
+  readonly regions: readonly StageableRegion[];
+  readonly walls: readonly { readonly edge: number; readonly points: readonly Point[] }[];
+  /** One line for the log, saying which source produced this and what it found. */
+  readonly note: string;
+  /** What the GM is told the push was made from, before the counts of what reached the scene. */
+  readonly summary: string;
+}
+
+async function frozenSource(graph: FrozenGraph): Promise<PushSource | string> {
+  const map = await resolveTraceMap();
+  if (!map) return "No map is nominated — nothing to put on the map.";
+  const [bounds, dpi] = await Promise.all([readMapBounds(map), readGridDpi()]);
+  const emission = frozenEmission(graph, bounds, dpi);
+
+  const check = emission.faces.eulerHolds
+    ? "check holds"
+    : "CHECK FAILED — the graph is not a valid embedding, see the lines above";
+  if (!emission.faces.eulerHolds) devLog("warn", `emit: ${describeFrozenFaces(emission.faces)}`);
+
+  return {
+    mapId: map.id,
+    regions: emission.regions,
+    walls: emission.walls,
+    note:
+      `emit: from the frozen graph — ${emission.regions.length} rooms, ` +
+      `${emission.walls.length} wall lines, ${check}`,
+    // Says *which* of the two sources this came from, because in stage two a GM has every reason
+    // to want it confirmed that what went out was their editing rather than a fresh read.
+    summary: emission.faces.eulerHolds
+      ? `Put your edited walls on the map`
+      : `Put your edited walls on the map — but the graph failed its check, see dev.log`,
+  };
+}
+
+export async function pushToFog(
+  fingerprint?: string,
+  /** The GM's edited graph. Present in stage two, and it replaces the trace as the source. */
+  frozen?: FrozenGraph,
+): Promise<string> {
   // Cleared here rather than by the caller: a stop belongs to one push, and a request that arrived
   // while nothing was running must not silently abort the next one.
   stopRequested = false;
   if (!(await OBR.scene.isReady())) return "No scene open — nothing to trace.";
 
-  const outcome = await runTrace();
-  if (!outcome.ok) return outcome.message;
-  const { run } = outcome;
+  let source: PushSource;
+  if (frozen) {
+    const built = await frozenSource(frozen);
+    if (typeof built === "string") return built;
+    source = built;
+  } else {
+    const outcome = await runTrace();
+    if (!outcome.ok) return outcome.message;
+    source = {
+      mapId: outcome.run.mapId,
+      regions: outcome.run.regions,
+      walls: outcome.run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed })),
+      note: `emit: from the map — ${outcome.run.regions.length} regions`,
+      summary: outcome.run.summary,
+    };
+  }
+  devLog("info", source.note);
 
   const runId = new Date().toISOString();
-  const { shapes, skipped } = stageShapes(run.regions, {
+  const { shapes, skipped } = stageShapes(source.regions, {
     run: runId,
-    mapId: run.mapId,
+    mapId: source.mapId,
     // The values an emitted shape must carry, not a review preference. Full opacity or revealed
     // ground keeps a tint of the fog colour; no outline or Dynamic Fog offsets its walls by half of
     // one either side of the boundary. Both are explained where they are declared.
@@ -189,10 +261,12 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
   }
 
   const fogColour = await OBR.scene.fog.getColor();
-  const { lines, dropped } = stageWallLines(
-    run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed })),
-    { run: runId, mapId: run.mapId, colour: fogColour, strokeWidth: ACCEPTED_WALL_STROKE },
-  );
+  const { lines, dropped } = stageWallLines(source.walls, {
+    run: runId,
+    mapId: source.mapId,
+    colour: fogColour,
+    strokeWidth: ACCEPTED_WALL_STROKE,
+  });
   if (dropped > 0) {
     devLog("warn", `emit: dropped ${dropped} zero-length wall segments — nothing to select there`);
   }
@@ -322,7 +396,7 @@ export async function pushToFog(fingerprint?: string): Promise<string> {
   lastPushed = fingerprint ?? null;
   devLog("info", `emit: pushed ${written} shapes and ${walls} wall segments onto the FOG layer`);
   return (
-    `${run.summary}. On the map: ${written} regions` +
+    `${source.summary}. On the map: ${written} regions` +
     (walls > 0 ? ` and ${walls} wall segments` : "") +
     (skipped.length > 0 ? `, skipped ${skipped.length} over the cap` : "") +
     `.`

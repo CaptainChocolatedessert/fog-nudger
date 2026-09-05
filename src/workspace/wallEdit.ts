@@ -109,7 +109,19 @@ function end(): void {
   const landed = state;
   grab = null;
   state = null;
-  setGrabTarget(false);
+  /*
+    The pointer has not moved, so whatever was under it still is.
+
+    Clearing the hint here was wrong and a room caught it: release a vertex — or press and release
+    without moving at all — and the cursor fell back to the hand while still sitting on the handle,
+    until the next mouse movement put it right. A release ends the gesture, not the hovering.
+
+    Which vertex is under the cursor afterwards is known without asking: a plain move leaves the one
+    that was dragged there, and a merge leaves the one it was folded into. Both are within a grab
+    radius of the cursor by construction, and the next pointer movement re-tests properly anyway.
+  */
+  hovered = held && landed ? landed.snapTo ?? held.id : null;
+  setGrabTarget(hovered !== null);
   invalidate();
   if (!held || !landed || !graph) return;
 

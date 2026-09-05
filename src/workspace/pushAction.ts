@@ -16,13 +16,25 @@
  * scene. A fingerprint of the map and the settings that produced the result decides, and it is held
  * in memory: losing it means pushing once more than necessary, which is the safe direction.
  *
- * ## It re-runs the trace rather than emitting what is on screen
+ * ## It re-derives rather than emitting what is on screen
  *
  * The preview holds region rings and could be turned into shapes here. It must not be: the emit path
  * has rules of its own — the command cap, the batching, the provenance stamped into each item — and
  * a second route into the scene would be a second implementation of them, drifting quietly until a
- * room disagreed with a preview. `pushToFog` runs the same `runTrace` the preview ran, against a
- * mask that is still cached, so the cost is the deriving half rather than a fresh read.
+ * room disagreed with a preview. In stage one `pushToFog` runs the same `runTrace` the preview ran,
+ * against a mask that is still cached, so the cost is the deriving half rather than a fresh read.
+ *
+ * ## In stage two it emits the GM's graph, and this is where that is decided
+ *
+ * **The push traced unconditionally until 2026-09-05, which made stage two unusable end to end**: a
+ * GM could edit their walls all evening and the scene would receive the rooms as read from the map.
+ * The frozen graph is handed to `pushToFog` from here, because the emit path has no business knowing
+ * what stage a workspace is in — and a push driven from the panel could not answer that anyway.
+ *
+ * **The fingerprint has to know about it too**, and that was the second half of the same defect: it
+ * was the map plus the settings, neither of which a vertex drag changes, so closing after an edit
+ * could decide there was nothing to push. The encoded graph goes into it — the whole string, because
+ * this is a comparison rather than a store, and a hash would be a second thing that can collide.
  *
  * ## The settings are written first, and awaited
  *
@@ -35,6 +47,8 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { pushToFog, pushWouldChange } from "../emit/emitRegions";
 import { readNominatedMapId } from "../map/mapImage";
+import { encodeFrozenGraph } from "../trace/frozenGraph";
+import { frozenGraph } from "./stage";
 import { controlsLive } from "./settingRows";
 import { currentSettings, persistSettings } from "./settingsState";
 import { say } from "./shell";
@@ -48,7 +62,11 @@ import { say } from "./shell";
  */
 async function fingerprint(): Promise<string> {
   const map = await readNominatedMapId();
-  return `${map ?? "none"}|${JSON.stringify(currentSettings())}`;
+  const graph = frozenGraph();
+  // In stage two the settings no longer decide the geometry, so on their own they would report an
+  // evening of editing as "nothing changed".
+  const edits = graph ? encodeFrozenGraph(graph) : "";
+  return `${map ?? "none"}|${JSON.stringify(currentSettings())}|${edits}`;
 }
 
 /**
@@ -74,7 +92,7 @@ export async function pushOnClose(): Promise<void> {
   say("putting it on the map…", "working");
   try {
     await persistSettings();
-    const message = await pushToFog(mark);
+    const message = await pushToFog(mark, frozenGraph() ?? undefined);
     devLog("info", `workspace: pushed on close — ${message}`);
   } catch (error) {
     // Never rethrow: the way out of an opaque full-screen sheet cannot depend on a scene write. The
@@ -100,8 +118,9 @@ export function renderPushAction(body: HTMLElement): void {
   const note = document.createElement("p");
   note.className = "sub";
   note.textContent =
-    "Replaces what we put in the scene before with what is on screen now. Closing the workspace " +
-    "does the same thing, so this is only needed to update the table without stopping work.";
+    "Replaces what we put in the scene before with what is on screen now — your edited walls once " +
+    "the graph is generated, and what the map reads before that. Closing the workspace does the " +
+    "same thing, so this is only needed to update the table without stopping work.";
 
   button.addEventListener("click", () => {
     // Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for
@@ -110,7 +129,7 @@ export function renderPushAction(body: HTMLElement): void {
     say("putting it on the map…", "working");
     void persistSettings()
       .then(fingerprint)
-      .then((mark) => pushToFog(mark))
+      .then((mark) => pushToFog(mark, frozenGraph() ?? undefined))
       .then((message) => say(message))
       .catch((error: unknown) => {
         const detail = describeError(error);
