@@ -419,6 +419,7 @@ function hover(point: MapPoint | null): void {
     // legible: the wall being drawn is on screen the whole time rather than only while a button is
     // held. With nothing started, the same point is what a press would place.
     if (anchor) reach = landed;
+    const attachedBefore = drawHover?.onNode ?? null;
     drawHover = landed;
     /*
       Always, because in this tool a press always draws.
@@ -429,7 +430,14 @@ function hover(point: MapPoint | null): void {
       this point, a hand means the surface moves.
     */
     setGrabTarget(true);
-    invalidate();
+    /*
+      Only when the picture would differ, which with nothing started is only when the attach target
+      changes.
+
+      Repainting on every mouse movement was a frame's work per event to draw the same thing, and a
+      room felt it as lag. A wall in progress does have to repaint — its far end follows the cursor.
+    */
+    if (anchor || landed.onNode !== attachedBefore) invalidate();
     return;
   }
 

@@ -31,6 +31,7 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { nodeDegrees, type FrozenGraph } from "../../trace/frozenGraph";
 import { addPainter, type Painter } from "../shell";
 import { frozenGraph } from "../stage";
+import type { DrawPoint } from "../dragGesture";
 import {
   draggedNode,
   hoveredNode,
@@ -280,19 +281,30 @@ function paintHandles(
     near it — a shared vertex is joined for ever, two coincident points agree until one moves. So the
     two states are drawn differently rather than left for the GM to infer from the position.
   */
-  const pending = pendingWall();
-  const ends = pending ? [pending.from, pending.to] : [];
   /*
-    With nothing started yet, the point a press *would* place is marked the same way.
+    A mark where a drawn end would **attach**, and nowhere else.
 
-    That is the half a room found missing: whether a line would attach to the vertex under the
-    pointer was invisible at the moment it was being decided, which is one press too late. The
-    cursor cannot carry it — a crosshair says "the tool acts here", not "and it will join that".
+    Attaching is the whole difference between closing a break and drawing a line that merely ends
+    near one, and it is decided before the press — so it has to be visible then, which the cursor
+    cannot say. A crosshair means "the tool acts here", not "and it will join that".
+
+    **Nothing is drawn under the cursor when it would not attach** (user, 2026-09-05). A dot that
+    simply follows the pointer says only where the pointer is, which the pointer already says, and
+    it sits in the middle of the thing being aimed at — the same fault the grab cursor had. The
+    fixed end of a wall in progress is different and is always marked: it is not under the cursor,
+    and where a wall began and whether it caught is worth seeing while the far end moves.
   */
-  const next = pendingPoint();
-  if (next) ends.push(next);
+  const pending = pendingWall();
+  const marks: DrawPoint[] = [];
+  if (pending) {
+    marks.push(pending.from);
+    if (pending.to.onNode !== null) marks.push(pending.to);
+  } else {
+    const next = pendingPoint();
+    if (next && next.onNode !== null) marks.push(next);
+  }
 
-  for (const point of ends) {
+  for (const point of marks) {
     const attaching = point.onNode !== null;
     dot(
       x(point.at.x),
