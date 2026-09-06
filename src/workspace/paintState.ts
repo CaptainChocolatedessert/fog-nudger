@@ -5,14 +5,25 @@
  *
  * A paint mode is entered, edited, and *finished* (user, 2026-09-05). That is what makes painting
  * affordable at all: a scene write takes the better part of a second, and one per brush stroke would
- * make the tool unusable, so a mode takes a **working copy**, the brush edits that, and pressing
- * Done writes it once and recomposes the ink once. Nothing beneath a paint mode has to keep up with
- * it while it runs.
+ * make the tool unusable, so a mode takes a **working copy**, the brush edits that, and finishing
+ * writes it once and recomposes the ink once. Nothing beneath a paint mode has to keep up with it
+ * while it runs.
  *
  * So there are two states here. The **committed** layers are what the scene holds and what the
- * pipeline composes from. The **working** layer is what a mode is holding, and while one is held it
- * is what the canvas draws — so the GM is always looking at their own edits even though the trace
- * has not seen them yet.
+ * pipeline composes from. The **working** layers are what a mode is holding, and while it is held
+ * they are what the canvas draws — so the GM is always looking at their own edits even though the
+ * trace has not seen them yet.
+ *
+ * ## A mode holds BOTH layers, and that is what merging the two painting steps bought
+ *
+ * It held one at a time while suppression and added ink were steps of their own, because entering a
+ * step was what opened it. With one Ink step holding both brushes, keying the mode to the *tool*
+ * would put a scene write — about a second — between every flick from one brush to the other, which
+ * is exactly what "jump between tools freely" rules out (user, 2026-09-05).
+ *
+ * So the mode is the step: entering Ink opens both as working copies, either brush writes into its
+ * own, and leaving Ink writes both. That is **less** machinery than one-at-a-time needed rather than
+ * more — the write-then-open serialisation that guarded switching steps has nothing left to guard.
  *
  * ## Leaving a mode any other way saves rather than warns
  *
@@ -53,8 +64,26 @@ let mapId: string | null = null;
  */
 let raster: { readonly width: number; readonly height: number } | null = null;
 
-/** The layer a mode is holding, if one is open. */
-let working: { readonly kind: PaintKind; readonly layer: PaintLayer } | null = null;
+/**
+ * Both kinds, in one place, so nothing walks them by writing the two strings out again.
+ *
+ * `PAINT_NAMES` is keyed by them and could be walked instead, but a record's key order is a fact
+ * about an object literal rather than a declaration — and this list decides the order the two layers
+ * are *written* in on the way out.
+ */
+const PAINT_KINDS: readonly PaintKind[] = ["suppress", "ink"];
+
+/**
+ * The layers a mode is holding, or `null` when no mode is open.
+ *
+ * Both kinds at once, and a kind inside it may still be `null` — which happens only when there is
+ * nothing stored for it and no raster to make an empty one at. Distinguishing "no mode is open" from
+ * "the mode is open and this one could not be made" is what lets a brush decline while the surface
+ * around it goes on working.
+ */
+type WorkingLayers = Readonly<Record<PaintKind, PaintLayer | null>>;
+
+let working: WorkingLayers | null = null;
 
 const listeners: (() => void)[] = [];
 
@@ -76,26 +105,35 @@ function announce(): void {
  */
 export function currentPaint(): PaintLayers {
   if (!working) return committed;
-  return { ...committed, [working.kind]: working.layer };
+  return {
+    suppress: working.suppress ?? committed.suppress,
+    ink: working.ink ?? committed.ink,
+  };
 }
 
 /** One layer as it should be drawn: the working copy where there is one. */
 export function paintLayerFor(kind: PaintKind): PaintLayer | null {
-  return working?.kind === kind ? working.layer : committed[kind];
+  return working?.[kind] ?? committed[kind];
 }
 
-/** Which layer a mode is holding, or `null` when none is open. */
-export function openPaintKind(): PaintKind | null {
-  return working?.kind ?? null;
+/** Whether a paint mode is open, which is whether the Ink step is the one the GM is in. */
+export function paintModeOpen(): boolean {
+  return working !== null;
 }
 
-/** Whether the mode in hand has anything unsaved in it. */
-export function hasUnsavedPaint(): boolean {
-  if (!working) return false;
-  const stored = committed[working.kind];
-  if (!stored) return !isPaintEmpty(working.layer);
-  if (stored.width !== working.layer.width || stored.height !== working.layer.height) return true;
-  return !stored.data.every((value, i) => value === working!.layer.data[i]);
+/** Whether one layer has changed since it was last saved. */
+export function hasUnsavedPaint(kind: PaintKind): boolean {
+  const layer = working?.[kind];
+  if (!layer) return false;
+  const stored = committed[kind];
+  if (!stored) return !isPaintEmpty(layer);
+  if (stored.width !== layer.width || stored.height !== layer.height) return true;
+  return !stored.data.every((value, i) => value === layer.data[i]);
+}
+
+/** Whether either layer has changed, which is what decides whether leaving costs a write at all. */
+export function anyUnsavedPaint(): boolean {
+  return PAINT_KINDS.some(hasUnsavedPaint);
 }
 
 /** The raster a mode would paint at, or `null` before a reading has landed. */
@@ -157,17 +195,25 @@ export async function loadPaint(
  * adopted at *its* size rather than the current raster's: if the two disagree the pipeline says so
  * and resamples, and quietly resampling it here instead would destroy the original on the next Done.
  */
-export function beginPaint(kind: PaintKind): boolean {
-  const existing = committed[kind];
-  if (!existing && !raster) return false;
-  working = { kind, layer: existing ? copyPaint(existing) : emptyPaint(raster!.width, raster!.height) };
+export function beginPaint(): boolean {
+  const next: WorkingLayers = { suppress: workingCopy("suppress"), ink: workingCopy("ink") };
+  // Neither could be made, so there is no mode to open. That is a painting tool reached for before
+  // the map has been read, and declining is what lets the press pan instead of doing nothing at all.
+  if (!next.suppress && !next.ink) return false;
+  working = next;
   announce();
   return true;
 }
 
-/** The layer a mode is editing, for the brush to write into. */
-export function workingLayer(): PaintLayer | null {
-  return working?.layer ?? null;
+function workingCopy(kind: PaintKind): PaintLayer | null {
+  const existing = committed[kind];
+  if (existing) return copyPaint(existing);
+  return raster ? emptyPaint(raster.width, raster.height) : null;
+}
+
+/** The layer one brush is editing, for it to write into. */
+export function workingLayer(kind: PaintKind): PaintLayer | null {
+  return working?.[kind] ?? null;
 }
 
 /*
@@ -192,44 +238,87 @@ export function workingLayer(): PaintLayer | null {
  * and going on to close the surface. Keeping the mode open leaves it where a second Done can try
  * again.
  */
-export async function commitPaint(): Promise<void> {
-  if (!working) return;
+export async function commitPaint(): Promise<{
+  readonly saved: readonly PaintKind[];
+  readonly failed: PaintKind | null;
+}> {
+  if (!working) return { saved: [], failed: null };
   if (!mapId) throw new Error("no map is nominated, so there is nothing to save paint against");
-  const { kind, layer } = working;
+  const saved: PaintKind[] = [];
 
   /*
-    A layer with nothing on it is **deleted**, not stored as an empty document.
+    Both layers, one at a time, and an unchanged one is not written at all.
 
-    Clearing a layer and pressing Done otherwise leaves a key holding a perfectly valid record that
-    says nothing, which every later read then decodes and every later fingerprint then hashes. More
-    to the point, "there is no paint for this map" and "there is paint, and it is blank" are the same
-    fact told two ways, and the second one can disagree with the first after a partial write.
+    Writing both unconditionally would cost two scene writes on the way out of every visit to the Ink
+    step, including the visits that only moved a slider. It also matters for what it *says*: an
+    unchanged layer rewritten is a stored record replaced by an identical one, which is work with no
+    result and a chance of failing.
+
+    **A failure stops the loop and names the layer it stopped on**, rather than throwing. The caller
+    has to know *which* to tell the GM about, and with two layers in play a bare rejection cannot say
+    — one may already be safely written. Reporting from inside is also what keeps the mode open with
+    its copies intact, which is the standing rule: a GM must never be told their work is saved and go
+    on to close the surface.
   */
-  if (isPaintEmpty(layer)) {
-    await clearPaintLayer(kind);
-    committed = { ...committed, [kind]: null };
-    working = null;
-    devLog("info", `paint: ${PAINT_NAMES[kind]} is empty, so its stored copy was removed`);
-    announce();
-    return;
+  for (const kind of PAINT_KINDS) {
+    if (!hasUnsavedPaint(kind)) continue;
+    const layer = working[kind]!;
+    try {
+
+    /*
+      A layer with nothing on it is **deleted**, not stored as an empty document.
+
+      Clearing a layer and finishing otherwise leaves a key holding a perfectly valid record that
+      says nothing, which every later read then decodes and every later fingerprint then hashes. More
+      to the point, "there is no paint for this map" and "there is paint, and it is blank" are the
+      same fact told two ways, and the second one can disagree with the first after a partial write.
+    */
+      if (isPaintEmpty(layer)) {
+        await clearPaintLayer(kind);
+        committed = { ...committed, [kind]: null };
+        devLog("info", `paint: ${PAINT_NAMES[kind]} is empty, so its stored copy was removed`);
+      } else {
+        await writePaintLayer(kind, mapId, layer);
+        committed = { ...committed, [kind]: layer };
+        devLog(
+          "info",
+          `paint: saved ${PAINT_NAMES[kind]} — ${paintedCount(layer)} px painted at ` +
+            `${layer.width}x${layer.height}`,
+        );
+      }
+      saved.push(kind);
+    } catch (error) {
+      reportPaintFailure(kind, error);
+      announce();
+      return { saved, failed: kind };
+    }
   }
 
-  await writePaintLayer(kind, mapId, layer);
-  committed = { ...committed, [kind]: layer };
+  announce();
+  return { saved, failed: null };
+}
+
+/** Let go of both working copies, once whatever was going to be saved has been. */
+export function endPaint(): void {
+  if (!working) return;
   working = null;
-  devLog(
-    "info",
-    `paint: finished ${PAINT_NAMES[kind]} — ${paintedCount(layer)} px painted at ` +
-      `${layer.width}x${layer.height}`,
-  );
   announce();
 }
 
-/** Abandon a mode, discarding everything it did. The one way work here is thrown away. */
-export function discardPaint(): void {
+/**
+ * Throw away one layer's unsaved edits, putting it back to what the scene holds.
+ *
+ * Per layer rather than per mode, which is the shape the merged step forces: the two brushes are
+ * open together, and discarding the suppression because a stroke of added ink went wrong would be
+ * one button destroying work it was never pointed at.
+ *
+ * It leaves the mode **open** with a fresh copy, rather than closing it. Discarding is a correction
+ * mid-session, not a way out, and a GM who discards a bad stroke expects to carry on painting.
+ */
+export function discardPaint(kind: PaintKind): void {
   if (!working) return;
-  devLog("info", `paint: discarded the ${PAINT_NAMES[working.kind]} edits in hand`);
-  working = null;
+  devLog("info", `paint: discarded the ${PAINT_NAMES[kind]} edits in hand`);
+  working = { ...working, [kind]: workingCopy(kind) };
   announce();
 }
 

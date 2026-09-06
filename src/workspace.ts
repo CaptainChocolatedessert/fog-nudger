@@ -52,7 +52,7 @@ import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForBreaks } from "./workspace/breakSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
-import { renderPaintActions, renderPaintTools } from "./workspace/paintControls";
+import { renderInkTools } from "./workspace/paintControls";
 import { finishPaint, registerPaintTool, requestPaintMode } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
@@ -161,8 +161,8 @@ registerWallEdit();
 
   Registered against the `brush` drag rather than against a step, so the two tools cannot be swapped
   into the wrong slot: a step declares which kind of drag it wants and the shell reaches for the
-  handler that implements it. Both painting steps share this one — which layer it writes into is the
-  mode that is open, not a second handler.
+  handler that implements it. All three ink tools share this one — which layer a press writes into is
+  the tool in hand, not a second handler.
 */
 registerPaintTool();
 /*
@@ -179,31 +179,30 @@ onStepOpen("edit", (open) => watchRegions("edit", open));
 // Thinning is the same shape of cost and gets the same answer: entering the step pays for it.
 onStepOpen("walls", watchSkeleton);
 /*
-  Which paint layer is open, told as a destination rather than as two separate arrivals.
+  Whether the paint mode is open, which is whether Ink is the step the GM is in.
 
-  `onStepOpen` would deliver a move between the two painting steps as one call saying "suppression
-  closed" and another saying "added ink opened", in registration order — which is the wrong order
-  half the time, and acting on each in turn closes the mode it has just opened. `onStepChange` says
-  where the GM now *is*, once, and `requestPaintMode` serialises the write-then-open that follows.
+  `onStepChange` rather than `onStepOpen`, and the reason survived the merge in a weaker form: it
+  says where the GM now *is*, once, where the per-step listeners deliver a move as an arrival and a
+  departure in registration order. With one painting step that ordering no longer matters, but the
+  destination is still the honest thing to be told, and `requestPaintMode` serialises what follows —
+  leaving Ink and coming back inside the second the write takes is a write and then an open.
 */
 onStepChange((step) => {
-  requestPaintMode(step === "suppress" ? "suppress" : step === "addink" ? "ink" : null);
+  requestPaintMode(step === "ink");
 });
 
 // The one step whose body is not built from parameters: choosing a map is a list of what the scene
 // holds, not a number to turn.
 registerStepContent("map", renderMapPicker);
 /*
-  The two painting steps, each a tool picker over its width control and its buttons under it.
+  The three ink tools, under the sliders they correct the results of, and one Save under them.
 
-  The step id and the layer name differ — `addink` against `ink` — and they are different namespaces
-  rather than a slip: a step is a place in the accordion and a layer is a document in the scene, and
-  the layer's name is what appears in a message about saving it.
+  **One step, three tools** since 2026-09-05 (user): the picker names the layer a press writes into
+  and a pair inside it says paint or erase. Both paint layers are held open together while the step
+  is, which is what makes flicking between them free — the thing two separate steps could not offer,
+  because leaving one wrote it to the scene.
 */
-registerStepContent("suppress", renderPaintTools("suppress"));
-registerStepContent("suppress", renderPaintActions("suppress"), "bottom");
-registerStepContent("addink", renderPaintTools("ink"));
-registerStepContent("addink", renderPaintActions("ink"), "bottom");
+registerStepContent("ink", renderInkTools, "bottom");
 // The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
 // particular map is change the colour, and it is not a number so it cannot be a row.
 registerStepContent("ink", renderSwatches);

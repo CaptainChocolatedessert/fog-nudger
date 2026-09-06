@@ -529,11 +529,13 @@ if (canvas instanceof HTMLCanvasElement) {
         pan on a plain drag whether or not the tool had taken the gesture. Reported from a room as
         panning working only with Ctrl.
 
-        **A brush press falls through here too, and that is deliberate rather than an oversight.** A
-        live brush takes every press by definition, so the only way one reaches this line is a brush
-        that could not start — a painting step opened before the map has been read, so there is no
-        raster to paint at. Panning is a better answer there than a dead drag, and it costs nothing
-        when the brush is working, because then this is unreachable.
+        **A brush press falls through here too, and that is now the ordinary case rather than an
+        edge one.** It used to be reachable only by a painting step opened before the map had been
+        read, where there is no raster to paint at. Merging the three ink steps into one made it the
+        main path: the Ink step declares `brush` all the time, and its tool picker starts with
+        nothing chosen and offers a break tool that acts only inside a ring. So a drag there pans
+        unless a brush is actually in hand, which is what keeps the sliders in that step usable
+        without holding Ctrl.
       */
     }
 

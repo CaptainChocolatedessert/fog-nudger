@@ -1,27 +1,34 @@
 /**
- * The brush: the pointer events, the tool in hand, and finishing a paint mode.
+ * The ink tools: the pointer events, which one is in hand, and saving what they wrote.
  *
  * What a gesture *means* is in `paintGesture.ts` and is tested there. This is the wiring — which
- * layer is open, where the last sample was, and what Done and Cancel do.
+ * tool, which layer it writes into, where the last sample was, and what saving does.
  *
- * ## The mode is the step, and it opens when the step does
+ * ## The mode is the step, and the tool says which layer
  *
- * Entering a painting step takes a working copy of that layer; leaving it finishes. There is no
- * "start painting" button, because a step is already a mode and a second thing to enter inside it
- * would be a mode inside a mode. What the picker chooses is the *verb* — the same division the wall
- * tools settled into, where the step says what you are editing and the tool says what a press does
- * to it.
+ * Entering the Ink step takes a working copy of **both** paint layers; leaving it writes both. The
+ * picker inside the step chooses which one a press writes into, and the merge that made that
+ * necessary is the point (user, 2026-09-05): keying the mode to the tool instead would put a scene
+ * write — about a second — between every flick from one brush to the other.
  *
- * ## A drag takes every press, and Ctrl is the way out of that
+ * So `tool` names a *layer* rather than a verb, which is the inversion the merge forced. Paint and
+ * erase are a pair inside each brush, and Shift swaps them for the length of one stroke.
  *
- * A stroke has to be able to start anywhere, so unlike the wall tools this cannot decide by looking.
- * That is the case the shell's brush branch was written for, and it is why the record's standing debt
- * to a trackpad user — no unmodified drag left for panning — comes due here and is paid by Ctrl.
+ * ## A brush takes every press; the other two decline
  *
- * ## Nothing is written until the mode is finished
+ * A stroke has to be able to start anywhere, so a brush cannot decide by looking. That is the case
+ * the shell's brush branch was written for, and it is why the record's standing debt to a trackpad
+ * user — no unmodified drag left for panning — comes due here and is paid by Ctrl.
+ *
+ * **With no tool chosen, and with the break tool, a press falls through to a pan.** The first is what
+ * makes the sliders above usable without a modifier; the second is because a map with forty rings on
+ * it is one a GM spends most of their time moving around, so a tool that swallowed every drag would
+ * put panning behind Ctrl for the whole of it.
+ *
+ * ## Nothing is written until the step is left, or Save is pressed
  *
  * A scene write takes the better part of a second, so one per stroke would make the tool unusable.
- * The working copy absorbs every stroke and one write happens at the end (user, 2026-09-05), which
+ * The working copies absorb every stroke and one write happens at the end (user, 2026-09-05), which
  * is also what makes the recomposite happen once rather than per mark.
  */
 
@@ -41,8 +48,8 @@ import {
 } from "./breakSearch";
 import { breaksChanged } from "./layers/breaks";
 import {
+  brushKind,
   brushRadius,
-  brushVerb,
   rasterPoint,
   strokeSegment,
   verbFor,
@@ -51,12 +58,12 @@ import {
   type PaintVerb,
 } from "./paintGesture";
 import {
+  anyUnsavedPaint,
   beginPaint,
   commitPaint,
   discardPaint,
-  hasUnsavedPaint,
-  openPaintKind,
-  reportPaintFailure,
+  endPaint,
+  paintModeOpen,
   workingLayer,
 } from "./paintState";
 import { requestRecompose } from "./reading";
@@ -64,7 +71,23 @@ import { inStageTwo } from "./stage";
 import { currentSettings } from "./settingsState";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
 
-let tool: PaintTool = "paint";
+/**
+ * Which tool is in hand.
+ *
+ * Starts at `none`, which is the Ink step being a place to move the sliders in. A step that took
+ * every press the moment it opened would make its own controls unusable without a modifier, and the
+ * first thing a GM does there is tune the threshold rather than paint.
+ */
+let tool: PaintTool = "none";
+
+/**
+ * Paint or erase, held per brush rather than shared.
+ *
+ * Two brushes, two independent verbs. One shared verb would mean that setting Erase to fix a
+ * suppression stroke and then switching to added ink silently arms a delete on the other layer,
+ * which is a mode change nobody asked for. Shift inverts whichever is set, for one stroke.
+ */
+const verbs: Record<PaintKind, PaintVerb> = { suppress: "paint", ink: "paint" };
 
 /** The last sample of the stroke in progress. `null` between gestures, which is what keeps them apart. */
 let last: BrushPoint | null = null;
@@ -77,6 +100,16 @@ let busy = false;
 
 export function currentPaintTool(): PaintTool {
   return tool;
+}
+
+/** Which of the two verbs a brush is set to, for the picker to show. */
+export function currentVerb(kind: PaintKind): PaintVerb {
+  return verbs[kind];
+}
+
+/** Set a brush's verb. The picker's only job beyond choosing the tool. */
+export function setVerb(kind: PaintKind, next: PaintVerb): void {
+  verbs[kind] = next;
 }
 
 /**
@@ -98,6 +131,10 @@ export function setPaintTool(next: PaintTool): void {
   } else {
     clearBreakSearch();
   }
+  // The ring belongs to whichever brush is now in hand, and to no tool at all otherwise. Cleared
+  // here because no pointer event fires on a click in the panel.
+  setBrushPosition(null);
+  setGrabTarget(false);
   breaksChanged();
   invalidate();
 }
@@ -109,7 +146,7 @@ export function refreshBreakSearch(): void {
   breaksChanged();
 }
 
-/** The brush width for whichever layer is open, in raster pixels. */
+/** The brush width for one layer, in raster pixels. */
 function widthFor(kind: PaintKind): number {
   const { overlay } = currentSettings();
   return kind === "suppress" ? overlay.suppressBrushPx : overlay.inkBrushPx;
@@ -121,10 +158,9 @@ function widthFor(kind: PaintKind): number {
  * The verb is the one fixed at the press rather than the one the modifier says now: letting go of
  * Shift halfway through a stroke should not turn the rest of it into the opposite operation.
  */
-function apply(at: BrushPoint): void {
-  const layer = workingLayer();
-  const kind = openPaintKind();
-  if (!layer || !kind) return;
+function apply(kind: PaintKind, at: BrushPoint): void {
+  const layer = workingLayer(kind);
+  if (!layer) return;
 
   const segment = strokeSegment(last, at);
   last = at;
@@ -143,38 +179,36 @@ function apply(at: BrushPoint): void {
 }
 
 function start(point: MapPoint): boolean {
-  if (busy) return false;
-  const layer = workingLayer();
-  const kind = openPaintKind();
-  // No mode open means no raster to paint at, which happens when a painting step is entered before
-  // the map has been read. Declining lets the press pan instead of doing nothing at all.
-  if (!layer || !kind) return false;
+  if (busy || !paintModeOpen()) return false;
 
   /*
     The break tool decides by looking, where the brushes take every press.
 
     It is the wall tools' rule rather than the brush's, and for the wall tools' reason: this is a
-    step spent mostly *looking* at what the search proposed, so a tool that swallowed every drag
-    would make the looking part cost a modifier. A press inside a ring accepts that break; a press
-    anywhere else is a pan.
+    tool spent mostly *looking* at what the search proposed, so one that swallowed every drag would
+    make the looking part cost a modifier. A press inside a ring accepts that break; a press anywhere
+    else is a pan.
   */
   if (tool === "breaks") return acceptAt(point);
 
-  const brush = brushVerb(tool);
-  if (!brush) return false;
-  verb = verbFor(brush, point.modifier);
+  const kind = brushKind(tool);
+  // No brush in hand — either no tool is chosen, or the layer could not be made because the map has
+  // not been read. Declining lets the press pan instead of doing nothing at all.
+  if (!kind || !workingLayer(kind)) return false;
+
+  verb = verbFor(verbs[kind], point.modifier);
   last = null;
   strokePixels = 0;
-  apply(rasterPoint(point.u, point.v, layer));
-  setBrushPosition({ u: point.u, v: point.v });
+  apply(kind, rasterPoint(point.u, point.v, workingLayer(kind)!));
+  setBrushPosition({ u: point.u, v: point.v, kind });
   return true;
 }
 
 /**
  * Accept the break whose ring this press landed in, or decline so the press pans.
  *
- * **Declining is what keeps the step usable**, not a fallback: a map with forty rings on it is one a
- * GM will spend most of their time moving around, and a tool that took every drag would put panning
+ * **Declining is what keeps the tool usable**, not a fallback: a map with forty rings on it is one a
+ * GM will spend most of their time moving around, and one that took every drag would put panning
  * behind Ctrl for the whole of it.
  */
 function acceptAt(point: MapPoint): boolean {
@@ -213,20 +247,20 @@ export function acceptAllShownBreaks(): void {
 function move(point: MapPoint): void {
   // An accept is finished at the press. Nothing follows the pointer, so a drag that began on a ring
   // is over — and treating it as a brush stroke would paint a line out of a break the GM only clicked.
-  if (tool === "breaks") return;
-  const layer = workingLayer();
+  const kind = brushKind(tool);
+  if (!kind) return;
+  const layer = workingLayer(kind);
   if (!layer) return;
-  apply(rasterPoint(point.u, point.v, layer));
-  setBrushPosition({ u: point.u, v: point.v });
+  apply(kind, rasterPoint(point.u, point.v, layer));
+  setBrushPosition({ u: point.u, v: point.v, kind });
 }
 
 function end(): void {
-  if (tool === "breaks") return;
-  const kind = openPaintKind();
+  const kind = brushKind(tool);
   last = null;
   if (!kind || strokePixels === 0) return;
   const verbWord = verb === "paint" ? "painted" : "erased";
-  say(`${verbWord} ${strokePixels} px · not saved until you press Done`);
+  say(`${verbWord} ${strokePixels} px of ${PAINT_NAMES[kind]} · not saved until you leave Ink`);
   strokePixels = 0;
 }
 
@@ -242,7 +276,7 @@ function cancel(): void {
  *
  * The wall tools consume Escape when a wall is half-drawn, so it does not also close the workspace.
  * A brush has no half-finished state — every stroke is complete the moment it is released — so
- * consuming it would take away the way out of the surface for no gain. Cancelling a whole session of
+ * consuming it would take away the way out of the surface for no gain. Throwing away a session of
  * painting is a button, deliberately: it is destructive and must not be one keystroke away.
  */
 function escape(): boolean {
@@ -250,66 +284,68 @@ function escape(): boolean {
 }
 
 function hover(point: MapPoint | null): void {
-  // No brush ring while the break tool is in hand: it says how much map the next *stroke* covers,
-  // and in this tool there is no stroke. The rings the search drew are what to aim at.
-  setBrushPosition(point && tool !== "breaks" ? { u: point.u, v: point.v } : null);
-  // A crosshair wherever the tool will act, which under a brush is everywhere on the map. The rule
-  // this follows was settled for the wall tools: a crosshair means the tool acts at this point, a
-  // hand means the surface moves — and here panning is the secondary action, behind Ctrl.
-  setGrabTarget(point !== null && openPaintKind() !== null);
+  const kind = brushKind(tool);
+  // No brush ring outside a brush: it says how much map the next *stroke* covers, and the other two
+  // tools have no stroke. The rings the search drew are what to aim at there.
+  setBrushPosition(point && kind && workingLayer(kind) ? { u: point.u, v: point.v, kind } : null);
+
+  /*
+    A crosshair wherever the tool will act, which under a brush is everywhere on the map.
+
+    The rule was settled for the wall tools: a crosshair means the tool acts at this point, a hand
+    means the surface moves. Under a brush, panning is the secondary action and is behind Ctrl. In
+    the break tool the surface really does move on a drag, so the hand is right *except* over a ring,
+    which is the one place a press does something.
+  */
+  if (!point) {
+    setGrabTarget(false);
+    return;
+  }
+  if (kind) {
+    setGrabTarget(workingLayer(kind) !== null);
+    return;
+  }
+  const raster = breakRaster();
+  const overRing =
+    tool === "breaks" &&
+    raster !== null &&
+    markAt(breakMarks(), raster, point.u, point.v, point.perPixel) !== null;
+  setGrabTarget(overRing);
 }
 
 let modeChain: Promise<void> = Promise.resolve();
 
 /**
- * Ask for a paint mode, one at a time.
+ * Ask for the paint mode to be open or closed, one request at a time.
  *
- * Switching directly between the two painting steps is one gesture that has to become a *write* and
- * then an open, in that order. Both are asynchronous, and calling them concurrently loses the second
- * one outright: the commit that lands last clears whatever is in hand, so a mode opened while the
- * previous one was still saving is thrown away the moment that save returns — and the GM is left in
- * a painting step whose brush silently declines every press.
- *
- * Chaining is the whole fix, and it is why this exists beside `openPaintMode` rather than inside it:
- * the guard has to cover the gap *between* two calls, which nothing inside one of them can see.
+ * **The record predicted this would disappear with the merge, and it was half right.** Its reason
+ * for existing was that switching between the two painting steps is a write and then an open, which
+ * cannot happen any more — there is one step. What survives is leaving Ink and coming back inside
+ * the second the write takes: the close is asynchronous, so an unchained re-open would copy the
+ * layers the scene held *before* the write and then have its working copies cleared out from under
+ * it when the close finished. Same failure, different route to it.
  */
-export function requestPaintMode(kind: PaintKind | null): void {
+export function requestPaintMode(open: boolean): void {
   modeChain = modeChain
-    .then(() => openPaintMode(kind))
+    .then(() => (open ? openPaintMode() : closePaintMode()))
     .catch((error: unknown) => {
       devLog("error", "workspace: switching paint mode failed", String(error));
     });
 }
 
 /**
- * Open a paint mode for a step, or close the one that is open.
+ * Open the mode: take a working copy of both layers.
  *
- * Reached through `requestPaintMode` when the accordion moves, never directly. Closing **finishes**
- * rather than warning: everything else on this surface is safe to leave at any moment because
- * everything durable is in scene metadata, and unsaved paint would be the first thing to break that
- * claim. Keeping it true is better than teaching a GM to dismiss a dialog.
+ * Reached through `requestPaintMode` when the accordion moves, never directly.
  */
-async function openPaintMode(kind: PaintKind | null): Promise<void> {
-  if (openPaintKind() === kind) return;
+async function openPaintMode(): Promise<void> {
+  if (paintModeOpen()) return;
+  await Promise.resolve();
 
-  /*
-    Finish first and open second, and the `await` between them is load-bearing.
-
-    Going straight from one painting step to the other is one gesture to the GM and two operations
-    here. An earlier version returned after finishing, which left them in the new step with no mode
-    open and a brush that silently declined every press — the shell would pan instead, so it looked
-    like the tool had stopped working rather than like something was still saving.
-  */
-  await finishPaint("leaving");
-  // The marks describe a composite that belonged to the layer just closed. Carrying them into the
-  // next mode would offer breaks against ink the tool there cannot write into.
+  tool = "none";
   clearBreakSearch();
-  tool = "paint";
-  if (!kind) {
-    breaksChanged();
-    invalidate();
-    return;
-  }
+  breaksChanged();
+
   /*
     Nothing is painted in stage two, and refusing here is what makes the step's notice true.
 
@@ -322,58 +358,90 @@ async function openPaintMode(kind: PaintKind | null): Promise<void> {
     invalidate();
     return;
   }
-  if (!beginPaint(kind)) {
-    say("nothing has been read from the map yet, so there is nothing to paint on");
+  if (!beginPaint()) {
+    // Not an error and not said out loud: the Ink step opened before the first reading landed, which
+    // is the ordinary state for the first second of a session. The tools say so when one is picked.
+    devLog("info", "paint: the ink step opened before a reading, so no layers were taken");
   }
   invalidate();
 }
 
 /**
- * Write the layer in hand and recompose the ink.
+ * Close it: write whatever changed, then let go.
  *
- * The one place a paint mode ends by keeping its work, whether that was Done, changing step, or
- * closing the workspace. A failed write **keeps the mode open**, so a second attempt is possible and
- * the GM is never told their work is safe when it is not.
+ * Closing **finishes** rather than warning: everything else on this surface is safe to leave at any
+ * moment because everything durable is in scene metadata, and unsaved paint would be the first thing
+ * to break that claim. Keeping it true is better than teaching a GM to dismiss a dialog.
  */
-export async function finishPaint(reason: "done" | "leaving"): Promise<boolean> {
-  const kind = openPaintKind();
-  if (!kind || busy) return true;
+async function closePaintMode(): Promise<void> {
+  await finishPaint("leaving");
+  clearBreakSearch();
+  tool = "none";
+  setBrushPosition(null);
+  setGrabTarget(false);
+  breaksChanged();
+  invalidate();
+}
 
-  if (!hasUnsavedPaint()) {
-    // Nothing changed, so there is nothing to write and nothing to recompose. Entering a step to look
-    // at a layer and leaving again must not cost a scene write.
-    discardPaint();
+/**
+ * Write both layers and recompose the ink.
+ *
+ * The one place painting ends by keeping its work, whether that was Save, changing step, or closing
+ * the workspace. A failed write **keeps the working copies**, so a second attempt is possible and the
+ * GM is never told their work is safe when it is not.
+ *
+ * `leaving` lets go of the copies afterwards; `save` re-takes them, so the brush goes on writing into
+ * something distinct from what is now stored. **Not re-taking was a real defect in the one-layer
+ * version**: pressing Done closed the mode outright, and every press after it silently declined until
+ * the GM left the step and came back.
+ */
+export async function finishPaint(reason: "save" | "leaving"): Promise<boolean> {
+  if (!paintModeOpen() || busy) return true;
+
+  if (!anyUnsavedPaint()) {
+    // Nothing changed, so there is nothing to write and nothing to recompose. Entering the step to
+    // look at a layer and leaving again must not cost a scene write.
+    if (reason === "leaving") endPaint();
     invalidate();
     return true;
   }
 
-  const layer = workingLayer();
-  const painted = layer ? paintedCount(layer) : 0;
+  const painted = describePainted();
   busy = true;
   say("saving…", "working");
   try {
-    await commitPaint();
-    // Only now, because until the layer is committed the composite would be recomputed from paint
-    // that is not saved — and a trace whose result outlives a failed write is the mismatch this
-    // whole ordering exists to avoid.
+    const { saved, failed } = await commitPaint();
+    if (failed) return false;
+    // Only now, because until the layers are committed the composite would be recomputed from paint
+    // that is not saved — and a trace whose result outlives a failed write is the mismatch this whole
+    // ordering exists to avoid.
     requestRecompose();
-    say(`${PAINT_NAMES[kind]} saved — ${painted} px`);
-    devLog("info", `workspace: ${PAINT_NAMES[kind]} committed on ${reason}`);
+    say(`saved ${saved.map((kind) => PAINT_NAMES[kind]).join(" and ")} — ${painted}`);
+    devLog("info", `workspace: paint committed on ${reason}`);
+    if (reason === "leaving") endPaint();
+    else beginPaint();
     return true;
-  } catch (error) {
-    reportPaintFailure(kind, error);
-    return false;
   } finally {
     busy = false;
     invalidate();
   }
 }
 
-/** Throw away everything the open mode has done. The only way work here is lost. */
-export function abandonPaint(): void {
-  discardPaint();
+/** How much is on each layer, for the line that says what was saved. */
+function describePainted(): string {
+  return (["suppress", "ink"] as const)
+    .map((kind) => {
+      const layer = workingLayer(kind);
+      return `${layer ? paintedCount(layer) : 0} px ${PAINT_NAMES[kind]}`;
+    })
+    .join(", ");
+}
+
+/** Throw away one layer's unsaved edits. The only way work here is lost. */
+export function abandonPaint(kind: PaintKind): void {
+  discardPaint(kind);
   last = null;
-  say("changes discarded");
+  say(`${PAINT_NAMES[kind]} back to what was last saved`);
   invalidate();
 }
 

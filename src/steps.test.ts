@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 import { CONTROLS } from "./controls";
 import {
   groupControls,
+  headingGroups,
   isStepDefault,
   LAYERS,
   PARAMETER_STEP,
@@ -35,6 +36,7 @@ import {
   STEPS,
   stepControls,
   stepParameters,
+  toolGroups,
   ungroupedControls,
   workspaceSteps,
   type StepId,
@@ -155,6 +157,42 @@ describe("a step's groups", () => {
       ].map((control) => control.name);
       expect([...rendered].sort()).toEqual([...stepControls(step.id)].map((c) => c.name).sort());
       expect(new Set(rendered).size).toBe(rendered.length);
+    }
+  });
+
+  it("splits into heading groups and tool groups with nothing in both and nothing in neither", () => {
+    /*
+      The split is what stops a tool's controls being drawn twice.
+
+      A step's body renders `headingGroups`; its picker renders whichever `toolGroups` entry is in
+      hand. If a group could land in both, two sliders would write one setting and disagree the
+      moment either moved — and if one could land in neither, its control would simply never appear.
+    */
+    for (const step of STEPS) {
+      const all = step.groups ?? [];
+      const heading = headingGroups(step);
+      const tools = toolGroups(step);
+      expect(heading.length + tools.length, step.id).toBe(all.length);
+      for (const group of heading) expect(tools).not.toContain(group);
+    }
+  });
+
+  it("gives a step's tools distinct ids, since that is what the picker addresses them by", () => {
+    // Two tools sharing an id would make `toolGroup` return the first for both, so choosing the
+    // second would disclose the first's controls while a press wrote into the second's layer.
+    for (const step of STEPS) {
+      const ids = toolGroups(step).map((group) => group.tool);
+      expect(new Set(ids).size, step.id).toBe(ids.length);
+    }
+  });
+
+  it("only lets a step with tools take the drag those tools need", () => {
+    // A tool picker in a step that pans would be three buttons that change nothing about a press.
+    // The converse is not asserted: a `brush` step with no declared tools is what an unconditional
+    // brush would look like, and nothing rules that out.
+    for (const step of STEPS) {
+      if (toolGroups(step).length === 0) continue;
+      expect(step.drag, step.id).not.toBe("pan");
     }
   });
 

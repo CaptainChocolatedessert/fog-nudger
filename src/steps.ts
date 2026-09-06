@@ -51,14 +51,7 @@ import {
  * partition is no longer somewhere a GM goes. `view` is not one of the six: it is the persistent
  * group, which is a step's shape without a mode.
  */
-export type StepId =
-  | "map"
-  | "ink"
-  | "suppress"
-  | "addink"
-  | "walls"
-  | "edit"
-  | "view";
+export type StepId = "map" | "ink" | "walls" | "edit" | "view";
 
 /**
  * What the canvas can draw over the map.
@@ -78,14 +71,14 @@ export const LAYERS = ["ink", "paint", "breaks", "skeleton", "regions", "graph"]
   One rule about `paint`, because it is the layer that does not follow the convention.
 
   Everything else here is drawn only in the step that is about it. The GM's two hand-made layers are
-  drawn **wherever the ink is drawn** — Ink, both painting steps, and Walls — and the reason is that
-  a picture of the ink that leaves out what the GM has done to it is a picture of something that no
-  longer exists downstream. The concrete bite is the Walls step: its skeleton is thinned from the
-  whole composite, so without both colours the centreline and the ink under it visibly disagree.
+  drawn **wherever the ink is drawn** — Ink and Walls — and the reason is that a picture of the ink
+  that leaves out what the GM has done to it is a picture of something that no longer exists
+  downstream. The concrete bite is the Walls step: its skeleton is thinned from the whole composite,
+  so without both colours the centreline and the ink under it visibly disagree.
 
-  `breaks` is drawn in exactly one step, Add ink, which is where its tool runs. It was in Ink and
-  Walls while the search ran on every recompose and there was always something to show; on demand,
-  those steps would carry an empty layer in the ordinary case.
+  `breaks` is drawn in exactly one step, Ink, which is where its tool runs. It was in Walls too while
+  the search ran on every recompose and there was always something to show; on demand, that step
+  would carry an empty layer in the ordinary case.
 
   They do not compete for the ink's own channel. The mask is drawn in the GM's chosen colour and
   these two in fixed colours of their own, which is the same arrangement the break fill has and rests
@@ -114,6 +107,20 @@ export interface StepGroup {
   /** Shown under the heading. May carry markup. */
   readonly blurb: string;
   readonly parameters: readonly SettingName[];
+  /**
+   * The tool inside the step that owns these controls, if one does.
+   *
+   * A group with this set is **not** rendered by the step's body: the step's tool picker draws the
+   * button from `title`, the line under the row from `blurb`, and the rows only while that tool is
+   * the one in hand. Without it the controls would appear twice — once in the disclosure and once as
+   * an ordinary sub-heading — and two sliders writing one setting disagree the moment either moves.
+   *
+   * It is declared here rather than in the picker so that a step's parameters are all in one place,
+   * which is what `PARAMETER_STEP`'s totality test and the per-step Defaults both walk. The id is a
+   * plain string because a step's tools are the step's own vocabulary; the one step that has them
+   * matches these against its `PaintTool` union.
+   */
+  readonly tool?: string;
 }
 
 export interface Step {
@@ -175,74 +182,89 @@ export const STEPS: readonly Step[] = [
   {
     id: "ink",
     title: "Ink",
-    blurb: "What the trace calls a mark, and which marks it keeps.",
+    blurb:
+      "What the trace calls a mark, which marks it keeps, and the tools for correcting that by hand. " +
+      "Everything the tools write goes into a layer of your own that no slider here can undo.",
     /*
-      One step, three questions in series, and the ink layer answers all three.
+      One step, and it took two others into itself on 2026-09-05 (user).
 
-      Walls was a step of its own until 2026-08-29 (user). Its two controls are ink *filters* \u2014 they
-      decide which marks survive, not what a wall is \u2014 so what they change is the same picture the
-      threshold changes, judged the same way. A step is a mode, and there was never a mode here: the
-      canvas, the drag and the layers were identical. The name returns as a step when it has a
-      skeleton to paint, which is what a wall actually is.
+      Suppress ink and Add ink were steps of their own for a day. The objection is that they are not
+      *modes* in the sense a step is: they look at the same picture, judged the same way, and a GM
+      correcting a map moves between the threshold, the amber and the cyan constantly. Making each of
+      them a place to travel to put a scene write between every switch, because a painting step
+      committed its layer on the way out.
+
+      > *"You're in the Ink workspace, and there's a special effect of leaving it. But within that
+      > workspace you can jump between tools freely."*
+
+      So the mode is this step and the picker says which verb inside it. **Both paint layers are
+      opened as working copies when the step opens and both are written when it closes**, which is
+      less machinery than the two steps needed rather than more: the write-then-open serialisation
+      existed only because switching between them was a write.
+
+      Walls was here too, and left on 2026-08-29 (user) when it had a skeleton to paint. Its two
+      controls stayed, under the Linework sub-heading: they are ink *filters*, deciding which marks
+      survive rather than what a wall is.
     */
-    layers: ["ink", "paint"],
-    drag: "pan",
+    layers: ["ink", "paint", "breaks"],
+    /*
+      A brush takes every press, which is what `brush` means -- and here it is qualified by the tool.
+
+      With no tool chosen the handler declines and the press pans, which is the path the shell has
+      always had for a brush opened before the map has been read. That is what makes the sliders
+      usable without a modifier: this step is a brush only once you have said which brush.
+    */
+    drag: "brush",
     groups: [
       {
-        // Called "Walls" until the skeleton arrived and took the name back — these two decide which
+        // Called "Walls" until the skeleton arrived and took the name back: these two decide which
         // marks are *linework*, which is a question about ink. A wall is what the step below makes
         // of the linework.
         title: "Linework",
         blurb: "Filtering those marks down to linework. Both go far past useful, so the edge is findable.",
         parameters: ["minStrokeInkWidths", "minIslandPx"],
       },
-    ],
-  },
-  {
-    id: "suppress",
-    title: "Suppress ink",
-    blurb:
-      "Paint over marks the trace should <b>ignore</b> — meaningless crosshatching, a printed floor " +
-      "grid, a compass rose. The controls above work on every mark at once and cannot tell " +
-      "decoration from linework; you can, by looking. Painted areas are shown in " +
-      "<b class='suppress-key'>amber</b>.",
-    /*
-      The base ink with the paint over it, which is the pairing this step is judged by.
+      /*
+        The three tools, declared here so their controls sit with everything else the step owns --
+        and rendered by the picker rather than by the step body, which is what `tool` means.
 
-      Suppression is meaningless without the ink it acts on — what a GM is deciding is which of
-      *those* marks are not linework — so the ink is drawn under it and the paint over it in its own
-      colour. The breaks are not here: their controls belong to Ink, and a ring appearing while an
-      area is blocked out would be answering a question nobody is asking yet.
-    */
-    layers: ["ink", "paint"],
-    drag: "brush",
-  },
-  {
-    id: "addink",
-    title: "Add ink",
-    blurb:
-      "Draw linework the map does not have, or does not have clearly: a wall the reading broke, a " +
-      "doorway to close off, a boundary that was never drawn. This goes in <b>last of everything</b>, " +
-      "so no filter above can take it away again. Drawn ink is shown in <b class='addink-key'>cyan</b>.",
-    /*
-      The same pairing as suppression, and for the same reason one question later.
-
-      What is drawn here is judged against the linework it is joining — a wall added to close a break
-      has to meet the ink at both ends — so the ink is underneath and both paint layers are over it,
-      the suppression included: ink the GM has already taken out is not ink a new stroke should be
-      aiming at.
-    */
-    layers: ["ink", "paint", "breaks"],
-    drag: "brush",
-    groups: [
+        Each carries a title and a blurb because the picker uses both: the title is the button, and
+        the blurb is the line under the row saying what a press does. A tool with no parameters would
+        still be declared here; these three happen to have some.
+      */
       {
-        title: "Finding breaks",
+        tool: "suppress",
+        title: "Suppress",
         blurb:
-          "A wall with a section missing merges two rooms, which is the worst this can get wrong &mdash; " +
-          "and a crack four pixels wide is not something anyone finds by scanning a map. The " +
-          "<b>Breaks</b> tool searches for them and proposes each one in " +
-          "<b class='gap-key'>purple</b>; nothing is added until you accept it, and what you accept " +
-          "becomes ordinary added ink.",
+          "Drag to cover marks the trace should <b>ignore</b> &mdash; meaningless crosshatching, a " +
+          "printed floor grid, a compass rose. The sliders above work on every mark at once and " +
+          "cannot tell decoration from linework; you can, by looking. Covered areas show in " +
+          "<b class='suppress-key'>amber</b>. Hold <b>Shift</b> to uncover while you drag, " +
+          "<b>Ctrl</b> to pan.",
+        parameters: ["suppressBrushPx"],
+      },
+      {
+        tool: "ink",
+        title: "Add ink",
+        blurb:
+          "Drag to draw linework the map does not have, or does not have clearly: a wall the reading " +
+          "broke, a doorway to close off, a boundary that was never drawn. This goes in <b>last of " +
+          "everything</b>, so no filter above can take it away again. Drawn ink shows in " +
+          "<b class='addink-key'>cyan</b>. Hold <b>Shift</b> to erase while you drag, <b>Ctrl</b> " +
+          "to pan.",
+        parameters: ["inkBrushPx"],
+      },
+      {
+        tool: "breaks",
+        title: "Breaks",
+        blurb:
+          "A wall with a section missing merges two rooms, which is the worst this can get wrong " +
+          "&mdash; and a crack four pixels wide is not something anyone finds by scanning a map. " +
+          "This searches for them and rings each one in <b class='gap-key'>purple</b>. <b>Click " +
+          "inside a ring</b> to close that break, or close them all with the button below. " +
+          "<b>Nothing is added until you accept it</b>, and what you accept becomes ordinary added " +
+          "ink. A <b>dashed</b> ring is a channel the search could not finish examining and will " +
+          "not offer. Dragging pans.",
         parameters: ["gapFillPx", "gapTravelPx"],
       },
     ],
@@ -374,14 +396,17 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   minStrokeInkWidths: "ink",
   minIslandPx: "ink",
 
-  // A brush each, in the step whose layer it paints. One shared width would make every switch
-  // between the two tools a resize, and what they are for is an order of magnitude apart.
-  suppressBrushPx: "suppress",
-  inkBrushPx: "addink",
-  // With the search that uses them, which is a tool inside Add ink. They were under Ink while the
-  // repair was a stage of the pipeline; a control belongs to the step that runs it.
-  gapFillPx: "addink",
-  gapTravelPx: "addink",
+  /*
+    The three tools' own controls, in the step that holds all three.
+
+    A brush width each rather than one shared: what the two brushes are for is an order of magnitude
+    apart, so a single width would make every switch between them a resize. They sit under their own
+    tool in the picker, which is what keeps a step holding nine controls from reading as nine.
+  */
+  suppressBrushPx: "ink",
+  inkBrushPx: "ink",
+  gapFillPx: "ink",
+  gapTravelPx: "ink",
   // Both of the controls that shape the graph, together. Pruning decides which walls survive and
   // smoothing decides what shape they are, and the step draws the result of both.
   spurPrunePx: "walls",
@@ -465,6 +490,22 @@ export function stepControls(step: StepId): readonly Control[] {
 export function ungroupedControls(step: Step): readonly Control[] {
   const grouped = new Set((step.groups ?? []).flatMap((group) => group.parameters));
   return stepControls(step.id).filter((control) => !grouped.has(control.name));
+}
+
+/**
+ * The groups a step draws as sub-headings, which is every group that is not a tool's.
+ *
+ * The split is what stops a tool's controls being rendered twice. A tool group belongs to the
+ * picker, which shows it only while that tool is in hand; drawing it here as well would put two
+ * sliders on one setting, and two sliders on one setting disagree the moment either moves.
+ */
+export function headingGroups(step: Step): readonly StepGroup[] {
+  return (step.groups ?? []).filter((group) => group.tool === undefined);
+}
+
+/** Every tool a step declares, in declaration order. Empty for a step with no picker. */
+export function toolGroups(step: Step): readonly StepGroup[] {
+  return (step.groups ?? []).filter((group) => group.tool !== undefined);
 }
 
 /** The controls of one group, in declaration order. */

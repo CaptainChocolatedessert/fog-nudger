@@ -40,6 +40,7 @@
 
 import {
   groupControls,
+  headingGroups,
   isStepDefault,
   resetStep,
   STEPS,
@@ -137,7 +138,12 @@ function stepBody(step: Step): HTMLElement {
     body.append(settingRow(control));
   }
 
-  for (const group of step.groups ?? []) {
+  /*
+    Sub-headings only. A group belonging to a **tool** is drawn by that step's picker instead, which
+    shows it while the tool is in hand and hides it otherwise — so rendering it here as well would
+    put two sliders on one setting.
+  */
+  for (const group of headingGroups(step)) {
     const heading = document.createElement("h3");
     heading.textContent = group.title;
     const note = document.createElement("p");
@@ -207,9 +213,9 @@ export function onStepOpen(id: StepId, changed: (open: boolean) => void): void {
  * `onStepOpen` is per step, which suits anything whose answer is independent of what the *other*
  * steps are doing — a derive that entering pays for, a watcher that stops watching. It is the wrong
  * shape when two steps share one piece of state, because the transition between them arrives as two
- * separate calls whose order is registration order rather than anything meaningful: moving from one
- * painting step to the other can announce the arrival before the departure, and a listener acting on
- * each in turn then closes the mode it has just opened.
+ * separate calls whose order is registration order rather than anything meaningful: an arrival can
+ * be announced before the departure, and a listener acting on each in turn then closes the thing it
+ * has just opened. That was a live defect while suppression and added ink were steps of their own.
  *
  * So a listener that owns something shared subscribes here and is told the *destination*, once.
  */

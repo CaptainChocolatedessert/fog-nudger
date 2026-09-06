@@ -2,7 +2,7 @@
  * The breaks layer: what the search proposes, and a ring round every break it found.
  *
  * A break merges two rooms, which is the worst outcome this project has. The tool that finds them
- * lives in the Add ink step; this draws what it is holding.
+ * is the Breaks tool inside the Ink step; this draws what it is holding.
  *
  * ## It draws a PROPOSAL now, not invented ink
  *

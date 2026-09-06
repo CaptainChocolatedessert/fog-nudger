@@ -39,7 +39,7 @@ import { parseColour, type Rgb } from "../../overlay/maskImage";
 import type { PaintLayer, StrokeBounds } from "../../trace/inkPaint";
 import { bitmapFrom, type Bitmap } from "../bitmap";
 import { brushRadius } from "../paintGesture";
-import { onPaintChange, openPaintKind, paintLayerFor } from "../paintState";
+import { onPaintChange, paintLayerFor } from "../paintState";
 import { currentSettings } from "../settingsState";
 import { addPainter, invalidate, say, type Frame, type Painter } from "../shell";
 
@@ -67,8 +67,15 @@ let painted: Bitmap | null = null;
 let builtFrom: { readonly suppress: PaintLayer | null; readonly ink: PaintLayer | null } | null =
   null;
 
-/** Where the brush is, in map fractions, or `null` when the pointer is not over the map. */
-let brushAt: { readonly u: number; readonly v: number } | null = null;
+/**
+ * Where the brush is and which layer it would write into, or `null` when there is no brush.
+ *
+ * **The kind is carried rather than asked for**, and that changed when the two painting steps became
+ * one. It used to be read from "which layer is the open mode holding", which was the same question;
+ * with both layers open at once, the only thing that knows which brush is in hand is the tool, and
+ * this layer asking the tool would close a cycle between the two.
+ */
+let brushAt: { readonly u: number; readonly v: number; readonly kind: PaintKind } | null = null;
 
 /**
  * Put the brush ring somewhere, or take it away.
@@ -76,9 +83,11 @@ let brushAt: { readonly u: number; readonly v: number } | null = null;
  * Called on every hover, so it only invalidates when the ring would actually move — repainting per
  * mouse movement is what a room felt as lag in the wall tools.
  */
-export function setBrushPosition(at: { readonly u: number; readonly v: number } | null): void {
+export function setBrushPosition(
+  at: { readonly u: number; readonly v: number; readonly kind: PaintKind } | null,
+): void {
   if (!brushAt && !at) return;
-  if (brushAt && at && brushAt.u === at.u && brushAt.v === at.v) return;
+  if (brushAt && at && brushAt.u === at.u && brushAt.v === at.v && brushAt.kind === at.kind) return;
   brushAt = at;
   invalidate();
 }
@@ -235,8 +244,9 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }: Frame) => {
 /**
  * The ring under the cursor, at the size the next stroke will actually cover.
  *
- * Only while a paint mode is open, because in the Ink and Walls steps the paint is being *looked at*
- * rather than edited, and a brush ring there would promise a gesture those steps do not have.
+ * Only while a brush is actually in hand. The paint is drawn in the Walls step too, where it is
+ * being *looked at* rather than edited, and a ring there would promise a gesture that step does not
+ * have — as would one in the Ink step with the break tool or no tool selected.
  */
 function drawBrushRing(
   context: CanvasRenderingContext2D,
@@ -244,8 +254,8 @@ function drawBrushRing(
   drawWidth: number,
   drawHeight: number,
 ): void {
-  const kind = openPaintKind();
-  if (!kind || !brushAt) return;
+  if (!brushAt) return;
+  const kind = brushAt.kind;
 
   const layer = paintLayerFor(kind);
   if (!layer || layer.width <= 0) return;

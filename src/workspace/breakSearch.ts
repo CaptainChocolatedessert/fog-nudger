@@ -37,7 +37,7 @@ import { composePaint, paintPixels, type StrokeBounds } from "../trace/inkPaint"
 import { findGaps, type GapMark } from "../trace/gaps";
 import type { BinaryMask } from "../trace/binarize";
 import type { MarkRaster } from "./breakGesture";
-import { currentPaint, openPaintKind, workingLayer } from "./paintState";
+import { currentPaint, workingLayer } from "./paintState";
 import { currentSettings } from "./settingsState";
 
 /**
@@ -147,13 +147,15 @@ const NOTHING: AcceptResult = { accepted: 0, pixels: 0, bounds: null };
  * not differ is what happens afterwards: write into the working layer, then **search again**, so the
  * marks on screen describe the ink as it now is rather than as it was when the tool was opened.
  *
- * Refuses unless the added-ink mode is the one open. What this writes is added ink, and writing it
- * anywhere else — into a suppression layer, or into a committed layer nothing is holding — would be
- * paint the GM never made and cannot see being made.
+ * Refuses unless the added-ink layer is open as a working copy. What this writes is added ink, and
+ * writing it into a committed layer nothing is holding would be paint the GM never made and cannot
+ * see being made. It asks for that layer **by name** rather than for "whatever is open", which is
+ * what the two painting steps becoming one changed: both layers are open together now, so "the open
+ * one" no longer identifies anything.
  */
 function accept(chosen: readonly GapMark[]): AcceptResult {
-  const layer = workingLayer();
-  if (openPaintKind() !== "ink" || !layer || chosen.length === 0) return NOTHING;
+  const layer = workingLayer("ink");
+  if (!layer || chosen.length === 0) return NOTHING;
 
   let pixels = 0;
   let left = layer.width;

@@ -83,24 +83,35 @@ export function strokeSegment(previous: BrushPoint | null, at: BrushPoint): Stro
 export type PaintVerb = "paint" | "erase";
 
 /**
- * Which tool the Add ink step has in hand.
+ * Which tool the Ink step has in hand.
  *
- * A superset of the brush verbs rather than a separate axis, because the picker offers all three in
- * one row and a GM switching between them is making one choice. `breaks` is not a brush at all — it
- * takes a click on a ring rather than a drag — which is why the brush code asks for a `PaintVerb`
- * and gets one only when the tool is one.
+ * **It names the layer rather than the verb**, which is the change the three ink steps becoming one
+ * forced. While each layer had a step of its own the step said *what* was being edited and the
+ * picker said *which verb*; with one step the picker has to carry both, and the layer is the half
+ * that cannot be recovered from anything else. The verb comes from `verbFor` and from Shift.
+ *
+ * `"none"` is a real state rather than a missing value: it is the Ink step being a place to move the
+ * sliders in, where a plain drag pans. It is also where the step starts, because a step that took
+ * every press the moment it opened would make the sliders above unusable without a modifier.
+ *
+ * `"breaks"` is not a brush at all — it takes a click on a ring rather than a drag — which is why
+ * the brush code asks for a kind and gets one only when the tool is a brush.
  */
-export type PaintTool = PaintVerb | "breaks";
+export type PaintTool = "none" | "suppress" | "ink" | "breaks";
 
 /**
- * The brush verb a tool implies, or `null` when the tool is not a brush.
+ * The layer a tool paints into, or `null` when the tool is not a brush.
  *
- * Narrowing in one place, so no caller has to remember that `breaks` is in the union. A brush handed
- * `null` declines the press, which is what lets a drag in the break tool pan as usual — nothing is
- * painted by dragging there.
+ * Narrowing in one place, so no caller has to remember which members of the union are brushes. A
+ * press handed `null` is declined, which is what lets a drag pan in the break tool and with no tool
+ * chosen — nothing is painted by dragging in either.
+ *
+ * The two brush members are spelled out rather than imported as `PaintKind`, because that type lives
+ * beside the SDK and this module is one of the pure ones. They are the same two strings, and
+ * `paintTool.ts` is where the two meet and the compiler checks it.
  */
-export function brushVerb(tool: PaintTool): PaintVerb | null {
-  return tool === "breaks" ? null : tool;
+export function brushKind(tool: PaintTool): "suppress" | "ink" | null {
+  return tool === "suppress" || tool === "ink" ? tool : null;
 }
 
 /**
