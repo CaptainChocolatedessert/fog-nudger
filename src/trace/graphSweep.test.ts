@@ -61,10 +61,25 @@ const SHAPES = [
 ] as const;
 
 describe("the graph derivation over generated linework", () => {
+  /*
+    Every shape is swept twice: with pruning off, and with a budget that removes real spurs.
+
+    **Pruning moved onto the graph on 2026-09-06, and until that day this sweep ran at a budget of
+    zero** — so the entire pruning path was outside the only instrument that has ever found a defect
+    in graph building. A green suite said nothing about it, which is this project's own warning about
+    treating a clean diagnostic as evidence.
+
+    The pruned pass matters more than the plain one, because pruning is the thing that can *strand* a
+    pixel: the graph is rasterised back and rebuilt after the cut precisely so the labelling never
+    sees a spur's pixels without its edges. If that rebuild were skipped, the area check below is
+    what would say so.
+  */
+  const BUDGETS = [0, 4] as const;
   for (const { width, height, runs, seeds } of SHAPES) {
-    it(`holds every invariant on ${seeds} random ${width}x${height} skeletons`, () => {
+    for (const spurPrunePx of BUDGETS) {
+      it(`holds every invariant on ${seeds} random ${width}x${height} skeletons, pruning at ${spurPrunePx}`, () => {
       for (let seed = 1; seed <= seeds; seed++) {
-        const where = `${width}x${height} seed ${seed}`;
+        const where = `${width}x${height} seed ${seed} pruning ${spurPrunePx}`;
         /*
           Fitting is switched off here, and that is what makes the ring-area assertion below exact.
 
@@ -75,7 +90,7 @@ describe("the graph derivation over generated linework", () => {
           by its own tests, which is the same split the area check upstream already uses.
         */
         const result = deriveGraphRegions(randomInk(width, height, rng(seed), runs), {
-          spurPrunePx: 0,
+          spurPrunePx,
           tolerance: 0,
           maxTolerance: 0,
         });
@@ -91,9 +106,26 @@ describe("the graph derivation over generated linework", () => {
         // nor on any boundary, and the identity comes up short by exactly it.
         expect(result.graph.stats.orphans, `orphans, ${where}`).toBe(0);
 
-        // Exactly one cycle legitimately has no interior: the unbounded face outside the frame.
-        // Anything else would be a sliver that survived the cleanup.
-        expect(result.faces.unlabelled, `unlabelled cycles, ${where}`).toBe(1);
+        /*
+          At least one cycle has no interior — the unbounded face outside the frame — and with
+          pruning off that is the only one.
+
+          **With pruning on it is not, and that was discovered by extending this sweep on 2026-09-06.**
+          A sliver whose every bounding edge carries interior pixels cannot be deleted: taking such an
+          edge out would strand those pixels, which is worse than the sliver. The record has always
+          named that state and called it never observed; it is observed now, and pruning is what
+          produces it. Measured on the raster prune at a budget of 4: 1 of 400 seeds at 18x14, 3 of
+          200 at 40x30, 5 of 100 at 70x50.
+
+          It is inert rather than harmful — a face with no interior pixels holds no map and is not
+          emitted — so what this asserts is that the *derivation stays sound*, which the three checks
+          above do. Demanding one unlabelled cycle here would be demanding that pruning never meets a
+          shape it cannot fully tidy, which is not true of either implementation.
+        */
+        expect(result.faces.unlabelled, `unlabelled cycles, ${where}`).toBeGreaterThanOrEqual(1);
+        if (spurPrunePx === 0) {
+          expect(result.faces.unlabelled, `unlabelled cycles unpruned, ${where}`).toBe(1);
+        }
 
         /*
           The emitted rings must enclose exactly what the face does.
@@ -134,7 +166,8 @@ describe("the graph derivation over generated linework", () => {
           );
         }
       }
-    });
+      });
+    }
   }
 
   it("removes the sub-pixel slivers rather than merely tolerating them", () => {
