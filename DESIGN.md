@@ -1922,9 +1922,11 @@ reading tab but are **display** parameters (below).
   returns a usable set, clamping rather than rejecting and falling back **per field** so one bad
   key cannot discard a GM's other four. A parameter panel that can put the pipeline into a state it
   cannot recover from is worse than no panel.
-- **Edge simplification is capped below half an ink width** in the control itself, because that is
-  the bound past which a boundary can cross the middle of a wall into the next room. A control whose
-  top end silently merges rooms is not a control.
+- **Edge simplification WAS capped below half an ink width**, because that was the bound past which a
+  boundary could cross the middle of a wall into the next room. **Retired 2026-09-06** (user): the
+  bound stopped meaning anything when the graph pivot made both faces of a shared wall move together,
+  and the top of the track is now meant to reach obviously useless values, the same as the two ink
+  filters. The control is a fraction of the map on a graph-measured track; see §11a.
 - **Sliders, not number boxes.** These are values arrived at by feel — drag until the map looks
   right — so the control should support a sweep rather than a typed guess. The readout and the
   derived figure update *during* the drag, on `input`; only releasing writes, on `change`, so one
@@ -2061,7 +2063,15 @@ Where each parameter landed:
 | Largest break to repair | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes what is repaired invisibly |
 | Same-wall distance | px | a distance travelled across the image; nothing about it is a stroke or a square |
 | ~~Smallest room~~ | ~~squares~~ | **Control deleted 2026-08-30.** Kept in the table only because it was the one entry justifying a square-denominated unit; nothing takes squares now |
-| Edge simplification | ink widths | its safety bound *is* half an ink width |
+| Edge simplification | **fraction of the map** (was ink widths) | changed 2026-09-06: the safety bound it was denominated for is retired, and the wall editor has neither a raster nor an ink width, so a fraction of the map is the only unit both modes can express |
+| Prune spurs | **fraction of the map** (was raster px) | same change and the same reason — pruning became an operation on the fitted graph, which both modes hold |
+
+**Those two are the exception to "a threshold that moves with a measurement changes the result
+invisibly", and it is worth saying why it is not one.** Their *stored* value is an absolute fraction
+of the map and nothing moves it. What is measured off the graph is the **top of the slider's track** —
+the longest spur, the largest bend — so a re-measurement moves the handle and never the setting. A
+fixed ceiling cannot work here: two maps of the same pixel size carry 3px or 12px linework, and a
+ceiling generous enough for one puts the whole useful range of the other in the first percent.
 
 **Nothing in the pipeline depends on the grid any more.** Stage one never did; stage two's exposure
 was the smallest-room control, which depended on it *squared*, so a grid off by four put it off by
@@ -4475,6 +4485,26 @@ reasonable gives no feel for where the edge is.
   Measured rather than asserted: one ink width sits about a third of the way up such a track, so the
   range a GM tunes in is a third of the slider rather than a few pixels against the stop. `CLAUDE.md`
   carries the figures, the storage decision and the order of work.
+
+  **BUILT 2026-09-06, and not yet seen in a room.** Both controls are fractions of the map on a log
+  track with a pinned floor and an off position at the far left; the top is `longestSpur` or
+  `largestBend`, measured when the step opens and held for that opening. `largestBend` is per
+  **vertex** — how far one point sits off the line joining its neighbours — because a whole wall's
+  deviation from its own chord is dominated by the exterior, which would put every useful setting in
+  the first percent. Both measurements exclude what their tool cannot reach: a run with no free end,
+  a vertex that is a junction or an end.
+
+  **Pruning also moved past the freeze**, which is what let the editor have it at all: it is an
+  operation on the fitted graph now, a slider in the ink mode and a slider plus a **one-shot button**
+  in the editor, where applying a budget deletes walls that do not come back. The alternative —
+  prune the graph, rasterise the survivors, rebuild — was measured and abandoned: it left the
+  sub-pixel-sliver artefact on 181 of 400 generated seeds against 1 of 400 for the raster prune it
+  would have replaced, because deleting a whole edge takes one pixel further into every pruned
+  junction than the pixel walk did.
+
+  **Simplification itself did not move**, and the record was wrong to bundle it: `simplifyPolyline`
+  already takes a polyline and nothing else. Only its unit changed. The editor's own simplification is
+  still the unbuilt half of item 1 below.
 - **A crossing rule, and it is: let it split** (user, 2026-09-05). Simplification can make a wall
   cross one that used to be clear of it, where pruning cannot — deleting never breaks planarity.
   The user's argument, and it holds on the geometry rather than only intuitively: Douglas–Peucker
