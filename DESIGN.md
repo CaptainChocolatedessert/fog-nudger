@@ -4382,6 +4382,189 @@ them removes the only place where its private namespace was unavoidable.
 
 ---
 
+## 11a. The two-mode restructure — designed 2026-09-05 (user), NOT built
+
+**Everything in this section is a plan.** The surface described elsewhere in this record is what
+exists; this is what it becomes. A session picking it up should read this first and then check the
+current-state sections for what it is changing *from*.
+
+### The shape
+
+Stage one goes from nothing to a simplified graph, in three sub-stages:
+
+1. **Map** — pick one. Finishing displays the map and unlocks the rest.
+2. **Ink** — adjust the reading parameters, suppress ink, paint ink, close breaks. **One step with
+   divisions**, not three steps.
+3. **Walls** — the derived graph over the coloured partition, with the parameters that shape it:
+   spur pruning and simplification.
+
+When those are done there is something that can be emitted. **Then a separate mode**, launched
+separately, in the same basic layout: it pulls the graph from metadata, displays it, and provides
+editing tools.
+
+### Why — the user's argument, 2026-09-05
+
+> *That way, each stage feels like a complete process that starts and ends with looking at the scene.
+> It makes it evident that edit can be re-opened to make further adjustments.*
+
+Both halves matter. The first is about shape — a mode that begins by looking at a map and ends by
+putting fog on it is a thing a GM can hold whole, where a seven-header accordion spanning both is a
+list to be worked down. The second is about a defect: today the editor is a step inside the same
+accordion, reachable only by scrolling past the stage-one controls that are dimmed out because you
+are in stage two.
+
+**And there is a third payoff the framing produces rather than aims at: opening stage one stops being
+destructive.** Today crossing back discards the graph the moment you do it. As two modes sharing one
+document, opening the first is just looking — only *Generate the graph* replaces the edited one, and
+that button can warn and name what goes. That is the all-or-nothing door revisit **answered rather
+than reworded**, and it retires the item that has been sitting on the next list since 2026-09-02.
+
+### Simplification and pruning belong in BOTH modes — the key decision
+
+Offered in stage one so the graph is never raw, and offered again in the editor as operations on the
+graph as it stands.
+
+**Why that is coherent, and it is the user's observation** (2026-09-05):
+
+> *We don't need to keep the vertex ids constant anymore, because we aren't trying to re-assert vertex
+> moves after a change. It would just operate on the graph as it exists when the tool is selected.*
+
+The freeze exists because **re-deriving** renumbers everything, so stored edits point at vertices that
+no longer exist. That only bites when edits are being **replayed across a re-derivation**. An
+operation applied to the graph as it stands replays nothing — the GM's edits are already inside the
+thing being transformed. It is the same shape as erasing a wall: destructive, immediate, and holding
+no ids across it, exactly as `compactNodes` already does after every gesture.
+
+**What this changes about the freeze.** It stops being a loss and becomes a provenance note: not "the
+door that costs you your editing" but "where this graph came from". The tolerance chosen in stage one
+stops being the last word and becomes a starting point.
+
+**The cost, stated: it is a ratchet.** You can always simplify further or prune more in the editor;
+you can never get detail back without regenerating. Same for stubs.
+
+#### What the editor's versions need
+
+- **A unit.** Stage one's tolerance is a fraction of the *measured ink width*, and an editor that
+  only pulls a graph from metadata has no measurement. **Freeze the ink width alongside the graph** —
+  one number in the document, a format version bump — so both modes speak the same unit and a
+  tolerance means the same thing in each.
+- **A crossing rule, and it is: let it split** (user, 2026-09-05). Simplification can make a wall
+  cross one that used to be clear of it, where pruning cannot — deleting never breaks planarity.
+  The user's argument, and it holds on the geometry rather than only intuitively: Douglas–Peucker
+  guarantees the fitted line stays within the tolerance of every point it discards, so a crossing
+  means the other wall was **within one tolerance of the original path** — under half an ink width,
+  which is visually touching. Splitting there adds a junction where they already met to the eye, and
+  the existing sweep splits already, so it costs nothing to build.
+- **Per wall run.** A *wall* is a run of segments chained through degree-2 nodes (`wallRuns`), and
+  fitting keeps both ends, so junctions survive without being special-cased.
+
+#### The small-area-face tool — wanted eventually, and it closes a loop
+
+The user's cleanup for what a split leaves. Worth recognising: **this is the smallest-room control
+returning in the form this record already said was correct.** It was deleted rather than defaulted
+off, on the grounds that it removed a *region* when what is usually wrong is a *wall*, and that
+"removing a sliver by deleting the wall that made it is exact, local and visible, where removing it
+by area is none of those". In the editor, deleting a small face **is** deleting the walls that bound
+it. Same control, right stage.
+
+### Ink is one step with divisions — user, 2026-09-05
+
+> *I think it's reasonable to be seeing each of those tools at the same time. If necessary, there
+> could be a behavior where selecting a tool reveals a little "accordion" section for that tool, if it
+> needs tuning parameters, or a choice of brushes, or whatever. You're in the Ink workspace, and
+> there's a special effect of leaving it. But within that workspace you can jump between tools freely.*
+
+This reverses the step-per-layer arrangement built on 2026-09-05, and the reversal is about *where
+the mode boundary is* rather than about the layers. The three-layer architecture is untouched:
+suppression and added ink are still independent raster documents composed in a fixed order. What
+changes is that they are edited from one place.
+
+**The consequence that forces a real change: a paint mode must key to the STEP, not the tool.**
+
+Today a mode is entered by opening a painting step and finished by leaving it — working copy in,
+one scene write out. With both brushes as tools inside one step, keying to the tool would mean a
+scene write every time a GM flicks between them, at about a second each, which directly contradicts
+"jump between tools freely". So:
+
+> **Entering Ink opens both layers as working copies; either brush writes into its own; leaving Ink
+> writes both.**
+
+That is *less* machinery than exists, not more. `requestPaintMode`'s serialisation exists only
+because switching between two painting steps is a write-then-open; with one step it has nothing to
+serialise.
+
+**The drag binding needs no new mechanism.** The step declares `brush`, and the tool handler declines
+a press when the selected tool is not a brush — which falls through to a pan, which the shell already
+does and already has a comment explaining.
+
+### Regions dissolves — user, 2026-09-05
+
+> *"regions" as a separate step isn't needed anymore. We can always display colored regions when we
+> display the graph.*
+
+So the partition is drawn wherever the graph is drawn, in both modes, and the step that existed only
+to show it goes. Its simplification control moves to Walls; its preview fill and outline become
+display controls for the combined picture; and **"Put on the map" needs a home**, which is the end of
+Walls in the ink mode and the end of the editor in the other.
+
+### Two modes, probably ONE page
+
+Worth stating because it changes the size of the job. The shell, the accordion, the map loading, the
+view transform and every layer are already shared, and the A.1 split exists precisely so the surface
+is *a shell plus a list of steps*. The difference between the two modes is **which steps are
+declared** — a variation in one declaration, not a second application. Two buttons on the panel, one
+page, one entry in the build's page list.
+
+A genuinely separate second page would duplicate the composition root and add a manifest entry, and
+the Pages subpath is already hardcoded in ten places. Cheaper and less drift-prone as one page.
+
+### What does NOT change
+
+Worth saying explicitly, because a restructure this size invites re-opening settled things:
+
+- **The freeze stays**, and so does its position — after fitting. Four jobs need the raster and all
+  four are pre-freeze: face identity, sliver detection, the empty-face invariant, and the area and
+  handedness checks.
+- **Vertex ids are still the only stable identity inside the editor**, and renumbering mid-gesture is
+  still forbidden. Simplification and pruning are whole-document operations run between gestures,
+  which is the same slot `compactNodes` occupies.
+- **The three-layer ink composition is untouched**, including the order.
+
+### The cost, stated
+
+**The sequence becomes less legible.** Today the accordion shows the whole chain as one ordered list,
+which the record calls "the cascade made visible" and is how a GM learns the order at all. Split
+across two modes, the editor's existence is invisible from the ink mode's surface. So **finishing
+stage one has to offer the editor** rather than leaving it to be discovered — the hand-off is part of
+the feature, not a nicety.
+
+### OPEN, and it must be answered before item 4
+
+The user described leaving the ink mode as *"saving the graph and losing how it was generated"*.
+
+**Read here as a statement about the editor's point of view** — the graph is the document there and
+its provenance stops mattering — **and not as discarding the inputs.** Today the reading settings and
+both paint layers survive: reopening stage one lands a GM back at their tuned ink rather than a bare
+map, which is what makes reopening cheap and is the whole reason opening the ink mode can be
+non-destructive.
+
+If the stronger reading was meant — that leaving actually throws the settings and paint away — it
+changes item 4 substantially and removes the third payoff above. **Ask before building it.**
+
+### The order, agreed 2026-09-05
+
+Four pieces, each confirmable in a room on its own. The record's own warning is that a whole UI
+rework landing in one day leaves a long list of things nobody has looked at.
+
+1. **Simplify and prune in the editor**, with the ink width frozen into the document. Smallest,
+   self-contained, no UI restructure — and it is the piece that dissolves the freeze's tension.
+2. **Dissolve Regions**: the partition draws wherever the graph draws; simplification moves to Walls.
+3. **Merge Ink, Suppress and Add into one step**, with the tool picker, per-tool disclosure, and both
+   layers held open together.
+4. **Split into two modes**, with the map gate and the hand-off.
+
+---
+
 ## 12. Code sharing with the sibling — decided: copy, and the case has weakened
 
 The genuinely shared surface is now **smaller than it was**: image loading, binarisation, the
