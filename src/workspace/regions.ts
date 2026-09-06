@@ -21,17 +21,26 @@
  * rather than the ones metadata has caught up to. A second, lighter "just for the preview" chain is
  * exactly the duplication that made the sibling's harness and its rooms disagree in direction.
  *
- * ## Two sources, one partition — and the second is not a second implementation
+ * ## Two inputs, ONE derivation — which it was not until 2026-09-06
  *
- * In stage two the map is no longer what the rooms are made of: the frozen graph is, and the reading
- * that produced it has been closed. So the partition comes from walking that graph instead, which is
- * a different *input* rather than a parallel chain — the traversal is the one place faces are
- * derived from a frozen graph, exactly as `runTrace` is the one place they are derived from a map.
- * Getting this wrong is not cosmetic: drawing the traced partition in stage two would show the GM
- * the rooms **before** their edits, which is the one thing this surface exists to prevent.
+ * Both modes walk a frozen graph. What differs is where the graph came from: the editor reads the
+ * stored one, and the ink mode freezes the trace's own and walks that. The faces themselves come
+ * from `buildFrozenFaces` either way, which is the same function the push uses.
  *
- * It is also cheap enough to be synchronous — no reading, no thinning, no fitting, just a walk of a
- * graph already in hand — so the laziness below is stage one's concern and costs stage two nothing.
+ * **It used to draw the trace's own regions here, and that was a defect.** Those are grouped by the
+ * raster labelling; a push writes faces grouped by containment off the frozen document. Same walk,
+ * different grouping, so the ink mode previewed one answer and emitted another — introduced on
+ * 2026-09-05 when Walls started drawing the fitted graph and the partition under it was left where
+ * it was, found from the outside a day later. **Do not reach for `outcome.run.regions` here again**;
+ * what the trace is for is the graph, the fitted edges and the checks over them.
+ *
+ * The mode still decides which graph, and getting *that* wrong is not cosmetic either: reading the
+ * stored graph in the ink mode would show the GM the rooms as **edited** while they moved sliders
+ * that do not produce them, and walking the trace's in the editor would show them the rooms before
+ * their edits.
+ *
+ * The walk is cheap enough to be synchronous — no reading, no thinning, no fitting — so it costs
+ * the editor nothing, and in the ink mode it is a rounding error beside the trace it follows.
  */
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
@@ -76,9 +85,10 @@ let walls: readonly PreviewWall[] = [];
 /**
  * The space the rings are in, which is what the painter scales by.
  *
- * Stage one's is the trace's raster in pixels. **Stage two's is 1×1**, because a frozen graph is
- * stored in fractions of the map's own extent — so the same multiplication puts both over the map
- * with no branch in the painter and no second scale to keep consistent.
+ * **Always 1×1 now**, in both modes, because both draw a frozen graph and a frozen graph is stored
+ * in fractions of the map's own extent. Kept as a field rather than folded into the painter because
+ * it is the painter's contract — the rings are in *some* space and this says which — and because a
+ * third source would arrive needing to say so.
  */
 let raster: { readonly width: number; readonly height: number } | null = null;
 /**
@@ -88,12 +98,15 @@ let raster: { readonly width: number; readonly height: number } | null = null;
  * reads it live, so storing the product here would leave the outline stale until the next derive.
  * What changes with the stage is only the unit, and that is what this carries.
  *
- * **In stage two it is always zero, and that is a stated cost rather than an oversight.** The
+ * **In the editor it is always zero, and that is a stated cost rather than an oversight.** The
  * setting is denominated in grid squares; converting it needs a pixels-per-square measurement that
- * only a trace produces, and a GM who reopens a room already in stage two has never run one.
- * Honouring it only when a trace happens to have run this session would be an invisible divergence,
- * which is worse than not at all — so in stage two the outline is drawn at its screen-pixel floor.
- * The fills and the shapes, which are what the step is for, are unaffected.
+ * only a trace produces, and a GM who opens the editor has not run one. Honouring it only when a
+ * trace happens to have run this session would be an invisible divergence, which is worse than not
+ * at all — so there the outline is drawn at its screen-pixel floor. The fills and the shapes, which
+ * are what the step is for, are unaffected.
+ *
+ * **In the ink mode it is not zero**, because a trace has just run and the rings are fractions of the
+ * same map that trace divided by.
  */
 let unitsPerSquare = 0;
 
@@ -268,38 +281,64 @@ async function derive(): Promise<void> {
       return;
     }
 
-    regions = outcome.run.regions;
-    walls = outcome.run.walls;
-    raster = outcome.run.raster;
     // The same call the save makes, so what is drawn and what would be stored cannot differ.
     const stored = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
     preview = stored.graph;
     previewDropped = stored.duplicates + stored.zeroLength;
-    // Rings are in raster pixels here, so a grid square is however many pixels the run measured.
-    unitsPerSquare = lastPixelsPerSquare() ?? 0;
-    stale = false;
-    // The wall count belongs here as much as the region count: they are staged together, and when
-    // the lines were being drawn invisibly there was nothing on this surface that could say so.
-    const segments = walls.reduce((total, wall) => total + Math.max(0, wall.points.length - 1), 0);
     /*
-      The dropped count is on the line because it is a room the map has and the document will not.
+      And the same traversal the push makes, which is the second half of that sentence.
 
-      Smoothing can fit both walls of a very thin room to the same line, closing it up; the freeze
+      The trace produces rooms of its own — `outcome.run.regions`, grouped by the raster labelling —
+      and they used to be what this drew. **They are not what a push writes.** Saving stores the
+      frozen graph and the push walks *that*, grouped by containment with no raster anywhere, so the
+      ink mode was previewing one face derivation and emitting another. Found from the outside on
+      2026-09-06; introduced on 2026-09-05, when Walls started drawing the fitted graph and the
+      partition under it was left on the traced regions.
+
+      One derivation now. What the trace still derives for itself is the graph, the fitted edges and
+      the area check — a derivation, not a picture.
+    */
+    const faces = buildFrozenFaces(stored.graph);
+    regions = faces.faces.map((face) => ({ rings: face.rings }));
+    walls = wallSegments(stored.graph, faces).map((points) => ({ points }));
+    // Fractions of the map, exactly as in the editor, so the painter needs no branch either.
+    raster = { width: 1, height: 1 };
+    /*
+      A grid square as a fraction of the map, which the ink mode can answer and the editor cannot.
+
+      The trace measured it in raster pixels and the freeze divided by that raster, so the two cancel.
+      The editor has no trace and leaves this at zero, which is the stated cost recorded above; here
+      the measurement exists, so the outline setting is honoured rather than drawn at its floor.
+    */
+    const pxPerSquare = lastPixelsPerSquare() ?? 0;
+    unitsPerSquare = pxPerSquare > 0 ? pxPerSquare / Math.max(1, outcome.run.raster.width) : 0;
+    stale = false;
+    /*
+      The same figures the editor says, in the same order, because they now describe the same object.
+
+      The dropped count is on the line because it is a room the map has and the document will not:
+      smoothing can fit both walls of a very thin room to the same line, closing it up, and the freeze
       drops what that leaves. Saying so here rather than only at the save is the point — the slider
       that caused it is on screen at this moment, and afterwards it is one mode away.
+
+      Euler's identity is on it for a related reason. A doubled wall is exactly what that check
+      fails on, and in this mode there are no hand edits to make such a state a legal one to pass
+      through — so a failure here means the freeze produced something a traversal cannot mean
+      anything over, which is worth a red line rather than a log entry nobody reads.
     */
+    const rooms = `${regions.length} region${regions.length === 1 ? "" : "s"}`;
     lastSummary =
-      `${regions.length} region${regions.length === 1 ? "" : "s"}` +
-      (walls.length === 0
-        ? " · no separate walls"
-        : ` · ${walls.length} wall${walls.length === 1 ? "" : "s"} in ${segments} segments`) +
+      `${rooms} · ${wallRuns(stored.graph).length} walls in ` +
+      `${stored.graph.edges.length} segments · ${stored.graph.nodes.length} points` +
       (previewDropped === 0
         ? ""
-        : ` · ${previewDropped} wall${previewDropped === 1 ? "" : "s"} would be dropped — ` +
-          "smoothing has closed a thin room up");
-    lastSummaryOk = previewDropped === 0;
+        : ` · ${previewDropped} wall${previewDropped === 1 ? "" : "s"} dropped — ` +
+          "smoothing has closed a thin room up") +
+      (faces.eulerHolds ? "" : " · CHECK FAILED, see the log");
+    lastSummaryOk = previewDropped === 0 && faces.eulerHolds;
     say(lastSummary, lastSummaryOk ? "" : "bad");
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
+    devLog("info", `workspace: partition ${generation} — ${describeFrozenFaces(faces)}`);
   } catch (error) {
     if (requests.fail(generation)) {
       const detail = describeError(error);
