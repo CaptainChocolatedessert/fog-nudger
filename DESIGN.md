@@ -4382,11 +4382,21 @@ them removes the only place where its private namespace was unavoidable.
 
 ---
 
-## 11a. The two-mode restructure — designed 2026-09-05 (user), NOT built
+## 11a. The two-mode restructure — designed and BUILT 2026-09-05 (user)
 
-**Everything in this section is a plan.** The surface described elsewhere in this record is what
-exists; this is what it becomes. A session picking it up should read this first and then check the
-current-state sections for what it is changing *from*.
+**Three of the four pieces are built; item 1 is not.** This section was written as a plan and is kept
+as the argument, because the reasoning is what a future session needs and it did not change in the
+building. Two things to read it with:
+
+- **Everything except "the order" below describes what now exists.** Where it says "becomes", read
+  "became". `CLAUDE.md` carries the operating account of what was actually built, including the parts
+  the plan did not settle.
+- **None of it has been in a room.** It types, the suite passes and both pages were inspected outside
+  Owlbear, which says the surface renders and not that it is the surface a GM wants.
+
+**Item 1 — simplifying and pruning inside the editor — is still to build.** It is the piece that
+carries the design value, and it is a feature rather than a UI change, which is why it was not
+folded into the three that were.
 
 ### The shape
 
@@ -4572,17 +4582,30 @@ So the reading settings and both paint layers survive, as they do today: reopeni
 GM back at their tuned ink rather than a bare map. That is what makes reopening cheap, and it is the
 whole reason opening the ink mode can be non-destructive — the third payoff above stands.
 
-### The order, agreed 2026-09-05
+### The order, agreed 2026-09-05 — and what happened to it
 
-Four pieces, each confirmable in a room on its own. The record's own warning is that a whole UI
-rework landing in one day leaves a long list of things nobody has looked at.
+Four pieces, each confirmable in a room on its own. The record's own warning is that a whole UI rework
+landing in one day leaves a long list of things nobody has looked at.
 
 1. **Simplify and prune in the editor**, with the ink width frozen into the document. Smallest,
    self-contained, no UI restructure — and it is the piece that dissolves the freeze's tension.
+   **NOT BUILT.** It was asked for as a UI change and it is a feature, so it was left; nothing in the
+   three below depends on it.
 2. **Dissolve Regions**: the partition draws wherever the graph draws; simplification moves to Walls.
+   **BUILT**, one commit. Preview fill and outline went to the persistent View group rather than to
+   either step that draws the partition — the plan did not say where, and two steps drawing one layer
+   is what makes a persistent group the honest home.
 3. **Merge Ink, Suppress and Add into one step**, with the tool picker, per-tool disclosure, and both
-   layers held open together.
-4. **Split into two modes**, with the map gate and the hand-off.
+   layers held open together. **BUILT**, one commit.
+4. **Split into two modes**, with the map gate and the hand-off. **BUILT**, one commit — and it
+   carried one thing the plan did not: the ink mode's last step draws the graph *after simplification*
+   rather than the pixel skeleton, and saving out of that mode is what freezes and pushes it (user,
+   2026-09-05). The skeleton layer was deleted with that change. Closing the ink mode therefore
+   commits nothing, which is what makes reopening it harmless and is a reversal of every build before
+   it.
+
+**They were kept as three separate commits, deliberately.** Each is confirmable on its own, and a
+room run that finds a defect can say which of the three it belongs to.
 
 ---
 
