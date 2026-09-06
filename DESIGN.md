@@ -4452,12 +4452,29 @@ stops being the last word and becomes a starting point.
 **The cost, stated: it is a ratchet.** You can always simplify further or prune more in the editor;
 you can never get detail back without regenerating. Same for stubs.
 
+**And the half-ink-width cap on simplification is retired** (user, 2026-09-06). Both controls are
+meant to reach obviously-useless values at the top — every trace to one segment, every wall pruned —
+on the same argument the two ink filters already rest on: a control whose top end still looks
+reasonable gives no feel for where the edge is.
+
 #### What the editor's versions need
 
-- **A unit.** Stage one's tolerance is a fraction of the *measured ink width*, and an editor that
-  only pulls a graph from metadata has no measurement. **Freeze the ink width alongside the graph** —
-  one number in the document, a format version bump — so both modes speak the same unit and a
-  tolerance means the same thing in each.
+- **A unit. SUPERSEDED 2026-09-06 (user) — the ink width is NOT frozen into the document.** The
+  plan was one number stored beside the graph and a format version bump, because stage one's tolerance
+  is a fraction of the *measured ink width* and an editor that only pulls a graph from metadata has no
+  measurement.
+
+  What replaces it needs no storage at all: denominate both controls in something measured off **the
+  graph itself**, which both modes have. A **log scale** from a **pinned floor** — a small fraction of
+  the map, since the editor has no raster — to a **graph-derived top**, the largest observed bend for
+  simplification and the longest spur for pruning, re-measured each time the tool opens. The floor is
+  pinned rather than tracking the observed minimum because **both tools delete from the bottom**, so a
+  tracking floor would chase the slider upward on every application. The far-left position is a
+  literal zero, so off is exactly off.
+
+  Measured rather than asserted: one ink width sits about a third of the way up such a track, so the
+  range a GM tunes in is a third of the slider rather than a few pixels against the stop. `CLAUDE.md`
+  carries the figures, the storage decision and the order of work.
 - **A crossing rule, and it is: let it split** (user, 2026-09-05). Simplification can make a wall
   cross one that used to be clear of it, where pruning cannot — deleting never breaks planarity.
   The user's argument, and it holds on the geometry rather than only intuitively: Douglas–Peucker
