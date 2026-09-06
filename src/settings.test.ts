@@ -33,23 +33,32 @@ describe("normaliseSettings", () => {
     expect(high.review.fillOpacity).toBe(1);
   });
 
-  it("caps simplification below the bound that stops a boundary crossing a wall", () => {
-    /*
-      **A conservative bound whose original reason is gone — do not raise it without deriving a new
-      one.** Region-first, half an ink width was where Douglas–Peucker stopped being provably unable
-      to carry a room's edge into the room next door. Under the wall graph that cannot happen: the
-      boundary *is* the wall's centreline, both faces are assembled from the same fitted edge, and
-      they move together.
+  /*
+    The half-ink-width cap was pinned here and is **retired** (user, 2026-09-06).
 
-      The cap stays because it is conservative, and the risk it now guards — a corner cut across a
-      doorway — **has not been derived**. Said plainly here because the comment this replaced gave a
-      causal justification a future session would check, find false, and use to justify raising a
-      cap `CLAUDE.md` says never to raise.
-    */
-    expect(SETTING_LIMITS.simplifyInkWidths.max).toBeLessThan(0.5);
-    expect(normaliseSettings({ trace: { simplifyInkWidths: 5 } }).trace.simplifyInkWidths).toBe(
-      SETTING_LIMITS.simplifyInkWidths.max,
-    );
+    Region-first, half an ink width was where Douglas–Peucker stopped being provably unable to carry
+    a room's edge into the room next door. Under the wall graph that cannot happen: the boundary *is*
+    the wall's centreline, both faces are assembled from the same fitted edge, and they move
+    together. What replaces the cap is the same argument the two ink filters rest on — the top of the
+    track should reach obviously useless values, and it is visible when it does.
+
+    What still has to hold is the **off state**, which is what the two graph-derived controls gained
+    when they moved onto a log scale. Both have a real zero, and a log scale cannot start at one.
+  */
+  it("keeps a stored zero at zero on the two log controls with an off position", () => {
+    for (const name of ["simplifyFraction", "spurPruneFraction"] as const) {
+      const limits = SETTING_LIMITS[name];
+      /*
+        The floor is declared beside `min` rather than as it, and that is forced.
+
+        This normaliser clamps into `[min, max]`, so a positive `min` would raise a stored zero to
+        the floor on every read — destroying the off state at the one moment nothing is watching.
+      */
+      expect(limits.min).toBe(0);
+      expect(limits.floor).toBeGreaterThan(0);
+      expect(normaliseSettings({ trace: { [name]: 0 } }).trace[name]).toBe(0);
+      expect(normaliseSettings({ trace: { [name]: 99 } }).trace[name]).toBe(limits.max);
+    }
   });
 
   it("falls back per field, not wholesale", () => {

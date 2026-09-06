@@ -46,6 +46,7 @@ import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
+import { renderPruneAction } from "./workspace/pruneAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
@@ -216,7 +217,22 @@ registerStepContent("ink", renderSwatches);
 registerStepContent("walls", renderFreezeAction, "bottom");
 // What you do with the walls, above the button that writes them.
 registerStepContent("edit", renderWallTools);
-registerStepContent("edit", renderPushAction, "bottom");
+/*
+  Two actions at the foot of the editor, in the order they are reached.
+
+  Pruning changes the document and pushing writes it to the scene, so pruning comes first — and both
+  are below the slider that decides what pruning would take, which is the reason the bottom slot
+  exists at all. One render rather than a third slot: what wanted separate slots was a *picker* at
+  the top against an *action* at the bottom, and these are two actions.
+*/
+registerStepContent(
+  "edit",
+  (body) => {
+    renderPruneAction(body);
+    renderPushAction(body);
+  },
+  "bottom",
+);
 
 /*
   Closing writes the result to the scene.

@@ -464,6 +464,61 @@ export function longestSpur(graph: FrozenGraph): number {
   return longest;
 }
 
+/**
+ * The largest bend in the graph, which is what a simplification slider's top end is measured from.
+ *
+ * A **bend** is measured at one vertex: how far it sits off the straight line joining its two
+ * neighbours. That is the same quantity a Douglas–Peucker tolerance is compared against, so a
+ * tolerance at this figure is one at which every bend on the map is a candidate for removal — which
+ * is the deliberate over-reach the top of the track is for, in the same family as the ink filters
+ * that run far enough to erase a map.
+ *
+ * **Per vertex rather than per wall**, and that is the difference between a usable track and a
+ * useless one. A whole wall's deviation from the chord between its ends is dominated by the exterior
+ * wall, which wraps the building and departs from its own chord by something like half the map — so
+ * a top measured that way would put every setting a GM wants in the first percent of the track.
+ *
+ * Only vertices with exactly two walls are counted, because those are the only ones simplification
+ * can remove. A junction and a free end survive any tolerance, so a bend at one is not a bend this
+ * control could act on. Same exclusion, and the same reason, as `longestSpur`'s.
+ *
+ * Zero when there is nothing to measure, which the caller reads as "no top".
+ */
+export function largestBend(graph: FrozenGraph): number {
+  const degrees = nodeDegrees(graph);
+  const neighbours = new Map<number, number[]>();
+  for (const edge of graph.edges) {
+    if (degrees[edge.a] === 2) (neighbours.get(edge.a) ?? neighbours.set(edge.a, []).get(edge.a)!).push(edge.b);
+    if (degrees[edge.b] === 2) (neighbours.get(edge.b) ?? neighbours.set(edge.b, []).get(edge.b)!).push(edge.a);
+  }
+
+  let largest = 0;
+  for (const [id, sides] of neighbours) {
+    if (sides.length !== 2) continue;
+    const point = graph.nodes[id];
+    const from = graph.nodes[sides[0]!];
+    const to = graph.nodes[sides[1]!];
+    if (!point || !from || !to) continue;
+    largest = Math.max(largest, offLine(point, from, to));
+  }
+  return largest;
+}
+
+/**
+ * How far `point` sits off the line through `from` and `to`.
+ *
+ * The distance to the infinite line rather than to the segment, which is what Douglas–Peucker
+ * measures and therefore what a tolerance is comparable to. When the two neighbours coincide there
+ * is no line, so the distance to the point they share is the honest answer.
+ */
+function offLine(point: Vector2, from: Vector2, to: Vector2): number {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const span = Math.hypot(dx, dy);
+  if (span === 0) return Math.hypot(point.x - from.x, point.y - from.y);
+  return Math.abs(dy * (point.x - from.x) - dx * (point.y - from.y)) / span;
+}
+
 /** Grows as needed; `bytes()` returns exactly what was written. */
 class ByteWriter {
   private buffer = new Uint8Array(1024);

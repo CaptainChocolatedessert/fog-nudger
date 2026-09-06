@@ -57,6 +57,7 @@ import {
   wallRuns,
   type FrozenGraph,
 } from "../trace/frozenGraph";
+import { noteGraph } from "./graphScale";
 import { inEditor } from "./mode";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
@@ -263,19 +264,21 @@ let derivation: {
  * is a few milliseconds against the second the trace took.
  */
 function publish(from: NonNullable<typeof derivation>, generation: number): void {
-  /*
-    The budget is in raster pixels and the graph is in map fractions, so it is converted here.
-
-    **Temporary, and the conversion is the tell.** The whole reason pruning moved past the freeze is
-    that the editor has no raster and therefore cannot speak this unit at all; re-denominating the
-    control in map fractions is the step that follows this one. Until then the ink mode converts and
-    the editor has no prune control.
-  */
-  const budget = currentSettings().trace.spurPrunePx / from.rasterWidth;
+  // Both the budget and the graph are in fractions of the map, so there is nothing to convert —
+  // which is the point of the unit, and what lets the editor run the same operation.
+  const budget = currentSettings().trace.spurPruneFraction;
   const pruned = pruneFrozenGraph(from.graph, budget);
 
   preview = pruned.graph;
   previewDropped = from.dropped;
+  /*
+    Measured from the graph **before** pruning, which is the graph the slider's own budget acts on.
+
+    Handing over the pruned one would make the top the longest spur that *survived* — which is the
+    budget itself, so raising the slider would raise the floor of what it measures against and the
+    handle would chase the setting. The bottom of these tracks is pinned for the same reason.
+  */
+  noteGraph(from.graph);
 
   const faces = buildFrozenFaces(pruned.graph);
   regions = faces.faces.map((face) => ({ rings: face.rings }));
@@ -470,6 +473,7 @@ function clearPartition(): void {
   unitsPerSquare = 0;
   preview = null;
   stale = false;
+  noteGraph(null);
   requests.fulfil(generation);
   lastSummary = "no walls saved for this map yet";
   lastSummaryOk = true;
@@ -484,6 +488,7 @@ function deriveFrozen(graph: FrozenGraph): void {
 
   regions = result.faces.map((face) => ({ rings: face.rings }));
   walls = wallSegments(graph, result).map((points) => ({ points }));
+  noteGraph(graph);
   // Fractions of the map, so one unit is the whole map and the painter's scale needs no branch.
   raster = { width: 1, height: 1 };
   unitsPerSquare = 0;

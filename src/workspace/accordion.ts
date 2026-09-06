@@ -50,6 +50,7 @@ import {
   type Step,
   type StepId,
 } from "../steps";
+import { forgetGraphScale } from "./graphScale";
 import { recomputeFor, resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
@@ -276,6 +277,12 @@ export function renderPanel(): void {
   // Cleared with the rows they belong to, or a rebuild would leave painters pointing at detached
   // elements and grow the list every time the settings arrive.
   resetHints();
+  /*
+    And the graph-derived slider tops with them, which is what makes them "measured when the tool
+    opens": this runs on every header click, so opening a step re-measures and everything in between
+    holds still. A top re-measured on every derive would chase the slider that caused the derive.
+  */
+  forgetGraphScale();
 
   const container = document.getElementById("steps");
   if (container) {

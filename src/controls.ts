@@ -42,6 +42,16 @@ export interface Measured {
   readonly pxPerSquare: number | null;
   /** Measured ink width in raster pixels, or `null` before any run. */
   readonly inkWidth: number | null;
+  /**
+   * The raster the last reading used, in pixels across, or `null` before any run.
+   *
+   * What turns a fraction of the map back into pixels, for the two controls whose stored unit is a
+   * fraction. Nullable for the same reason as the other two, and for one more: **the editor never
+   * has it**, because it never runs a reading. A readout that invented a raster there would be
+   * reporting a guess in the voice of a measurement about a mode that has no such measurement at
+   * all.
+   */
+  readonly rasterWidth: number | null;
 }
 
 /*
@@ -58,6 +68,16 @@ export interface Control {
   readonly label: string;
   readonly hint: string;
   readonly scale?: Scale;
+  /**
+   * How the number beside the label is written, when the stored unit is not one to show a GM.
+   *
+   * Two controls store a fraction of the map, because that is the only unit both modes can speak —
+   * and "0.00043" beside a slider is a number nobody can read. This turns it into one they can. The
+   * *unit* is not negotiable; how it is spelled is.
+   *
+   * Absent means the shared formatter decides, which is the ordinary case.
+   */
+  readonly format?: (value: number) => string;
   /**
    * Renders the value in a unit the GM can feel.
    *
@@ -97,6 +117,34 @@ export interface Control {
  * pixels where none has. The nullable measurement is why: before a first reading there is no density
  * and a readout that invented one would be a guess in the voice of a measurement.
  */
+/**
+ * A fraction of the map, written so it can be read at a glance.
+ *
+ * Per ten thousand rather than per cent, because everything these two controls express lives between
+ * about two and five hundred parts in ten thousand — a percentage would print three leading zeroes
+ * for every value a GM will ever choose.
+ */
+function mapFraction(value: number): string {
+  if (value <= 0) return "off";
+  return `${Number((value * 10000).toPrecision(3))}/10k`;
+}
+
+/**
+ * The same fraction in raster pixels, which is the unit a GM can actually feel.
+ *
+ * Only the ink mode can say it: it needs the raster the last reading used, and the editor has never
+ * run one. That asymmetry is the whole reason the stored unit is a fraction — a control the editor
+ * cannot denominate is a control the editor cannot have — so this is the readout being generous
+ * where it can rather than the setting depending on a measurement.
+ */
+function inRasterPixels(value: number, { rasterWidth, inkWidth }: Measured): string {
+  if (rasterWidth === null || rasterWidth <= 0) return "";
+  const px = value * rasterWidth;
+  const base = `${px.toFixed(1)}px`;
+  if (inkWidth === null || inkWidth <= 0) return base;
+  return `${base}, ${(px / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink width`;
+}
+
 function brushReadout(value: number, { pxPerSquare }: Measured): string {
   const px = `${Math.round(value)}px across`;
   if (pxPerSquare === null || pxPerSquare <= 0) return px;
@@ -164,14 +212,15 @@ export const CONTROLS: readonly Control[] = [
       value <= 0 ? "propose every break" : `${Math.round(value)}px along the ink`,
   },
   {
-    name: "spurPrunePx",
+    name: "spurPruneFraction",
     label: "Prune spurs",
-    hint: "Removes dead-end walls shorter than this, measured along the wall in pixels. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Zero is off</b>, and past a wall's own length it eats the graph.",
-    derive: (value, { pxPerSquare }) => {
-      if (value <= 0) return "off";
-      if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;
-      return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
-    },
+    scale: "log",
+    hint: "Removes dead-end walls shorter than this, measured along the wall. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Far left is off</b>, and the top of the track is the longest dead end this graph has &mdash; past a wall's own length it eats the graph.",
+    format: mapFraction,
+    // Nothing when off, because `format` has already said so beside the label. These two are the
+    // only controls whose own formatter names the off state, so they are the only ones whose hint
+    // must not repeat it.
+    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
   {
     name: "suppressBrushPx",
@@ -201,12 +250,11 @@ export const CONTROLS: readonly Control[] = [
     hint: "In grid squares, and <b>only here</b>. An emitted shape carries no outline at all: Dynamic Fog offsets its walls by exactly that width, so an outline would push them half of one either side of the boundary.",
   },
   {
-    name: "simplifyInkWidths",
+    name: "simplifyFraction",
     label: "Edge simplification",
-    hint: "As a share of the measured ink width. Capped below a half, which is the point past which a boundary could cross the middle of a wall into the next room.",
-    derive: (value, { inkWidth }) =>
-      inkWidth === null || inkWidth <= 0
-        ? "trace once for a figure"
-        : `${(value * inkWidth).toFixed(1)}px of a ${inkWidth.toFixed(1)}px ink width`,
+    scale: "log",
+    hint: "How far a wall may be moved to straighten it, as a share of the map. <b>Far left is off</b>; the top of the track is the biggest bend this graph has, which flattens everything. The bottom of the track does nothing on a graph already fitted this hard &mdash; that dead stretch is how far it has been taken already.",
+    format: mapFraction,
+    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
 ];

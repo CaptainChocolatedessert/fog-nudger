@@ -10,7 +10,7 @@
  */
 
 import { type Control, type Measured } from "../controls";
-import { lastInkWidth, lastPixelsPerSquare } from "../pipeline";
+import { lastInkWidth, lastPixelsPerSquare, lastRasterWidth } from "../pipeline";
 import {
   isSkeletonOnly,
   PARAMETER_KIND,
@@ -20,15 +20,51 @@ import {
   writeParameter,
 } from "../settings";
 import type { SettingName } from "../settings";
-import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
+import {
+  formatValue,
+  fromSlider,
+  SLIDER_STEPS,
+  toSlider,
+  type Scale,
+  type ScaleLimits,
+} from "../sliderScale";
+import { graphScaleTop, onGraphScale } from "./graphScale";
 import { refreshBreakSearch } from "./paintTool";
 import { requestReread } from "./reading";
 import { invalidateRegions, repruneRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 
+/**
+ * The track a control's slider runs over.
+ *
+ * The declared limits for all but two, whose top end is measured off the graph. Falling back to the
+ * declared maximum when there is no measurement yet is deliberate: it is a real ceiling rather than
+ * a guess, and the handle moves to where the measurement puts it the moment one arrives.
+ */
+function trackFor(name: SettingName): ScaleLimits {
+  const declared: ScaleLimits = SETTING_LIMITS[name];
+  const top = graphScaleTop(name);
+  return top === null ? declared : { ...declared, max: top };
+}
+
+/**
+ * The number beside the label.
+ *
+ * A control may spell its own value, because two of them store a fraction of the map and "0.00043"
+ * is not a number anybody can read. Everything else takes the shared formatter, which knows about
+ * steps and off positions and should not be bypassed for taste.
+ */
+function format(control: Control, value: number, limits: ScaleLimits, scale: Scale): string {
+  return control.format ? control.format(value) : formatValue(value, limits, scale);
+}
+
 function measured(): Measured {
-  return { pxPerSquare: lastPixelsPerSquare(), inkWidth: lastInkWidth() };
+  return {
+    pxPerSquare: lastPixelsPerSquare(),
+    inkWidth: lastInkWidth(),
+    rasterWidth: lastRasterWidth(),
+  };
 }
 
 /**
@@ -148,9 +184,17 @@ export function recomputeFor(names: readonly SettingName[]): void {
  * slider does what.
  */
 export function settingRow(control: Control): HTMLElement {
-  const limits = SETTING_LIMITS[control.name];
   const scale = control.scale ?? "linear";
   const value = readParameter(currentSettings(), control.name);
+  /*
+    The track, which for two controls is not the declared one.
+
+    Their top end is measured off the graph — the longest spur, the largest bend — so `SETTING_LIMITS`
+    supplies only the storage bounds and the pinned floor. `graphScale.ts` carries the reasoning; what
+    matters here is that this is a `let`, because the measurement can arrive after the row is built
+    and the handlers below have to see the new track when it does.
+  */
+  let limits = trackFor(control.name);
 
   const row = document.createElement("div");
   row.className = "row";
@@ -162,7 +206,7 @@ export function settingRow(control: Control): HTMLElement {
   label.htmlFor = `control-${control.name}`;
   const readout = document.createElement("span");
   readout.className = "value";
-  readout.textContent = formatValue(value, limits, scale);
+  readout.textContent = format(control, value, limits, scale);
   top.append(label, readout);
 
   const input = document.createElement("input");
@@ -172,6 +216,16 @@ export function settingRow(control: Control): HTMLElement {
   input.max = String(SLIDER_STEPS);
   input.step = "1";
   input.value = String(toSlider(value, limits, scale));
+  /*
+    The position the stored value put the handle at, so a release that moved nothing writes nothing.
+
+    Without it, letting go of a slider the GM only brushed rewrites the setting to whatever value
+    that position happens to mean — which on the two graph-scaled tracks is *not* the stored value,
+    because the top moves and no number can land on its own step under every top. It is worth having
+    on every control regardless: a drag away and back is a change of nothing, and re-deriving for it
+    is a second of a GM's time spent arriving where they already were.
+  */
+  let placed = Number(input.value);
 
   const hint = document.createElement("p");
   hint.className = "hint";
@@ -185,6 +239,25 @@ export function settingRow(control: Control): HTMLElement {
   paintHint(value);
   // Registered so a change to one control can refresh the readouts of the others.
   hintPainters.push(() => paintHint(fromSlider(Number(input.value), limits, scale)));
+
+  /*
+    Reposition when the measurement lands, which is after the first derive of an opening.
+
+    **The value does not move; the handle does.** That is the whole shape of the decision — the
+    stored setting is an absolute tolerance, so a re-measured top can only change where on the track
+    it sits. Registered through `graphScale` rather than through a subscription of this row's own, so
+    the list is cleared with the rows it belongs to.
+  */
+  if (graphScaleTop(control.name) === null) {
+    onGraphScale(() => {
+      limits = trackFor(control.name);
+      const current = readParameter(currentSettings(), control.name);
+      placed = toSlider(current, limits, scale);
+      input.value = String(placed);
+      readout.textContent = format(control, current, limits, scale);
+      paintHint(current);
+    });
+  }
 
   /*
     Re-reads on **release**, not while dragging — reverted 2026-08-23 after a room reported the
@@ -203,7 +276,7 @@ export function settingRow(control: Control): HTMLElement {
 
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = formatValue(current, limits, scale);
+    readout.textContent = format(control, current, limits, scale);
     paintHint(current);
 
     if (kind === "display") {
@@ -227,7 +300,16 @@ export function settingRow(control: Control): HTMLElement {
   });
 
   input.addEventListener("change", () => {
-    const current = fromSlider(Number(input.value), limits, scale);
+    const position = Number(input.value);
+    if (position === placed) {
+      // Nothing moved. Say so and stop, rather than writing a value the track happens to mean here
+      // and paying for a recompute that would arrive at the same picture.
+      setPendingEdit(false);
+      say("");
+      return;
+    }
+    placed = position;
+    const current = fromSlider(position, limits, scale);
     setSettings(writeParameter(currentSettings(), control.name, current));
     setPendingEdit(false);
 

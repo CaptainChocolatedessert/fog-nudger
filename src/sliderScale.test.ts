@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "./sliderScale";
+import {
+  formatValue,
+  fromSlider,
+  SLIDER_STEPS,
+  toSlider,
+  type ScaleLimits,
+} from "./sliderScale";
 import { DEFAULT_SETTINGS, readParameter, SETTING_LIMITS, type SettingName } from "./settings";
 
 const linear = { min: 0, max: 1, step: 0.02 };
@@ -98,17 +104,46 @@ describe("round-tripping", () => {
       prevents is the worst a control can have: merely opening a surface rewrites a GM's setting, and
       nothing announces it.
 
-      No shipping control is log-scaled — the smallest-room threshold was the only one and was
-      deleted — so this walks the linear scale. The log path is covered against a locally declared
-      range in the tests above; a ternary here naming `minRoomSquares` outlived the setting and always
-      chose "linear" anyway.
+      **Two shipping controls are log-scaled now** — the prune budget and the simplification
+      tolerance — and they are excluded here rather than tested more loosely, because for them the
+      property is not merely unmet, it is *unmeetable*. Their track's top end is measured off the
+      graph when the step opens, so the value at a given position depends on the map; no stored
+      number can land on its own step under every top. What closes the failure there is a guard in
+      `settingRows` that writes only when the slider's **position** changed, which is the block
+      below.
     */
-    for (const [name, limits] of Object.entries(SETTING_LIMITS)) {
+    for (const [name, declared] of Object.entries(SETTING_LIMITS)) {
+      const limits: ScaleLimits = declared;
+      if (limits.floor !== undefined) continue;
       // Read from the real defaults rather than a copy of them. A hand-maintained list here went
       // stale the moment a setting was added, and failed as `NaN` — which reads as a scaling bug
       // rather than as a missing entry.
       const value = readParameter(DEFAULT_SETTINGS, name as SettingName);
       expect(fromSlider(toSlider(value, limits, "linear"), limits, "linear"), name).toBe(value);
+    }
+  });
+
+  /*
+    What the two graph-scaled controls have instead, and it is what the guard rests on.
+
+    A stored value need not land on a step, but the *position* it lands on must be stable: read the
+    value, place the handle, and reading the handle again without touching it must give the same
+    position. That is what makes "the position did not change" a sound test for "the GM did not
+    change anything", whatever top the track happens to have been measured at.
+  */
+  it("puts a stored value at a stable position on a graph-scaled track", () => {
+    for (const [name, declared] of Object.entries(SETTING_LIMITS)) {
+      const limits: ScaleLimits = declared;
+      if (limits.floor === undefined) continue;
+      const stored = readParameter(DEFAULT_SETTINGS, name as SettingName);
+      // Every top the measurement could plausibly land on, plus the declared ceiling.
+      for (const max of [0.01, 0.08, 0.25, limits.max]) {
+        const track = { ...limits, max };
+        const first = toSlider(stored, track, "log");
+        expect(toSlider(fromSlider(first, track, "log"), track, "log"), `${name} at ${max}`).toBe(
+          first,
+        );
+      }
     }
   });
 

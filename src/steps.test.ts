@@ -32,6 +32,7 @@ import {
   isStepDefault,
   LAYERS,
   PARAMETER_STEP,
+  stepsOf,
   resetStep,
   STEPS,
   stepControls,
@@ -68,15 +69,33 @@ describe("the step declaration", () => {
     // Totality is the point, and the failure is worse than the stage's: a parameter with no step
     // appears in no section on either surface, which is a control a GM simply cannot reach.
     for (const name of ALL_NAMES) {
-      expect(DECLARED.has(PARAMETER_STEP[name])).toBe(true);
+      for (const step of stepsOf(name)) expect(DECLARED.has(step)).toBe(true);
     }
     expect(Object.keys(PARAMETER_STEP).sort()).toEqual([...ALL_NAMES].sort());
   });
 
-  it("partitions the parameters across the steps with no gaps or overlaps", () => {
+  /*
+    A **cover**, not a partition, and that changed on 2026-09-06.
+
+    Every parameter has to be reachable from some step, or a control is declared and never drawn.
+    What is no longer true is that it appears in exactly one: spur pruning is in each mode's last
+    step, because the operation is the same and the two modes want it on different terms — a slider
+    re-applied on every derive in the ink mode, a number a button applies once in the editor.
+
+    What is still asserted is that any repeat is **across modes rather than within one**. A control
+    drawn twice in one accordion would be two handles on one setting, which is a different thing
+    entirely and is a mistake.
+  */
+  it("covers every parameter, and repeats one only across the two modes", () => {
     const collected = STEPS.flatMap((step) => stepParameters(step.id));
-    expect([...collected].sort()).toEqual([...ALL_NAMES].sort());
-    expect(new Set(collected).size).toBe(collected.length);
+    expect([...new Set(collected)].sort()).toEqual([...ALL_NAMES].sort());
+
+    for (const mode of ["ink", "edit"] as const) {
+      const here = STEPS.filter((step) => step.modes.includes(mode)).flatMap((step) =>
+        stepParameters(step.id),
+      );
+      expect(new Set(here).size, mode).toBe(here.length);
+    }
   });
 
   it("allows a step with no parameters, because a step is a mode rather than a group of sliders", () => {
@@ -231,8 +250,9 @@ describe("a step's groups", () => {
 
   it("keeps every control reachable from some step", () => {
     // The union of the steps must cover the control list, or a control is declared and never drawn.
+    // A set, because one control is declared in both modes — see the cover test above.
     const drawn = STEPS.flatMap((step) => stepControls(step.id)).map((control) => control.name);
-    expect([...drawn].sort()).toEqual(CONTROLS.map((control) => control.name).sort());
+    expect([...new Set(drawn)].sort()).toEqual(CONTROLS.map((control) => control.name).sort());
   });
 });
 
@@ -261,7 +281,11 @@ describe("per-step defaults", () => {
       expect(isStepDefault(edited, step.id), `${step.id} is edited`).toBe(false);
       for (const other of STEPS) {
         if (other.id === step.id) continue;
-        expect(isStepDefault(edited, other.id), `${other.id} is untouched`).toBe(true);
+        // A step sharing a parameter with the edited one is *not* untouched, and should not claim to
+        // be: its own Defaults button restores that parameter, so saying otherwise would be the
+        // button and its label disagreeing.
+        const shared = stepParameters(other.id).some((name) => parameters.includes(name));
+        expect(isStepDefault(edited, other.id), `${other.id} is untouched`).toBe(!shared);
       }
     }
   });
@@ -280,7 +304,7 @@ describe("per-step defaults", () => {
         );
       }
       for (const name of ALL_NAMES) {
-        if (PARAMETER_STEP[name] === step.id) continue;
+        if (stepsOf(name).includes(step.id)) continue;
         expect(readParameter(reset, name), `${step.id}: ${name} untouched`).toBe(
           readParameter(everything, name),
         );
@@ -327,7 +351,9 @@ describe("the four axes are declared independently", () => {
     // stage's cache invalidation - the failure the two-axis split exists to prevent, one axis on.
     const byStep = new Map<StepId, Set<string>>();
     for (const name of ALL_NAMES) {
-      const step = PARAMETER_STEP[name];
+      // Through `stepsOf`, because a control may name more than one step — spur pruning is in both
+      // modes' last step. Every step it names has to carry the same conclusion.
+      for (const step of stepsOf(name))
       byStep.set(step, (byStep.get(step) ?? new Set()).add(PARAMETER_STAGE[name]));
     }
     expect([...byStep.values()].some((stages) => stages.size > 1)).toBe(true);
@@ -340,7 +366,9 @@ describe("the four axes are declared independently", () => {
     // the two from quietly becoming synonyms.
     const byStep = new Map<StepId, Set<string>>();
     for (const name of ALL_NAMES) {
-      const step = PARAMETER_STEP[name];
+      // Through `stepsOf`, because a control may name more than one step — spur pruning is in both
+      // modes' last step. Every step it names has to carry the same conclusion.
+      for (const step of stepsOf(name))
       byStep.set(step, (byStep.get(step) ?? new Set()).add(PARAMETER_KIND[name]));
     }
     expect([...byStep.values()].some((kinds) => kinds.size > 1)).toBe(true);
@@ -352,7 +380,9 @@ describe("the four axes are declared independently", () => {
     // it touches, which is the boundary that can be *wrong* rather than merely useless.
     const byStep = new Map<StepId, Set<boolean>>();
     for (const name of ALL_NAMES) {
-      const step = PARAMETER_STEP[name];
+      // Through `stepsOf`, because a control may name more than one step — spur pruning is in both
+      // modes' last step. Every step it names has to carry the same conclusion.
+      for (const step of stepsOf(name))
       byStep.set(step, (byStep.get(step) ?? new Set()).add(isPostReading(name)));
     }
     expect([...byStep.values()].some((sides) => sides.size > 1)).toBe(true);

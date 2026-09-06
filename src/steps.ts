@@ -435,7 +435,7 @@ export const STEPS: readonly Step[] = [
  * Total over every parameter, and asserted so: a parameter with no step would simply vanish from
  * both surfaces, which is a control a GM cannot reach and nothing to say it is missing.
  */
-export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
+export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly StepId[]>> = {
   // How the ink is drawn sits with the ink, and how a proposal is drawn sits with the proposals
   // (user, 2026-08-29). They were a View group of their own while the partition existed only in the
   // scene; now that both are drawn on this canvas, a control that changes one belongs beside it.
@@ -459,8 +459,21 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   gapTravelPx: "ink",
   // Both of the controls that shape the graph, together. Pruning decides which walls survive and
   // smoothing decides what shape they are, and the step draws the result of both.
-  spurPrunePx: "walls",
-  simplifyInkWidths: "walls",
+  /*
+    Pruning is in **two** steps, one per mode, and it is the only control that is.
+
+    The operation is the same one either way — the same budget, the same units, the same code — and
+    the two modes want it on opposite terms. In the ink mode the graph is a derivation, so the budget
+    is re-applied on every derive and turning it back down puts the walls back. In the editor the
+    graph is the document, so applying it deletes walls that do not return, and the slider sets a
+    number that a **button** applies once.
+
+    Repeating the control rather than giving the editor one of its own is what keeps a GM from having
+    to find a budget that suits their map twice. Only one mode is on screen at a time, so nothing is
+    ever drawn twice.
+  */
+  spurPruneFraction: ["walls", "edit"],
+  simplifyFraction: "walls",
   /*
     How the partition is drawn, in the group that is never entered.
 
@@ -533,14 +546,24 @@ export function workspaceSteps(mode: WorkspaceMode): readonly Step[] {
  * order-independent.
  */
 export function stepParameters(step: StepId): readonly SettingName[] {
-  return (Object.keys(PARAMETER_STEP) as SettingName[]).filter(
-    (name) => PARAMETER_STEP[name] === step,
-  );
+  return (Object.keys(PARAMETER_STEP) as SettingName[]).filter((name) => stepsOf(name).includes(step));
 }
 
 /** The controls belonging to one step, in declaration order. */
 export function stepControls(step: StepId): readonly Control[] {
-  return CONTROLS.filter((control) => PARAMETER_STEP[control.name] === step);
+  return CONTROLS.filter((control) => stepsOf(control.name).includes(step));
+}
+
+/**
+ * Which steps a parameter appears in.
+ *
+ * Almost always one, and the declaration says so by naming it plainly; a list is how a control that
+ * genuinely belongs to both modes says so. Read through here rather than off the map, so a future
+ * second member cannot be missed by one of the two callers above.
+ */
+export function stepsOf(name: SettingName): readonly StepId[] {
+  const where = PARAMETER_STEP[name];
+  return typeof where === "string" ? [where] : where;
 }
 
 /** The controls of a step that no group claims, which is what a step renders before its groups. */

@@ -29,6 +29,12 @@ function sampleValues(name: (typeof CONTROLS)[number]["name"]): number[] {
 
 const NONSENSE = ["NaN", "Infinity", "undefined", "null", "[object"];
 
+/** Nothing read yet — the state a workspace opens in, and the only state the editor is ever in. */
+const MEASURED_NONE: Measured = { pxPerSquare: null, inkWidth: null, rasterWidth: null };
+
+/** The test map's own figures, so a passing sweep is about a plausible map. */
+const MEASURED_MAP: Measured = { pxPerSquare: 51, inkWidth: 5.7, rasterWidth: 3300 };
+
 function sweep(measured: Measured, label: string): void {
   for (const control of CONTROLS) {
     if (!control.derive) continue;
@@ -45,7 +51,7 @@ describe("every control's readout", () => {
   it("says nothing nonsensical before anything has been measured", () => {
     // The state a workspace opens in. Every readout that needs a measurement has to drop its clause
     // rather than reach for a number that does not exist yet.
-    sweep({ pxPerSquare: null, inkWidth: null }, "nothing measured");
+    sweep(MEASURED_NONE, "nothing measured");
   });
 
   it("says nothing nonsensical on a zero measurement, which survives a null guard", () => {
@@ -53,39 +59,65 @@ describe("every control's readout", () => {
     // squares, and `=== null` does not catch a zero — so the division that followed printed
     // "Infinity". `lastPixelsPerSquare` nulls a zero at source now; this is the type's own contract
     // holding rather than one caller remembering to.
-    sweep({ pxPerSquare: 0, inkWidth: 0 }, "zero measurements");
+    sweep({ pxPerSquare: 0, inkWidth: 0, rasterWidth: 0 }, "zero measurements");
   });
 
   it("says nothing nonsensical on a real measurement", () => {
     // The test map's own figures, so a passing sweep is about a plausible map rather than about a
     // number chosen to be easy.
-    sweep({ pxPerSquare: 51, inkWidth: 5.7 }, "measured");
+    sweep(MEASURED_MAP, "measured");
   });
 
   it("says nothing nonsensical on a negative measurement either", () => {
     // Not reachable from the pipeline, and asserted because `Measured` permits it: a readout is a
     // pure function of what it is handed, and it should not be the caller's job to know that.
-    sweep({ pxPerSquare: -1, inkWidth: -1 }, "negative measurements");
+    sweep({ pxPerSquare: -1, inkWidth: -1, rasterWidth: -1 }, "negative measurements");
   });
 });
 
 describe("readouts that depend on a measurement", () => {
   const gapFill = CONTROLS.find((control) => control.name === "gapFillPx")!;
-  const spurs = CONTROLS.find((control) => control.name === "spurPrunePx")!;
+  const spurs = CONTROLS.find((control) => control.name === "spurPruneFraction")!;
   const stroke = CONTROLS.find((control) => control.name === "minStrokeInkWidths")!;
-  const simplify = CONTROLS.find((control) => control.name === "simplifyInkWidths")!;
+  const simplify = CONTROLS.find((control) => control.name === "simplifyFraction")!;
 
   it("drops the grid-square clause when there is no pixel density", () => {
-    for (const control of [gapFill, spurs]) {
-      expect(control.derive!(12, { pxPerSquare: null, inkWidth: 5.7 })).not.toContain("of a square");
-      expect(control.derive!(12, { pxPerSquare: 0, inkWidth: 5.7 })).not.toContain("of a square");
-      expect(control.derive!(12, { pxPerSquare: 51, inkWidth: 5.7 })).toContain("of a square");
+    expect(gapFill.derive!(12, MEASURED_NONE)).not.toContain("of a square");
+    expect(gapFill.derive!(12, { ...MEASURED_NONE, pxPerSquare: 0 })).not.toContain("of a square");
+    expect(gapFill.derive!(12, MEASURED_MAP)).toContain("of a square");
+  });
+
+  /*
+    The two graph-derived controls say nothing at all without a raster, and that is the case the
+    editor is always in.
+
+    They are stored as a fraction of the map because that is the only unit both modes can speak. The
+    ink mode can turn it back into pixels; the editor never ran a reading and cannot, so the readout
+    goes quiet rather than inventing one. Both are checked, because a readout that is right only in
+    the mode it was written in is the failure this file exists to catch.
+  */
+  it("says nothing in pixels when no raster has been read", () => {
+    for (const control of [spurs, simplify]) {
+      expect(control.derive!(4e-4, MEASURED_NONE)).toBe("");
+      expect(control.derive!(4e-4, MEASURED_MAP)).toContain("px");
+      // Empty rather than "off": their own `format` says so beside the label, and a hint that
+      // repeated it would print "off" twice in one row.
+      expect(control.derive!(0, MEASURED_MAP)).toBe("");
+    }
+  });
+
+  it("writes a map fraction as something a GM can read", () => {
+    for (const control of [spurs, simplify]) {
+      expect(control.format!(4e-4)).toBe("4/10k");
+      expect(control.format!(0)).toBe("off");
     }
   });
 
   it("says so plainly when an ink width is wanted and has not been measured", () => {
-    expect(stroke.derive!(0.5, { pxPerSquare: 51, inkWidth: null })).toBe("trace once for a figure");
-    expect(simplify.derive!(0.2, { pxPerSquare: 51, inkWidth: null })).toBe(
+    // Only the stroke filter is denominated in ink widths now. The simplification tolerance was,
+    // and moved to a fraction of the map on 2026-09-06 so that both modes could speak it — it
+    // reports *against* an ink width where one exists, which the raster test above covers.
+    expect(stroke.derive!(0.5, { pxPerSquare: 51, inkWidth: null, rasterWidth: 3300 })).toBe(
       "trace once for a figure",
     );
   });
@@ -97,13 +129,20 @@ describe("readouts that depend on a measurement", () => {
       different sentences, or the number in them is not coming from the measurement.
     */
     for (const control of [stroke, simplify]) {
-      const thin = control.derive!(0.5, { pxPerSquare: 51, inkWidth: 3 });
-      const thick = control.derive!(0.5, { pxPerSquare: 51, inkWidth: 9 });
+      const thin = control.derive!(0.5, { pxPerSquare: 51, inkWidth: 3, rasterWidth: 3300 });
+      const thick = control.derive!(0.5, { pxPerSquare: 51, inkWidth: 9, rasterWidth: 3300 });
       expect(thin, control.name).not.toBe(thick);
     }
-    for (const control of [gapFill, spurs]) {
-      const coarse = control.derive!(12, { pxPerSquare: 20, inkWidth: 5.7 });
-      const fine = control.derive!(12, { pxPerSquare: 80, inkWidth: 5.7 });
+    // The two stored as a fraction of the map report against the raster instead, so that is the
+    // measurement their sentence has to come from.
+    for (const control of [spurs, simplify]) {
+      const small = control.derive!(4e-4, { pxPerSquare: 51, inkWidth: 5.7, rasterWidth: 1600 });
+      const large = control.derive!(4e-4, { pxPerSquare: 51, inkWidth: 5.7, rasterWidth: 3300 });
+      expect(small, control.name).not.toBe(large);
+    }
+    for (const control of [gapFill]) {
+      const coarse = control.derive!(12, { pxPerSquare: 20, inkWidth: 5.7, rasterWidth: 3300 });
+      const fine = control.derive!(12, { pxPerSquare: 80, inkWidth: 5.7, rasterWidth: 3300 });
       expect(coarse, control.name).not.toBe(fine);
     }
   });
@@ -112,11 +151,10 @@ describe("readouts that depend on a measurement", () => {
     // Zero is off for all four of these, and it has to read as off rather than as "0px, 0.00 of a
     // square" — a GM scanning for which controls are doing something reads the readout, not the
     // slider position.
-    for (const control of [gapFill, spurs, stroke]) {
-      for (const measured of [
-        { pxPerSquare: null, inkWidth: null },
-        { pxPerSquare: 51, inkWidth: 5.7 },
-      ] satisfies Measured[]) {
+    // Not the two stored as a map fraction: they say "off" through `format` instead, which the
+    // raster test above pins. A control cannot be in both lists without saying it twice.
+    for (const control of [gapFill, stroke]) {
+      for (const measured of [MEASURED_NONE, MEASURED_MAP]) {
         expect(control.derive!(0, measured), control.name).toBe("off");
       }
     }

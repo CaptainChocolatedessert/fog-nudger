@@ -163,12 +163,7 @@ export interface TraceSettings {
    */
   readonly gapTravelPx: number;
   /**
-   * The longest dead-end wall spur pruning will remove, in raster pixels along the wall.
-   *
-   * **It acts on the fitted graph, past the freeze** (2026-09-06), not on the skeleton — so the unit
-   * is a length along the wall as stored rather than a count of pixels stepped over. Still raster
-   * pixels for now, converted at the point of use; re-denominating it in fractions of the map is
-   * what lets the editor carry the same control, and is the step after this one.
+   * The longest dead-end wall spur pruning will remove, **as a fraction of the map's extent**.
    *
    * A spur is the artefact a ragged ink edge leaves on a centreline; a **stub** is a wall that
    * genuinely stops in mid-air. They are the same shape locally and only length separates them,
@@ -177,15 +172,17 @@ export interface TraceSettings {
    * Destructive out of proportion to its size at the top end: a budget longer than a wall's own arms
    * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
    */
-  readonly spurPrunePx: number;
+  readonly spurPruneFraction: number;
   /**
-   * Simplification tolerance, as a fraction of the measured ink width.
+   * Simplification tolerance, **as a fraction of the map's extent**.
    *
-   * **Keep it below 0.5.** Douglas–Peucker moves a boundary by at most the tolerance, so under half
-   * an ink width it provably cannot carry a room's edge past the centre of the wall beside it and
-   * into the next room. Above that the guarantee is gone, which is why the maximum here is 0.45.
+   * The old `simplifyInkWidths` cap — below half an ink width, so Douglas–Peucker provably could not
+   * carry a room's edge past the centre of the wall beside it — is **retired** (user, 2026-09-06:
+   * *"it's ok to allow simplification over a half-ink-width. The user will be looking at the
+   * consequences."*). Its original reason went when the graph pivot made both faces of a shared wall
+   * move together, and what is left is a corner cut across a doorway, which is visible.
    */
-  readonly simplifyInkWidths: number;
+  readonly simplifyFraction: number;
 }
 
 export interface ReviewSettings {
@@ -292,8 +289,16 @@ export const DEFAULT_SETTINGS: Settings = {
     // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a budget longer
     // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
     // graph as fitting produced it, hairs and all.
-    spurPrunePx: 0,
-    simplifyInkWidths: 0.25,
+    spurPruneFraction: 0,
+    /*
+      About a quarter of an ink width on the test map, which is what this defaulted to when it was
+      denominated in them: 0.25 x 5.7px on a 3300px raster is 4.3e-4 of the map.
+
+      A fixed fraction is not as map-independent as an ink width, but it is close: linework is drawn
+      to be legible at a given printed size, so its width as a share of the map is fairly stable
+      across scanned maps in a way its width in pixels is not.
+    */
+    simplifyFraction: 4e-4,
   },
   review: {
     fillOpacity: 0.22,
@@ -351,9 +356,9 @@ export const SETTING_LIMITS = {
   minStrokeInkWidths: { min: 0, max: 3, step: 0.05 },
   // Same reasoning: the top end should be able to erase a map's decoration and then its walls.
   minIslandPx: { min: 0, max: 300, step: 1 },
-  // Capped below the half-ink-width bound that stops a boundary crossing a wall. A GM cannot be
-  // given a control whose top end silently merges rooms.
-  simplifyInkWidths: { min: 0.02, max: 0.45, step: 0.01 },
+  // The half-ink-width cap is retired (user, 2026-09-06); the top of the track is meant to reach
+  // obviously useless values, the same as the two ink filters. See the block above for the unit.
+  simplifyFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   fillOpacity: { min: 0, max: 1, step: 0.02 },
   strokeSquares: { min: 0, max: 0.3, step: 0.01 },
   // Not floored above zero. Dragging it to nothing is a legitimate way to check what is underneath
@@ -371,11 +376,27 @@ export const SETTING_LIMITS = {
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
   // the repair; the bottom end repairs every break that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },
-  // In raster pixels along the wall, not straight-line distance between its ends. The top end is
-  // past any plausible stub and will eat walls whole, which is the same deliberate over-reach the
-  // ink filters have and is defensible for the same reason: the graph is drawn, so it is visible
-  // rather than silent.
-  spurPrunePx: { min: 0, max: 60, step: 1 },
+  /*
+    Both graph-derived controls carry a `floor` and a static `max` they will normally never reach.
+
+    **The unit is a fraction of the map**, measured along the wall rather than between its ends. Not
+    raster pixels: the raster is an artefact of the megapixel cap, and the editor has no raster at
+    all — a control the editor cannot denominate is a control the editor cannot have.
+
+    **The `max` here is storage, not the track.** The slider's top end is measured off the graph when
+    the step opens — the longest spur, the largest bend — so it adapts to how finely the map was
+    drawn, which no fixed ceiling can: two maps of the same pixel size can carry 3px or 12px
+    linework. This number only bounds what may be stored, and it sits well past any measured top.
+
+    **The `floor` is pinned and is NOT `min`.** A log scale cannot start at zero and both of these
+    have a real off state, so the far-left position is off and the log part starts one step in. It
+    must not be the *observed* minimum: both tools delete from the bottom, so prune at budget B and
+    the shortest surviving spur is B — a tracking bottom would chase the slider upward and make the
+    same percentage mean a larger bite every pass, which is the non-monotonicity that collapsed the
+    two-slider break design. And `min` stays 0 because the normaliser clamps into `[min, max]`, so a
+    positive `min` would silently raise a stored zero to the floor on every read.
+  */
+  spurPruneFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   // From a single pixel — the finest correction a raster can hold — to wide enough to cover a room
   // in a few strokes. The bottom end is genuinely usable rather than a token: repairing one severed
   // wall is a one-pixel job.
@@ -438,10 +459,10 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   inkOpacity: "read",
   gapFillPx: "read",
   gapTravelPx: "read",
-  spurPrunePx: "read",
+  spurPruneFraction: "read",
   suppressBrushPx: "read",
   inkBrushPx: "read",
-  simplifyInkWidths: "derive",
+  simplifyFraction: "derive",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
 };
@@ -503,10 +524,10 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   // what it writes goes into the added-ink layer rather than into a term of the composition.
   gapFillPx: "tool",
   gapTravelPx: "tool",
-  spurPrunePx: "pipeline",
+  spurPruneFraction: "pipeline",
   suppressBrushPx: "tool",
   inkBrushPx: "tool",
-  simplifyInkWidths: "pipeline",
+  simplifyFraction: "pipeline",
   fillOpacity: "display",
   strokeSquares: "display",
 };
@@ -591,7 +612,7 @@ const POST_READING: readonly SettingName[] = [
   // *pipeline* parameters of the read stage, and they are `tool` parameters now — so naming them
   // here would be naming non-members, and the test that every excluded one still moves the mask
   // fingerprint would fail, correctly.
-  "spurPrunePx",
+  "spurPruneFraction",
 ];
 
 /**
@@ -610,7 +631,7 @@ const POST_READING: readonly SettingName[] = [
  * The cost this saves is real: a prune sweep costs a branch walk and a face traversal rather than
  * re-binarising the map or recomposing the ink.
  */
-const GRAPH_ONLY: readonly SettingName[] = ["spurPrunePx"];
+const GRAPH_ONLY: readonly SettingName[] = ["spurPruneFraction"];
 
 /**
  * Whether a parameter changes the graph without changing the mask.
@@ -691,12 +712,12 @@ export function normaliseSettings(raw: unknown): Settings {
       minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
-      spurPrunePx: clamp(trace.spurPrunePx, "spurPrunePx", t.spurPrunePx),
-      simplifyInkWidths: clamp(
-        trace.simplifyInkWidths,
-        "simplifyInkWidths",
-        t.simplifyInkWidths,
+      spurPruneFraction: clamp(
+        trace.spurPruneFraction,
+        "spurPruneFraction",
+        t.spurPruneFraction,
       ),
+      simplifyFraction: clamp(trace.simplifyFraction, "simplifyFraction", t.simplifyFraction),
     },
     review: {
       fillOpacity: clamp(review.fillOpacity, "fillOpacity", r.fillOpacity),
@@ -749,8 +770,8 @@ export function describeSettings(settings: Settings): string {
     `min island ${trace.minIslandPx}px, ` +
     // Spur pruning belongs in the summary more than most: it is the one control here that can erode
     // the entire graph at its top end, and it went missing when the smallest-room term was removed.
-    `prune ${trace.spurPrunePx}px, ` +
-    `simplify ${trace.simplifyInkWidths} ink widths; ` +
+    `prune ${trace.spurPruneFraction.toExponential(2)} of the map, ` +
+    `simplify ${trace.simplifyFraction.toExponential(2)} of the map; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `breaks ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")

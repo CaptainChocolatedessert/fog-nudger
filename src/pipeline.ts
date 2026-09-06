@@ -127,16 +127,19 @@ const MIN_BLOB_SQUARES = 0.05;
 const BLOB_INK_WIDTHS = 3;
 
 /**
- * Ceiling on the tolerance a region may be escalated to in order to fit the 8192-command cap, again
- * in ink widths.
+ * Ceiling on the tolerance a region may be escalated to in order to fit the 8192-command cap, as a
+ * fraction of the map.
  *
- * Far past the half-width safety bound, deliberately. Only a region whose boundary wraps most of the
- * map ever climbs this far, which in practice means the outside — and DESIGN.md §4 says the outside
- * can be simplified far harder than any room, since there is no room out there to clip. What this
- * setting cannot do is *know* that, so every region that escalates past the bound is named in the
- * log rather than trusted to be the exterior.
+ * Far past anything a GM would set, deliberately. Only a region whose boundary wraps most of the map
+ * ever climbs this far, which in practice means the outside — and DESIGN.md §4 says the outside can
+ * be simplified far harder than any room, since there is no room out there to clip. What this
+ * setting cannot do is *know* that, so the count of escalations is named in the log rather than
+ * trusted to have found the exterior.
+ *
+ * 0.01 of the map is 33px on the test map's raster, against a 5.7px ink width — the same order the
+ * old eight-ink-widths ceiling was, expressed in the unit the control now uses.
  */
-const MAX_SIMPLIFY_INK_WIDTHS = 8;
+const MAX_SIMPLIFY_FRACTION = 0.01;
 
 /**
  * Everything the reading stage produces, which is everything the deriving stage needs.
@@ -463,6 +466,22 @@ export function lastPixelsPerSquare(): number | null {
  */
 export function lastInkWidth(): number | null {
   return cachedMask?.reading.inkWidth ?? null;
+}
+
+/**
+ * The raster the last reading used, in pixels across.
+ *
+ * For the two controls stored as a fraction of the map: it is what turns one back into pixels for
+ * the readout. **Only the ink mode has it** — the editor never runs a reading — which is exactly why
+ * the stored unit is a fraction and not this.
+ *
+ * From the mask cache, like the other two, so it survives a reading change with no full trace after
+ * it. `null` before anything has been read, and a non-positive width is treated as none for the same
+ * reason `lastPixelsPerSquare` treats a zero that way.
+ */
+export function lastRasterWidth(): number | null {
+  const width = cachedMask?.plan.width ?? null;
+  return width !== null && width > 0 ? width : null;
 }
 
 /** One region, carrying everything the emit path needs and nothing it does not. */
@@ -1301,21 +1320,23 @@ export async function runTrace(
   // stops two rooms leaking into each other through a one-pixel diagonal — and it still supplies the
   // area check. What it no longer supplies is geometry.
   const inkWidth = reading.inkWidth ?? pxPerSquare * 0.1;
-  if (reading.inkWidth === null) {
-    devLog(
-      "warn",
-      `trace: no ink width to denominate simplification in, so the tolerance falls back to ` +
-        `${inkWidth.toFixed(1)}px from the grid. The half-wall safety bound is not being checked ` +
-        `against anything measured.`,
-    );
-  }
 
-  const tolerance = settings.trace.simplifyInkWidths * inkWidth;
-  const safeTolerance = inkWidth / 2;
+  /*
+    The tolerance is stored as a fraction of the map and used here in raster pixels.
+
+    **That is the whole of the re-denomination** (2026-09-06). It used to be a share of the measured
+    ink width, which the editor cannot know — it has no reading — so the two modes could not have
+    expressed one tolerance between them. A fraction of the map is a unit both can speak, and the
+    conversion is this one multiplication, because the raster is a linear sampling of the map.
+
+    The ink width is still measured and still reported beside the figure, because it is what a GM
+    judges a tolerance against. It just no longer *denominates* it.
+  */
+  const tolerance = settings.trace.simplifyFraction * plan.width;
 
   const derived = deriveGraphRegions(inkMask, {
     tolerance,
-    maxTolerance: MAX_SIMPLIFY_INK_WIDTHS * inkWidth,
+    maxTolerance: MAX_SIMPLIFY_FRACTION * plan.width,
   });
   const labelled = derived.labelled;
 
@@ -1457,19 +1478,21 @@ export async function runTrace(
   devLog(
     "info",
     `trace: simplified to ${totalVertices} vertices in ${totalCommands} commands at ` +
-      `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyInkWidths} of a ` +
-      `${inkWidth.toFixed(1)}px ink width, escalated ${derived.escalations} times for the whole ` +
-      `map); ${preserved} rings kept unfitted because fitting would have collapsed them`,
+      `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyFraction.toExponential(2)} of ` +
+      `the map, ${(derived.tolerance / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink ` +
+      `width, escalated ${derived.escalations} times for the whole map); ${preserved} rings kept ` +
+      `unfitted because fitting would have collapsed them`,
   );
-  if (derived.tolerance > safeTolerance) {
-    devLog(
-      "warn",
-      `trace: the tolerance escalated to ${derived.tolerance.toFixed(2)}px, past the ` +
-        `${safeTolerance.toFixed(2)}px half-ink-width bound. Under the graph that bound guards a ` +
-        `corner cut across a doorway rather than an edge crossing into the next room — the old ` +
-        `reason no longer applies and the new one has not been derived. Treat it as unverified.`,
-    );
-  }
+  /*
+    The half-ink-width warning was here and is **retired** (user, 2026-09-06).
+
+    It said a tolerance past half an ink width had left the bound the region-first pipeline could
+    prove. That bound stopped meaning anything when the graph pivot made both faces of a shared wall
+    move together — there is no sliver between rooms to open — and the user has now removed the cap
+    the warning guarded: *"it's ok to allow simplification over a half-ink-width. The user will be
+    looking at the consequences."* Which is the point: the graph is drawn, so this is visible, and a
+    warning is not a safeguard.
+  */
 
   const heaviest = [...derived.regions].sort((a, b) => b.commands - a.commands).slice(0, 5);
   if (heaviest.length > 0) {
