@@ -62,24 +62,23 @@ const SHAPES = [
 
 describe("the graph derivation over generated linework", () => {
   /*
-    Every shape is swept twice: with pruning off, and with a budget that removes real spurs.
+    **There is no spur budget here any more, and that is the code changing rather than the test.**
 
-    **Pruning moved onto the graph on 2026-09-06, and until that day this sweep ran at a budget of
-    zero** — so the entire pruning path was outside the only instrument that has ever found a defect
-    in graph building. A green suite said nothing about it, which is this project's own warning about
-    treating a clean diagnostic as evidence.
+    This sweep was briefly run at two budgets, on 2026-09-06, because until that day it had only ever
+    run at zero — so the whole pruning path sat outside the only instrument that has ever found a
+    defect in graph building. It found one immediately: with pruning on, more than one cycle came
+    back with no interior at all.
 
-    The pruned pass matters more than the plain one, because pruning is the thing that can *strand* a
-    pixel: the graph is rasterised back and rebuilt after the cut precisely so the labelling never
-    sees a spur's pixels without its edges. If that rebuild were skipped, the area check below is
-    what would say so.
+    Pruning then left the raster entirely, which is what that finding argued for. It is an operation
+    on the *fitted* graph now, past the freeze, where there is nothing to rasterise back and nothing
+    to rebuild — so `deriveGraphRegions` never prunes and there is no budget to sweep. The pruning
+    that survives has its own tests in `spurs.test.ts` and needs none of this apparatus, because it
+    deletes a run whole and can strand nothing.
   */
-  const BUDGETS = [0, 4] as const;
   for (const { width, height, runs, seeds } of SHAPES) {
-    for (const spurPrunePx of BUDGETS) {
-      it(`holds every invariant on ${seeds} random ${width}x${height} skeletons, pruning at ${spurPrunePx}`, () => {
+      it(`holds every invariant on ${seeds} random ${width}x${height} skeletons`, () => {
       for (let seed = 1; seed <= seeds; seed++) {
-        const where = `${width}x${height} seed ${seed} pruning ${spurPrunePx}`;
+        const where = `${width}x${height} seed ${seed}`;
         /*
           Fitting is switched off here, and that is what makes the ring-area assertion below exact.
 
@@ -90,7 +89,6 @@ describe("the graph derivation over generated linework", () => {
           by its own tests, which is the same split the area check upstream already uses.
         */
         const result = deriveGraphRegions(randomInk(width, height, rng(seed), runs), {
-          spurPrunePx,
           tolerance: 0,
           maxTolerance: 0,
         });
@@ -107,25 +105,15 @@ describe("the graph derivation over generated linework", () => {
         expect(result.graph.stats.orphans, `orphans, ${where}`).toBe(0);
 
         /*
-          At least one cycle has no interior — the unbounded face outside the frame — and with
-          pruning off that is the only one.
+          Exactly one cycle has no interior: the unbounded face outside the border frame.
 
-          **With pruning on it is not, and that was discovered by extending this sweep on 2026-09-06.**
-          A sliver whose every bounding edge carries interior pixels cannot be deleted: taking such an
-          edge out would strand those pixels, which is worse than the sliver. The record has always
-          named that state and called it never observed; it is observed now, and pruning is what
-          produces it. Measured on the raster prune at a budget of 4: 1 of 400 seeds at 18x14, 3 of
-          200 at 40x30, 5 of 100 at 70x50.
-
-          It is inert rather than harmful — a face with no interior pixels holds no map and is not
-          emitted — so what this asserts is that the *derivation stays sound*, which the three checks
-          above do. Demanding one unlabelled cycle here would be demanding that pruning never meets a
-          shape it cannot fully tidy, which is not true of either implementation.
+          Anything else is a sliver whose every bounding edge carries interior pixels, which sliver
+          removal cannot take — lifting such an edge would strand those pixels, which is worse. The
+          record has named that state since step D and called it never observed. It *was* observed on
+          2026-09-06, by sweeping the raster spur prune, and it is unreachable again now that pruning
+          does not touch the raster. This is the assertion that would say so if that changed.
         */
-        expect(result.faces.unlabelled, `unlabelled cycles, ${where}`).toBeGreaterThanOrEqual(1);
-        if (spurPrunePx === 0) {
-          expect(result.faces.unlabelled, `unlabelled cycles unpruned, ${where}`).toBe(1);
-        }
+        expect(result.faces.unlabelled, `unlabelled cycles, ${where}`).toBe(1);
 
         /*
           The emitted rings must enclose exactly what the face does.
@@ -167,7 +155,6 @@ describe("the graph derivation over generated linework", () => {
         }
       }
       });
-    }
   }
 
   it("removes the sub-pixel slivers rather than merely tolerating them", () => {
@@ -185,7 +172,6 @@ describe("the graph derivation over generated linework", () => {
     let seedsWithSlivers = 0;
     for (let seed = 1; seed <= 200; seed++) {
       const removed = deriveGraphRegions(randomInk(40, 30, rng(seed), 22), {
-        spurPrunePx: 0,
         tolerance: 0.5,
         maxTolerance: 4,
       }).sliversRemoved;

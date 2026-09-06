@@ -23,7 +23,7 @@ import type { SettingName } from "../settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
 import { refreshBreakSearch } from "./paintTool";
 import { requestReread } from "./reading";
-import { invalidateRegions } from "./regions";
+import { invalidateRegions, repruneRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 
@@ -99,18 +99,26 @@ export function recomputeFor(names: readonly SettingName[]): void {
   if (names.some((name) => PARAMETER_KIND[name] === "tool")) refreshBreakSearch();
 
   const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
-  // Graph-only first: pruning a spur costs a branch walk and a face traversal where a re-read costs
-  // 690ms and would produce an identical mask. `GRAPH_ONLY` is what makes that safe, and it has
-  // exactly one member — the weld radius was the other, and it was deleted rather than defaulted to
-  // zero after 459 of 600 generated cases failed at its default.
+  /*
+    Graph-only first, and it is now a third thing rather than a cheaper second.
+
+    `GRAPH_ONLY` has exactly one member, the spur budget. It used to mean "skip the 690ms re-read but
+    re-derive everything", because pruning happened between thinning and chaining. **Pruning moved
+    past the freeze on 2026-09-06**, so it changes nothing the trace did — the graph is already
+    fitted and stored, and re-pruning it is a run walk and a face traversal, single-digit
+    milliseconds against the better part of a second.
+
+    The weld radius was the other member and was deleted rather than defaulted to zero, after 459 of
+    600 generated cases failed at its default.
+  */
   const rest = pipeline.filter((name) => !isSkeletonOnly(name));
   const graphChanged = pipeline.some(isSkeletonOnly);
 
   if (rest.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
-  // A graph change now invalidates the partition as well, because the faces *are* the graph's
-  // (step D). It did not have to before, when the skeleton was a view that emitted nothing — and
-  // that is the whole of what step D changed here.
-  else if (rest.length > 0 || graphChanged) invalidateRegions();
+  // Ordered so the broadest wins: a Defaults reset changes both kinds at once, and a full derive
+  // re-prunes on its way through where a re-prune would leave the trace stale.
+  else if (rest.length > 0) invalidateRegions();
+  else if (graphChanged) repruneRegions();
   invalidate();
 }
 

@@ -166,7 +166,7 @@ export const CONTROLS: readonly Control[] = [
   {
     name: "spurPrunePx",
     label: "Prune spurs",
-    hint: "Removes dead-end branches shorter than this, in pixels walked along the skeleton. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Zero is off</b>, and past a wall's own length it eats the graph.",
+    hint: "Removes dead-end walls shorter than this, measured along the wall in pixels. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Zero is off</b>, and past a wall's own length it eats the graph.",
     derive: (value, { pxPerSquare }) => {
       if (value <= 0) return "off";
       if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;

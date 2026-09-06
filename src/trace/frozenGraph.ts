@@ -62,6 +62,7 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import type { FittedEdge } from "./faces";
+import { spursToPrune, type PrunableRun } from "./spurs";
 import type { WallGraph } from "./wallGraph";
 
 export interface FrozenGraph {
@@ -273,6 +274,29 @@ export function compactNodes(graph: FrozenGraph): FrozenGraph {
  * an arbitrary point on it — which is the same thing the derived graph does with such a chain.
  */
 export function wallRuns(graph: FrozenGraph): number[][] {
+  return walkRuns(graph).map((run) => run.nodes);
+}
+
+/**
+ * The same runs, as edge indices.
+ *
+ * Pruning needs these and the node ids both — the ids to decide which runs have a free end, the
+ * edges to take out of the graph. Recovering the edges from consecutive node pairs afterwards is not
+ * safe: two distinct segments can join the same pair of vertices, which is a legal state to pass
+ * through in the editor, and the lookup would have to guess between them.
+ */
+export function wallRunEdges(graph: FrozenGraph): number[][] {
+  return walkRuns(graph).map((run) => run.edges);
+}
+
+interface TracedRun {
+  /** Node ids, ends first and last. Equal at both ends when the run is a closed loop. */
+  readonly nodes: number[];
+  /** The segments between them, in the same order. */
+  readonly edges: number[];
+}
+
+function walkRuns(graph: FrozenGraph): TracedRun[] {
   const neighbours = new Map<number, { edge: number; to: number }[]>();
   for (let i = 0; i < graph.edges.length; i++) {
     const { a, b } = graph.edges[i]!;
@@ -282,20 +306,22 @@ export function wallRuns(graph: FrozenGraph): number[][] {
 
   const degrees = nodeDegrees(graph);
   const used = new Uint8Array(graph.edges.length);
-  const runs: number[][] = [];
+  const runs: TracedRun[] = [];
 
   const walk = (from: number, first: { edge: number; to: number }): void => {
-    const run = [from];
+    const nodes = [from];
+    const edges: number[] = [];
     let step: { edge: number; to: number } | undefined = first;
     let at = from;
     while (step && !used[step.edge]) {
       used[step.edge] = 1;
-      run.push(step.to);
+      nodes.push(step.to);
+      edges.push(step.edge);
       at = step.to;
       if (degrees[at] !== 2) break;
       step = neighbours.get(at)?.find((n) => !used[n.edge]);
     }
-    if (run.length > 1) runs.push(run);
+    if (nodes.length > 1) runs.push({ nodes, edges });
   };
 
   for (let id = 0; id < graph.nodes.length; id++) {
@@ -309,6 +335,133 @@ export function wallRuns(graph: FrozenGraph): number[][] {
     if (!used[i]) walk(graph.edges[i]!.a, { edge: i, to: graph.edges[i]!.b });
   }
   return runs;
+}
+
+/** What pruning removed, in the document's own units. */
+export interface FrozenPruning {
+  readonly graph: FrozenGraph;
+  /** Wall runs removed, over all rounds. */
+  readonly removed: number;
+  /** Segments those runs held — what the document actually loses. */
+  readonly segments: number;
+  /** Total length removed, in fractions of the map. */
+  readonly length: number;
+  readonly rounds: number;
+}
+
+/**
+ * Prune the dead-end walls shorter than `budget`, measured along the wall in map fractions.
+ *
+ * ## Why this is on the fitted graph rather than on the skeleton
+ *
+ * Pruning used to happen in the raster, between thinning and chaining, and the obvious alternative
+ * was to build the graph, prune it, rasterise the survivors and build again. **That was tried and
+ * abandoned, and the measurement is the reason.** At a spur budget of 4 over generated linework, the
+ * rebuild left 181 of 400 seeds carrying a sub-pixel sliver the cleanup cannot remove, against 1 of
+ * 400 for the raster prune — the same artefact, thirty to a hundred times more of it. The cause is
+ * that the raster walk stops *before* the junction a branch runs into and leaves that pixel, where
+ * deleting a whole graph edge takes it too, one pixel further into every pruned junction, which is
+ * exactly where junction clusters come from.
+ *
+ * Doing it here has neither problem, because **there is no raster left to disturb**. The freeze is
+ * the point where the pixels stop being needed; a run deleted after it changes the document and
+ * nothing else, and nothing is ever rebuilt from a rasterised copy of it.
+ *
+ * It is also what lets the two modes share one implementation. The editor has no skeleton and never
+ * will, so a raster prune could only ever have been the ink mode's.
+ *
+ * ## Degree is unambiguous here, and that retires a class of defect
+ *
+ * The raster version had to count contiguous runs around a pixel's ring rather than raw neighbours,
+ * because a pixel one row above a line touches three of its pixels diagonally and reads as a
+ * junction — which stopped the branch walk early and left a nub on the wall. On a graph a run is
+ * deleted whole and a node's degree is just how many runs name it. `spursToPrune` carries the rest
+ * of the reasoning, including why a closed loop can never be a spur.
+ *
+ * Node ids are renumbered by the compaction at the end, so **this may not run inside a gesture** —
+ * the standing rule. Everywhere it is called, the caller stops holding ids across it.
+ */
+export function pruneFrozenGraph(graph: FrozenGraph, budget: number): FrozenPruning {
+  if (!(budget > 0)) return { graph, removed: 0, segments: 0, length: 0, rounds: 0 };
+
+  const runs = walkRuns(graph);
+  const prunable: PrunableRun[] = runs.map((run) => ({
+    a: run.nodes[0]!,
+    b: run.nodes[run.nodes.length - 1]!,
+    length: runLength(graph, run.nodes),
+  }));
+  const decision = spursToPrune(prunable, budget);
+  if (decision.removed.size === 0) {
+    return { graph, removed: 0, segments: 0, length: 0, rounds: decision.rounds };
+  }
+
+  const dropped = new Uint8Array(graph.edges.length);
+  let segments = 0;
+  for (const index of decision.removed) {
+    for (const edge of runs[index]!.edges) {
+      if (dropped[edge] === 0) {
+        dropped[edge] = 1;
+        segments += 1;
+      }
+    }
+  }
+
+  const edges = graph.edges.filter((_, index) => dropped[index] === 0);
+  return {
+    // Compacted, because a pruned run leaves its interior vertices referenced by nothing, and this
+    // project does not leave junk lying around once a gesture is over.
+    graph: compactNodes({ nodes: graph.nodes, edges }),
+    removed: decision.removed.size,
+    segments,
+    length: decision.length,
+    rounds: decision.rounds,
+  };
+}
+
+/**
+ * How long a run is, following it rather than measuring end to end.
+ *
+ * The distinction is the same one the raster version made by counting steps: a curled spur is as
+ * long as the path along it, and one that doubles back would otherwise measure as short as its ends
+ * happen to be close.
+ */
+function runLength(graph: FrozenGraph, nodes: readonly number[]): number {
+  let total = 0;
+  for (let i = 1; i < nodes.length; i++) {
+    const from = graph.nodes[nodes[i - 1]!];
+    const to = graph.nodes[nodes[i]!];
+    if (!from || !to) continue;
+    total += Math.hypot(to.x - from.x, to.y - from.y);
+  }
+  return total;
+}
+
+/**
+ * The longest spur in a graph, which is what a prune slider's top end is measured from.
+ *
+ * A **spur** is what pruning can reach: a run with at least one free end. Anything else is not a
+ * candidate at any budget, so including it would put a ceiling on the track that no setting could
+ * ever act on — and on a map whose exterior wall is one enormous run, that ceiling would be the
+ * whole map and every useful setting would sit in the first percent.
+ *
+ * Zero when there is nothing to prune, which the caller reads as "no top to measure from".
+ */
+export function longestSpur(graph: FrozenGraph): number {
+  const runs = walkRuns(graph);
+  const degree = new Map<number, number>();
+  const ends = runs.map((run) => [run.nodes[0]!, run.nodes[run.nodes.length - 1]!] as const);
+  for (const [a, b] of ends) {
+    degree.set(a, (degree.get(a) ?? 0) + 1);
+    degree.set(b, (degree.get(b) ?? 0) + 1);
+  }
+
+  let longest = 0;
+  runs.forEach((run, index) => {
+    const [a, b] = ends[index]!;
+    if (degree.get(a) !== 1 && degree.get(b) !== 1) return;
+    longest = Math.max(longest, runLength(graph, run.nodes));
+  });
+  return longest;
 }
 
 /** Grows as needed; `bytes()` returns exactly what was written. */

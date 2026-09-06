@@ -51,7 +51,12 @@ import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
 import type { StepId } from "../steps";
 import { buildFrozenFaces, describeFrozenFaces, wallSegments } from "../trace/frozenFaces";
-import { freezeGraph, wallRuns, type FrozenGraph } from "../trace/frozenGraph";
+import {
+  freezeGraph,
+  pruneFrozenGraph,
+  wallRuns,
+  type FrozenGraph,
+} from "../trace/frozenGraph";
 import { inEditor } from "./mode";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
@@ -192,6 +197,8 @@ let lastSummaryOk = true;
  */
 export function invalidateRegions(): void {
   stale = true;
+  // The trace is out of date, so the freeze's output is too and there is nothing left to re-prune.
+  derivation = null;
   requests.request();
   invalidate();
   if (watching) void derive();
@@ -225,6 +232,116 @@ export function watchRegions(step: StepId, open: boolean): void {
     A room asked for the room count and there was no way to get it back.
   */
   if (lastSummary !== "") say(lastSummary, lastSummaryOk ? "" : "bad");
+}
+
+/**
+ * What the last trace produced, before pruning — held so a prune needs no second trace.
+ *
+ * Spur pruning is an operation on the *fitted* graph now (2026-09-06), which means a change to its
+ * budget invalidates nothing the trace did. Keeping the freeze's output lets the slider re-apply in
+ * a few milliseconds where a re-derive costs the better part of a second on a cached mask, which is
+ * the difference between a control a GM sweeps and one they nudge and wait for.
+ *
+ * Dropped whenever a reading or a deriving parameter changes, because then the trace itself is out
+ * of date and there is nothing here worth re-pruning.
+ */
+let derivation: {
+  /** The freeze's own output, unpruned. Pruning always starts from this rather than from itself. */
+  readonly graph: FrozenGraph;
+  /** Segments the freeze dropped for lying on one already stored, plus any of no length. */
+  readonly dropped: number;
+  /** The trace's raster width, which is what turns a pixel budget into a map fraction. */
+  readonly rasterWidth: number;
+  readonly pxPerSquare: number;
+} | null = null;
+
+/**
+ * Prune, walk, and put the answer on screen.
+ *
+ * Shared by the trace's completion and by a prune-only change, so the two cannot disagree about what
+ * the partition is. Synchronous throughout: the freeze is already done, and pruning plus a traversal
+ * is a few milliseconds against the second the trace took.
+ */
+function publish(from: NonNullable<typeof derivation>, generation: number): void {
+  /*
+    The budget is in raster pixels and the graph is in map fractions, so it is converted here.
+
+    **Temporary, and the conversion is the tell.** The whole reason pruning moved past the freeze is
+    that the editor has no raster and therefore cannot speak this unit at all; re-denominating the
+    control in map fractions is the step that follows this one. Until then the ink mode converts and
+    the editor has no prune control.
+  */
+  const budget = currentSettings().trace.spurPrunePx / from.rasterWidth;
+  const pruned = pruneFrozenGraph(from.graph, budget);
+
+  preview = pruned.graph;
+  previewDropped = from.dropped;
+
+  const faces = buildFrozenFaces(pruned.graph);
+  regions = faces.faces.map((face) => ({ rings: face.rings }));
+  walls = wallSegments(pruned.graph, faces).map((points) => ({ points }));
+  // Fractions of the map, exactly as in the editor, so the painter needs no branch either.
+  raster = { width: 1, height: 1 };
+  unitsPerSquare = from.pxPerSquare > 0 ? from.pxPerSquare / from.rasterWidth : 0;
+  stale = false;
+
+  /*
+    The same figures the editor says, in the same order, because they now describe the same object.
+
+    The dropped count is on the line because it is a room the map has and the document will not:
+    smoothing can fit both walls of a very thin room to the same line, closing it up, and the freeze
+    drops what that leaves. Saying so here rather than only at the save is the point — the slider
+    that caused it is on screen at this moment, and afterwards it is one mode away.
+
+    Euler's identity is on it for a related reason. A doubled wall is exactly what that check fails
+    on, and in this mode there are no hand edits to make such a state a legal one to pass through —
+    so a failure here means the freeze produced something a traversal cannot mean anything over,
+    which is worth a red line rather than a log entry nobody reads.
+  */
+  const rooms = `${regions.length} region${regions.length === 1 ? "" : "s"}`;
+  lastSummary =
+    `${rooms} · ${wallRuns(pruned.graph).length} walls in ` +
+    `${pruned.graph.edges.length} segments · ${pruned.graph.nodes.length} points` +
+    (pruned.removed === 0 ? "" : ` · ${pruned.removed} spurs pruned`) +
+    (previewDropped === 0
+      ? ""
+      : ` · ${previewDropped} wall${previewDropped === 1 ? "" : "s"} dropped — ` +
+        "smoothing has closed a thin room up") +
+    (faces.eulerHolds ? "" : " · CHECK FAILED, see the log");
+  lastSummaryOk = previewDropped === 0 && faces.eulerHolds;
+  say(lastSummary, lastSummaryOk ? "" : "bad");
+  devLog(
+    "info",
+    `workspace: partition ${generation} — pruned ${pruned.removed} spurs ` +
+      `(${pruned.segments} segments) in ${pruned.rounds} rounds at a budget of ` +
+      `${budget.toExponential(2)} of the map; ${describeFrozenFaces(faces)}`,
+  );
+  invalidate();
+}
+
+/**
+ * Re-apply the spur budget without re-deriving anything.
+ *
+ * The dispatch calls this for a graph-only change. Falls back to a full derive when there is no
+ * derivation in hand — which is the state after any reading or deriving change, and after opening
+ * the workspace — so the caller never has to know which of the two it is asking for.
+ */
+export function repruneRegions(): void {
+  if (inEditor()) return;
+  if (!derivation || inFlight) {
+    invalidateRegions();
+    return;
+  }
+  if (!watching) {
+    // Nobody is looking, so the cheap thing is still too much. Marked owed, like any other change.
+    stale = true;
+    requests.request();
+    invalidate();
+    return;
+  }
+  requests.request();
+  publish(derivation, requests.latest());
+  requests.fulfil(requests.latest());
 }
 
 async function derive(): Promise<void> {
@@ -283,8 +400,6 @@ async function derive(): Promise<void> {
 
     // The same call the save makes, so what is drawn and what would be stored cannot differ.
     const stored = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
-    preview = stored.graph;
-    previewDropped = stored.duplicates + stored.zeroLength;
     /*
       And the same traversal the push makes, which is the second half of that sentence.
 
@@ -298,11 +413,6 @@ async function derive(): Promise<void> {
       One derivation now. What the trace still derives for itself is the graph, the fitted edges and
       the area check — a derivation, not a picture.
     */
-    const faces = buildFrozenFaces(stored.graph);
-    regions = faces.faces.map((face) => ({ rings: face.rings }));
-    walls = wallSegments(stored.graph, faces).map((points) => ({ points }));
-    // Fractions of the map, exactly as in the editor, so the painter needs no branch either.
-    raster = { width: 1, height: 1 };
     /*
       A grid square as a fraction of the map, which the ink mode can answer and the editor cannot.
 
@@ -311,34 +421,15 @@ async function derive(): Promise<void> {
       the measurement exists, so the outline setting is honoured rather than drawn at its floor.
     */
     const pxPerSquare = lastPixelsPerSquare() ?? 0;
-    unitsPerSquare = pxPerSquare > 0 ? pxPerSquare / Math.max(1, outcome.run.raster.width) : 0;
-    stale = false;
-    /*
-      The same figures the editor says, in the same order, because they now describe the same object.
-
-      The dropped count is on the line because it is a room the map has and the document will not:
-      smoothing can fit both walls of a very thin room to the same line, closing it up, and the freeze
-      drops what that leaves. Saying so here rather than only at the save is the point — the slider
-      that caused it is on screen at this moment, and afterwards it is one mode away.
-
-      Euler's identity is on it for a related reason. A doubled wall is exactly what that check
-      fails on, and in this mode there are no hand edits to make such a state a legal one to pass
-      through — so a failure here means the freeze produced something a traversal cannot mean
-      anything over, which is worth a red line rather than a log entry nobody reads.
-    */
-    const rooms = `${regions.length} region${regions.length === 1 ? "" : "s"}`;
-    lastSummary =
-      `${rooms} · ${wallRuns(stored.graph).length} walls in ` +
-      `${stored.graph.edges.length} segments · ${stored.graph.nodes.length} points` +
-      (previewDropped === 0
-        ? ""
-        : ` · ${previewDropped} wall${previewDropped === 1 ? "" : "s"} dropped — ` +
-          "smoothing has closed a thin room up") +
-      (faces.eulerHolds ? "" : " · CHECK FAILED, see the log");
-    lastSummaryOk = previewDropped === 0 && faces.eulerHolds;
-    say(lastSummary, lastSummaryOk ? "" : "bad");
+    const rasterWidth = Math.max(1, outcome.run.raster.width);
+    derivation = {
+      graph: stored.graph,
+      dropped: stored.duplicates + stored.zeroLength,
+      rasterWidth,
+      pxPerSquare,
+    };
+    publish(derivation, generation);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
-    devLog("info", `workspace: partition ${generation} — ${describeFrozenFaces(faces)}`);
   } catch (error) {
     if (requests.fail(generation)) {
       const detail = describeError(error);
@@ -420,6 +511,7 @@ function deriveFrozen(graph: FrozenGraph): void {
 export function registerRegionInvalidation(): void {
   onReading(() => {
     stale = true;
+    derivation = null;
     requests.request();
     if (watching) void derive();
   });

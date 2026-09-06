@@ -69,13 +69,10 @@ import {
 } from "./faces";
 import { labelSpace, type LabelledSpace } from "./label";
 import { COMMAND_CAP } from "./simplify";
-import { pruneSpurs } from "./spurs";
 import { thin } from "./thinning";
 import { buildWallGraph, type WallGraph } from "./wallGraph";
 
 export interface GraphRegionOptions {
-  /** Longest dead-end branch to prune from the skeleton, in pixels walked. Zero is off. */
-  readonly spurPrunePx: number;
   /** Douglas–Peucker tolerance in raster pixels. */
   readonly tolerance: number;
   /** Ceiling the tolerance may escalate to. */
@@ -113,6 +110,14 @@ export interface GraphRegionResult {
   readonly regions: readonly GraphRegion[];
   /** The skeleton the graph came from, before the border frame was painted on. */
   readonly skeleton: BinaryMask;
+  /*
+    Spur pruning used to happen here, between thinning and chaining, and it moved past the freeze on
+    2026-09-06. It is an operation on the fitted graph now — `pruneFrozenGraph` — shared by the ink
+    mode and the editor, which has no skeleton and never will. Deleting a run after the freeze
+    disturbs no raster, which is what a rebuild-based graph prune could not manage: measured over
+    generated linework, rebuilding left the sub-pixel-sliver artefact on 181 of 400 seeds against 1
+    of 400 for the raster prune it would have replaced.
+  */
   /** Faces holding no map at all — sub-pixel slivers. There is no size threshold any more. */
   readonly discarded: number;
   /**
@@ -178,14 +183,12 @@ export interface GraphRegionResult {
   readonly sliversLeft: number;
   readonly timings: {
     readonly thinMs: number;
-    readonly pruneMs: number;
     readonly graphMs: number;
     readonly labelMs: number;
     readonly faceMs: number;
     readonly fitMs: number;
   };
   readonly thinning: { readonly before: number; readonly after: number; readonly passes: number };
-  readonly pruning: { readonly removed: number; readonly pixels: number; readonly rounds: number };
 }
 
 export function deriveGraphRegions(
@@ -196,12 +199,8 @@ export function deriveGraphRegions(
   const thinned = thin(ink);
   const thinMs = performance.now() - thinStarted;
 
-  const pruneStarted = performance.now();
-  const pruned = pruneSpurs(thinned.mask, options.spurPrunePx);
-  const pruneMs = performance.now() - pruneStarted;
-
   const graphStarted = performance.now();
-  let graph = buildWallGraph(pruned.mask);
+  let graph = buildWallGraph(thinned.mask);
   const graphMs = performance.now() - graphStarted;
 
   // No minimum here on purpose. The area identity compares against this pixel count, and filtering
@@ -300,7 +299,7 @@ export function deriveGraphRegions(
     labelled: filteredLabelling,
     regions: built.regions.map((region) => ({ ...region, overCap: region.commands > cap })),
     fittedEdges: built.fitted,
-    skeleton: pruned.mask,
+    skeleton: thinned.mask,
     discarded,
     bridges,
     uncoveredEdges: built.uncovered,
@@ -312,9 +311,8 @@ export function deriveGraphRegions(
     sliversRemoved,
     sliverRounds,
     sliversLeft: faces.slivers.length,
-    timings: { thinMs, pruneMs, graphMs, labelMs, faceMs, fitMs },
+    timings: { thinMs, graphMs, labelMs, faceMs, fitMs },
     thinning: { before: thinned.before, after: thinned.after, passes: thinned.passes },
-    pruning: { removed: pruned.removed, pixels: pruned.pixels, rounds: pruned.rounds },
   };
 }
 
@@ -457,7 +455,7 @@ export function describeGraphRegions(result: GraphRegionResult): string {
     `${result.filledHoles} holes filled, ${result.droppedCycles} cycles produced no ring); ` +
     `${exact}; tolerance ${result.tolerance.toFixed(2)}px ` +
     `after ${result.escalations} escalations; thin ${Math.round(timings.thinMs)}ms, ` +
-    `prune ${Math.round(timings.pruneMs)}ms, graph ${Math.round(timings.graphMs)}ms, ` +
+    `graph ${Math.round(timings.graphMs)}ms, ` +
     `label ${Math.round(timings.labelMs)}ms, faces ${Math.round(timings.faceMs)}ms, ` +
     `fit ${Math.round(timings.fitMs)}ms`
   );

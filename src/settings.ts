@@ -163,7 +163,12 @@ export interface TraceSettings {
    */
   readonly gapTravelPx: number;
   /**
-   * The longest dead-end branch spur pruning will remove from the skeleton, in raster pixels walked.
+   * The longest dead-end wall spur pruning will remove, in raster pixels along the wall.
+   *
+   * **It acts on the fitted graph, past the freeze** (2026-09-06), not on the skeleton — so the unit
+   * is a length along the wall as stored rather than a count of pixels stepped over. Still raster
+   * pixels for now, converted at the point of use; re-denominating it in fractions of the map is
+   * what lets the editor carry the same control, and is the step after this one.
    *
    * A spur is the artefact a ragged ink edge leaves on a centreline; a **stub** is a wall that
    * genuinely stops in mid-air. They are the same shape locally and only length separates them,
@@ -286,7 +291,7 @@ export const DEFAULT_SETTINGS: Settings = {
     // Off by default, like every other control that removes something a GM has not looked at yet.
     // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a budget longer
     // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
-    // skeleton as thinning produced it, hairs and all.
+    // graph as fitting produced it, hairs and all.
     spurPrunePx: 0,
     simplifyInkWidths: 0.25,
   },
@@ -366,9 +371,10 @@ export const SETTING_LIMITS = {
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
   // the repair; the bottom end repairs every break that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },
-  // In raster pixels of path walked, not straight-line distance. The top end is past any plausible
-  // stub and will eat walls whole, which is the same deliberate over-reach the ink filters have and
-  // is defensible for the same reason: the skeleton is drawn, so it is visible rather than silent.
+  // In raster pixels along the wall, not straight-line distance between its ends. The top end is
+  // past any plausible stub and will eat walls whole, which is the same deliberate over-reach the
+  // ink filters have and is defensible for the same reason: the graph is drawn, so it is visible
+  // rather than silent.
   spurPrunePx: { min: 0, max: 60, step: 1 },
   // From a single pixel — the finest correction a raster can hold — to wide enough to cover a room
   // in a few strokes. The bottom end is genuinely usable rather than a token: repairing one severed

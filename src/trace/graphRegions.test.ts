@@ -4,7 +4,6 @@ import { maskFromRows } from "./fixtures";
 import { coveredArea, deriveGraphRegions, type GraphRegionOptions } from "./graphRegions";
 
 const BASE: GraphRegionOptions = {
-  spurPrunePx: 0,
   tolerance: 0.5,
   maxTolerance: 4,
 };
@@ -188,10 +187,12 @@ describe("regions derived from the wall graph", () => {
     expect(result.faces.exact).toBe(result.faces.checked);
   });
 
-  it("holds the area identity whatever the pruning", () => {
-    for (const spurPrunePx of [0, 3, 7]) {
-      const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), { ...BASE, spurPrunePx });
-      expect(result.faces.exact, `prune ${spurPrunePx}`).toBe(result.faces.checked);
+  it("holds the area identity at every tolerance", () => {
+    // Spur pruning used to be swept here, and it left the raster on 2026-09-06 — it is an operation
+    // on the fitted graph now and has its own tests. What is left to vary is the fitting.
+    for (const tolerance of [0, 0.5, 2]) {
+      const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), { ...BASE, tolerance });
+      expect(result.faces.exact, `tolerance ${tolerance}`).toBe(result.faces.checked);
       expect(result.faces.disagreements).toBe(0);
       expect(result.graph.stats.orphans).toBe(0);
     }

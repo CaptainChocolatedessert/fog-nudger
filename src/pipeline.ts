@@ -1314,7 +1314,6 @@ export async function runTrace(
   const safeTolerance = inkWidth / 2;
 
   const derived = deriveGraphRegions(inkMask, {
-    spurPrunePx: settings.trace.spurPrunePx,
     tolerance,
     maxTolerance: MAX_SIMPLIFY_INK_WIDTHS * inkWidth,
   });
@@ -1337,8 +1336,7 @@ export async function runTrace(
   devLog(
     "info",
     `trace: graph — thinned ${derived.thinning.before} ink pixels to ${derived.thinning.after} in ` +
-      `${derived.thinning.passes} passes; pruned ${derived.pruning.removed} spurs ` +
-      `(${derived.pruning.pixels} px) at ${settings.trace.spurPrunePx}px; ` +
+      `${derived.thinning.passes} passes; ` +
       `${derived.graph.stats.chains} chains into ${derived.graph.nodes.length} nodes and ` +
       `${derived.graph.edges.length} edges (${derived.graph.stats.merged} joins through path ` +
       `nodes, ${derived.graph.stats.orphans} orphaned pixels); ${derived.sliversRemoved} sub-pixel ` +
