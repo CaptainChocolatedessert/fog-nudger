@@ -2,8 +2,9 @@
  * The skeleton layer: centrelines over the ink they came from.
  *
  * Drawn as a bitmap rather than paths, because at this point in the chain that is what it is — a
- * one-pixel-wide mask. Step D turns it into vectors *downstream* of here, and the Regions step draws
- * those; rasterising it here is honest about the fact that what this step shows is still pixels.
+ * one-pixel-wide mask. Step D turns it into vectors *downstream* of here, and the regions layer
+ * draws the faces those make; rasterising it here is honest about the fact that what this layer shows
+ * is still pixels.
  *
  * ## A colour that is not the ink's
  *

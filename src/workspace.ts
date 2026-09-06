@@ -108,7 +108,7 @@ onReading((result) => {
   registration order and stops at the first one that refuses a reading, which is how a layer that
   cannot allocate blanks the mask instead of leaving a stale one on screen. Behind the layers, these
   two were part of what got cancelled — so a failed reading left the *partition* from the previous
-  mask marked current, and opening the Regions step drew it as though it were this reading's, with
+  mask marked current, and opening a step that draws it showed it as though it were this reading's, with
   nothing on the state line by then to say otherwise.
 
   Marking derived state stale is not a thing that can fail and does not depend on anything being
@@ -136,8 +136,16 @@ registerInkLayer();
 */
 registerPaintLayer();
 registerBreaksLayer();
-registerSkeletonLayer();
+/*
+  The partition, and it moved BELOW the skeleton when the Regions step was dissolved.
+
+  It could sit anywhere while only one step drew it. Now Walls draws it with the centrelines on top,
+  and the order is the whole of whether that step is legible: the rooms are an area fill and the
+  skeleton is a one-pixel line, so a fill drawn after it covers the thing being judged. Rooms under
+  their cause, in both of the steps that show them.
+*/
 registerRegionsLayer();
+registerSkeletonLayer();
 // Last, so the editable graph sits over the rooms it makes rather than under them.
 registerGraphLayer();
 /*
@@ -157,10 +165,16 @@ registerWallEdit();
   mode that is open, not a second handler.
 */
 registerPaintTool();
-// Deriving costs the better part of a second in stage one and is visible in two steps, so entering
-// one of them is what pays for it. Both are told on every change, which is why the module keeps a
-// set rather than a flag.
-onStepOpen("regions", (open) => watchRegions("regions", open));
+/*
+  Deriving costs the better part of a second in stage one and is visible in two steps, so entering
+  one of them is what pays for it. Both are told on every change, which is why the module keeps a set
+  rather than a flag.
+
+  The two are **Walls and Edit walls** since the Regions step was dissolved: the partition is drawn
+  wherever a graph is drawn. Walls therefore subscribes twice, once for the rooms and once for the
+  centrelines over them, which is two independent costs a single entry happens to pay for.
+*/
+onStepOpen("walls", (open) => watchRegions("walls", open));
 onStepOpen("edit", (open) => watchRegions("edit", open));
 // Thinning is the same shape of cost and gets the same answer: entering the step pays for it.
 onStepOpen("walls", watchSkeleton);
@@ -204,8 +218,15 @@ registerStepContent("ink", renderSwatches);
 // What you do with the walls, above the way out of the step that holds them.
 registerStepContent("edit", renderWallTools);
 registerStepContent("edit", renderFreezeAction, "bottom");
-// Pushing stays with the partition, which is the thing it writes and the thing being judged.
-registerStepContent("regions", renderPushAction, "bottom");
+/*
+  Pushing stays with the partition, which is the thing it writes and the thing being judged.
+
+  That used to mean the Regions step. With Regions dissolved the partition is drawn in two steps,
+  and this goes to **Walls** — the last step of stage one, and the one whose two controls decide the
+  geometry that gets written. Edit walls has the door at its foot instead, which is what a GM in
+  stage two reaches for.
+*/
+registerStepContent("walls", renderPushAction, "bottom");
 
 /*
   Closing writes the result to the scene.

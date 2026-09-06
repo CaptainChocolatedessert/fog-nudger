@@ -14,8 +14,8 @@
  *
  * It also reads better from inside. In stage one the Edit walls step is empty and this button is
  * what puts something in it; in stage two it is the way back out of the thing the GM is looking at.
- * Regions keeps the button that acts on the partition — the push — which is the one that genuinely
- * belongs beside what it writes.
+ * The button that acts on the partition — the push — sits at the foot of **Walls**, which is the
+ * step that shows what it would write.
  *
  * ## Why a dialog here and disabled controls elsewhere
  *

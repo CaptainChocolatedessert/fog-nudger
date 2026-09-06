@@ -5,8 +5,9 @@
  *
  * It has the same shape — ask, blank, publish, drop a superseded answer — but a different rule about
  * *when*. A reading is what every stage-one step is looking at, so it runs whenever a stage-one
- * control moves. The partition is looked at in two steps — Regions, and Edit walls with the graph
- * over it — and deriving it costs the better part of a second on top of a cached mask. So it runs
+ * control moves. The partition is looked at in two steps — Walls, with the centrelines over it, and
+ * Edit walls, with the frozen graph over it — and deriving it costs the better part of a second on
+ * top of a cached mask. So it runs
  * **lazily**: on entering one of those steps, and on a change while one is open. Anywhere else, a
  * change only marks it stale.
  *
@@ -166,8 +167,8 @@ export function invalidateRegions(): void {
 /**
  * Which of the steps that draw the partition are open.
  *
- * A set rather than a flag because **two** steps draw it now — Regions, and Edit walls with the
- * graph over it. The accordion is exclusive so only one can be open, but every listener is told on
+ * A set rather than a flag because **two** steps draw it now — Walls and Edit walls, which is what
+ * dissolving the Regions step means: the partition is drawn wherever a graph is drawn. The accordion is exclusive so only one can be open, but every listener is told on
  * every change, one true and the rest false, and the order they are told in is not ours to depend
  * on. A flag would be set by one listener and cleared by the other.
  */

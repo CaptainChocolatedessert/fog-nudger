@@ -357,7 +357,7 @@ let lastRun: {
  * The last mask the overlay path produced, for the probe.
  *
  * The full run holds a labelling and this does not, which is the whole difference between what the
- * probe can say in the Regions step and what it can say in the Ink step. Kept separately rather than
+ * probe can say once a partition has been derived and what it can say before one has. Kept
  * folded into `lastRun`, because a half-filled `lastRun` would let anything reading it believe a
  * partition existed.
  */

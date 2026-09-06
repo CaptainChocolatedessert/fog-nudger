@@ -117,8 +117,8 @@ export function advanceTo(id: StepId): void {
  * A step's rows, in declaration order, with its groups after them under their own headings.
  *
  * **Every stage is drawn here now.** It was stage one only while the panel still owned deriving; the
- * Regions step ended that, and the two appearance controls came with it because the partition they
- * describe is now drawn on this canvas rather than only in the scene. Which stage a control belongs
+ * partition moving onto this canvas ended that, and the two appearance controls came with it because
+ * what they describe is drawn here rather than only in the scene. Which stage a control belongs
  * to still decides what changing it destroys — that is the cascade, and `settingRows` reads it — but
  * it no longer decides which surface draws it.
  */
@@ -276,11 +276,18 @@ export function renderPanel(): void {
     }
   }
 
-  // The persistent group is drawn whenever one is declared, and today it holds **no controls at
-  // all**: every display parameter moved to the step that draws its layer, which is what emptied it.
-  // So this renders a heading and a blurb over nothing. Left as it is on purpose — the group is
-  // where a genuinely cross-step display control would go — and said here so the next reader does
-  // not go looking for a control that failed to render.
+  /*
+    The persistent group, which is drawn whenever one is declared and is no longer empty.
+
+    It held nothing between 2026-08-29 and the dissolving of the Regions step: every display
+    parameter had moved to the step that draws its layer, and this rendered a heading over nothing.
+    What refilled it is the partition acquiring a *second* step that draws it — the rule "a display
+    control lives with its layer" cannot name one step when two show the same thing, and the group
+    that is never entered is the answer rather than a tie-break between them.
+
+    It gets a Defaults of its own for the same reason every step with controls does. It is the one
+    place that rule could have been missed, because for a while there was nothing here to reset.
+  */
   const view = document.getElementById("view-group");
   const persistent = STEPS.find((step) => step.persistent);
   if (view && persistent) {
@@ -297,6 +304,8 @@ export function renderPanel(): void {
     for (const control of ungroupedControls(persistent)) {
       view.append(settingRow(control));
     }
+
+    if (stepParameters(persistent.id).length > 0) view.append(defaultsButton(persistent));
   }
 
   applyOpenStep();

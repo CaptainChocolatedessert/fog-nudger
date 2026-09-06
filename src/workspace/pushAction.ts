@@ -1,8 +1,10 @@
 /**
  * "Put on the map" — the one button on this surface that writes to the scene, and the close hook.
  *
- * The Regions step ends with it because that is where the partition is judged, and judging it is
- * what makes writing it a sensible next move.
+ * The **Walls** step ends with it, because that is the last step of stage one and the one that now
+ * shows what would be written — the partition, with the centrelines that decide it drawn over the
+ * top. Judging a thing and writing it belong next to each other. It was the Regions step until that
+ * step was dissolved into this one.
  *
  * ## Closing pushes, and the button is for not having to close
  *

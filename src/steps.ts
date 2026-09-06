@@ -46,9 +46,10 @@ import {
 /**
  * Every step that exists today.
  *
- * The A-plan designed six — map, ink, walls, edit walls, regions, doors — and five of them are built;
- * doors stay with Dynamic Fog entirely. `view` is not one of the six: it is the persistent group,
- * which is a step's shape without a mode.
+ * The A-plan designed six — map, ink, walls, edit walls, regions, doors. Doors stay with Dynamic Fog
+ * entirely, and **regions was dissolved on 2026-09-05** into the two steps that draw a graph, so the
+ * partition is no longer somewhere a GM goes. `view` is not one of the six: it is the persistent
+ * group, which is a step's shape without a mode.
  */
 export type StepId =
   | "map"
@@ -57,16 +58,19 @@ export type StepId =
   | "addink"
   | "walls"
   | "edit"
-  | "regions"
   | "view";
 
 /**
  * What the canvas can draw over the map.
  *
  * A step declares which of these it shows, and they legitimately differ: Ink paints the binary mask,
- * Walls paints linework over it, and Regions paints coloured faces over a map with no mask at all.
- * Nothing is drawn "because it exists" — a layer is on screen because the step the GM is in is about
- * it.
+ * Walls paints coloured faces and the centrelines that bound them over it, and Edit walls paints the
+ * same faces under the graph with no mask at all. Nothing is drawn "because it exists" — a layer is
+ * on screen because the step the GM is in is about it.
+ *
+ * `regions` is the one drawn in **two** steps, which is what dissolving the Regions step means: the
+ * partition is a consequence of a graph rather than a subject of its own, so it is drawn wherever a
+ * graph is.
  */
 export const LAYERS = ["ink", "paint", "breaks", "skeleton", "regions", "graph"] as const;
 
@@ -247,15 +251,25 @@ export const STEPS: readonly Step[] = [
     id: "walls",
     title: "Walls",
     blurb:
-      "The <b class='skeleton-key'>centreline</b> of every piece of linework, one pixel wide. " +
-      "<b>This is the graph the regions below are made of</b> \u2014 a face boundary is a centreline, so " +
-      "pruning here changes the partition.",
+      "The <b class='skeleton-key'>centreline</b> of every piece of linework, one pixel wide, over " +
+      "the rooms it encloses. <b>A face boundary is a centreline</b>, so both controls here change " +
+      "which rooms exist and what shape they are. This is what goes on the map.",
     /*
-      The skeleton over the ink, which is the only pairing that answers the question.
+      The skeleton over the partition over the ink: three layers, and each earns its place.
 
-      A centreline on its own says nothing: what a GM is judging is whether it runs down the middle
-      of the wall it came from, and whether the hairs on it are artefacts of a ragged edge or stubs
-      that are really there. Both are comparisons against the ink, so the ink is drawn under it.
+      **The Regions step was dissolved into this one** (user, 2026-09-05): *"'regions' as a separate
+      step isn't needed anymore. We can always display colored regions when we display the graph."*
+      So the partition stopped being somewhere to go, and is drawn wherever a graph is drawn --
+      which is here and in Edit walls.
+
+      The ink stays under both for the reason it always did: a centreline on its own says nothing,
+      and what a GM is judging is whether it runs down the middle of the wall it came from, and
+      whether the hairs on it are artefacts of a ragged edge or stubs that are really there. Both
+      are comparisons against the ink.
+
+      **The cost is that this step now carries a lot at once**, and it is the opposite of the reason
+      the dissolved step showed the partition on bare map. The lever for it is the ink opacity,
+      which is one step up rather than here.
 
       **The breaks were here too, and are not any more** (2026-09-05). That was the one argued
       exception to "each step shows its own layer", on the grounds that a severed wall becomes
@@ -268,7 +282,7 @@ export const STEPS: readonly Step[] = [
       to watch in a room**: a wall this step's own filter severed no longer announces itself, and
       finding it means going to Add ink and running the search.
     */
-    layers: ["ink", "paint", "skeleton"],
+    layers: ["ink", "paint", "regions", "skeleton"],
     drag: "pan",
   },
   {
@@ -281,11 +295,13 @@ export const STEPS: readonly Step[] = [
     /*
       The partition under the graph, which is the one pairing that answers this step's question.
 
-      The convention is that each step draws its own thing, and the Regions step makes the strongest
-      case for it — ink under a partition answers the previous question over the top of this one.
-      This is the argued exception, and it is the same shape as the one Walls carries: what a GM is
+      This is the same pairing Walls carries one step up, and for the same reason: what a GM is
       deciding here is not where a line *is* but what moving it would do, and what it does is change
       which rooms exist. The rooms are the consequence, so they are drawn under the cause.
+
+      **What is NOT here is the ink**, which is the one difference from Walls. The reading is closed
+      by this point and the graph no longer comes from it, so a mask drawn underneath would invite a
+      comparison against a picture that has stopped being the source of anything.
 
       They also do not compete for the same ink. The partition is fills and outlines in six cycling
       colours; the graph is one colour and a handle at every point.
@@ -301,31 +317,40 @@ export const STEPS: readonly Step[] = [
     */
     drag: "edit",
   },
-  {
-    id: "regions",
-    title: "Regions",
-    blurb:
-      "Every enclosed area, in six colours so neighbours differ. This is what goes on the map. " +
-      "The top two only change how it is drawn here; the third smooths the outlines. None of them " +
-      "can split or join a region — the ink and the walls above already decided which rooms exist.",
-    /*
-      The partition alone, with no ink under it.
+  /*
+    The Regions step was here, and it is GONE (user, 2026-09-05).
 
-      Deliberate, and the clearest case yet for the convention that a step shows its own thing: the
-      question here is whether these areas are the rooms a GM would have drawn, and ink drawn under
-      them would answer the previous question over the top of this one. The map is still there to
-      judge against, which is the comparison that matters at this point.
-    */
-    layers: ["regions"],
-    drag: "pan",
-  },
+    Its question -- are these the rooms I would have drawn -- has not gone anywhere; what went is the
+    idea that answering it is a place you travel to. The partition is drawn wherever a graph is
+    drawn, which is Walls and Edit walls, so a step whose whole content was that one layer had
+    nothing left the two steps either side of it were not already showing.
+
+    Where its three controls went, and why each landed where it did:
+
+    - **Edge smoothing to Walls**, because it shapes the graph rather than the picture of it, and
+      Walls is where the other control that does that already sits.
+    - **Preview fill and outline to the View group**, which is the persistent one. They describe a
+      layer that two steps now draw, so filing them under either would make recolouring it from the
+      other a journey -- which is the exact objection that moved them *out* of View in the first
+      place, one axis over. A persistent group is never navigated to, so it answers that objection
+      rather than reintroducing it.
+    - **"Put on the map" to the end of Walls**, which is now the step that shows what it writes.
+  */
   {
     id: "view",
     title: "View",
     blurb:
-      "Empty, for now. What was here \u2014 the ink colour and opacity, the proposal fill and outline \u2014 " +
-      "went to the steps that draw the thing each one describes. This is where a control that is " +
-      "genuinely about the whole surface would go.",
+      "How the rooms are drawn, wherever they are drawn \u2014 which is <b>Walls</b> and <b>Edit " +
+      "walls</b>. Neither of these changes what goes on the map: an emitted room is fully opaque " +
+      "and carries no outline at all.",
+    /*
+      No layers of its own, and that is what a persistent group means rather than an oversight.
+
+      It is never entered, so it never decides what is on the canvas. What it holds are controls for
+      a layer some *other* step has asked for, which is the whole reason a control ends up here
+      rather than in a step: the partition has two homes now, and a control living in one of them is
+      one the other home has to be left in order to reach.
+    */
     layers: [],
     drag: "pan",
     persistent: true,
@@ -357,10 +382,21 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId>> = {
   // repair was a stage of the pipeline; a control belongs to the step that runs it.
   gapFillPx: "addink",
   gapTravelPx: "addink",
+  // Both of the controls that shape the graph, together. Pruning decides which walls survive and
+  // smoothing decides what shape they are, and the step draws the result of both.
   spurPrunePx: "walls",
-  fillOpacity: "regions",
-  strokeSquares: "regions",
-  simplifyInkWidths: "regions",
+  simplifyInkWidths: "walls",
+  /*
+    How the partition is drawn, in the group that is never entered.
+
+    These followed the partition out of the deleted Regions step, and the persistent group is where
+    they land rather than either step that draws it. The 2026-08-29 rule was that a display control
+    belongs in the step that draws its layer, on the argument that navigating away from a thing to
+    recolour it is absurd — and that argument now points *here*, because there are two such steps
+    and filing them under one would mean leaving the other to reach them.
+  */
+  fillOpacity: "view",
+  strokeSquares: "view",
 };
 
 /**

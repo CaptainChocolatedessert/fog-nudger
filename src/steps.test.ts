@@ -9,16 +9,16 @@
  *
  * ## What can be asserted, and what would be pinning a coincidence
  *
- * Independence is asserted where the declarations actually disagree today: the View group holds a
- * reading-stage control and an adjusting one, and the reading stage is spread across three steps, so
- * neither of step and stage can be recovered from the other.
+ * Independence is asserted where the declarations actually disagree today: the Walls step holds a
+ * reading-stage control beside a deriving one, and the Ink step spans both the kind and the
+ * post-reading boundary. None of those is a rule about *which* step — what is pinned is only that
+ * some step disagrees, so that no lookup from one axis to another can ever be written.
  *
- * It is *not* asserted for the kind or the post-reading boundary, and that is deliberate. Every
- * parameter in the ink step happens to be a pipeline parameter, and every walls parameter happens to
- * be post-reading — facts about these twelve parameters rather than rules. A test demanding that
- * they diverge would fail the day a step legitimately holds one of each, which is the very freedom
- * the separation exists to give. What is pinned instead is that each declaration is total on its
- * own, which is what makes a step-driven UI unable to leave a parameter unreachable.
+ * What is deliberately *not* pinned is which step does the disagreeing. That moves whenever the
+ * sections do — it was the View group in August and the Regions step until that step was dissolved
+ * — and a test naming one would fail at the next rearrangement while teaching the wrong lesson when
+ * it did. Each declaration is also pinned total on its own, which is what makes a step-driven UI
+ * unable to leave a parameter unreachable.
  *
  * Pure: no DOM, no SDK.
  */
@@ -251,10 +251,9 @@ describe("per-step defaults", () => {
 
 describe("the four axes are declared independently", () => {
   it("does not let the stage be recovered from the step", () => {
-    // The Regions step holds the two deriving controls beside the two that decide how a proposal is
-    // drawn, which are adjusting ones. Reading a stage off a step would put a stage-three control
-    // into the reading stage's cache invalidation - the failure the two-axis split exists to
-    // prevent, one axis later.
+    // The Walls step holds spur pruning, which is a reading control, beside edge smoothing, which is
+    // a deriving one. Reading a stage off a step would put a later-stage control into the reading
+    // stage's cache invalidation - the failure the two-axis split exists to prevent, one axis on.
     const byStep = new Map<StepId, Set<string>>();
     for (const name of ALL_NAMES) {
       const step = PARAMETER_STEP[name];
@@ -264,10 +263,10 @@ describe("the four axes are declared independently", () => {
   });
 
   it("does not let the kind be recovered from the step", () => {
-    // Both steps that have controls hold a pipeline one and a display one: the ink colour and opacity
-    // sit with the threshold, and the proposal fill sits with the smallest room. Deciding on release
-    // what a slider costs by looking at which section it was drawn in is exactly the conflation the
-    // kind axis exists to prevent, and this is what keeps the two from quietly becoming synonyms.
+    // The Ink step holds the ink opacity, which recomputes nothing, beside the threshold, which
+    // re-reads the whole map. Deciding on release what a slider costs by looking at which section it
+    // was drawn in is exactly the conflation the kind axis exists to prevent, and this is what keeps
+    // the two from quietly becoming synonyms.
     const byStep = new Map<StepId, Set<string>>();
     for (const name of ALL_NAMES) {
       const step = PARAMETER_STEP[name];
