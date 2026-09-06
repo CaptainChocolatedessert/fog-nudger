@@ -137,3 +137,109 @@ describe("formatValue", () => {
     expect(formatValue(2.5, log, "log")).toBe("2.5");
   });
 });
+
+/**
+ * A log scale whose far left means **off**, which is the shape both graph-derived controls need.
+ *
+ * `min` is zero because that is the parameter's true minimum and the settings normaliser clamps to
+ * it; `floor` is where the logarithmic part begins. Keeping those separate is not tidiness — a
+ * positive `min` would make the normaliser raise a stored zero to the floor on every read, quietly
+ * destroying the off state.
+ */
+const offable = { min: 0, max: 0.076, step: 0.001, floor: 2e-4 };
+
+describe("a log scale with an off position", () => {
+  it("gives the far left a literal zero and nothing else", () => {
+    // The whole point: "off" has to be exactly off rather than small enough that nobody notices.
+    expect(fromSlider(0, offable, "log")).toBe(0);
+    expect(fromSlider(1, offable, "log")).toBeGreaterThan(0);
+  });
+
+  it("starts the log range one step in, so position 1 is the floor", () => {
+    // Not the same as position 0. A floor that shared the off position would be unreachable, and
+    // the bottom of the useful range is exactly where these controls are tuned.
+    expect(fromSlider(1, offable, "log")).toBeCloseTo(offable.floor, 12);
+    expect(toSlider(offable.floor, offable, "log")).toBe(1);
+  });
+
+  it("round-trips zero without a special case on the writing side", () => {
+    // `toSlider` already clamps, so a stored zero lands on the far left for free. Only `fromSlider`
+    // needed a branch — but both halves have to agree or a stored setting is rewritten by merely
+    // rendering its row.
+    expect(toSlider(0, offable, "log")).toBe(0);
+    expect(fromSlider(toSlider(0, offable, "log"), offable, "log")).toBe(0);
+  });
+
+  it("never rewrites a value that has already been through it", () => {
+    /*
+      The load-bearing property, asserted across the whole track rather than at the ends.
+
+      **Not** `toSlider(fromSlider(p)) === p`, which this module has never guaranteed and which I
+      asserted first and had to correct: `fromSlider` snaps log values to three significant figures,
+      so where the track is finer than that grid two adjacent positions produce the same value and
+      the second does not return its own position. Measured: 963 distinct values over 1001 positions
+      here, 993 on the plain log scale that shipped before it. Benign — the slider is slightly
+      coarser than its track, and no GM can see it.
+
+      What *is* guaranteed, and what actually matters, is that a value which came off the slider
+      survives being put back on it. That is what stops merely rendering a row from rewriting a
+      stored setting, which is the worst failure available to a control because nothing announces it.
+      Measured at zero exceptions across the whole track, on both scales.
+    */
+    for (let position = 0; position <= SLIDER_STEPS; position++) {
+      const value = fromSlider(position, offable, "log");
+      const again = fromSlider(toSlider(value, offable, "log"), offable, "log");
+      expect(again, `position ${position}`).toBe(value);
+    }
+  });
+
+  it("still reaches the top", () => {
+    expect(fromSlider(SLIDER_STEPS, offable, "log")).toBeCloseTo(offable.max, 12);
+    expect(toSlider(offable.max, offable, "log")).toBe(SLIDER_STEPS);
+  });
+
+  it("raises a positive value under the floor to the floor, and only zero means off", () => {
+    /*
+      I asserted the opposite first, and it is worth saying why it is wrong.
+
+      A stored value strictly between zero and the floor cannot come from the slider, so it means
+      either a hand-edited scene or a floor constant that has since been *raised*. In the second case
+      it was a real setting a GM chose with the control switched on — and snapping it to off would
+      silently disable something they were using. Rounding up to the nearest expressible value is the
+      safe direction; rounding down to off is not.
+
+      Zero and below are the only things that mean off, which is what makes the state exact.
+    */
+    expect(toSlider(-1, offable, "log")).toBe(0);
+    expect(fromSlider(toSlider(1e-9, offable, "log"), offable, "log")).toBeCloseTo(offable.floor, 12);
+  });
+
+  it("says off rather than printing the floor as a number", () => {
+    expect(formatValue(0, offable, "log")).toBe("off");
+    expect(formatValue(fromSlider(1, offable, "log"), offable, "log")).not.toBe("off");
+  });
+
+  it("leaves an ordinary log scale alone", () => {
+    /*
+      The opt-in half, and the reason `floor` is a field rather than a rule applied to every log
+      scale: a control whose bottom is a real value must not silently gain an off position. `log`
+      here has a positive `min` and no floor, so its far left is still its minimum.
+    */
+    expect(fromSlider(0, log, "log")).toBeCloseTo(log.min, 12);
+    expect(fromSlider(0, log, "log")).not.toBe(0);
+    expect(formatValue(fromSlider(0, log, "log"), log, "log")).not.toBe("off");
+  });
+
+  it("puts one ink width well up the track, which is what the floor is for", () => {
+    /*
+      The resolution claim, pinned rather than left as arithmetic in a conversation. With a floor of
+      2e-4 of the map and a top at the largest observed bend, a tolerance of one ink width — 5.7px on
+      the test map's 3300px raster — sits about a third of the way along, so the range a GM actually
+      tunes in is a third of the track rather than a few pixels against the stop.
+    */
+    const inkWidth = 5.7 / 3300;
+    const at = toSlider(inkWidth, offable, "log");
+    expect(at).toBeGreaterThan(SLIDER_STEPS * 0.25);
+    expect(at).toBeLessThan(SLIDER_STEPS * 0.5);
+  });
+});
