@@ -27,10 +27,11 @@
  */
 
 import { devLog } from "../devlog";
-import { advanceTo } from "./accordion";
+import { advanceTo, renderPanel } from "./accordion";
+import { inEditor } from "./mode";
 import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
-import { inStageTwo, loadStage } from "./stage";
+import { loadStage } from "./stage";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
 /**
@@ -41,9 +42,26 @@ import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
  * touched the accordion themselves, and nothing at all when there is no map, which leaves them in
  * the one step that can do something about that.
  */
+/**
+ * Whether a map has been resolved and read, which is what unlocks the rest of the ink mode.
+ *
+ * Held here because this is the one function that knows: it is the only place a reading is taken for
+ * a nominated image, and the answer changes on exactly the two occasions it runs. The accordion asks
+ * it rather than being told, so there is no second copy of the fact to go stale.
+ */
+let chosen = false;
+
+export function mapChosen(): boolean {
+  return chosen;
+}
+
 export async function loadNominatedMap(opening = false): Promise<void> {
   const outcome = await takeReading();
+  chosen = outcome.ok;
   if (!outcome.ok) {
+    // Rebuilt because the gate has just closed: whatever was open below Map is now about a picture
+    // that is not there, and its header has to stop offering to go back into it.
+    renderPanel();
     // Two failures, and they need different sentences. "No map" is an unanswered question with the
     // answer one step away; "unreadable" is a map that *is* chosen and drawn, whose pixels would not
     // come back — telling that GM to pick a map is advice they cannot act on.
@@ -94,7 +112,22 @@ export async function loadNominatedMap(opening = false): Promise<void> {
     what the GM cannot do (reported from a room, 2026-09-05). In stage two the step that matters is
     the one holding the graph.
   */
-  if (opening) advanceTo(inStageTwo() ? "edit" : "ink");
+  /*
+    Where a GM lands, which start-up decides once and never again.
+
+    Ink is where the ink mode starts once there is a map, which is the common case: they came here to
+    look at ink and the map question was already answered. With no map they stay on Map, which is the
+    only step open to them.
+
+    **The stage no longer decides this**, because the mode does. The editor is a page of its own now,
+    so a frozen scene does not have to be recognised and redirected to — the GM chose which surface
+    to open before this ran.
+  */
+  // Only the ink mode has anywhere to move on to. The editor opens on its one step already, and
+  // sending it to a step it does not declare would leave the accordion with nothing open.
+  if (opening && !inEditor()) advanceTo("ink");
+  // The gate has just opened, so every step below Map becomes reachable.
+  renderPanel();
 
   // The map image, drawn by us rather than by Owlbear. `crossOrigin` matches the pipeline's loader:
   // it proves the CDN sends the headers, and matching it means this cannot succeed where a trace

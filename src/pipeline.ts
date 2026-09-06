@@ -433,7 +433,7 @@ export function probeWorldPoint(x: number, y: number): string {
  * **Read from the mask cache rather than from `lastRun`, for the same reason `lastInkWidth` is.**
  * `pxPerSquare` is a field of the reading stage, so it is known as soon as a reading lands — and
  * reading it from `lastRun` meant it was null until a *full trace* had run, which in a fresh
- * workspace session means until the GM opens Regions. Two of the three derived readouts in stage one
+ * workspace session means until the GM opens Walls. Two of the three derived readouts in the ink mode
  * were therefore less informative than the third for no reason anyone had stated: the stroke-width
  * readout said "under ~6px goes (ink is 5.7px)" while the break and prune readouts said only "12px",
  * both of them dropping their "of a square" clause on a null.

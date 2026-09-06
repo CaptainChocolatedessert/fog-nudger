@@ -53,6 +53,7 @@ import {
 import type { SettingName } from "./settings";
 
 const ALL_NAMES = Object.keys(SETTING_LIMITS) as SettingName[];
+const MODES = ["ink", "edit"] as const;
 const DECLARED = new Set<StepId>(STEPS.map((step) => step.id));
 
 /** A value for a parameter that is guaranteed to differ from its default. */
@@ -113,8 +114,40 @@ describe("the step declaration", () => {
   it("makes every step but the persistent one a mode on the workspace", () => {
     // Replaces a test of the deleted `pending` flag, whose loop body never executed because no step
     // ever carried it — it passed vacuously and would have kept passing with the flag inverted.
-    expect(workspaceSteps().every((step) => !step.persistent)).toBe(true);
-    expect(workspaceSteps()).toHaveLength(STEPS.length - 1);
+    for (const mode of MODES) {
+      expect(workspaceSteps(mode).every((step) => !step.persistent), mode).toBe(true);
+    }
+    const across = MODES.flatMap((mode) => workspaceSteps(mode));
+    expect(across).toHaveLength(STEPS.length - 1);
+  });
+
+  it("puts every step in at least one mode, and every mode-less step nowhere", () => {
+    // A step in no mode is declared, tested, and drawn on no surface — which is a control a GM
+    // cannot reach with nothing to say it is missing, the same failure as a parameter with no step.
+    for (const step of STEPS) {
+      expect(step.modes.length, step.id).toBeGreaterThan(0);
+      for (const mode of step.modes) expect(MODES).toContain(mode);
+    }
+  });
+
+  it("gives each mode a first step to open on", () => {
+    // The accordion opens on `workspaceSteps(mode)[0]`. A mode with none would open on nothing and
+    // leave the surface with no way in beyond the persistent group.
+    for (const mode of MODES) {
+      expect(workspaceSteps(mode).length, mode).toBeGreaterThan(0);
+    }
+  });
+
+  it("puts every non-persistent step in exactly one mode", () => {
+    /*
+      A step in both would be a place a GM could be in either workspace, and neither mode's blurbs
+      could then say where they were — which is the whole of what the split buys. The persistent
+      group is the deliberate exception: it is never entered, so it names no place.
+    */
+    for (const step of STEPS) {
+      if (step.persistent) continue;
+      expect(step.modes, step.id).toHaveLength(1);
+    }
   });
 
   it("shows every layer in at least one step", () => {
@@ -178,8 +211,8 @@ describe("a step's groups", () => {
   });
 
   it("gives a step's tools distinct ids, since that is what the picker addresses them by", () => {
-    // Two tools sharing an id would make `toolGroup` return the first for both, so choosing the
-    // second would disclose the first's controls while a press wrote into the second's layer.
+    // Two tools sharing an id would make the picker's lookup return the first for both, so choosing
+    // the second would disclose the first's controls while a press wrote into the second's layer.
     for (const step of STEPS) {
       const ids = toolGroups(step).map((group) => group.tool);
       expect(new Set(ids).size, step.id).toBe(ids.length);

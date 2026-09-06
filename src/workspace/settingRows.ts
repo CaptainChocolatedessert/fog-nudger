@@ -23,9 +23,7 @@ import type { SettingName } from "../settings";
 import { formatValue, fromSlider, SLIDER_STEPS, toSlider } from "../sliderScale";
 import { refreshBreakSearch } from "./paintTool";
 import { requestReread } from "./reading";
-import { inStageTwo } from "./stage";
 import { invalidateRegions } from "./regions";
-import { invalidateSkeleton } from "./skeleton";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 
@@ -107,7 +105,6 @@ export function recomputeFor(names: readonly SettingName[]): void {
   // zero after 459 of 600 generated cases failed at its default.
   const rest = pipeline.filter((name) => !isSkeletonOnly(name));
   const graphChanged = pipeline.some(isSkeletonOnly);
-  if (graphChanged) invalidateSkeleton();
 
   if (rest.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
   // A graph change now invalidates the partition as well, because the faces *are* the graph's
@@ -231,40 +228,19 @@ export function settingRow(control: Control): HTMLElement {
   });
 
   /*
-    Frozen in stage two, if this control is one that would rebuild the graph.
+    **No frozen state here any more**, and its removal is what the two modes bought.
 
-    **`PARAMETER_KIND` already answers which**, which is why there is no second list to keep in step
-    with the cascade. A `pipeline` control feeds the mask or the graph, so moving it in stage two
-    would re-derive the very thing the GM has been editing; a `display` one — ink opacity, and the
-    two preview colours — touches neither, and stays live because recolouring while editing walls is
-    an ordinary thing to want.
+    Every `pipeline` and `tool` control used to dim itself once a graph was frozen, with a line
+    saying where to reopen the reading. The reason was sound while one accordion carried both stages:
+    moving a reading slider would have re-derived the very graph the GM had been editing, and §8
+    wants a boundary visible *before* it is crossed rather than confirmed after.
 
-    Disabled rather than confirmed on use. §8 wants the boundary visible *before* it is crossed, and
-    a live slider that throws a dialog when you nudge it to see what it does is a trap; the sentence
-    below is the continuous statement, and the deliberate way back is one button in the Edit walls
-    step.
+    Split into two modes, that boundary is the page. The editor does not declare the steps these
+    controls live in, so there is nothing to disable there; and in the ink mode nothing is frozen --
+    the graph is a derivation until the GM saves, and the save is the one place the replacement is
+    named and confirmed. A control that is live in the only mode that draws it needs no notice.
   */
-  /*
-    Both kinds that the freeze closes, which is not the same set as "everything that is not display".
-
-    `pipeline` closes because the reading is closed. `tool` closes because the tool it belongs to is —
-    a brush and the break search are both stage one's, and the frozen graph does not re-derive from
-    ink. Leaving one live would be a slider that moves under a step whose own notice says its tools
-    are shut, which is the untidiness the third kind was added to end.
-  */
-  const frozen = inStageTwo() && (kind === "pipeline" || kind === "tool");
-  input.disabled = !live || frozen;
-  if (frozen) {
-    row.classList.add("frozen");
-    const closed = document.createElement("p");
-    closed.className = "hint";
-    // Names **Edit walls**, which is where the door is. It said Regions until 2026-09-05, which was
-    // right when the button lived there and became wrong the moment it moved to the step it is the
-    // door to — sending a GM to look for a control that is one step further down.
-    closed.textContent = "Closed — the graph is frozen. Start over, under Edit walls, reopens this.";
-    row.append(top, input, closed);
-    return row;
-  }
+  input.disabled = !live;
 
   row.append(top, input, hint);
   return row;

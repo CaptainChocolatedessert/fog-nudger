@@ -52,6 +52,8 @@ import {
 } from "../steps";
 import { recomputeFor, resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
+import { mapChosen } from "./mapSource";
+import { workspaceMode } from "./mode";
 import { invalidate, say, setActiveLayers, setDrag } from "./shell";
 
 /**
@@ -69,7 +71,26 @@ import { invalidate, say, setActiveLayers, setDrag } from "./shell";
  * could not reach. Nothing open means no layers and a plain pan, which is a coherent mode rather
  * than a gap: the map, and nothing of ours on top of it.
  */
-let open: StepId | null = workspaceSteps()[0]?.id ?? null;
+let open: StepId | null = workspaceSteps(workspaceMode())[0]?.id ?? null;
+
+/**
+ * Whether a step can be entered at all yet.
+ *
+ * **The map gate** (user, 2026-09-05): stage one goes Map, then Ink, then Walls, and *"finishing
+ * displays the map and unlocks the rest"*. Until an image is loaded every step below Map is about a
+ * picture that is not there — the ink of nothing, the walls of nothing — so they are disabled rather
+ * than opened onto a blank canvas with sliders over it.
+ *
+ * Disabled rather than hidden, so the shape of what is coming is visible from the first frame. That
+ * is the same choice the accordion makes everywhere: the order is the cascade, and a cascade with
+ * its later half missing does not teach it.
+ *
+ * The editor has no gate. Its own step says when there is no graph to edit, which is a different
+ * sentence from "choose a map" and belongs where the graph would have been.
+ */
+function locked(step: Step): boolean {
+  return workspaceMode() === "ink" && step.id !== "map" && !mapChosen();
+}
 
 /**
  * Whether the GM has opened a step themselves.
@@ -235,7 +256,7 @@ export function onStepChange(listener: (step: StepId | null) => void): void {
  * subscribes — which is also how a paint mode gets finished and its work saved.
  */
 function applyOpenStep(): void {
-  const step = workspaceSteps().find((candidate) => candidate.id === open);
+  const step = workspaceSteps(workspaceMode()).find((candidate) => candidate.id === open);
   setActiveLayers(step?.layers ?? []);
   setDrag(step?.drag ?? "pan");
   for (const listener of openListeners) listener.changed(listener.id === open);
@@ -259,15 +280,30 @@ export function renderPanel(): void {
   const container = document.getElementById("steps");
   if (container) {
     container.replaceChildren();
-    for (const step of workspaceSteps()) {
+    /*
+      A locked step cannot be the open one.
+
+      Checked here rather than at the click, because the lock can arrive *after* the step was opened:
+      nominating a different map drops the surface back to having no picture. Leaving the GM inside a
+      step that has just become unreachable would show its layers over nothing and leave its header
+      unable to close it.
+    */
+    const current = workspaceSteps(workspaceMode()).find((step) => step.id === open);
+    if (current && locked(current)) open = "map";
+
+    for (const step of workspaceSteps(workspaceMode())) {
+      const shut = locked(step);
       const section = document.createElement("section");
       section.className = "step";
       if (step.id === open) section.classList.add("open");
+      if (shut) section.classList.add("locked");
 
       const header = document.createElement("button");
       header.type = "button";
       header.className = "step-header";
       header.textContent = step.title;
+      header.disabled = shut;
+      if (shut) header.title = "Choose a map first";
       header.setAttribute("aria-expanded", String(step.id === open));
       header.addEventListener("click", () => {
         // Clicking the open one closes it. Exclusivity is unchanged — there is still never more than

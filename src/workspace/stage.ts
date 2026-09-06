@@ -1,37 +1,38 @@
 /**
- * Which of the two stages the GM is in, and the one-way door between them.
+ * The saved wall graph: reading it for a map, and writing it.
  *
- * Stage one is the map: tune the reading, edit pixels, generate the graph. Stage two is the graph:
- * nudge vertices, add and delete edges. **Going back to stage one discards the graph**, and that is
- * the whole rule — it does not solve the identity problem in storing a move, it removes it, because
- * stage two never re-derives and so nothing is ever renumbered behind an edit.
+ * ## It stopped being a "stage" when the surface became two modes — 2026-09-05
  *
- * ## The stored graph's presence IS the stage
+ * This file used to own a one-way door. Stage one was the map and stage two was the graph, one
+ * accordion carried both, and crossing back **discarded** the graph — which is what removed the
+ * identity problem in storing a move, since nothing was ever re-derived behind an edit.
+ *
+ * The modes keep the property and drop the door. The wall editor never re-derives, so nothing is
+ * renumbered behind an edit; and the ink mode never *reads* the stored graph, so being in it costs
+ * nothing. What is left here is a stored document with a map beside it: read it, write it, and tell
+ * whoever draws it when it changed.
+ *
+ * ## The stored graph's presence is still what says whether there is anything to edit
  *
  * There is no flag, deliberately. A flag is a second statement of the same fact and can disagree
  * with the first; a graph either is in the scene or is not. `frozenGraphStore.ts` says the same
  * thing from the other end.
  *
- * ## What crossing back actually costs, and what it does not
+ * ## Nothing here discards it
  *
- * Only the stage-two editing. The reading settings, the map nomination and (when they exist) the
- * GM's pixel strokes are stage one's *inputs* — never consumed, never discarded — so starting over
- * lands them back at their tuned ink rather than at a bare map. Saying that in the confirmation
- * matters as much as naming what goes: the fear otherwise is that "start over" means the whole map.
+ * `startOver` was deleted with the door. Replacing the graph is what the ink mode's save does, with
+ * a confirmation naming what goes; removing it altogether belongs to the panel, beside the button
+ * that takes our fog out of the scene (user, 2026-09-05: *"the panel has a way to clear objects that
+ * we own. the workspace doesn't need to provide that."*).
  *
- * **Closing the workspace costs nothing at all**, which is why nothing warns about it. Everything
- * durable is in scene metadata and everything else is derived from it on demand. A warning there
- * would train a GM to dismiss the one warning that matters.
- *
- * No DOM. The confirmation is drawn by `confirmDialog.ts`; this owns the state and the rule.
+ * No DOM.
  */
 
 import { devLog } from "../devlog";
-import { clearFrozenGraph, readFrozenGraph, writeFrozenGraph } from "../frozenGraphStore";
+import { readFrozenGraph, writeFrozenGraph } from "../frozenGraphStore";
 import type { FrozenGraph } from "../trace/frozenGraph";
 
 let frozen: FrozenGraph | null = null;
-let loaded = false;
 const listeners: (() => void)[] = [];
 
 /**
@@ -43,22 +44,6 @@ const listeners: (() => void)[] = [];
  */
 export function frozenGraph(): FrozenGraph | null {
   return frozen;
-}
-
-/** Whether the GM is editing a frozen graph rather than tuning a reading. */
-export function inStageTwo(): boolean {
-  return frozen !== null;
-}
-
-/**
- * Whether the stage has been established yet.
- *
- * Separate from `inStageTwo` because "not yet asked" and "asked, and there is none" want the same
- * behaviour but not the same *message* — a control disabled because the SDK has not answered is not
- * a control disabled because the graph is frozen.
- */
-export function stageKnown(): boolean {
-  return loaded;
 }
 
 export function onStageChange(listener: () => void): void {
@@ -88,7 +73,6 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
   mapId = forMap;
   const { graph, corrupt } = await readFrozenGraph(forMap);
   frozen = graph;
-  loaded = true;
   announce();
   return { corrupt };
 }
@@ -115,15 +99,4 @@ export async function updateFrozen(graph: FrozenGraph): Promise<void> {
   announce();
 }
 
-/**
- * Cross back: discard the graph and reopen the reading.
- *
- * The scene is cleared first for the same reason the freeze writes first — if the write fails, the
- * GM should still be in the stage the scene says they are in.
- */
-export async function startOver(): Promise<void> {
-  await clearFrozenGraph();
-  frozen = null;
-  announce();
-  devLog("info", "stage: back to stage one, graph discarded");
-}
+

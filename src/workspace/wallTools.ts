@@ -10,11 +10,18 @@
  * control opened from a sandboxed third-party iframe paints against the *system* background, and the
  * first version of the map picker rendered white on white and looked empty.
  *
- * It sits at the **top** of the step, above the door at the bottom. What you do comes before the way
- * out, and the door is the one thing here that is not a verb about walls.
+ * It sits at the **top** of the step, above the button that writes to the scene. What you do comes
+ * before what it produces.
+ *
+ * ## With no graph saved there is nothing to pick a tool for
+ *
+ * The editor opens from the panel, so a GM can reach it on a map that has never been through the ink
+ * mode. That is not an error and must not read as one: the answer is a sentence saying where the
+ * walls come from, in place of three buttons that would do nothing.
  */
 
 import { currentTool, setTool, type WallTool } from "./wallEdit";
+import { frozenGraph } from "./stage";
 import { invalidate } from "./shell";
 
 interface ToolChoice {
@@ -55,6 +62,16 @@ const TOOLS: readonly ToolChoice[] = [
  * is the only thing that can change it.
  */
 export function renderWallTools(body: HTMLElement): void {
+  if (!frozenGraph()) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.innerHTML =
+      "No walls are saved for this map yet. They are made by reading the map: close this, open " +
+      "<b>Read the map</b> from the panel, and the last step there puts a graph here.";
+    body.append(empty);
+    return;
+  }
+
   const row = document.createElement("div");
   row.className = "step-actions";
 

@@ -65,7 +65,13 @@ export type StepId = "map" | "ink" | "walls" | "edit" | "view";
  * partition is a consequence of a graph rather than a subject of its own, so it is drawn wherever a
  * graph is.
  */
-export const LAYERS = ["ink", "paint", "breaks", "skeleton", "regions", "graph"] as const;
+/*
+  `skeleton` was here, and went when the Walls step started drawing the fitted graph instead
+  (2026-09-05). It was a one-pixel raster centreline and the graph is the polyline fitted to it, so
+  drawing both would have put two answers to one question on the canvas -- and the graph is the
+  honest one, because it is what gets stored.
+*/
+export const LAYERS = ["ink", "paint", "breaks", "regions", "graph"] as const;
 
 /*
   One rule about `paint`, because it is the layer that does not follow the convention.
@@ -101,6 +107,20 @@ export type LayerId = (typeof LAYERS)[number];
  */
 export type Drag = "pan" | "brush" | "edit";
 
+/**
+ * Which of the two workspaces a step belongs to.
+ *
+ * **The whole of the two-mode split, as far as this file is concerned** (user, 2026-09-05). Stage
+ * one and the wall editor are separate processes that each begin by looking at the scene and end by
+ * putting something on it; what makes them separate in the code is one field on a step, because the
+ * surface has been a shell plus a list of steps since A.1.
+ *
+ * `view` is in both, which is what a persistent group is for. Nothing else is: a step that appeared
+ * in both would be a place a GM could be in either mode, and neither mode's blurbs could then say
+ * where they were.
+ */
+export type WorkspaceMode = "ink" | "edit";
+
 /** A sub-heading within a step, for a handful of controls that want their own explanation. */
 export interface StepGroup {
   readonly title: string;
@@ -132,6 +152,15 @@ export interface Step {
   readonly layers: readonly LayerId[];
   /** What a plain left-drag does while this step is open. */
   readonly drag: Drag;
+  /**
+   * Which workspaces this step appears in.
+   *
+   * Required rather than defaulted, so a new step has to say. A default would put every future step
+   * into whichever mode the default named, which is exactly the kind of silent membership the two
+   * modes exist to prevent — the editor's whole point is that it does not carry stage one's
+   * controls.
+   */
+  readonly modes: readonly WorkspaceMode[];
   /** Sub-headings, for controls that need their own explanation inside a step. */
   readonly groups?: readonly StepGroup[];
   /**
@@ -167,7 +196,10 @@ export const STEPS: readonly Step[] = [
   {
     id: "map",
     title: "Map",
-    blurb: "Which image the trace reads. Everything below is about this one picture.",
+    modes: ["ink"],
+    blurb:
+      "Which image the trace reads. Everything below is about this one picture, and stays closed " +
+      "until one is chosen.",
     /*
       Nothing over the map, deliberately.
 
@@ -182,6 +214,7 @@ export const STEPS: readonly Step[] = [
   {
     id: "ink",
     title: "Ink",
+    modes: ["ink"],
     blurb:
       "What the trace calls a mark, which marks it keeps, and the tools for correcting that by hand. " +
       "Everything the tools write goes into a layer of your own that no slider here can undo.",
@@ -272,70 +305,79 @@ export const STEPS: readonly Step[] = [
   {
     id: "walls",
     title: "Walls",
+    modes: ["ink"],
     blurb:
-      "The <b class='skeleton-key'>centreline</b> of every piece of linework, one pixel wide, over " +
-      "the rooms it encloses. <b>A face boundary is a centreline</b>, so both controls here change " +
-      "which rooms exist and what shape they are. This is what goes on the map.",
+      "The <b>graph</b> the reading arrives at, over the rooms it encloses: every wall a line, every " +
+      "corner a point. <b>A face boundary is a wall's centreline</b>, so both controls here change " +
+      "which rooms exist and what shape they are. <b>This is what goes on the map</b>, and it is the " +
+      "same picture the wall editor opens on.",
     /*
-      The skeleton over the partition over the ink: three layers, and each earns its place.
+      The graph over the partition over the ink: three layers, and each earns its place.
+
+      **It draws the graph after simplification, not the pixel skeleton** (user, 2026-09-05): *"the
+      last step of the ink mode displays the graph, post simplification. Saving out of ink mode
+      pushes that graph."* That makes the last thing stage one shows and the first thing the editor
+      shows one picture, which is what a hand-off between two modes has to be — and it is the honest
+      one, because the fitted polyline is what gets stored and the one-pixel skeleton never was.
+
+      **The skeleton layer went with that change**, rather than being drawn beside it. It showed a
+      coarser version of the same centreline, and drawing both would put two answers to one question
+      on the canvas. Everything it was for survives: whether the line runs down the middle of the
+      wall is still a comparison against the ink underneath, and a pruned spur is as absent from the
+      fitted graph as it was from the skeleton.
 
       **The Regions step was dissolved into this one** (user, 2026-09-05): *"'regions' as a separate
       step isn't needed anymore. We can always display colored regions when we display the graph."*
-      So the partition stopped being somewhere to go, and is drawn wherever a graph is drawn --
-      which is here and in Edit walls.
+      So the partition stopped being somewhere to go, and is drawn wherever a graph is drawn.
 
       The ink stays under both for the reason it always did: a centreline on its own says nothing,
-      and what a GM is judging is whether it runs down the middle of the wall it came from, and
-      whether the hairs on it are artefacts of a ragged edge or stubs that are really there. Both
-      are comparisons against the ink.
+      and what a GM is judging is whether it runs down the middle of the wall it came from.
 
-      **The cost is that this step now carries a lot at once**, and it is the opposite of the reason
-      the dissolved step showed the partition on bare map. The lever for it is the ink opacity,
-      which is one step up rather than here.
+      **The cost is that this step carries a lot at once**, which is the opposite of the reason the
+      dissolved step showed the partition on bare map. The lever for it is the ink opacity, one step
+      up rather than here.
 
       **The breaks were here too, and are not any more** (2026-09-05). That was the one argued
       exception to "each step shows its own layer", on the grounds that a severed wall becomes
-      visible here — a gap in the ink is a gap in the skeleton, and the rings told a GM whether a
-      break was a doorway or something their own filter had cut.
-
-      What retired it is that the search is a **tool** now, run when the GM asks rather than on every
-      recompose. There is nothing to draw here unless something ran it, so a layer declared here
-      would be empty in the ordinary case and stale in every other. **The cost is real and is the one
-      to watch in a room**: a wall this step's own filter severed no longer announces itself, and
-      finding it means going to Add ink and running the search.
+      visible here. What retired it is that the search is a **tool** now, run when the GM asks rather
+      than on every recompose: there is nothing to draw here unless something ran it. **The cost is
+      real and is the one to watch in a room** -- a wall this step's own filter severed no longer
+      announces itself, and finding it means running the Breaks tool one step up.
     */
-    layers: ["ink", "paint", "regions", "skeleton"],
+    layers: ["ink", "paint", "regions", "graph"],
     drag: "pan",
   },
   {
     id: "edit",
     title: "Edit walls",
+    modes: ["edit"],
     blurb:
-      "The walls as a <b>graph</b>: every wall a line, every corner a point. Generating it hands " +
-      "them over to be edited by hand and closes the reading above — from then on this is what the " +
-      "rooms are made of, and nothing recalculates it from the map.",
+      "The walls as they were saved, and yours to move. Every wall is a line and every corner a " +
+      "point; joining two points makes them one for ever, so the rooms either side of a wall follow " +
+      "it when it moves. Nothing here recalculates anything from the map.",
     /*
       The partition under the graph, which is the one pairing that answers this step's question.
 
-      This is the same pairing Walls carries one step up, and for the same reason: what a GM is
+      Same pairing as the Walls step in the other mode, and for the same reason: what a GM is
       deciding here is not where a line *is* but what moving it would do, and what it does is change
-      which rooms exist. The rooms are the consequence, so they are drawn under the cause.
+      which rooms exist. The rooms are the consequence, so they are drawn under the cause. What
+      differs is that here the graph carries a handle at every point, because here it can be grabbed.
 
-      **What is NOT here is the ink**, which is the one difference from Walls. The reading is closed
-      by this point and the graph no longer comes from it, so a mask drawn underneath would invite a
-      comparison against a picture that has stopped being the source of anything.
+      **What is NOT here is the ink.** This mode never reads the map, so a mask drawn underneath
+      would invite a comparison against a picture that is not the source of anything on screen.
 
-      They also do not compete for the same ink. The partition is fills and outlines in six cycling
-      colours; the graph is one colour and a handle at every point.
+      They do not compete for the same ink either. The partition is fills and outlines in six cycling
+      colours; the graph is one colour and a dot at every point.
     */
     layers: ["regions", "graph"],
     /*
-      The first step that takes the plain drag for something other than panning.
+      The one step that takes the plain drag for something other than panning without being a brush.
 
-      It is not all-or-nothing, which is what makes it liveable: the tool takes the gesture only when
-      the press lands on a vertex, so panning by dragging empty map still works and Ctrl still pans
-      anywhere. That matters more here than in a painting step — editing a graph is mostly looking,
-      and a mode that took every drag would make the looking part awkward to pay for the editing.
+      It is not all-or-nothing, which is what makes it liveable: two of the three tools take the
+      gesture only when there is something under the press, so panning by dragging empty map still
+      works and Ctrl still pans anywhere. That matters more here than under a brush -- editing a
+      graph is mostly looking, and a mode that took every drag would make the looking part awkward to
+      pay for the editing.
     */
     drag: "edit",
   },
@@ -361,6 +403,14 @@ export const STEPS: readonly Step[] = [
   {
     id: "view",
     title: "View",
+    /*
+      The only thing in both modes, which is what a persistent group is.
+
+      Its controls describe the partition, and the partition is drawn in each mode's last step. A
+      group that is never entered is the one place a control can sit and be reachable from both
+      without either mode claiming it.
+    */
+    modes: ["ink", "edit"],
     blurb:
       "How the rooms are drawn, wherever they are drawn \u2014 which is <b>Walls</b> and <b>Edit " +
       "walls</b>. Neither of these changes what goes on the map: an emitted room is fully opaque " +
@@ -462,9 +512,16 @@ export function resetStep(settings: Settings, id: StepId): Settings {
   };
 }
 
-/** The steps that are modes on the workspace: everything but the persistent View group. */
-export function workspaceSteps(): readonly Step[] {
-  return STEPS.filter((step) => !step.persistent);
+/**
+ * The steps this mode puts in its accordion: its own, minus the persistent View group.
+ *
+ * Two filters rather than one, and they mean different things. `persistent` is about *how* a group
+ * is rendered — outside the accordion, never entered. `modes` is about which surface it is on at
+ * all. A step could in principle be persistent in one mode and absent from the other; nothing is
+ * today, and the two are kept separate so that stays possible.
+ */
+export function workspaceSteps(mode: WorkspaceMode): readonly Step[] {
+  return STEPS.filter((step) => !step.persistent && step.modes.includes(mode));
 }
 
 /**

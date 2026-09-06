@@ -67,7 +67,6 @@ import {
   workingLayer,
 } from "./paintState";
 import { requestRecompose } from "./reading";
-import { inStageTwo } from "./stage";
 import { currentSettings } from "./settingsState";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
 
@@ -347,17 +346,14 @@ async function openPaintMode(): Promise<void> {
   breaksChanged();
 
   /*
-    Nothing is painted in stage two, and refusing here is what makes the step's notice true.
+    There is no stage-two refusal here any more.
 
-    A paint layer is a **reading** input: it changes the composed ink, and the frozen graph does not
-    re-derive from ink. So a stroke made in stage two would look like it had worked, change nothing
-    anyone can see, and then take effect the moment the GM started over — which is a control that
-    does nothing until it surprises you, the exact shape the door was built to prevent.
+    Painting used to be closed once a graph was frozen, because a paint layer is a **reading** input
+    and the frozen graph does not re-derive from ink — so a stroke would have looked like it worked,
+    changed nothing visible, and then taken effect on starting over. The editor is a separate page
+    now and does not declare this step, so the case cannot arise: the only surface carrying a brush
+    is the one whose reading is live.
   */
-  if (inStageTwo()) {
-    invalidate();
-    return;
-  }
   if (!beginPaint()) {
     // Not an error and not said out loud: the Ink step opened before the first reading landed, which
     // is the ordinary state for the first second of a session. The tools say so when one is picked.

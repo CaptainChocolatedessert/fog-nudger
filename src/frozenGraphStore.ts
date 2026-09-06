@@ -5,12 +5,16 @@
  * `localStorage` per top-level site and a local copy can simply vanish; and a graph derived from
  * *this* map belongs to the scene rather than to a browser.
  *
- * ## Its presence is what says which stage the GM is in
+ * ## Its presence is what says whether there is anything to edit
  *
- * No frozen graph means stage one: the reading is live, every control does what it says, and
- * generating the graph is available. A frozen graph means stage two: the reading is closed, the
- * graph is the document, and going back discards it. **There is no separate flag**, deliberately —
- * a flag can disagree with the thing it describes, and this cannot.
+ * No stored graph means the wall editor has nothing to show, and says so. A stored graph is the
+ * document that editor works on and the source the push emits from. **There is no separate flag**,
+ * deliberately — a flag can disagree with the thing it describes, and this cannot.
+ *
+ * It used to mean more than that: it *was* the stage, and the reading closed itself while one
+ * existed. The two-mode split (2026-09-05) ended that. Reading the map and editing the walls are two
+ * surfaces now, so the ink mode never consults this and being in it costs nothing — which is what
+ * makes reopening it over an edited graph harmless.
  *
  * ## Its own key, not a field inside the settings
  *
@@ -51,7 +55,7 @@ const GRAPH_KEY = key("graph");
  * Read the scene's frozen graph, or `null` if there is not one this build can vouch for.
  *
  * **`null` is a legitimate answer, not an error**: it is what every scene looks like before anything
- * was ever frozen, and the caller's response is the same either way — offer stage one.
+ * has been saved, and the caller says where walls come from rather than reporting a failure.
  *
  * It is also the answer for a graph that will not decode, and that case is *not* silent. Unlike the
  * settings, there is no per-field degrading available here: an edge naming a node that does not
@@ -128,13 +132,20 @@ export async function writeFrozenGraph(mapId: string, graph: FrozenGraph): Promi
 }
 
 /**
- * Discard the frozen graph, which is what going back to stage one means.
+ * Discard the stored graph.
  *
- * The one-way door, and the only thing that opens it. Everything else stage one needs — the reading
- * settings and the map nomination — is under its own key and is deliberately left alone, so "start
- * over" lands the GM back at their tuned ink rather than at a bare map.
+ * **One caller, and it is the panel's "Remove ours"** (user, 2026-09-05: *"the panel has a way to
+ * clear objects that we own. the workspace doesn't need to provide that."*). Neither workspace
+ * offers it: the ink mode's save *replaces* the graph, with a confirmation naming what goes, and the
+ * editor has no reason to throw away the only thing it holds.
+ *
+ * It goes with the fog rather than alone, because on its own it would be half a removal — the next
+ * save from either surface would put the same walls straight back.
+ *
+ * The reading settings, the map nomination and the paint layers are under their own keys and are
+ * deliberately left alone.
  */
 export async function clearFrozenGraph(): Promise<void> {
   await OBR.scene.setMetadata({ [GRAPH_KEY]: undefined });
-  devLog("info", "graph: discarded, back to stage one");
+  devLog("info", "graph: the saved walls were discarded");
 }

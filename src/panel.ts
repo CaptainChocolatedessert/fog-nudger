@@ -48,6 +48,7 @@ import { inspectFogShapes } from "./probe/fogProbe";
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
 import { dryRun } from "./pipeline";
 import { openWorkspace } from "./workspace/workspaceControl";
+import { clearFrozenGraph } from "./frozenGraphStore";
 import {
   removeOurs,
 } from "./emit/emitRegions";
@@ -129,6 +130,23 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
  * greys is still perfectly usable, so an error message about it would be noise sitting where the
  * actual content goes.
  */
+/**
+ * Take our fog out of the scene, and the saved walls with it.
+ *
+ * **The walls go too, and that is the user's answer to where discarding lives** (2026-09-05: *"the
+ * panel has a way to clear objects that we own. the workspace doesn't need to provide that."*). The
+ * wall editor therefore has no discard of its own — replacing the graph is what the ink mode's save
+ * does, and removing it altogether is this.
+ *
+ * Without it the two halves would disagree: the fog would go and the next save from either workspace
+ * would put the same walls straight back, which is a "remove" that does not remove.
+ */
+async function removeEverythingOfOurs(): Promise<string> {
+  const message = await removeOurs();
+  await clearFrozenGraph();
+  return `${message} The saved wall editing for this scene was cleared too.`;
+}
+
 function applyTheme(theme: unknown): void {
   const style = document.documentElement.style;
   for (const [property, value] of Object.entries(themeVariables(theme))) {
@@ -163,8 +181,16 @@ OBR.onReady(async () => {
 
   const buttons = [
     wireButton("dry-run", dryRun),
-    wireButton("open-workspace", openWorkspace),
-    wireButton("remove", removeOurs),
+    /*
+      Two buttons for two workspaces, which is the whole of the split from out here.
+
+      They open one page with a different mode in its URL, so this is a pair of arguments rather than
+      a pair of applications. Both are always offered: the editor with no saved graph says so in its
+      own step, which is a better sentence than a disabled button with nothing to explain it.
+    */
+    wireButton("open-workspace", () => openWorkspace("ink")),
+    wireButton("open-editor", () => openWorkspace("edit")),
+    wireButton("remove", removeEverythingOfOurs),
     wireButton("inspect", inspectFogShapes),
     wireButton("workspace-probe-bare", () => openWorkspaceProbe("bare")),
     wireButton("workspace-probe-framed", () => openWorkspaceProbe("framed")),

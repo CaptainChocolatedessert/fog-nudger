@@ -42,7 +42,8 @@ import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
 import type { StepId } from "../steps";
 import { buildFrozenFaces, describeFrozenFaces, wallSegments } from "../trace/frozenFaces";
-import { wallRuns, type FrozenGraph } from "../trace/frozenGraph";
+import { freezeGraph, wallRuns, type FrozenGraph } from "../trace/frozenGraph";
+import { inEditor } from "./mode";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
@@ -97,6 +98,28 @@ let raster: { readonly width: number; readonly height: number } | null = null;
 let unitsPerSquare = 0;
 
 /**
+ * The graph the last derive arrived at, in the form saving would store it.
+ *
+ * **The ink mode's last step draws this** (user, 2026-09-05): *"the last step of the ink mode
+ * displays the graph, post simplification."* Built with `freezeGraph`, the same function the save
+ * uses, so the picture and the document are the same thing rather than two renderings of one idea —
+ * which is what makes handing off to the editor a continuation rather than a surprise.
+ *
+ * It is also where the dropped-segment counts come from. Simplification can collapse a room thinner
+ * than its tolerance into a doubled wall, and the freeze drops what is left; reporting that here
+ * puts the warning in front of the GM while the slider that caused it is still on screen.
+ *
+ * `null` in the editor, where the stored graph is the document and nothing derives one.
+ */
+let preview: FrozenGraph | null = null;
+let previewDropped = 0;
+
+/** The graph the ink mode's Walls step draws, or `null` when no derive has produced one. */
+export function previewGraph(): FrozenGraph | null {
+  return preview;
+}
+
+/**
  * Whether the partition in hand is for the settings now applied.
  *
  * Starts stale rather than absent, which is the state a workspace opens in: no partition has been
@@ -134,22 +157,19 @@ let lastSummary = "";
 /** Whether that summary is bad news, so re-saying it keeps its tone. */
 let lastSummaryOk = true;
 
-/**
- * The frozen partition's room count and whether its arithmetic check held, or `null` in stage one.
- *
- * Exposed because the freeze needs it and cannot compute it: the traversal runs *inside* the stage
- * change the freeze triggers, so by the time the freeze has a graph the answer already exists.
- *
- * **This is here because a room found the check reporting into a channel nobody could see**
- * (2026-09-05). The traversal said EULER FAILED on every run and the freeze's own message, written
- * a moment later, overwrote it — so the one warning stage two has went unread for a day. A check
- * that fires where nothing shows it is the §8 failure in its purest form.
- */
-export function partitionCheck(): { readonly rooms: number; readonly ok: boolean } | null {
-  return frozenCheck;
-}
+/*
+  `partitionCheck` was here, and it is gone with the thing that needed it.
 
-let frozenCheck: { readonly rooms: number; readonly ok: boolean } | null = null;
+  It handed the frozen traversal's room count and Euler verdict to the freeze, because **a room found
+  that check reporting into a channel nobody could see** (2026-09-05): the traversal said EULER
+  FAILED on every run and the freeze's own message, written a moment later, painted over it.
+
+  The two-mode split removes the collision rather than the guard. The traversal runs only in the
+  editor, where `deriveFrozen` below says the verdict on its own line and nothing writes over it; the
+  save that used to overwrite it lives on the other page and never triggers a traversal. **Do not
+  re-introduce a message written on the heels of a derive** — that is the shape of the fault, and it
+  is what §8 is about.
+*/
 
 /**
  * Mark the partition out of date, and rebuild it if anyone is looking.
@@ -197,11 +217,21 @@ export function watchRegions(step: StepId, open: boolean): void {
 async function derive(): Promise<void> {
   if (inFlight || isClosing()) return;
 
-  // Stage two: the rooms are made of the frozen graph, not of the map. Walking it needs no reading
-  // and no fitting, so it happens here and now rather than through the async cycle below.
-  const graph = frozenGraph();
-  if (graph) {
-    deriveFrozen(graph);
+  /*
+    The **mode** decides where the rooms come from, not the presence of a stored graph.
+
+    That inverted when the surface became two modes (2026-09-05). It used to read "a graph is frozen,
+    so use it", which was right while one surface carried both stages. Now the editor's rooms are its
+    document and the ink mode's rooms are its reading — and reading a stored graph in the ink mode
+    would show the GM the rooms as *edited* while they moved the sliders that do not produce them.
+
+    Walking the frozen graph needs no reading and no fitting, so it happens here and now rather than
+    through the async cycle below.
+  */
+  if (inEditor()) {
+    const graph = frozenGraph();
+    if (graph) deriveFrozen(graph);
+    else clearPartition();
     return;
   }
 
@@ -241,20 +271,34 @@ async function derive(): Promise<void> {
     regions = outcome.run.regions;
     walls = outcome.run.walls;
     raster = outcome.run.raster;
+    // The same call the save makes, so what is drawn and what would be stored cannot differ.
+    const stored = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
+    preview = stored.graph;
+    previewDropped = stored.duplicates + stored.zeroLength;
     // Rings are in raster pixels here, so a grid square is however many pixels the run measured.
     unitsPerSquare = lastPixelsPerSquare() ?? 0;
-    frozenCheck = null;
     stale = false;
     // The wall count belongs here as much as the region count: they are staged together, and when
     // the lines were being drawn invisibly there was nothing on this surface that could say so.
     const segments = walls.reduce((total, wall) => total + Math.max(0, wall.points.length - 1), 0);
+    /*
+      The dropped count is on the line because it is a room the map has and the document will not.
+
+      Smoothing can fit both walls of a very thin room to the same line, closing it up; the freeze
+      drops what that leaves. Saying so here rather than only at the save is the point — the slider
+      that caused it is on screen at this moment, and afterwards it is one mode away.
+    */
     lastSummary =
       `${regions.length} region${regions.length === 1 ? "" : "s"}` +
       (walls.length === 0
         ? " · no separate walls"
-        : ` · ${walls.length} wall${walls.length === 1 ? "" : "s"} in ${segments} segments`);
-    lastSummaryOk = true;
-    say(lastSummary);
+        : ` · ${walls.length} wall${walls.length === 1 ? "" : "s"} in ${segments} segments`) +
+      (previewDropped === 0
+        ? ""
+        : ` · ${previewDropped} wall${previewDropped === 1 ? "" : "s"} would be dropped — ` +
+          "smoothing has closed a thin room up");
+    lastSummaryOk = previewDropped === 0;
+    say(lastSummary, lastSummaryOk ? "" : "bad");
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
   } catch (error) {
     if (requests.fail(generation)) {
@@ -281,6 +325,28 @@ async function derive(): Promise<void> {
  * the bridge criterion returns, and it is the same criterion the emit path uses. Drawing fewer walls
  * here than a push would write is the one failure this surface exists to prevent.
  */
+/**
+ * Nothing to draw: the editor opened on a map with no saved graph.
+ *
+ * Said rather than left blank, because an empty canvas in the one step this mode has is
+ * indistinguishable from one that is still working. The step's own body says what to do about it;
+ * this is the line that stops the surface looking stuck.
+ */
+function clearPartition(): void {
+  const generation = requests.latest();
+  regions = [];
+  walls = [];
+  raster = { width: 1, height: 1 };
+  unitsPerSquare = 0;
+  preview = null;
+  stale = false;
+  requests.fulfil(generation);
+  lastSummary = "no walls saved for this map yet";
+  lastSummaryOk = true;
+  say(lastSummary);
+  invalidate();
+}
+
 function deriveFrozen(graph: FrozenGraph): void {
   const generation = requests.latest();
   const result = buildFrozenFaces(graph);
@@ -291,11 +357,11 @@ function deriveFrozen(graph: FrozenGraph): void {
   // Fractions of the map, so one unit is the whole map and the painter's scale needs no branch.
   raster = { width: 1, height: 1 };
   unitsPerSquare = 0;
+  preview = null;
   stale = false;
 
   const rooms = `${regions.length} room${regions.length === 1 ? "" : "s"}`;
   const points = graph.nodes.length;
-  frozenCheck = { rooms: regions.length, ok: result.eulerHolds };
   lastSummary =
     `${rooms} · ${wallRuns(graph).length} walls in ${graph.edges.length} segments · ${points} points` +
     (result.eulerHolds ? "" : " · CHECK FAILED, see the log");

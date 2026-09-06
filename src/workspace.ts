@@ -46,7 +46,6 @@ import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
-import { registerSkeletonLayer } from "./workspace/layers/skeleton";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
@@ -56,7 +55,6 @@ import { renderInkTools } from "./workspace/paintControls";
 import { finishPaint, registerPaintTool, requestPaintMode } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
-import { registerSkeletonInvalidation, watchSkeleton } from "./workspace/skeleton";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { registerWallEdit } from "./workspace/wallEdit";
@@ -64,6 +62,7 @@ import { renderWallTools } from "./workspace/wallTools";
 import { renderFreezeAction } from "./workspace/freezeAction";
 import { onStageChange } from "./workspace/stage";
 import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
+import { inEditor } from "./workspace/mode";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 
 installDevLog("workspace");
@@ -116,7 +115,6 @@ onReading((result) => {
   could show it.
 */
 registerRegionInvalidation();
-registerSkeletonInvalidation();
 
 /*
   The canvas stack, in draw order.
@@ -137,16 +135,15 @@ registerInkLayer();
 registerPaintLayer();
 registerBreaksLayer();
 /*
-  The partition, and it moved BELOW the skeleton when the Regions step was dissolved.
+  The partition, under the graph in both modes.
 
-  It could sit anywhere while only one step drew it. Now Walls draws it with the centrelines on top,
-  and the order is the whole of whether that step is legible: the rooms are an area fill and the
-  skeleton is a one-pixel line, so a fill drawn after it covers the thing being judged. Rooms under
-  their cause, in both of the steps that show them.
+  It could sit anywhere while only one step drew it. Both of the steps that draw it now put a graph
+  on top, and the order is the whole of whether either is legible: the rooms are an area fill and a
+  wall is a two-pixel line, so a fill drawn after it covers the thing being judged. Rooms under their
+  cause, in both modes.
 */
 registerRegionsLayer();
-registerSkeletonLayer();
-// Last, so the editable graph sits over the rooms it makes rather than under them.
+// Last, so the graph sits over the rooms it makes rather than under them.
 registerGraphLayer();
 /*
   The one tool on this surface that changes the GM's own work rather than a setting.
@@ -166,18 +163,16 @@ registerWallEdit();
 */
 registerPaintTool();
 /*
-  Deriving costs the better part of a second in stage one and is visible in two steps, so entering
-  one of them is what pays for it. Both are told on every change, which is why the module keeps a set
-  rather than a flag.
+  Deriving costs the better part of a second in the ink mode and is visible in one step per mode, so
+  entering that step is what pays for it. Every listener is told on each change, which is why the
+  module keeps a set rather than a flag — the two ids never coexist on one page, but the module does
+  not know that and should not have to.
 
-  The two are **Walls and Edit walls** since the Regions step was dissolved: the partition is drawn
-  wherever a graph is drawn. Walls therefore subscribes twice, once for the rooms and once for the
-  centrelines over them, which is two independent costs a single entry happens to pay for.
+  In the editor it is a walk of a graph already in hand, which is cheap enough that the laziness
+  costs nothing there.
 */
 onStepOpen("walls", (open) => watchRegions("walls", open));
 onStepOpen("edit", (open) => watchRegions("edit", open));
-// Thinning is the same shape of cost and gets the same answer: entering the step pays for it.
-onStepOpen("walls", watchSkeleton);
 /*
   Whether the paint mode is open, which is whether Ink is the step the GM is in.
 
@@ -207,25 +202,21 @@ registerStepContent("ink", renderInkTools, "bottom");
 // particular map is change the colour, and it is not a number so it cannot be a row.
 registerStepContent("ink", renderSwatches);
 /*
-  The door lives in the step it is the door to.
+  How each mode ends, at the foot of its last step.
 
-  It was at the end of Regions, which its own doc called a first answer pending "a step of its own
-  once stage two has real editing tools". Edit walls is that step, and the button reads differently
-  from inside it: in stage one the step has nothing in it and the button is what puts something
-  there, and in stage two it is the way back out. A door at the boundary rather than one room away.
+  The **ink mode** ends by saving the graph it has derived and putting it on the map, with the
+  hand-off to the editor beside it. That replaces the one-way door: there is no stage to cross any
+  more, only a document to commit. The **editor** ends by pushing what it has already committed,
+  which is the ordinary "put it on the map".
+
+  Both are registered unconditionally. A step that this mode does not declare is never rendered, so
+  the registration for the other one costs a map entry nobody reads — which is cheaper than a branch
+  here that has to be kept in step with `steps.ts`.
 */
-// What you do with the walls, above the way out of the step that holds them.
+registerStepContent("walls", renderFreezeAction, "bottom");
+// What you do with the walls, above the button that writes them.
 registerStepContent("edit", renderWallTools);
-registerStepContent("edit", renderFreezeAction, "bottom");
-/*
-  Pushing stays with the partition, which is the thing it writes and the thing being judged.
-
-  That used to mean the Regions step. With Regions dissolved the partition is drawn in two steps,
-  and this goes to **Walls** — the last step of stage one, and the one whose two controls decide the
-  geometry that gets written. Edit walls has the door at its foot instead, which is what a GM in
-  stage two reaches for.
-*/
-registerStepContent("walls", renderPushAction, "bottom");
+registerStepContent("edit", renderPushAction, "bottom");
 
 /*
   Closing writes the result to the scene.
@@ -275,16 +266,21 @@ onMapClick((u, v) => {
   each holding DOM that has already been thrown away.
 */
 /*
-  Crossing the door also changes what the rooms are made of, so the partition goes with it.
+  The stored graph changed, so what draws it has to be told.
 
-  Freezing, starting over and loading a scene's stored graph all change which of the two sources the
-  partition comes from — the map or the frozen graph. Without this, crossing the door would leave the
-  previous stage's partition on screen marked current, which is exactly the "shows the rooms before
-  your edits" failure the two-source split exists to prevent.
+  **The panel in both modes**, because both say something about it: the editor swaps its "no walls
+  saved" notice for the tool picker, and the ink mode's save changes what its confirmation has to
+  warn about.
+
+  **The partition only in the editor.** There the graph *is* the rooms, so an edit changes them and
+  leaving the old ones on screen marked current is the "shows the rooms before your edits" failure
+  the two sources exist to prevent. In the ink mode the rooms come from the reading whatever is
+  stored, so saving changes nothing about them — and re-deriving would cost a full trace to arrive
+  at the picture already on screen, wiping the push's own message on the way.
 */
 onStageChange(() => {
   renderPanel();
-  invalidateRegions();
+  if (inEditor()) invalidateRegions();
 });
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after
@@ -292,6 +288,19 @@ onStageChange(() => {
 onReading(() => {
   refreshHints();
 });
+
+/*
+  Which of the two workspaces this page is, said on the page itself.
+
+  Set here rather than left to the markup, because the markup is shared: one page serves both modes
+  and the query string is what distinguishes them. A surface whose heading did not match the button
+  that opened it would be the worst possible outcome of sharing a page, since the two look otherwise
+  identical and only one of them is destructive to save from.
+*/
+const modeName = inEditor() ? "Editing the walls" : "Reading the map";
+document.title = `Fog Nudger — ${modeName.toLowerCase()}`;
+const heading = document.getElementById("mode-name");
+if (heading) heading.textContent = modeName;
 
 start();
 // Drawn now, disabled, from the defaults — see `controlsLive`.

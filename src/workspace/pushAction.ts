@@ -1,16 +1,20 @@
 /**
- * "Put on the map" — the one button on this surface that writes to the scene, and the close hook.
+ * Writing the scene: the editor's button, the ink mode's save, and the close hook.
  *
- * The **Walls** step ends with it, because that is the last step of stage one and the one that now
- * shows what would be written — the partition, with the centrelines that decide it drawn over the
- * top. Judging a thing and writing it belong next to each other. It was the Regions step until that
- * step was dissolved into this one.
+ * ## Who pushes, and when — and the two modes answer differently on purpose
  *
- * ## Closing pushes, and the button is for not having to close
+ * **The editor pushes on close.** Its edits are written to the document as they are made, so the
+ * scene is simply behind the thing the GM has already committed to; catching it up on the way out is
+ * what makes that mode end by looking at the table. Its own button is the mid-session case — a
+ * change a table is waiting on, made without giving up the surface.
  *
- * The scene is a rendering of the wall graph, so it should say what the graph currently says. Closing
- * the workspace is the natural moment for that: the GM has stopped tuning. The button exists for the
- * other case — a mid-session change a table is waiting on, made without giving up the surface.
+ * **The ink mode pushes only when the GM saves** (user, 2026-09-05: *"saving out of ink mode pushes
+ * that graph"*). Nothing there is committed until they say so, which is exactly what makes reopening
+ * it over an edited graph harmless. A close-time push would undo that in one keystroke: a GM who
+ * opened stage one to look at their threshold and pressed Escape would have replaced their walls.
+ *
+ * That asymmetry is the two-mode split showing through rather than an inconsistency. One mode holds
+ * a draft; the other holds the document.
  *
  * ## Only when something changed
  *
@@ -52,6 +56,7 @@ import { readNominatedMapId } from "../map/mapImage";
 import { encodeFrozenGraph } from "../trace/frozenGraph";
 import { paintRevision } from "../trace/inkPaint";
 import { frozenGraph } from "./stage";
+import { inEditor } from "./mode";
 import { controlsLive } from "./settingRows";
 import { currentPaint } from "./paintState";
 import { currentSettings, persistSettings } from "./settingsState";
@@ -96,6 +101,18 @@ async function fingerprint(): Promise<string> {
  */
 export async function pushOnClose(): Promise<void> {
   if (!controlsLive()) return;
+  /*
+    The ink mode writes nothing on the way out.
+
+    Its product is a *derivation* — one re-run away from the settings and paint that are already
+    stored — so leaving loses nothing, and pushing it would commit a graph the GM did not ask to
+    commit over one they may have spent an evening editing. Saving is the deliberate act, and it has
+    two buttons of its own at the foot of Walls.
+  */
+  if (!inEditor()) {
+    devLog("info", "workspace: closing the ink mode, which commits nothing on its own");
+    return;
+  }
   const mark = await fingerprint();
   if (!pushWouldChange(mark)) {
     devLog("info", "workspace: closing with nothing to push — the scene already says this");
@@ -118,6 +135,22 @@ export async function pushOnClose(): Promise<void> {
   }
 }
 
+/**
+ * Push what the scene should now hold, and say how it went.
+ *
+ * Shared by the editor's button and the ink mode's save, so there is one route into the emit path
+ * rather than two — which is the same rule that stopped the preview being emitted directly. The
+ * settings are written first and **awaited**: `pushToFog` reads scene metadata, and the sliders write
+ * there on release without waiting, so pushing a moment after letting go of one would otherwise emit
+ * the value before it.
+ */
+export async function pushCurrent(): Promise<void> {
+  await persistSettings();
+  const mark = await fingerprint();
+  const message = await pushToFog(mark, frozenGraph() ?? undefined);
+  say(message);
+}
+
 export function renderPushAction(body: HTMLElement): void {
   const actions = document.createElement("div");
   actions.className = "step-actions";
@@ -131,9 +164,9 @@ export function renderPushAction(body: HTMLElement): void {
   const note = document.createElement("p");
   note.className = "sub";
   note.textContent =
-    "Replaces what we put in the scene before with what is on screen now — your edited walls once " +
-    "the graph is generated, and what the map reads before that. Closing the workspace does the " +
-    "same thing, so this is only needed to update the table without stopping work.";
+    "Replaces what we put in the scene before with the walls as they are now. Closing this does the " +
+    "same thing, so it is only needed to update the table without stopping work — your edits are " +
+    "saved as you make them either way.";
 
   button.addEventListener("click", () => {
     // Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for

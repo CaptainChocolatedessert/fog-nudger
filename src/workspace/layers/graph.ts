@@ -1,10 +1,16 @@
 /**
- * The graph layer: the frozen walls, and a handle at every point in them.
+ * The graph layer: the walls, and — where they can be grabbed — a handle at every point in them.
  *
- * **Stage two's picture of the thing it edits.** Every other layer draws a *derivation* — the ink is
- * what the reading made of the map, the skeleton is what thinning made of the ink, the partition is
- * what the traversal made of the graph. This one draws the document itself, which after the freeze
- * is the only thing there is: nothing upstream of it applies any more.
+ * **Drawn in both modes, from two sources, and the difference is whether it can be touched.** In the
+ * editor it is the stored document: nothing upstream of it applies, and every point carries a handle
+ * because every point can be moved. In the ink mode it is what the current reading would save,
+ * fitted exactly as the save would fit it, and it carries **no handles at all** — a handle that moves
+ * nothing would be a lie about what is there, which is the same rule that hides one on an orphaned
+ * vertex.
+ *
+ * One layer rather than two, because they are one picture: the last thing stage one shows and the
+ * first thing the editor shows have to be the same, or the hand-off between the modes is a surprise
+ * rather than a continuation.
  *
  * ## Map fractions, so there is no raster to agree with
  *
@@ -30,6 +36,8 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { nodeDegrees, type FrozenGraph } from "../../trace/frozenGraph";
 import { addPainter, type Painter } from "../shell";
+import { inEditor } from "../mode";
+import { previewGraph } from "../regions";
 import { frozenGraph } from "../stage";
 import type { DrawPoint } from "../dragGesture";
 import {
@@ -101,8 +109,18 @@ function degrees(graph: FrozenGraph): number[] {
   return degreesOf;
 }
 
+/**
+ * The graph on screen: the document in the editor, what a save would store in the ink mode.
+ *
+ * Asked once per frame rather than held, so nothing has to be told when a derive lands or a gesture
+ * writes. Both sources are already module state that changes wholesale.
+ */
+function graphOnCanvas(): FrozenGraph | null {
+  return inEditor() ? frozenGraph() : previewGraph();
+}
+
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
-  const graph = frozenGraph();
+  const graph = graphOnCanvas();
   if (!graph || graph.edges.length === 0) return;
 
   const x = (fraction: number): number => view.x + fraction * drawWidth;
@@ -194,18 +212,25 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     context.stroke();
   }
 
-  paintHandles(context, graph, x, y, at);
+  /*
+    Handles only where they can be grabbed, which is the editor.
+
+    In the ink mode this same graph is a *preview*: it is what saving would store, and the next
+    derive replaces it wholesale. Dots on it would offer a gesture that does not exist there — the
+    step pans — and the record's rule is that a handle which moves nothing is a lie about what is
+    present. The walls themselves are the whole of what that step has to show.
+  */
+  if (inEditor()) paintHandles(context, graph, x, y, at);
   context.restore();
 };
 
 /**
  * A handle at every point of the graph — in **screen** space, so it stays grabbable at any zoom.
  *
- * The same argument as the break rings and the skeleton's node marks: a point is a single position
- * with a whole map on the canvas, and a mark that scales with the zoom disappears at exactly the
- * moment it is wanted. A handle has a second reason on top of that one — piece by piece this is what
- * the drag gesture will aim at, and a target that changes size under the cursor as the GM zooms is a
- * target they have to re-learn.
+ * The same argument as the break rings: a point is a single position with a whole map on the canvas,
+ * and a mark that scales with the zoom disappears at exactly the moment it is wanted. A handle has a
+ * second reason on top of that one — it is what the drag gesture aims at, and a target that changes
+ * size under the cursor as the GM zooms is a target they have to re-learn.
  *
  * **A point with no walls gets no handle.** Merging two vertices leaves the folded one in the table
  * unreferenced rather than renumbering, because renumbering would invalidate every id the caller

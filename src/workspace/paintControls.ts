@@ -48,7 +48,6 @@ import { settingRow } from "./settingRows";
 import { paintStroke } from "../trace/inkPaint";
 import { refreshPaintRegion } from "./layers/paint";
 import { invalidate, say } from "./shell";
-import { inStageTwo } from "./stage";
 
 /** The step the tools belong to, looked up once so the tool declarations are read rather than copied. */
 function inkStep(): (typeof STEPS)[number] | undefined {
@@ -65,11 +64,6 @@ function inkStep(): (typeof STEPS)[number] | undefined {
 export function renderInkTools(body: HTMLElement): void {
   const step = inkStep();
   if (!step) return;
-
-  if (inStageTwo()) {
-    body.append(frozenNotice());
-    return;
-  }
 
   const tools = toolGroups(step);
   const active = currentPaintTool();
@@ -274,23 +268,6 @@ function renderSave(body: HTMLElement): void {
 
   row.append(save);
   body.append(row, note);
-}
-
-/**
- * What the tools say once the graph is frozen.
- *
- * The same treatment the reading sliders get, and for the same reason: §8 wants a boundary visible
- * *before* it is crossed, so the tools are simply not here rather than present and inert. Painting is
- * a reading input and the frozen graph does not re-derive from the reading — a stroke made here would
- * change nothing visible and then take effect on starting over.
- */
-function frozenNotice(): HTMLElement {
-  const note = document.createElement("p");
-  note.className = "hint";
-  note.textContent =
-    "Closed — the graph is frozen, so what you painted is not being read any more. Start over, " +
-    "under Edit walls, reopens this. Your painting is kept either way.";
-  return note;
 }
 
 /**

@@ -38,7 +38,8 @@ import {
   type View,
 } from "../probe/viewTransform";
 import type { Drag, LayerId } from "../steps";
-import { WORKSPACE_ID } from "./workspaceControl";
+import { workspaceMode } from "./mode";
+import { workspaceModalId } from "./workspaceControl";
 
 /**
  * The navigation constants, settled by the probe in a room (`DESIGN.md` §4).
@@ -783,9 +784,23 @@ async function close(): Promise<void> {
   }
 
   closing = true;
-  void OBR.modal.close(WORKSPACE_ID).catch((error: unknown) => {
+  // Its own id, which is per mode: the two surfaces are one page and two modals, so a page that
+  // closed "the workspace" would sometimes be closing the other one.
+  await OBR.modal.close(workspaceModalId(workspaceMode())).catch((error: unknown) => {
     devLog("error", "workspace: could not close itself", describeError(error));
   });
+}
+
+/**
+ * Leave, from something other than the close button.
+ *
+ * The hand-off between the two modes is the one caller: finishing in the ink mode opens the editor
+ * and then closes this page. It goes through the same `close` as Escape does, so the close action
+ * and the exit hatch behave identically however leaving was asked for — the alternative would be a
+ * second way out that the fourth exit does not cover.
+ */
+export async function closeWorkspace(): Promise<void> {
+  await close();
 }
 
 /**

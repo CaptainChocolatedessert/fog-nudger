@@ -89,20 +89,29 @@
     -->
     <p id="status" data-state="pending">Connecting&hellip;</p>
 
+    <!--
+      Two workspaces, in the order a map goes through them. Each is a complete process that starts by
+      looking at the scene and ends by putting something on it, which is why they are separate
+      surfaces rather than two halves of one long list.
+    -->
     <div class="actions">
-      <button id="open-workspace" disabled>Open the workspace</button>
+      <button id="open-workspace" disabled>Read the map</button>
+      <button id="open-editor" disabled>Edit the walls</button>
     </div>
     <p class="note">
-      Everything that decides what gets traced is there: the map, the ink, the walls and the
-      regions. It has to be its own surface because the answers are per-pixel verdicts, which only a
-      picture can carry &mdash; and because the controls belong beside the thing they change rather
-      than in a panel the picture would cover.
+      <em>Read the map</em> is where the picture becomes walls: choose the image, decide what counts
+      as ink, correct it by hand, and save the result. It has to be its own surface because the
+      answers are per-pixel verdicts, which only a picture can carry.
     </p>
     <p class="note">
-      Closing the workspace puts the result on the fog layer, replacing whatever it put there
-      before; there is a button inside for doing that without closing. <strong>There is no staging
-      step any more.</strong> What the workspace shows is what the scene holds, so a hand edit to
-      one of our fog items does not survive the next write &mdash; edit in the workspace instead.
+      <em>Edit the walls</em> opens what was saved and lets you move, draw and erase them by hand.
+      Going back to reading the map is not destructive &mdash; only saving from there replaces the
+      walls, and it says so first.
+    </p>
+    <p class="note">
+      Both put the result straight on the fog layer, replacing whatever we put there before.
+      <strong>There is no staging step.</strong> So a hand edit to one of our fog items does not
+      survive the next write &mdash; edit it in one of these instead.
     </p>
 
     <p class="field">Our fog</p>
@@ -110,9 +119,9 @@
       <button id="remove" disabled>Remove ours</button>
     </div>
     <p class="note">
-      Takes out everything this extension put in the scene and leaves anything you drew by hand
-      alone. Only needed to stop using the extension on a map; an ordinary re-run replaces its own
-      output.
+      Takes out everything this extension put in the scene, <em>and</em> the saved walls behind it,
+      and leaves anything you drew by hand alone. Only needed to stop using the extension on a map;
+      an ordinary re-run replaces its own output.
     </p>
 
     <!--

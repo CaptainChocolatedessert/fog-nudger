@@ -2,6 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!--
+      One page, two modes: `?mode=ink` reads the map and `?mode=edit` edits the walls it saved. The
+      heading and this title are set from the mode at start-up, so what is here is the ink mode's,
+      which is what an unrecognised query falls back to.
+    -->
     <title>Fog Nudger — reading the map</title>
     <style>
       /*
@@ -120,14 +125,6 @@
       .row {
         margin: 0 0 0.9rem;
       }
-      /*
-        A control the frozen graph has closed. Dimmed rather than hidden: the GM needs to see that
-        the reading still exists and where it went, or "start over" reads as a way to lose work
-        rather than as the way back to a thing they can still see.
-      */
-      .row.frozen {
-        opacity: 0.45;
-      }
       .row .top {
         display: flex;
         justify-content: space-between;
@@ -161,10 +158,6 @@
       */
       .gap-key {
         color: #a855f7;
-      }
-      /* Kept in step with SKELETON_COLOUR in the skeleton layer by hand, for the same reason. */
-      .skeleton-key {
-        color: #00ff88;
       }
       /*
         The GM's two hand-made layers, kept in step with SUPPRESS_COLOUR and ADD_COLOUR by hand.
@@ -232,8 +225,17 @@
         text-align: left;
         cursor: pointer;
       }
-      .step-header:hover {
+      .step-header:hover:not(:disabled) {
         color: #e8e9f5;
+      }
+      /*
+        A step the map gate has not opened yet. Dimmed rather than hidden, so the order of what is
+        coming is visible from the first frame — the accordion's order is the cascade, and a cascade
+        with its later half missing does not teach it.
+      */
+      .step.locked > .step-header {
+        opacity: 0.4;
+        cursor: default;
       }
       /* The open step is named in the accent colour and marked down the edge, because an accordion
          header is a weaker "you are here" than a selected tab and needs the help. */
@@ -464,7 +466,9 @@
       <canvas id="canvas"></canvas>
 
       <div id="panel">
-        <h1>Reading the map</h1>
+        <!-- Replaced at start-up with the mode's own name. This is the ink mode's, which is the
+             fallback for an unrecognised query. -->
+        <h1 id="mode-name">Reading the map</h1>
         <p class="sub" id="map-name">Loading…</p>
 
         <!--
