@@ -4458,7 +4458,7 @@ you can never get detail back without regenerating. Same for stubs.
 - **Per wall run.** A *wall* is a run of segments chained through degree-2 nodes (`wallRuns`), and
   fitting keeps both ends, so junctions survive without being special-cased.
 
-#### The small-area-face tool — wanted eventually, and it closes a loop
+#### The small-area-face tool — wanted eventually, and NOT YET DESIGNED
 
 The user's cleanup for what a split leaves. Worth recognising: **this is the smallest-room control
 returning in the form this record already said was correct.** It was deleted rather than defaulted
@@ -4466,6 +4466,28 @@ off, on the grounds that it removed a *region* when what is usually wrong is a *
 "removing a sliver by deleting the wall that made it is exact, local and visible, where removing it
 by area is none of those". In the editor, deleting a small face **is** deleting the walls that bound
 it. Same control, right stage.
+
+**It needs a design discussion before anyone implements it** (user, 2026-09-05): *it's not obvious
+how it should work.* That is a decision to be made in conversation, not one to be inferred from this
+paragraph — which says only what the tool is *for*, and nothing about what it does. It is deliberately
+**not** part of the four-piece order below, and taking it up should start with the questions rather
+than with code. The ones visible from here, offered as a starting point and not as an agenda:
+
+- **Which walls go?** A face is bounded by several. Deleting all of them merges it into *every*
+  neighbour at once; deleting one merges it into exactly one, and **which one is a choice nothing in
+  the geometry makes for you**. The old control had no such question because it deleted a region
+  rather than a wall — which is precisely the deletion this record rejected.
+- **A threshold, or a click?** A sweep over everything under an area is what the deleted control was.
+  A click on the face you actually want gone is the exact, local, visible version, and the argument
+  that killed the old control points at it — but it is one click per sliver where a split may leave
+  many.
+- **What unit is the area in?** Fractions of the map squared means nothing to a GM; grid squares needs
+  a pixels-per-square figure the editor does not have. **Same shape as the ink-width problem item 1
+  already solves by freezing the measurement into the document**, so the fix may be free — but only if
+  the tool turns out to want a threshold at all, which is the previous question.
+- **A face bounded partly by a stub is not a merge.** Deleting a bridge deletes the stub and merges
+  nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or
+  simply a different action has not been asked.
 
 ### Ink is one step with divisions — user, 2026-09-05
 
@@ -4538,18 +4560,17 @@ across two modes, the editor's existence is invisible from the ink mode's surfac
 stage one has to offer the editor** rather than leaving it to be discovered — the hand-off is part of
 the feature, not a nicety.
 
-### OPEN, and it must be answered before item 4
+### SETTLED — what "losing how it was generated" means
 
-The user described leaving the ink mode as *"saving the graph and losing how it was generated"*.
+The user described leaving the ink mode as *"saving the graph and losing how it was generated"*, and
+that was carried as an open question for one turn because it has a weak and a strong reading. **The
+weak one is what was meant** (user, 2026-09-05): it is a statement about the **editor's point of
+view** — the graph is the document there and its provenance stops mattering — and **not** about
+discarding the inputs.
 
-**Read here as a statement about the editor's point of view** — the graph is the document there and
-its provenance stops mattering — **and not as discarding the inputs.** Today the reading settings and
-both paint layers survive: reopening stage one lands a GM back at their tuned ink rather than a bare
-map, which is what makes reopening cheap and is the whole reason opening the ink mode can be
-non-destructive.
-
-If the stronger reading was meant — that leaving actually throws the settings and paint away — it
-changes item 4 substantially and removes the third payoff above. **Ask before building it.**
+So the reading settings and both paint layers survive, as they do today: reopening stage one lands a
+GM back at their tuned ink rather than a bare map. That is what makes reopening cheap, and it is the
+whole reason opening the ink mode can be non-destructive — the third payoff above stands.
 
 ### The order, agreed 2026-09-05
 
