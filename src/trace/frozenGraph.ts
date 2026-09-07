@@ -463,30 +463,41 @@ function runLength(graph: FrozenGraph, nodes: readonly number[]): number {
 }
 
 /**
- * The longest spur in a graph, which is what a prune slider's top end is measured from.
+ * The longest wall run in the graph — the top end of the prune slider's track.
  *
- * A **spur** is what pruning can reach: a run with at least one free end. Anything else is not a
- * candidate at any budget, so including it would put a ceiling on the track that no setting could
- * ever act on — and on a map whose exterior wall is one enormous run, that ceiling would be the
- * whole map and every useful setting would sit in the first percent.
+ * ## Why every run, and not only the ones that are spurs today
  *
- * Zero when there is nothing to prune, which the caller reads as "no top to measure from".
+ * **This measured only spurs until 2026-09-07, and that was wrong in a way a room found.** A spur is
+ * a run with a free end, which is what pruning can reach *at this instant* — but pruning cascades:
+ * every arm of a junction becomes a dead end once its neighbours go, so a run that is between two
+ * junctions now can be a dead end three rounds later. Measuring only today's spurs made the top of
+ * the track too short to reach exactly those walls, so the far right left long dead ends standing
+ * where a GM reasonably expected everything to go. Reported from a room as *"very long walls that
+ * don't enclose a space"*.
+ *
+ * The longest run is the honest bound (user, 2026-09-07): **no run can be longer than the longest
+ * run**, so a budget set here can reach anything the cascade ever frees. The far right therefore
+ * means "every dead end, whatever its length", while staying a finite number measured off this graph
+ * rather than an infinity dressed up as a setting.
+ *
+ * ## What it costs, and why it is less than it sounds
+ *
+ * The note this replaces said including non-spurs would put every useful setting "in the first
+ * percent", because the exterior wall's run would dominate. **That was overstated, and the arithmetic
+ * is why**: the track is logarithmic, so a top twenty times larger costs about a fifth of the track
+ * rather than all of it. A working budget on the test map sits around two thirds of the way up under
+ * the old measurement and around half under this one.
+ *
+ * The argument does still hold for `largestBend`, which is measured per *vertex* for exactly that
+ * reason — and the distinction between the two is worth keeping straight. Pruning acts on whole runs,
+ * so the longest run is a bound it can actually be set to. Simplification acts at a vertex, so a
+ * whole wall's deviation from its own chord is not a quantity that control could ever use.
+ *
+ * Zero when there is nothing to measure, which the caller reads as "no top".
  */
-export function longestSpur(graph: FrozenGraph): number {
-  const runs = walkRuns(graph);
-  const degree = new Map<number, number>();
-  const ends = runs.map((run) => [run.nodes[0]!, run.nodes[run.nodes.length - 1]!] as const);
-  for (const [a, b] of ends) {
-    degree.set(a, (degree.get(a) ?? 0) + 1);
-    degree.set(b, (degree.get(b) ?? 0) + 1);
-  }
-
+export function longestRun(graph: FrozenGraph): number {
   let longest = 0;
-  runs.forEach((run, index) => {
-    const [a, b] = ends[index]!;
-    if (degree.get(a) !== 1 && degree.get(b) !== 1) return;
-    longest = Math.max(longest, runLength(graph, run.nodes));
-  });
+  for (const run of walkRuns(graph)) longest = Math.max(longest, runLength(graph, run.nodes));
   return longest;
 }
 
@@ -506,7 +517,7 @@ export function longestSpur(graph: FrozenGraph): number {
  *
  * Only vertices with exactly two walls are counted, because those are the only ones simplification
  * can remove. A junction and a free end survive any tolerance, so a bend at one is not a bend this
- * control could act on. Same exclusion, and the same reason, as `longestSpur`'s.
+ * control could act on.
  *
  * Zero when there is nothing to measure, which the caller reads as "no top".
  */

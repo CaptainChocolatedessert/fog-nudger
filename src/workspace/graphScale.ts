@@ -11,8 +11,10 @@
  * the same pixel size can carry 3px linework or 12px, and every setting a GM wants sits within a few
  * multiples of the map's own ink. A ceiling generous enough for the coarse map puts the whole useful
  * range of the fine one in the first percent of the track. So the top is **measured**: the longest
- * spur for pruning, the largest bend for simplification, each of which is the setting at which that
- * tool has done everything it can do.
+ * wall *run* for pruning, the largest single-vertex bend for simplification. Each is the setting at
+ * which that tool has done everything it can do — and for pruning that is a claim about a *bound*
+ * rather than about today's candidates, which is why it counts every run and not only the ones with a
+ * free end. `longestRun` carries why that distinction cost a room a puzzle.
  *
  * > *"Maybe a log scale from the smallest to the largest observed bend/spur? If we find a good
  * > version of that, we should use the same in both cases."* — user, 2026-09-06
@@ -43,10 +45,16 @@
  */
 
 import type { SettingName } from "../settings";
-import { largestBend, longestSpur, type FrozenGraph } from "../trace/frozenGraph";
+import { largestBend, longestRun, type FrozenGraph } from "../trace/frozenGraph";
 
 interface Tops {
-  /** The longest run pruning could reach, in map fractions. Zero when there is nothing to prune. */
+  /**
+   * The longest wall run, in map fractions. Zero when there is nothing to prune.
+   *
+   * **Every run, not only those with a free end today.** Pruning cascades, so a run between two
+   * junctions now can be a dead end three rounds later; a top measured from today's spurs alone was
+   * too short to reach exactly those, which is what left long walls standing at the far right.
+   */
   readonly spur: number;
   /** The largest single-vertex bend, in map fractions. Zero when there is nothing to straighten. */
   readonly bend: number;
@@ -100,10 +108,37 @@ export function onGraphScale(tell: () => void): void {
 export function graphScaleTop(name: SettingName): number | null {
   if (tops === null && latest !== null) tops = measure(latest);
   if (tops === null) return null;
-  const top = name === "spurPruneFraction" ? tops.spur : name === "simplifyFraction" ? tops.bend : 0;
+  /*
+    Both simplification keys take the same measurement, because they are the same quantity.
+
+    The ink mode's and the editor's differ in their default and in what applying them costs, not in
+    what a given number means — so a GM who learned where on the track their map wants to sit does not
+    have to learn it twice.
+  */
+  const top =
+    name === "spurPruneFraction"
+      ? tops.spur
+      : name === "simplifyFraction" || name === "editSimplifyFraction"
+        ? tops.bend
+        : 0;
   return top > 0 ? top : null;
 }
 
 function measure(graph: FrozenGraph): Tops {
-  return { spur: longestSpur(graph), bend: largestBend(graph) };
+  return { spur: roundUp(longestRun(graph)), bend: roundUp(largestBend(graph)) };
+}
+
+/**
+ * Round a measurement **up** to three significant figures, which is what the slider snaps to.
+ *
+ * Without it the top of the track lands a hair *below* what was measured: `fromSlider` snaps a log
+ * value to three figures, so a maximum of 0.1364 comes back as 0.136, and the prune budget then
+ * fails to reach the very run it was measured from. Rounding the bound up is what keeps the far left
+ * meaning exactly off and the far right meaning exactly everything, which is the pair of guarantees
+ * these two tracks exist to offer.
+ */
+function roundUp(value: number): number {
+  if (!(value > 0)) return 0;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)) - 2);
+  return Math.ceil(value / magnitude) * magnitude;
 }

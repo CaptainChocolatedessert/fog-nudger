@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   documentPoint,
-  longestSpur,
+  longestRun,
   nodeDegrees,
   pruneFrozenGraph,
   wallRunEdges,
@@ -290,8 +290,16 @@ describe("wallRunEdges", () => {
   });
 });
 
-describe("longestSpur", () => {
-  it("measures only the runs pruning could reach", () => {
+describe("longestRun", () => {
+  /*
+    Every run, and that changed on 2026-09-07 after a room found the consequence.
+
+    It measured only *spurs* — runs with a free end — which is what pruning can reach at that instant.
+    But pruning cascades: a run between two junctions becomes a dead end once the spurs around it go,
+    and it was then judged against a budget whose maximum had never counted it. So the far right of
+    the track left exactly those walls standing.
+  */
+  it("counts a run with no free end, because pruning can reach it later", () => {
     const room = graphOf(
       [
         [0, 0],
@@ -310,28 +318,33 @@ describe("longestSpur", () => {
         [5, 4],
       ],
     );
-    /*
-      The room's own perimeter is a closed run of length 4 and can never be pruned. If it counted,
-      the slider's top would be ten times the only setting that does anything — which on a real map,
-      whose exterior wall is one enormous run, is the difference between a usable track and one where
-      everything useful sits in the first percent.
-    */
-    expect(longestSpur(room)).toBeCloseTo(0.4, 5);
+    // The spur off the bottom wall is 0.4; the room's own perimeter is a closed run of 4. The bound
+    // has to be the larger, or a budget can never be set high enough to erode the room's arms once
+    // the spur has gone and left them free.
+    expect(longestRun(room)).toBeCloseTo(4, 6);
   });
 
-  it("is zero when there is nothing to prune", () => {
-    const loop = graphOf(
+  it("is a bound on what any budget could ever prune", () => {
+    const chain = graphOf(
       [
         [0, 0],
-        [1, 0],
-        [1, 1],
+        [0.5, 0],
+        [0.9, 0],
       ],
       [
         [0, 1],
         [1, 2],
-        [2, 0],
       ],
     );
-    expect(longestSpur(loop)).toBe(0);
+    /*
+      The property the maximum has to have: at this budget nothing is refused for being too long, so
+      everything with a free end goes and what is left is only what cycles hold in place.
+    */
+    const budget = longestRun(chain);
+    expect(pruneFrozenGraph(chain, budget).graph.edges).toHaveLength(0);
+  });
+
+  it("is zero when there is nothing to measure", () => {
+    expect(longestRun({ nodes: [], edges: [] })).toBe(0);
   });
 });
