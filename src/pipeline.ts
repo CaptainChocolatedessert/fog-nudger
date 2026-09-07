@@ -1446,22 +1446,30 @@ export async function runTrace(
       `segments, emitted as LINE items the way Dynamic Fog's own wall mode builds one.`,
   );
 
-  // ## What is left uncovered, which is the only way to answer "why is there a gap"
+  // ## What the trace's own faces cover — and they are NOT what goes on the map
   //
   // The faces tile the framed raster, so their total is very nearly the whole of it — short only by
   // the half-pixel each boundary runs inside the wall.
   //
-  // **There is no bare floor to report any more.** With the smallest-room control gone, every face
-  // holding any map is emitted, and the only faces dropped hold none. The warning that used to live
-  // here — grid squares of floor covered by nothing, showing through as bare map inside a revealed
-  // room — described a defect that no longer has a mechanism.
+  // **Every figure on this line describes the derivation rather than the scene** (corrected
+  // 2026-09-07). Since 2026-09-06 both the preview and the push walk the *frozen* graph, so
+  // `derived.regions` is no longer emitted by anything — and this line said "emitted shapes" and
+  // "were dropped" about a set that is neither emitted nor dropped. A diagnostic asserting a removal
+  // that does not happen is precisely the trap this project keeps paying for, so the wording names
+  // whose faces these are and says plainly that nothing acts on the count.
+  //
+  // **The empty-face filter below it is retired in the same sense.** It still runs here, because the
+  // trace still builds its own region list for the dry run; what it decides reaches no scene. A face
+  // enclosing nothing is emitted in both modes now, which is a stated cost of the frozen traversal
+  // having no pixel counts to test.
   const coveredPixels = coveredArea(derived.regions);
   const rasterArea = plan.width * plan.height;
   devLog(
     "info",
-    `trace: emitted shapes cover ${((coveredPixels / rasterArea) * 100).toFixed(1)}% of the raster ` +
-      `(against ${(chosenCoverage * 100).toFixed(1)}% ink); ${derived.discarded} faces held no map ` +
-      `at all and were dropped, and ${derived.filledHoles} holes enclosed nothing emitted.`,
+    `trace: the trace's own faces cover ${((coveredPixels / rasterArea) * 100).toFixed(1)}% of the ` +
+      `raster (against ${(chosenCoverage * 100).toFixed(1)}% ink); ${derived.discarded} of them ` +
+      `hold no map at all and ${derived.filledHoles} holes enclosed nothing. **Counted, not acted ` +
+      `on** — what reaches the scene is the frozen graph's faces, which drop neither.`,
   );
 
   // ## Simplification
