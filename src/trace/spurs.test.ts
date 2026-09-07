@@ -93,6 +93,36 @@ describe("spursToPrune", () => {
     expect(spursToPrune(runs, 1).removed.size).toBe(0);
   });
 
+  /*
+    **A run that becomes free later is judged against the same budget, and this is what a room saw.**
+
+    The cascade frees new ends round by round, but the budget never moves — so a long wall whose end
+    was a junction, and which only becomes a dead end once the short spurs around it go, is kept
+    because it is long. That is correct on its own terms: everything past the threshold is meant to be
+    treated as deliberate.
+
+    What makes it surprising is the *track*. Its top end is the longest spur measured on the graph as
+    it was when the step opened, so a run that had no free end then was never a candidate and never
+    counted — and at the far right, where a GM expects every dead end to go, those are exactly the
+    walls left standing. Reported from a room on 2026-09-07 as "very long walls that do not enclose a
+    space".
+  */
+  it("keeps a run that outgrew the budget before its end came free", () => {
+    const runs: PrunableRun[] = [
+      // A long wall between two junctions, with a short spur off each end.
+      { a: 0, b: 1, length: 50 },
+      { a: 0, b: 2, length: 1 },
+      { a: 1, b: 3, length: 1 },
+    ];
+    const result = spursToPrune(runs, 5);
+    // Both spurs go, and the wall between them is now free at both ends and still kept.
+    expect([...result.removed].sort()).toEqual([1, 2]);
+    expect(result.rounds).toBe(1);
+
+    // Only a budget past its own length reaches it, which the track's top end does not offer.
+    expect([...spursToPrune(runs, 50).removed].sort()).toEqual([0, 1, 2]);
+  });
+
   it("takes a run free at both ends, which is a wall touching nothing", () => {
     const runs: PrunableRun[] = [{ a: 0, b: 1, length: 1 }];
     expect([...spursToPrune(runs, 2).removed]).toEqual([0]);
