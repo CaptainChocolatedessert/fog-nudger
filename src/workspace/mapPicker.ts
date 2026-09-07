@@ -139,6 +139,26 @@ async function refreshMaps(): Promise<void> {
 
       drawRows(container, maps, selected);
       known = { maps, selected };
+
+      /*
+        A nomination this scene cannot satisfy is said out loud, because otherwise it is invisible.
+
+        The fallback is right and the marked row is honest, but "you chose this" and "we picked this
+        because your choice is missing" looked identical — and a room spent three hours in the second
+        state without knowing (2026-09-07). The log said so forty times; the surface said nothing,
+        which is the wrong way round.
+
+        **It says what to do rather than only what happened.** Choosing a row writes a nomination and
+        the line goes; nothing here rewrites it unasked, for the reason the resolver gives.
+      */
+      if (nominated && !maps.some((map) => map.id === nominated)) {
+        const stale = document.createElement("p");
+        stale.className = "sub";
+        stale.innerHTML =
+          "The map saved for this scene is <b>not in it any more</b>, so the largest one is being " +
+          "traced instead. Pick a row to make that choice stick.";
+        container.append(stale);
+      }
     }
 
     // Unconditional, including the zero case. An empty picker was reported as a bug precisely

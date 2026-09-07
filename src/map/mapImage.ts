@@ -198,6 +198,15 @@ export async function nominateMap(id: string | null): Promise<void> {
 }
 
 /**
+ * The dangling nomination already reported, so it is said once rather than once per call.
+ *
+ * `resolveTraceMap` runs several times per map load by design, and the warning it carries is about a
+ * standing condition rather than an event — forty copies in one session is a log nobody reads.
+ * Cleared whenever a nomination does resolve, so a different one going stale later still speaks.
+ */
+let warnedDanglingId: string | null = null;
+
+/**
  * The map image to trace: the GM's nomination, or the largest image in the scene.
  *
  * `null` only when the scene holds no `MAP`-layer image at all, which is an ordinary state rather
@@ -216,12 +225,36 @@ export async function resolveTraceMap(): Promise<ImageItem | null> {
   const chosenId = await readNominatedMapId();
   if (chosenId) {
     const chosen = maps.find((map) => map.id === chosenId);
-    if (chosen) return chosen;
-    // The nominated image is gone: deleted, or this scene was duplicated from one that carried the
-    // metadata. **Not** "the choice was made in another scene", which this used to say — the
-    // nomination lives in *scene* metadata, so it cannot leak between scenes. Falling through to
-    // the largest rather than tracing nothing is right whatever the cause.
-    devLog("warn", `map: the nominated map ${chosenId.slice(0, 8)} is not in this scene`);
+    if (chosen) {
+      // Resolved, so a later failure on a different id is worth hearing about again.
+      warnedDanglingId = null;
+      return chosen;
+    }
+    /*
+      The nominated image is gone: deleted, or this scene was duplicated from one that carried the
+      metadata. **Not** "the choice was made in another scene", which this used to say — the
+      nomination lives in *scene* metadata, so it cannot leak between scenes. Falling through to the
+      largest rather than tracing nothing is right whatever the cause.
+
+      **Said once per dangling id, not once per call.** This function runs several times per map
+      load, by its own design, so the warning arrived forty times in a three-hour session (room,
+      2026-09-07) — which is a log nobody can read rather than a fact nobody needs. The memo resets
+      when the id changes, so a second stale nomination still speaks.
+
+      **The nomination is NOT cleared, and that is deliberate.** Writing to metadata unasked is the
+      thing this project does not do, and here it would also be unsafe: the map list is briefly empty
+      while a scene loads — the picker has logged `0 map images` — so a resolver that cleared on a
+      failed lookup would destroy a perfectly good choice during start-up. Treating a dangling
+      nomination as absent is the same answer the frozen graph store gives a map mismatch.
+    */
+    if (warnedDanglingId !== chosenId) {
+      warnedDanglingId = chosenId;
+      devLog(
+        "warn",
+        `map: the nominated map ${chosenId.slice(0, 8)} is not in this scene, so the largest is ` +
+          "being traced instead. The choice is left alone rather than rewritten.",
+      );
+    }
   }
 
   // One map wins without a bounds round trip, and therefore without the area guard `largestByArea`
