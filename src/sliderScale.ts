@@ -136,6 +136,29 @@ export function fromSlider(position: number, limits: ScaleLimits, scale: Scale):
   return clampTo(Number(snapped.toFixed(decimals)), min, max);
 }
 
+/**
+ * A track position as one to a hundred, for a control whose own unit means nothing to a GM.
+ *
+ * Three controls store a fraction of the map — the only unit the ink mode and the wall editor can
+ * both speak — and no spelling of that is a number anybody can hold on to (user, 2026-09-07: *"an
+ * arbitrary large number and log scale don't make sense to the user"*). What the readout is for is
+ * **remembering a setting so you can go back to it**, and where the handle sits serves that.
+ *
+ * Position zero is the off state on those tracks and is answered before this is reached, so the range
+ * that matters begins at 1: the first usable position reads as 1 and the last as exactly 100.
+ *
+ * **It reports a place, not a quantity**, so it moves when the track does. These tracks have a top
+ * measured off the graph when a step opens, and the graph changes as walls are pruned and
+ * straightened — so one stored setting can read 40 today and 43 tomorrow. Stable for as long as the
+ * step is open, which is when a GM is comparing two settings. Numbering against a fixed reference
+ * range instead would be stable forever and would put the handle at the far right while the readout
+ * said 78, which is wrong in a way you can see.
+ */
+export function positionReadout(position: number): number {
+  const clamped = Math.min(SLIDER_STEPS, Math.max(1, position));
+  return 1 + Math.round(((clamped - 1) / (SLIDER_STEPS - 1)) * 99);
+}
+
 /** How a value should be written next to its slider. */
 export function formatValue(value: number, limits: ScaleLimits, scale: Scale): string {
   // Off is a state rather than a number, and "0.000200" beside a slider that is doing nothing reads

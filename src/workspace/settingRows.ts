@@ -23,6 +23,7 @@ import type { SettingName } from "../settings";
 import {
   formatValue,
   fromSlider,
+  positionReadout,
   SLIDER_STEPS,
   toSlider,
   type Scale,
@@ -60,12 +61,23 @@ function trackFor(name: SettingName): ScaleLimits {
 /**
  * The number beside the label.
  *
- * A control may spell its own value, because two of them store a fraction of the map and "0.00043"
- * is not a number anybody can read. Everything else takes the shared formatter, which knows about
- * steps and off positions and should not be bypassed for taste.
+ * A control may ask to report **where its handle is** rather than what its value is, because three of
+ * them store a fraction of the map and neither that nor any spelling of it is a number a GM can hold
+ * on to. Everything else takes the shared formatter, which knows about steps and off positions and
+ * should not be bypassed for taste.
  */
-function format(control: Control, value: number, limits: ScaleLimits, scale: Scale): string {
-  return control.format ? control.format(value) : formatValue(value, limits, scale);
+function format(
+  control: Control,
+  value: number,
+  position: number,
+  limits: ScaleLimits,
+  scale: Scale,
+): string {
+  if (control.readout !== "position") return formatValue(value, limits, scale);
+  // Off is a state rather than a place on the track, and it is the one thing about these controls
+  // that a number would obscure rather than convey.
+  if (value <= 0) return "off";
+  return String(positionReadout(position));
 }
 
 function measured(): Measured {
@@ -215,7 +227,7 @@ export function settingRow(control: Control): HTMLElement {
   label.htmlFor = `control-${control.name}`;
   const readout = document.createElement("span");
   readout.className = "value";
-  readout.textContent = format(control, value, limits, scale);
+  readout.textContent = format(control, value, toSlider(value, limits, scale), limits, scale);
   top.append(label, readout);
 
   const input = document.createElement("input");
@@ -263,7 +275,7 @@ export function settingRow(control: Control): HTMLElement {
       const current = readParameter(currentSettings(), control.name);
       placed = toSlider(current, limits, scale);
       input.value = String(placed);
-      readout.textContent = format(control, current, limits, scale);
+      readout.textContent = format(control, current, placed, limits, scale);
       paintHint(current);
     });
   }
@@ -285,7 +297,7 @@ export function settingRow(control: Control): HTMLElement {
 
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = format(control, current, limits, scale);
+    readout.textContent = format(control, current, Number(input.value), limits, scale);
     paintHint(current);
 
     if (kind === "display") {

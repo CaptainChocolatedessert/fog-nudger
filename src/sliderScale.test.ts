@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatValue,
   fromSlider,
+  positionReadout,
   SLIDER_STEPS,
   toSlider,
   type ScaleLimits,
@@ -82,6 +83,43 @@ describe("fromSlider", () => {
         expect(value).toBeGreaterThanOrEqual(limits.min);
         expect(value).toBeLessThanOrEqual(limits.max);
       }
+    }
+  });
+});
+
+describe("positionReadout", () => {
+  /*
+    What a GM reads on the three controls stored as a fraction of the map.
+
+    The unit is not negotiable — it is the only one both modes can speak — but no spelling of it is a
+    number anybody can remember, so the readout reports where the handle is instead. The ends are the
+    part worth pinning: they are what makes it feel like a percentage rather than an arbitrary count.
+  */
+  it("runs from 1 at the first usable position to 100 at the last", () => {
+    // Position 0 is off on these tracks and is answered before this is reached.
+    expect(positionReadout(1)).toBe(1);
+    expect(positionReadout(SLIDER_STEPS)).toBe(100);
+  });
+
+  it("rises with the handle and never leaves the range", () => {
+    let previous = 0;
+    for (let position = 1; position <= SLIDER_STEPS; position += 1) {
+      const reading = positionReadout(position);
+      expect(reading).toBeGreaterThanOrEqual(previous);
+      expect(reading).toBeGreaterThanOrEqual(1);
+      expect(reading).toBeLessThanOrEqual(100);
+      previous = reading;
+    }
+  });
+
+  it("clamps rather than inventing a number off the end", () => {
+    expect(positionReadout(-5)).toBe(1);
+    expect(positionReadout(SLIDER_STEPS + 500)).toBe(100);
+  });
+
+  it("is a whole number everywhere, since it is what a GM writes down", () => {
+    for (let position = 1; position <= SLIDER_STEPS; position += 7) {
+      expect(Number.isInteger(positionReadout(position))).toBe(true);
     }
   });
 });

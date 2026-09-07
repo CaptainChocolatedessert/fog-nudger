@@ -69,15 +69,24 @@ export interface Control {
   readonly hint: string;
   readonly scale?: Scale;
   /**
-   * How the number beside the label is written, when the stored unit is not one to show a GM.
+   * Report **where the handle is**, one to a hundred, instead of what the value is.
    *
-   * Two controls store a fraction of the map, because that is the only unit both modes can speak —
-   * and "0.00043" beside a slider is a number nobody can read. This turns it into one they can. The
-   * *unit* is not negotiable; how it is spelled is.
+   * For the controls whose stored unit is a fraction of the map. That unit is the only one both modes
+   * can speak, and it is not negotiable — but "0.00043" beside a slider is not a number anybody can
+   * read, and neither was the per-ten-thousand spelling that replaced it (user, 2026-09-07: *"an
+   * arbitrary large number and log scale don't make sense to the user"*).
    *
-   * Absent means the shared formatter decides, which is the ordinary case.
+   * What a GM actually wants from that readout is to **remember a setting and come back to it**, and
+   * a position on the track serves that where a logarithmic fraction does not.
+   *
+   * **The cost, stated: the number is a position, so it can drift.** The top of these tracks is
+   * measured off the graph when the step opens, and the graph changes as walls are pruned and
+   * straightened — so the same stored setting can read 40 today and 43 tomorrow. It is stable for as
+   * long as the step is open, which is when a GM is comparing. The alternative, numbering against a
+   * fixed reference range, is stable forever and puts the handle at the far right while the readout
+   * says 78, which is wrong in a way you can see.
    */
-  readonly format?: (value: number) => string;
+  readonly readout?: "position";
   /**
    * Renders the value in a unit the GM can feel.
    *
@@ -117,18 +126,6 @@ export interface Control {
  * pixels where none has. The nullable measurement is why: before a first reading there is no density
  * and a readout that invented one would be a guess in the voice of a measurement.
  */
-/**
- * A fraction of the map, written so it can be read at a glance.
- *
- * Per ten thousand rather than per cent, because everything these two controls express lives between
- * about two and five hundred parts in ten thousand — a percentage would print three leading zeroes
- * for every value a GM will ever choose.
- */
-function mapFraction(value: number): string {
-  if (value <= 0) return "off";
-  return `${Number((value * 10000).toPrecision(3))}/10k`;
-}
-
 /**
  * The same fraction in raster pixels, which is the unit a GM can actually feel.
  *
@@ -216,10 +213,10 @@ export const CONTROLS: readonly Control[] = [
     label: "Prune spurs",
     scale: "log",
     hint: "Removes dead-end walls shorter than this, measured along the wall. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Far left is off</b>, and the top of the track is the longest dead end this graph has &mdash; past a wall's own length it eats the graph.",
-    format: mapFraction,
-    // Nothing when off, because `format` has already said so beside the label. These two are the
-    // only controls whose own formatter names the off state, so they are the only ones whose hint
-    // must not repeat it.
+    readout: "position",
+    // Nothing when off, because the readout has already said so beside the label. These are the only
+    // controls whose own readout names the off state, so they are the only ones whose hint must not
+    // repeat it.
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
   {
@@ -254,7 +251,7 @@ export const CONTROLS: readonly Control[] = [
     label: "Edge simplification",
     scale: "log",
     hint: "How far a wall may be moved to straighten it, as a share of the map. <b>Far left is off</b>; the top of the track is the biggest bend this graph has, which flattens everything. The bottom of the track does nothing on a graph already fitted this hard &mdash; that dead stretch is how far it has been taken already.",
-    format: mapFraction,
+    readout: "position",
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
   {
@@ -262,7 +259,7 @@ export const CONTROLS: readonly Control[] = [
     label: "Straighten walls",
     scale: "log",
     hint: "How far a wall may be moved to straighten it. <b>Nothing happens until you press the button below</b> &mdash; and unlike the reading, there is nothing here to derive the detail back from, so what it removes is gone. Walls that cross after straightening are split where they meet.",
-    format: mapFraction,
+    readout: "position",
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
 ];

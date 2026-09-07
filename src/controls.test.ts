@@ -106,10 +106,26 @@ describe("readouts that depend on a measurement", () => {
     }
   });
 
-  it("writes a map fraction as something a GM can read", () => {
-    for (const control of [spurs, simplify]) {
-      expect(control.format!(4e-4)).toBe("4/10k");
-      expect(control.format!(0)).toBe("off");
+  /*
+    These three ask to report where the handle is rather than what the value is.
+
+    Their stored unit is a fraction of the map, which is the only one both modes can speak and not one
+    a GM can hold on to — and neither was the per-ten-thousand spelling that came before it. What the
+    readout is for is remembering a setting and coming back to it, which a position on the track
+    serves. The rendering itself is `settingRows`; what belongs here is that the declaration asks.
+  */
+  it("asks for a position readout on every control stored as a map fraction", () => {
+    const editSimplify = CONTROLS.find((control) => control.name === "editSimplifyFraction")!;
+    for (const control of [spurs, simplify, editSimplify]) {
+      expect(control.readout, control.name).toBe("position");
+    }
+  });
+
+  it("leaves every other control to the shared formatter", () => {
+    const byPosition = new Set(["spurPruneFraction", "simplifyFraction", "editSimplifyFraction"]);
+    for (const control of CONTROLS) {
+      if (byPosition.has(control.name)) continue;
+      expect(control.readout, control.name).toBeUndefined();
     }
   });
 
