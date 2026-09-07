@@ -183,6 +183,23 @@ export interface TraceSettings {
    * move together, and what is left is a corner cut across a doorway, which is visible.
    */
   readonly simplifyFraction: number;
+  /**
+   * The editor's own simplification tolerance, **as a fraction of the map**. Off by default.
+   *
+   * ## Why this is a second key rather than the one above
+   *
+   * They are not the same setting, and the giveaway is that they need different defaults — which one
+   * key cannot have.
+   *
+   * In the ink mode the tolerance is a **fitting parameter**: the graph is re-derived from the
+   * reading whenever anything moves, so turning it down puts the detail straight back, and starting
+   * at a sane non-zero value is what stops a fresh map producing a graph too large to write.
+   *
+   * Here the graph **is** the document. There is nothing to re-derive it from, so a vertex dropped is
+   * gone — including one the GM placed by hand. So it is a number a **button** applies once, and it
+   * starts at off, because opening the editor must not propose destroying detail.
+   */
+  readonly editSimplifyFraction: number;
 }
 
 export interface ReviewSettings {
@@ -299,6 +316,9 @@ export const DEFAULT_SETTINGS: Settings = {
       across scanned maps in a way its width in pixels is not.
     */
     simplifyFraction: 4e-4,
+    // Off. The editor's copy deletes vertices that do not come back, so opening the editor must not
+    // arrive holding a proposal to destroy detail — the same reasoning that keeps pruning at zero.
+    editSimplifyFraction: 0,
   },
   review: {
     fillOpacity: 0.22,
@@ -359,6 +379,9 @@ export const SETTING_LIMITS = {
   // The half-ink-width cap is retired (user, 2026-09-06); the top of the track is meant to reach
   // obviously useless values, the same as the two ink filters. See the block above for the unit.
   simplifyFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
+  // The same track as the ink mode's, because it is the same quantity measured the same way. What
+  // differs is the default and what applying it costs, both of which live elsewhere.
+  editSimplifyFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   fillOpacity: { min: 0, max: 1, step: 0.02 },
   strokeSquares: { min: 0, max: 0.3, step: 0.01 },
   // Not floored above zero. Dragging it to nothing is a legitimate way to check what is underneath
@@ -463,6 +486,15 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   suppressBrushPx: "read",
   inkBrushPx: "read",
   simplifyFraction: "derive",
+  /*
+    Nominally `read`, and the honest note is that the cascade does not describe it at all.
+
+    The three stages are about what a change destroys **in the ink pipeline**, and this control acts
+    on a document that pipeline is not deriving. The mapping has to be total, so it takes the same
+    answer the editor's other control does; nothing reads it, because a `tool` kind never reaches the
+    fingerprints or the recompute cascade.
+  */
+  editSimplifyFraction: "read",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
 };
@@ -528,6 +560,15 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   suppressBrushPx: "tool",
   inkBrushPx: "tool",
   simplifyFraction: "pipeline",
+  /*
+    `tool`, and it is the kind doing real work rather than a label.
+
+    `PARAMETER_KIND` asks what a change *recomputes*, and the answer here is nothing at all: the
+    number sits there until a button is pressed. That keeps it out of both fingerprints, which
+    `readingParameters` enforces by filtering to `pipeline` — so this cannot cost a re-read however it
+    is moved.
+  */
+  editSimplifyFraction: "tool",
   fillOpacity: "display",
   strokeSquares: "display",
 };
@@ -740,6 +781,11 @@ export function normaliseSettings(raw: unknown): Settings {
         t.spurPruneFraction,
       ),
       simplifyFraction: clamp(trace.simplifyFraction, "simplifyFraction", t.simplifyFraction),
+      editSimplifyFraction: clamp(
+        trace.editSimplifyFraction,
+        "editSimplifyFraction",
+        t.editSimplifyFraction,
+      ),
     },
     review: {
       fillOpacity: clamp(review.fillOpacity, "fillOpacity", r.fillOpacity),
@@ -793,7 +839,11 @@ export function describeSettings(settings: Settings): string {
     // Spur pruning belongs in the summary more than most: it is the one control here that can erode
     // the entire graph at its top end, and it went missing when the smallest-room term was removed.
     `prune ${trace.spurPruneFraction.toExponential(2)} of the map, ` +
-    `simplify ${trace.simplifyFraction.toExponential(2)} of the map; ` +
+    `simplify ${trace.simplifyFraction.toExponential(2)} of the map` +
+    (trace.editSimplifyFraction > 0
+      ? `, editor simplify ${trace.editSimplifyFraction.toExponential(2)}`
+      : "") +
+    `; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `breaks ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")

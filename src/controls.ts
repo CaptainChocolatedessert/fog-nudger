@@ -257,4 +257,12 @@ export const CONTROLS: readonly Control[] = [
     format: mapFraction,
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
+  {
+    name: "editSimplifyFraction",
+    label: "Straighten walls",
+    scale: "log",
+    hint: "How far a wall may be moved to straighten it. <b>Nothing happens until you press the button below</b> &mdash; and unlike the reading, there is nothing here to derive the detail back from, so what it removes is gone. Walls that cross after straightening are split where they meet.",
+    format: mapFraction,
+    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
+  },
 ];

@@ -113,7 +113,25 @@ export function simplifyPolyline(
   points: readonly Vector2[],
   tolerance: number,
 ): Vector2[] {
-  if (points.length <= 2 || !(tolerance > 0)) return [...points];
+  return simplifyIndices(points, tolerance).map((index) => points[index]!);
+}
+
+/**
+ * The same decision, as **positions** in the input rather than the points themselves.
+ *
+ * Needed by anything that has to carry something *alongside* each point through the fit. The wall
+ * editor's simplification is the caller: a run is a list of node ids and their coordinates, and what
+ * has to come out is which ids survived — so matching the returned points back to their ids by value
+ * would be a proximity test, which this project does not do, and matching them by object identity
+ * would be a trick that a closed run repeating its first node quietly breaks.
+ *
+ * `simplifyPolyline` is this composed with a lookup, so there is one Douglas–Peucker here and not two.
+ */
+export function simplifyIndices(
+  points: readonly Vector2[],
+  tolerance: number,
+): number[] {
+  if (points.length <= 2 || !(tolerance > 0)) return points.map((_, index) => index);
 
   const toleranceSquared = tolerance * tolerance;
   const keep = new Uint8Array(points.length);
@@ -144,9 +162,9 @@ export function simplifyPolyline(
     }
   }
 
-  const out: Vector2[] = [];
+  const out: number[] = [];
   for (let i = 0; i < points.length; i++) {
-    if (keep[i] === 1) out.push(points[i]!);
+    if (keep[i] === 1) out.push(i);
   }
   return out;
 }

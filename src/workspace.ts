@@ -48,6 +48,7 @@ import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSimplifySeed } from "./workspace/seedSimplify";
 import { renderPruneAction } from "./workspace/pruneAction";
+import { renderSimplifyAction } from "./workspace/simplifyAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
@@ -239,6 +240,13 @@ registerStepContent("edit", renderWallTools);
 registerStepContent(
   "edit",
   (body) => {
+    /*
+      Straighten, then prune, then push — which is the order they are reached rather than an
+      arbitrary one. Both operations change the document and pushing writes it, so the two that can
+      alter what is on screen come before the one that commits it, and both sit below the sliders
+      that decide what they would do.
+    */
+    renderSimplifyAction(body);
     renderPruneAction(body);
     renderPushAction(body);
   },

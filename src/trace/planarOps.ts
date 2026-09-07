@@ -25,7 +25,14 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { documentPoint, type FrozenEdge, type FrozenGraph } from "./frozenGraph";
+import {
+  compactNodes,
+  documentPoint,
+  wallRuns,
+  type FrozenEdge,
+  type FrozenGraph,
+} from "./frozenGraph";
+import { simplifyIndices } from "./simplify";
 import { segmentMeeting } from "./planarGraph";
 
 export interface EditResult {
@@ -389,4 +396,106 @@ export function nearestNode(
     }
   }
   return best;
+}
+
+/** What simplifying the whole document removed, on top of what every edit reports. */
+export interface WallSimplification extends EditResult {
+  /** Vertices dropped. Each one is a segment fewer, and a scene item fewer where no ring covers it. */
+  readonly removed: number;
+  /** Wall runs that were left alone because fitting would have collapsed them below a shape. */
+  readonly preserved: number;
+}
+
+/**
+ * Simplify every wall in the document, in place, as a one-shot operation.
+ *
+ * ## Why this is not the ink mode's simplification
+ *
+ * There, the tolerance is a *fitting* parameter: the graph is re-derived from the reading every time
+ * anything moves, so turning it down puts the detail straight back. Here the graph **is** the
+ * document. There is nothing to re-derive it from, so a vertex dropped is gone — including one the GM
+ * placed by hand a minute ago. That is why the editor's control is a number plus a deliberate act
+ * rather than a slider that applies on release, and why its default is off.
+ *
+ * ## Per wall run, which is what makes junctions safe without special-casing them
+ *
+ * A **wall run** is a chain of segments through degree-2 vertices, so its two ends are junctions or
+ * free ends by construction. Douglas–Peucker keeps both ends of what it is given, so fitting a run
+ * cannot move or remove a junction — the incidence the faces are read from survives without anything
+ * having to know about it. The same property the ink mode's per-edge fitting relies on.
+ *
+ * ## Crossings are SPLIT, and the sweep is total
+ *
+ * Simplification can pull a wall across another that was clear of it — unlike pruning, which only
+ * deletes and so cannot break planarity. The rule is to let it split (user, 2026-09-05), on the
+ * geometry rather than on taste: Douglas–Peucker guarantees the fitted line stays within the
+ * tolerance of every point it discards, so a crossing means the other wall was within one tolerance
+ * of the original path, which is visually touching. A junction there is where the eye already saw
+ * one.
+ *
+ * **Every segment is marked changed, so the sweep is quadratic and total** (user, 2026-09-07). An
+ * edit normally sweeps only what it touched, because a graph that was planar before can only have
+ * gained a crossing involving something that moved — but this touches everything, so that reasoning
+ * offers no saving here and pretending otherwise would leave real crossings behind. The cost is
+ * stated rather than hidden: it is worst on exactly the graphs that most need simplifying, and the
+ * caller warns before running it.
+ *
+ * Pure: no DOM, no SDK.
+ */
+export function simplifyWalls(graph: FrozenGraph, tolerance: number): WallSimplification {
+  if (!(tolerance > 0)) {
+    return { graph, splits: 0, overlaps: 0, removed: 0, preserved: 0 };
+  }
+
+  const nodes = [...graph.nodes];
+  const kept: FrozenEdge[] = [];
+  let removed = 0;
+  let preserved = 0;
+
+  for (const run of wallRuns(graph)) {
+    const points = run.map((id) => nodes[id]!);
+    const indices = simplifyIndices(points, tolerance);
+
+    /*
+      The collapse guard, and it applies to **closed runs only**.
+
+      An open wall is safe at any tolerance: Douglas–Peucker keeps both ends, so the worst it can
+      become is a single straight segment between them, which is a perfectly good wall. A **closed
+      loop** starts and ends at the same vertex, so a tolerance larger than the loop fits it to that
+      one point and the room it bounded disappears. Stage one has the same guard at the ring, for the
+      same reason and with the same answer: keep the unfitted version, because a room vanishing is
+      worse than a coarse one. Counted, so the GM is told rather than left to notice a missing room.
+
+      A closed run needs four entries to be a shape — three distinct vertices plus the repeat of the
+      first — which is why the threshold is not the three a ring of points would want.
+    */
+    const closed = run.length > 1 && run[0] === run[run.length - 1];
+    const survivors = !closed || indices.length >= 4 ? indices : run.map((_, index) => index);
+    if (survivors.length !== indices.length) preserved += 1;
+    removed += run.length - survivors.length;
+
+    for (let i = 1; i < survivors.length; i++) {
+      const a = run[survivors[i - 1]!]!;
+      const b = run[survivors[i]!]!;
+      if (a !== b) kept.push({ a, b });
+    }
+  }
+
+  const pending: Pending[] = kept.map((edge) => ({
+    a: edge.a,
+    b: edge.b,
+    // Everything, deliberately. See the note above: this operation touched every wall, so there is
+    // no untouched set whose planarity the previous state still vouches for.
+    changed: true,
+    isNew: false,
+  }));
+
+  const resolved = resolveCrossings(nodes, pending, graph.edges);
+  return {
+    graph: compactNodes(resolved.graph),
+    splits: resolved.splits,
+    overlaps: resolved.overlaps,
+    removed,
+    preserved,
+  };
 }
