@@ -50,6 +50,58 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 export const COMMAND_CAP = 8192;
 
 /**
+ * Drop every interior point that lies exactly on the line between its two neighbours.
+ *
+ * ## Lossless, and the only simplification that is
+ *
+ * Douglas–Peucker moves a boundary: it discards points within a tolerance of a chord, so the result
+ * differs from its input by up to that tolerance. This does not. A point exactly on the line joining
+ * its neighbours contributes nothing to the shape — remove it and every remaining point is where it
+ * was, the enclosed area is identical, and no coordinate is invented. That puts it in the same family
+ * as sliver removal: purely combinatorial, moves nothing, needs no parameter.
+ *
+ * **The test is an exact cross product, and it has to be.** Asking the fitter's own distance function
+ * whether a point is zero from the chord does not work: it divides by a squared length and multiplies
+ * back, so a collinear lattice point comes out at something like 1e-30 rather than 0, and a `> 0` test
+ * keeps it. The cross product of the two differences is a product and a subtraction of integers, which
+ * is exact.
+ *
+ * On float coordinates — the frozen document is float32 map fractions — exactness simply makes this
+ * find fewer triples. It is never wrong, only conservative, which is the right direction.
+ *
+ * ## Why a straight wall is not as common as it sounds
+ *
+ * A thinned centreline is a **staircase**. A wall at exactly 45° or exactly axis-aligned is genuinely
+ * collinear and collapses to its two ends; a wall at three degrees off horizontal is a run of single
+ * pixel steps, every one of which is a real corner, and none of which this may touch. So how much it
+ * saves is a fact about how a given map was drawn rather than a constant, **and no figure has been
+ * measured** — the reasoning says it helps most on axis-aligned linework and least on anything drawn
+ * freehand at a shallow angle. It is not a substitute for choosing a tolerance, and must not be
+ * offered as one.
+ *
+ * Greedy and single-pass: each candidate is tested against the last point **kept** rather than the
+ * last point seen, so a run of four collinear points collapses to two rather than three.
+ */
+export function dropCollinear(points: readonly Vector2[]): Vector2[] {
+  if (points.length <= 2) return [...points];
+
+  const out: Vector2[] = [points[0]!];
+  for (let i = 1; i < points.length - 1; i++) {
+    const previous = out[out.length - 1]!;
+    const point = points[i]!;
+    const next = points[i + 1]!;
+    const cross =
+      (point.x - previous.x) * (next.y - previous.y) -
+      (point.y - previous.y) * (next.x - previous.x);
+    // Zero also covers a repeated point, which has no direction and is worth losing for the same
+    // reason: it says nothing about the shape and the traversal cannot sort it into a rotation.
+    if (cross !== 0) out.push(point);
+  }
+  out.push(points[points.length - 1]!);
+  return out;
+}
+
+/**
  * Douglas–Peucker on an open polyline, keeping both ends.
  *
  * Iterative rather than recursive. The recursion depth is data-dependent — shallow when splits land

@@ -45,7 +45,16 @@ import { invalidate, say, setPendingEdit } from "./shell";
 function trackFor(name: SettingName): ScaleLimits {
   const declared: ScaleLimits = SETTING_LIMITS[name];
   const top = graphScaleTop(name);
-  return top === null ? declared : { ...declared, max: top };
+  /*
+    **Never above the declared ceiling**, and this was a real defect for a day.
+
+    `fromSlider` clamps to the track's own maximum, so a measured top above `declared.max` hands back
+    a value the settings normaliser will silently clamp the next time the scene is read — a stored
+    setting rewritten with nothing announced, which is the worst thing a control can do and the whole
+    reason the round-trip tests exist. Seen in a room on 2026-09-07: a graph whose largest bend
+    measured 0.707 of the map against a ceiling of 0.5, and 0.707 was written.
+  */
+  return top === null ? declared : { ...declared, max: Math.min(top, declared.max) };
 }
 
 /**

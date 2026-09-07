@@ -251,6 +251,8 @@ let derivation: {
   readonly graph: FrozenGraph;
   /** Segments the freeze dropped for lying on one already stored, plus any of no length. */
   readonly dropped: number;
+  /** Points the freeze dropped for lying exactly on the line between their neighbours. Lossless. */
+  readonly collinear: number;
   /** The trace's raster width, which is what turns a pixel budget into a map fraction. */
   readonly rasterWidth: number;
   readonly pxPerSquare: number;
@@ -317,7 +319,8 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
     "info",
     `workspace: partition ${generation} — pruned ${pruned.removed} spurs ` +
       `(${pruned.segments} segments) in ${pruned.rounds} rounds at a budget of ` +
-      `${budget.toExponential(2)} of the map; ${describeFrozenFaces(faces)}`,
+      `${budget.toExponential(2)} of the map; ${from.collinear} points dropped as exactly ` +
+      `collinear, which costs nothing; ${describeFrozenFaces(faces)}`,
   );
   invalidate();
 }
@@ -428,6 +431,7 @@ async function derive(): Promise<void> {
     derivation = {
       graph: stored.graph,
       dropped: stored.duplicates + stored.zeroLength,
+      collinear: stored.collinear,
       rasterWidth,
       pxPerSquare,
     };

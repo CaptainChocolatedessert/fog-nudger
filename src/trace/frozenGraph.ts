@@ -62,6 +62,7 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import type { FittedEdge } from "./faces";
+import { dropCollinear } from "./simplify";
 import { spursToPrune, type PrunableRun } from "./spurs";
 import type { WallGraph } from "./wallGraph";
 
@@ -101,6 +102,15 @@ export interface Frozen {
   readonly duplicates: number;
   /** Segments whose ends quantised onto the same point. Same family, same treatment. */
   readonly zeroLength: number;
+  /**
+   * Points dropped for lying exactly on the line between their neighbours.
+   *
+   * **Nothing is lost by these**, which is what separates the count from the two above: every
+   * remaining point is where it was and the shape is identical. It is reported because it is the
+   * difference between a document a scene can hold and one it cannot — each point dropped is a
+   * segment fewer, and each segment is its own `LINE` item when no room's boundary covers it.
+   */
+  readonly collinear: number;
 }
 
 /**
@@ -184,9 +194,25 @@ export function freezeGraph(graph: WallGraph, fitted: readonly FittedEdge[]): Fr
     edges.push({ a, b });
   };
 
+  let collinear = 0;
   for (let i = 0; i < graph.edges.length; i++) {
     const edge = graph.edges[i]!;
-    const points = fitted[i]?.points ?? edge.points;
+    const fittedPoints = fitted[i]?.points ?? edge.points;
+    /*
+      The lossless pass, and it happens **here** rather than inside the fitter for two reasons.
+
+      The freeze is where the document is built, so this is the last moment before anything a GM sees
+      — Walls draws the frozen graph — and before the emit path turns each remaining segment into its
+      own `LINE` item. Every point dropped here is one scene item fewer.
+
+      And the fitter must be left alone: the randomised sweep runs the derivation at a tolerance of
+      zero precisely to get *unfitted* rings, and asserts that every step of one is to an 8-neighbour
+      — a walk along the skeleton cannot teleport, which is the assertion that caught the lollipop.
+      Collapsing a straight run inside `simplifyPolyline` would break that for a reason that has
+      nothing to do with what it guards.
+    */
+    const points = dropCollinear(fittedPoints);
+    collinear += fittedPoints.length - points.length;
     // The two ends are the derived graph's own nodes, reused by id. Everything between them is new.
     let previous = edge.a;
     for (let p = 1; p < points.length - 1; p++) {
@@ -198,7 +224,7 @@ export function freezeGraph(graph: WallGraph, fitted: readonly FittedEdge[]): Fr
     keep(previous, edge.b);
   }
 
-  return { graph: { nodes, edges }, duplicates, zeroLength };
+  return { graph: { nodes, edges }, duplicates, zeroLength, collinear };
 }
 
 /**
