@@ -6,6 +6,7 @@ import {
   isDefault,
   normaliseSettings,
   SETTING_LIMITS,
+  seededSimplifyFraction,
 } from "./settings";
 
 describe("normaliseSettings", () => {
@@ -93,6 +94,45 @@ describe("normaliseSettings", () => {
     // A default outside its control's range would be silently rewritten the first time the workspace
     // saved, which reads as the extension changing a setting nobody touched.
     expect(normaliseSettings(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe("seededSimplifyFraction", () => {
+  /*
+    The figure that makes a default mean the same thing on every map.
+
+    A fixed fraction cannot: 4e-4 is 1.3px on the 3300px test map and 0.30px on a 751px one, which is
+    sub-pixel and very nearly no simplification at all. A room found that the second case produced a
+    graph too large for a scene write to carry.
+  */
+  it("is a quarter of the ink width, whatever the raster", () => {
+    // 0.25 x 5.7px on 3300px, and 0.25 x 3.3px on 751px: 1.4px and 0.8px, both sane.
+    expect(seededSimplifyFraction(5.7, 3300)).toBeCloseTo(4.32e-4, 6);
+    expect(seededSimplifyFraction(3.3, 751)).toBeCloseTo(1.1e-3, 6);
+  });
+
+  it("says the same thing about the same linework at two rasters", () => {
+    // The same map read at half size must seed the same *fraction*, or the megapixel cap would
+    // silently change the tuning — which is the trap the whole unit change exists to close.
+    expect(seededSimplifyFraction(6, 3000)).toBeCloseTo(seededSimplifyFraction(3, 1500), 9);
+  });
+
+  it("never lands on the off position", () => {
+    // Off is a state a GM chooses, not one they are handed. The floor is the lowest a seed may be.
+    const floor = SETTING_LIMITS.simplifyFraction.floor!;
+    expect(seededSimplifyFraction(0.0001, 100000)).toBe(floor);
+    expect(seededSimplifyFraction(0.0001, 100000)).toBeGreaterThan(0);
+  });
+
+  it("stays inside the storable range at the other end", () => {
+    // A quarter of 3000px against a 1000px raster is 0.75 of the map, well past the ceiling.
+    expect(seededSimplifyFraction(3000, 1000)).toBe(SETTING_LIMITS.simplifyFraction.max);
+  });
+
+  it("falls back to the declared default when there is no usable measurement", () => {
+    for (const [ink, raster] of [[0, 3300], [5.7, 0], [-1, 3300], [5.7, -1]] as const) {
+      expect(seededSimplifyFraction(ink, raster)).toBe(DEFAULT_SETTINGS.trace.simplifyFraction);
+    }
   });
 });
 

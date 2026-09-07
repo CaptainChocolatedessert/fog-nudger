@@ -46,6 +46,7 @@ import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
+import { registerSimplifySeed } from "./workspace/seedSimplify";
 import { renderPruneAction } from "./workspace/pruneAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
@@ -116,6 +117,16 @@ onReading((result) => {
   could show it.
 */
 registerRegionInvalidation();
+
+/*
+  Seed the simplification tolerance from the first reading that measures an ink width.
+
+  Registered here rather than inside the Walls step because it belongs to the *reading*, not to any
+  step, and because a step's body is rebuilt on every accordion click — a subscription there leaks a
+  listener per click. It is deliberately order-independent of the invalidation above: it invalidates
+  the partition itself rather than relying on running first.
+*/
+registerSimplifySeed();
 
 /*
   The canvas stack, in draw order.

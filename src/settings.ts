@@ -532,6 +532,28 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   strokeSquares: "display",
 };
 
+/**
+ * A quarter of the measured ink width, as a fraction of the map.
+ *
+ * What the simplification tolerance is seeded to on a map that has never had one chosen. A quarter
+ * of an ink width is what this control defaulted to for the months it was denominated in ink widths,
+ * and it is the figure that means the same thing on every map — which a fixed fraction cannot,
+ * because 4e-4 is 1.3px on a 3300px raster and 0.30px on a 751px one.
+ *
+ * Pure, and clamped into the control's own range so a wild measurement cannot store an unusable
+ * value. `seedSimplify.ts` carries why seeding a default is not the same thing as a threshold that
+ * moves with a measurement.
+ */
+export function seededSimplifyFraction(inkWidth: number, rasterWidth: number): number {
+  const limits = SETTING_LIMITS.simplifyFraction;
+  if (!(inkWidth > 0) || !(rasterWidth > 0)) return DEFAULT_SETTINGS.trace.simplifyFraction;
+  const wanted = (0.25 * inkWidth) / rasterWidth;
+  // The floor rather than `min`, because `min` is zero — the off position — and a seed must never
+  // land there: off is a state a GM chooses, not one they are given.
+  const floor = limits.floor ?? limits.min;
+  return Math.min(limits.max, Math.max(floor, Number(wanted.toPrecision(3))));
+}
+
 /** Every parameter belonging to one stage, in `SETTING_LIMITS`' declaration order. */
 export function stageParameters(stage: Stage): readonly SettingName[] {
   return (Object.keys(SETTING_LIMITS) as SettingName[]).filter(
