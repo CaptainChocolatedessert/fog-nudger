@@ -704,6 +704,90 @@ const SLOW_PUSH_NOTICE_MS = 4_000;
 const STOP_GRACE_MS = 2_000;
 
 /**
+ * Run a scene write with a way out of it, and say how it ended.
+ *
+ * ## Why this is not part of `close` any more
+ *
+ * It was, until 2026-09-07, and a room found the hole that made. The notice, the button, the stop
+ * request and the grace period were all inside the close sequence — so they covered **closing** and
+ * nothing else. Every other push had none of it: the two buttons at the foot of Walls, and the
+ * editor's *Put on the map*, call the push directly and disable themselves for its duration. A GM
+ * who pressed *Edit the walls* on a graph too large to write got a sheet reading "saving, then
+ * opening the editor…", two dead buttons, and no way out at all.
+ *
+ * That was backwards. Closing is the one case where the GM is *already leaving*; the buttons are
+ * where they are stuck watching. So the hatch belongs to the write rather than to the exit, and
+ * every caller wraps its own.
+ *
+ * ## What the caller decides, and what this does not
+ *
+ * This stops the write and reports. It does **not** close anything — pressing the button during a
+ * button-driven push should hand the surface back, not throw the GM off it, and only the caller
+ * knows which was wanted. `close` reads `bailed` and goes anyway; a button reads it and re-enables
+ * itself.
+ *
+ * The label is the caller's for the same reason: "Exit anyway" is right when leaving is what happens
+ * next, and a lie when it is not.
+ */
+export async function withEscapeHatch(
+  work: Promise<void>,
+  options: {
+    /** Ask the write in flight to stop. Cooperative — it lands at the next batch boundary. */
+    readonly stop: () => void;
+    /** What the button says. Names what pressing it actually does, which differs by caller. */
+    readonly label: string;
+    /** What the state line says once the write has run long enough to read as a hang. */
+    readonly notice: string;
+  },
+): Promise<{ readonly bailed: boolean; readonly unwound: boolean }> {
+  const button = document.getElementById("exit-anyway");
+
+  let bailed = false;
+  const bailedOut = new Promise<"bailed">((resolve) => {
+    exitAnyway = () => {
+      bailed = true;
+      options.stop();
+      say("stopping the write…", "working");
+      resolve("bailed");
+    };
+  });
+
+  const notice = window.setTimeout(() => {
+    say(options.notice, "working");
+    if (button instanceof HTMLButtonElement) {
+      button.textContent = options.label;
+      button.hidden = false;
+    }
+  }, SLOW_PUSH_NOTICE_MS);
+
+  await Promise.race([work, bailedOut]);
+  window.clearTimeout(notice);
+  /*
+    Disarmed and hidden whatever happened, so the button cannot reach a push that is no longer
+    running. Hiding it here rather than only on the close path is what lets the surface be handed
+    back intact: a button left visible after a stopped write is an affordance pointing at nothing.
+  */
+  exitAnyway = null;
+  if (button instanceof HTMLButtonElement) button.hidden = true;
+
+  if (!bailed) return { bailed: false, unwound: true };
+
+  /*
+    Give the stop a moment to land, then report regardless.
+
+    Waiting for the work outright would hand the stall back the power to trap the sheet, which is
+    what this exists to take away. The loop normally returns at the next batch boundary well inside
+    the grace; an `addItems` already in flight runs to completion, and if the connection itself is
+    what is stuck, waiting would make the escape hatch stall too.
+  */
+  const unwound = await Promise.race([
+    work.then(() => true),
+    new Promise<false>((resolve) => window.setTimeout(() => resolve(false), STOP_GRACE_MS)),
+  ]);
+  return { bailed: true, unwound };
+}
+
+/**
  * Leave, after the scene write finishes.
  *
  * **The order used to be the other way round** — dismiss the modal, then start the push — on the
@@ -739,40 +823,13 @@ async function close(): Promise<void> {
       devLog("error", "workspace: the close action threw", describeError(error));
     });
 
-    let bailed = false;
-    const bailedOut = new Promise<"bailed">((resolve) => {
-      exitAnyway = () => {
-        bailed = true;
-        onCloseStop?.();
-        say("stopping the write…", "working");
-        resolve("bailed");
-      };
+    const { bailed, unwound } = await withEscapeHatch(pushing, {
+      stop: () => onCloseStop?.(),
+      label: "Exit anyway",
+      notice: "still writing to the scene — Exit anyway leaves it partly done",
     });
 
-    const notice = window.setTimeout(() => {
-      say("still writing to the scene — Exit anyway leaves it partly done", "working");
-      offerExitAnyway();
-    }, SLOW_PUSH_NOTICE_MS);
-
-    await Promise.race([pushing, bailedOut]);
-    window.clearTimeout(notice);
-    // Disarmed whatever happened, so the button cannot reach a push that is no longer running. It
-    // stays visible for the instant before the modal goes, which is correct: it *was* available.
-    exitAnyway = null;
-
     if (bailed) {
-      /*
-        Give the stop a moment to land, then go regardless.
-
-        Waiting for `pushing` outright would hand the stall back the power to trap the sheet, which
-        is what this button exists to take away. Not waiting at all would tear the iframe down
-        mid-call, which is the fault the whole close-time wait was built to fix. A short grace is the
-        honest middle: normally the loop returns at the next batch boundary well inside it.
-      */
-      const unwound = await Promise.race([
-        pushing.then(() => true),
-        new Promise<false>((resolve) => window.setTimeout(() => resolve(false), STOP_GRACE_MS)),
-      ]);
       devLog(
         unwound ? "info" : "warn",
         unwound
@@ -810,11 +867,6 @@ export async function closeWorkspace(): Promise<void> {
  * hidden then too, but a hidden button and a dead one are different guarantees.
  */
 let exitAnyway: (() => void) | null = null;
-
-function offerExitAnyway(): void {
-  const button = document.getElementById("exit-anyway");
-  if (button instanceof HTMLButtonElement) button.hidden = false;
-}
 
 document.getElementById("exit-anyway")?.addEventListener("click", () => exitAnyway?.());
 

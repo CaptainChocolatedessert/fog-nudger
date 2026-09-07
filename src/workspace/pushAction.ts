@@ -51,7 +51,7 @@
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { pushToFog, pushWouldChange } from "../emit/emitRegions";
+import { pushToFog, pushWouldChange, requestPushStop } from "../emit/emitRegions";
 import { readNominatedMapId } from "../map/mapImage";
 import { encodeFrozenGraph } from "../trace/frozenGraph";
 import { paintRevision } from "../trace/inkPaint";
@@ -60,7 +60,7 @@ import { inEditor } from "./mode";
 import { controlsLive } from "./settingRows";
 import { currentPaint } from "./paintState";
 import { currentSettings, persistSettings } from "./settingsState";
-import { say } from "./shell";
+import { say, withEscapeHatch } from "./shell";
 
 /**
  * What the scene would receive, as one string.
@@ -144,11 +144,55 @@ export async function pushOnClose(): Promise<void> {
  * there on release without waiting, so pushing a moment after letting go of one would otherwise emit
  * the value before it.
  */
-export async function pushCurrent(): Promise<void> {
+export async function pushCurrent(): Promise<boolean> {
   await persistSettings();
   const mark = await fingerprint();
-  const message = await pushToFog(mark, frozenGraph() ?? undefined);
-  say(message);
+
+  /*
+    Wrapped in the escape hatch, which until 2026-09-07 only closing had.
+
+    A room found the hole: a graph large enough to exceed what a scene write can carry made the ink
+    mode's *Edit the walls* button hang, and because the hatch lived inside the close sequence there
+    was nothing to press — both buttons disable themselves for the duration, so the sheet said
+    "saving, then opening the editor…" and offered no way out. Closing is the one case where the GM
+    is already leaving; a button is where they are stuck watching, which is the case that needed it
+    more.
+
+    **The label differs from the close path's on purpose.** Stopping here hands the surface back
+    rather than leaving, so "Exit anyway" would be a lie about what the button does.
+  */
+  let message = "";
+  const pushing = pushToFog(mark, frozenGraph() ?? undefined).then((said) => {
+    message = said;
+  });
+
+  const { bailed, unwound } = await withEscapeHatch(pushing, {
+    stop: requestPushStop,
+    label: "Stop writing",
+    notice: "still writing to the scene — stopping leaves it partly done",
+  });
+
+  if (!bailed) {
+    say(message);
+    return true;
+  }
+
+  /*
+    Said rather than silently returning, and the wording is the honest one.
+
+    A stopped push leaves the fog layer partly replaced: `pushToFog` deletes ours before it writes,
+    so what is on the map is neither the old set nor the new one. Nothing needs cleaning up by hand —
+    the next push deletes all of ours first — but a GM who is not told would reasonably believe the
+    map is current.
+  */
+  devLog(
+    unwound ? "info" : "warn",
+    unwound
+      ? "workspace: the push stopped cleanly at the GM's request"
+      : "workspace: the push had not stopped when the grace ran out; a write may still be in flight",
+  );
+  say("stopped — the map is partly written, so push again when you are ready", "bad");
+  return false;
 }
 
 export function renderPushAction(body: HTMLElement): void {
@@ -169,14 +213,17 @@ export function renderPushAction(body: HTMLElement): void {
     "saved as you make them either way.";
 
   button.addEventListener("click", () => {
-    // Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for
-    // a second click to land and write a second copy of everything.
+    /*
+      Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for a
+      second click to land and write a second copy of everything.
+
+      **Through `pushCurrent` rather than the emit path directly**, which it used to call behind its
+      back. One route in means this button gets the escape hatch, the settings write and the
+      fingerprint on the same terms as every other push, rather than three call sites drifting.
+    */
     button.disabled = true;
     say("putting it on the map…", "working");
-    void persistSettings()
-      .then(fingerprint)
-      .then((mark) => pushToFog(mark, frozenGraph() ?? undefined))
-      .then((message) => say(message))
+    void pushCurrent()
       .catch((error: unknown) => {
         const detail = describeError(error);
         say(`could not write to the scene: ${detail}`, "bad");

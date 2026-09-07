@@ -63,8 +63,15 @@ async function saveAndPush(): Promise<boolean> {
   await freezeTo(graph);
   const walls = wallRuns(graph).length;
   devLog("info", `workspace: saved ${walls} walls and ${graph.nodes.length} points`);
-  await pushCurrent();
-  return true;
+  /*
+    The push's own answer decides whether the hand-off goes ahead.
+
+    Since 2026-09-07 a GM can stop a slow write from here, and pressing that button most plainly
+    means "let me out of this" rather than "carry on to the next thing". So a stopped push stays put
+    and says so. **The graph is saved either way** — `freezeTo` ran first, deliberately — so nothing
+    is lost by staying, and the editor is one button away whenever they want it.
+  */
+  return await pushCurrent();
 }
 
 /**
