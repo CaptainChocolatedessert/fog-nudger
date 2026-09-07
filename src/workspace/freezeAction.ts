@@ -39,7 +39,7 @@ import { describeError } from "../describeError";
 import { wallRuns } from "../trace/frozenGraph";
 import { confirmAction } from "./confirmDialog";
 import { controlsLive } from "./settingRows";
-import { previewGraph } from "./regions";
+import { currentRegions, currentWalls, previewGraph } from "./regions";
 import { pushCurrent } from "./pushAction";
 import { say, closeWorkspace } from "./shell";
 import { freezeTo, frozenGraph } from "./stage";
@@ -72,6 +72,51 @@ async function saveAndPush(): Promise<boolean> {
     is lost by staying, and the editor is one button away whenever they want it.
   */
   return await pushCurrent();
+}
+
+/**
+ * How many scene items a push may be expected to write before it is worth stopping to ask.
+ *
+ * **Provisional, and calibrated on exactly two observations** — which is stated because a threshold
+ * with no measurement behind it invites being trusted. On 2026-09-07 a graph of **5,881** wall
+ * segments could not be written at all: Owlbear allows a scene write five seconds, and
+ * `OBR_SCENE_ITEMS_ADD_ITEMS` blew through it repeatedly, stopping at 432, 1,104, 1,968, 2,568 and
+ * 3,960 across attempts until even asking whether the scene was ready timed out. The same map at a
+ * sane tolerance writes **274** items and takes a couple of seconds.
+ *
+ * So the cliff is somewhere between those, and nobody has bisected it. This sits an order of
+ * magnitude above the known-good figure and well below the known-bad one, which makes it a warning
+ * that should almost never fire on ordinary work.
+ *
+ * **It warns and does not refuse.** The GM may have a genuinely enormous map, and this is a
+ * prediction rather than a measurement of their scene — refusing on a guess would be the control
+ * deciding something it does not know. What it buys is that the failure stops being silent: before
+ * this, the only way to discover it was to press the button and watch nothing happen.
+ */
+const LARGE_PUSH_ITEMS = 1_500;
+
+/**
+ * Ask before writing a graph large enough that the scene may not take it.
+ *
+ * The counts come from the partition already on screen rather than from a fresh traversal, which is
+ * the point: what this warns about is exactly what the GM is looking at.
+ */
+async function mayBeTooLarge(): Promise<boolean> {
+  const items = currentRegions().length + currentWalls().length;
+  if (items < LARGE_PUSH_ITEMS) return true;
+
+  return confirmAction({
+    title: `Put ${items.toLocaleString()} items on the map?`,
+    body: [
+      `This graph is ${items.toLocaleString()} separate scene items — ${currentRegions().length} ` +
+        `rooms and ${currentWalls().length} wall segments. A scene write that large may not ` +
+        "finish, and there is a point past which Owlbear refuses it outright.",
+      "Raising Edge simplification in the step above is what reduces it: every point it removes is " +
+        "a wall segment fewer. Pruning spurs helps too. If you go ahead, the write can be stopped " +
+        "part way, and pushing again afterwards replaces whatever landed.",
+    ],
+    confirmLabel: "Put it on the map",
+  });
 }
 
 /**
@@ -130,6 +175,10 @@ export function renderFreezeAction(body: HTMLElement): void {
     "editor, which is where a wall is moved, drawn or erased by hand.";
 
   const run = async (thenEdit: boolean): Promise<void> => {
+    // Size first, because it is the question that might change what the GM does with the sliders —
+    // and asking about replacement, then about size, then being told no, would be two dialogs to
+    // reach the same nothing.
+    if (!(await mayBeTooLarge())) return;
     if (!(await mayReplace())) return;
     save.disabled = true;
     handOff.disabled = true;
