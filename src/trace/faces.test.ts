@@ -130,11 +130,19 @@ describe("the cycle walk", () => {
   /*
     A plain room: two faces, and only two.
 
-    The inside, and the band between the room and the border frame. Anything else means the walk
-    invented a cycle — which is what a junction cluster does, and what sliver removal exists to undo.
+    Anything more means the walk invented a cycle — which is what a junction cluster does, and what
+    sliver removal exists to undo.
   */
-  it("finds the room and the space around it, and nothing else", () => {
-    expect(facesOf(ROOM).faces).toHaveLength(2);
+  /*
+    A plain room is **one** face: the inside.
+
+    The space around it is the arrangement's unbounded face, which has no polygon and is not emitted
+    — since 2026-09-08 there is no border frame to make it a bounded one. That is the point rather
+    than a side effect: everything is fogged by default, so emitting nothing for the outside leaves it
+    fogged and unrevealable, which is what "not an explorable space" means on most maps.
+  */
+  it("finds the room, and nothing for the space around it", () => {
+    expect(facesOf(ROOM).faces).toHaveLength(1);
   });
 
   /*
@@ -162,21 +170,22 @@ describe("the cycle walk", () => {
   */
   it("attaches a nested box as a hole rather than as another face", () => {
     const faces = facesOf(NESTED);
-    expect(faces.faces).toHaveLength(3);
+    // The band between the boxes, and the inside of the inner one. The outside is unbounded.
+    expect(faces.faces).toHaveLength(2);
 
-    const [outside, band, inner] = areas(NESTED);
-    expect(outside).toBeGreaterThan(band!);
+    const [band, inner] = areas(NESTED);
     expect(band).toBeGreaterThan(inner!);
     /*
-      **Two** faces carry a hole here, not one, and getting that wrong first is instructive.
+      Exactly one face carries a hole — and this number moved when the frame went, which is worth
+      recording rather than quietly correcting.
 
-      The frame makes the outside a bounded face, so the nesting is three deep: the band inside the
-      frame holds the outer box as its hole, and the band inside the outer box holds the inner one.
-      Only the innermost face is a plain ring. A fixture that asserted one would be asserting that
-      the frame is not there.
+      With the frame the nesting was three deep and **two** faces held holes: the band inside the
+      frame held the outer box, and the band inside the outer box held the inner one. Unframed, the
+      outermost of those is the unbounded face and has no polygon, so only the band between the two
+      boxes carries a hole.
     */
     const withHole = faces.faces.filter((face) => face.cycles.length > 1);
-    expect(withHole).toHaveLength(2);
+    expect(withHole).toHaveLength(1);
   });
 
   /*
@@ -188,17 +197,20 @@ describe("the cycle walk", () => {
     other, cutting a chord across the map — reported from a room as the exterior running to unrelated
     vertices and skipping long stretches of wall.
   */
-  it("splits the surrounding boundary in two when the stalk is removed", () => {
+  it("gives a lollipop two rooms and a stalk that is a wall", () => {
     const faces = facesOf(LOLLIPOP);
-    // Both boxes, plus the space around them.
-    expect(faces.faces).toHaveLength(3);
+    // The inside of each box. The space around them is unbounded and is not a face.
+    expect(faces.faces).toHaveLength(2);
 
-    const surrounding = faces.faces.find((face) => face.cycles.length > 1);
-    expect(surrounding).toBeDefined();
-    // Two holes, one per box, rather than one hole threaded through the stalk.
-    expect(surrounding!.rings.length).toBe(3);
+    /*
+      The stalk is a **bridge** — the same face on either side — so no ring covers it and it emits as
+      a wall line. That is the whole reason the lollipop is a named fixture: taking a bridge out of a
+      ring disconnects that ring, and a version that skipped its half-edges without splitting left a
+      boundary jumping from one box to the other, cutting a chord across the map.
+    */
+    expect(faces.walls.length).toBeGreaterThan(0);
 
-    // Every ring is a real polygon: the symptom of the old defect was a ring of two points that
+    // Every ring is a real polygon: the symptom of that defect was a ring of two points that
     // teleported across the map.
     for (const face of faces.faces) {
       for (const ring of face.rings) expect(ring.length).toBeGreaterThanOrEqual(3);
@@ -222,9 +234,9 @@ describe("the cycle walk", () => {
       ".........",
     ];
     const faces = facesOf(FREESTANDING);
-    // Only the space around it.
-    expect(faces.faces).toHaveLength(1);
-    expect(faces.faces[0]!.cycles.length).toBeGreaterThan(1);
+    // No face at all: the only region it bounds is the unbounded one, which has no polygon.
+    expect(faces.faces).toHaveLength(0);
+    // It is still linework, so it still goes on the map — as wall lines.
     expect(faces.walls.length).toBeGreaterThan(0);
   });
 

@@ -92,9 +92,10 @@ describe("what the derivation produces", () => {
     expect(result.faces.faces.length).toBeGreaterThan(0);
   });
 
-  it("finds both rooms and the space around them", () => {
-    // Two rooms sharing a wall, plus the band between them and the border frame.
-    expect(deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE).faces.faces).toHaveLength(3);
+  it("finds both rooms, and nothing for the space around them", () => {
+    // Two rooms sharing a wall. The outside is the arrangement's unbounded face: no polygon, not
+    // emitted, and therefore fogged and unrevealable — which is what a map's exterior should be.
+    expect(deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE).faces.faces).toHaveLength(2);
   });
 
   /*
@@ -155,11 +156,18 @@ describe("meeting the command cap", () => {
     escalated on its own would stop matching its neighbours along their shared walls.
   */
   it("escalates the tolerance globally, so shared walls cannot come apart", () => {
+    /*
+      The cap is deliberately below what two plain rooms need, so the ladder has to run.
+
+      It is lower than it was before the border frame went: with the frame there was a third face —
+      the band around everything — carrying far more commands than either room, and it was what
+      tripped the cap first.
+    */
     const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), {
       ...BASE,
       tolerance: 0.1,
       maxTolerance: 16,
-      maxCommands: 12,
+      maxCommands: 6,
     });
 
     expect(result.escalations).toBeGreaterThan(0);

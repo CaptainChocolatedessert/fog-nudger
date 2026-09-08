@@ -229,9 +229,29 @@ describe("freezeGraph", () => {
   });
 
   it("carries the fitted geometry, not the pixel chain", () => {
-    // A coarse tolerance must actually reduce the point count, or the freeze is storing the wrong
-    // artefact — which is the mistake the first version of this made.
-    expect(frozen(TWO_ROOMS, 3).nodes.length).toBeLessThan(frozen(TWO_ROOMS, 0).nodes.length);
+    /*
+      A coarse tolerance must actually reduce the point count, or the freeze is storing the wrong
+      artefact — which is the mistake the first version of this made.
+
+      **On a jagged shape**, and that qualifier became necessary on 2026-09-08. `TWO_ROOMS` is all
+      straight lines, and since the freeze gained a lossless collinear pass a rectangle is already
+      down to its corners at a tolerance of zero: no fitting can take it further, so comparing two
+      tolerances there compares seven against seven. A staircase is where a tolerance has something
+      to remove.
+    */
+    const JAGGED = [
+      "..............",
+      "..............",
+      "..#########...",
+      "..#.......#...",
+      "..#.......##..",
+      "..#........#..",
+      "..#.......##..",
+      "..#.......#...",
+      "..#########...",
+      "..............",
+    ];
+    expect(frozen(JAGGED, 3).nodes.length).toBeLessThan(frozen(JAGGED, 0).nodes.length);
   });
 
   it("quantises to float32 so storage cannot change a coordinate", () => {

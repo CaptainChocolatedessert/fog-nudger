@@ -143,7 +143,7 @@ export function deriveGraphRegions(
     cannot answer.
   */
   const labelStarted = performance.now();
-  const labelled = labelSpace(graph.framed, { minArea: 0 });
+  const labelled = labelSpace(graph.skeleton, { minArea: 0 });
   const labelMs = performance.now() - labelStarted;
 
   const fitStarted = performance.now();

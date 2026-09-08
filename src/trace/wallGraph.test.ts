@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
 import { resolveFaces, walkCycles } from "./faces";
-import { buildWallGraph, frameSkeleton, type WallGraph } from "./wallGraph";
+import { buildWallGraph, eraseSpecks, type WallGraph } from "./wallGraph";
 
 /**
  * Fixtures are skeletons — already one pixel wide — and never draw their own border, because
@@ -116,66 +116,48 @@ const STAIRCASE = [
   ".........",
 ];
 
-describe("the border frame", () => {
-  it("paints the raster edge into the skeleton", () => {
-    const framed = frameSkeleton(maskFromRows(["...", "...", "..."]));
-    expect([...framed.data]).toEqual([1, 1, 1, 1, 0, 1, 1, 1, 1]);
+describe("erasing specks", () => {
+  /*
+    ## The border frame is GONE — 2026-09-08 (user)
+
+    This block used to assert that the raster's outer row and column were painted into the skeleton,
+    and that this was *why the map's exterior was a face at all*: the graph's outer face is unbounded
+    and has no polygon, so without a frame there is no exterior region to emit.
+
+    Not emitting one is now the point. Everything is fogged by default and an emitted shape is what
+    Owlbear will let a GM **reveal**, so an exterior with no shape stays fogged and unrevealable —
+    which is what "not an explorable space" means on most maps. It also removes an identification
+    problem with no sound answer: a line across a page separating two buildings carves a *framed*
+    outside into two faces, and there is no rule that picks "the exterior" correctly. Unframed, there
+    is exactly one unbounded face by topology, on every map.
+
+    What survives from that function is the speck erase, which is a different job wearing the same
+    name for a while.
+  */
+  it("erases a pixel with no neighbours rather than leaving it in the graph", () => {
+    // A component with no edges contributes no cycle, so it would end up neither inside a face nor
+    // on any boundary — and would be reported as an orphan, which is linework the walk lost. It is
+    // not: it is a speck. The island filter normally takes these upstream; this is the backstop.
+    const speck = eraseSpecks(maskFromRows(["...", ".#.", "..."]));
+    expect([...speck.data]).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0]);
   });
 
-  it("is why the map's exterior is a face at all", () => {
-    // Without it the outer face is unbounded and has no polygon at all. With it, an empty raster is
-    // one ring around one interior.
+  it("leaves a pixel that has a neighbour alone", () => {
+    const pair = eraseSpecks(maskFromRows(["...", ".##", "..."]));
+    expect([...pair.data]).toEqual([0, 0, 0, 0, 1, 1, 0, 0, 0]);
+  });
+
+  it("adds nothing at the raster's edge", () => {
+    // The frame's absence, stated as the assertion that would fail if it came back.
+    const empty = eraseSpecks(maskFromRows(["...", "...", "..."]));
+    expect([...empty.data]).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("gives an empty raster no faces at all", () => {
+    // With the frame this was one ring around one interior. Without it there is no linework, so
+    // there is nothing to enclose anything.
     const graph = graphOf([".....", ".....", ".....", ".....", "....."]);
-    /*
-      Cleaned first, because a raw frame is not one clean ring.
-
-      It fragments at its own corners — the pixel beside a corner touches the pixel on the adjoining
-      side diagonally, so it reads as a junction — and each cluster leaves sub-pixel cycles behind.
-      Sliver removal takes those; what is left is one cycle enclosing area and one facing outward.
-    */
-    const walk = walkCycles(resolveFaces(graph).graph);
-    const enclosing = walk.cycles.filter((cycle) => cycle.doubleArea > 0);
-    expect(enclosing).toHaveLength(1);
-    /*
-      Sixteen, doubled, and the number is worth stating carefully.
-
-      The boundary is the frame's own **centreline**, so the polygon runs through the border pixels
-      rather than around the space between them: on a 5x5 raster that is the square from (0,0) to
-      (4,4), area 16. The nine interior pixels are what a raster labelling would have counted, and
-      the two are different quantities — which is exactly the conflation the area check used to
-      reconcile and which nothing needs to reconcile now.
-    */
-    expect(enclosing[0]!.doubleArea).toBe(32);
-  });
-
-  it("fragments at its own corners, which is the cost of counting neighbours", () => {
-    // The pixel beside a corner touches the pixel on the adjoining side diagonally, so it has three
-    // neighbours and reads as a junction. The frame therefore arrives as several edges with a
-    // half-pixel triangle at each corner, and those triangles are removed downstream with every
-    // other sub-pixel sliver. Recorded rather than fixed: the alternative is the crossing number,
-    // which strands pixels.
-    const graph = graphOf([".....", ".....", ".....", ".....", "....."]);
-    expect(graph.edges.length).toBeGreaterThan(1);
-  });
-});
-
-describe("chains", () => {
-  it("leaves no skeleton pixel unclaimed on a staircase", () => {
-    // The chain walk steps orthogonally first. Taking the diagonal would step straight over the
-    // near neighbour and orphan it.
-    expect(graphOf(STAIRCASE).stats.orphans).toBe(0);
-  });
-
-  it("keeps every step to an 8-neighbour, which the area check depends on", () => {
-    for (const rows of [JUNCTION_CLUSTER, BROKEN_RUN, STAIRCASE, FOUR_NEIGHBOUR_PATH]) {
-      for (const edge of graphOf(rows).edges) {
-        for (let i = 1; i < edge.points.length; i++) {
-          const dx = Math.abs(edge.points[i]!.x - edge.points[i - 1]!.x);
-          const dy = Math.abs(edge.points[i]!.y - edge.points[i - 1]!.y);
-          expect(Math.max(dx, dy), `step ${dx},${dy} in a ${rows.length}-row fixture`).toBe(1);
-        }
-      }
-    }
+    expect(walkCycles(resolveFaces(graph).graph).cycles).toHaveLength(0);
   });
 });
 
@@ -184,7 +166,7 @@ describe("claiming every pixel", () => {
     for (const rows of [JUNCTION_CLUSTER, BROKEN_RUN, STAIRCASE, FOUR_NEIGHBOUR_PATH]) {
       const graph = graphOf(rows);
       const seen = claimed(graph);
-      const { width, height, data } = graph.framed;
+      const { width, height, data } = graph.skeleton;
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           if (data[y * width + x] !== 1) continue;
@@ -215,7 +197,7 @@ describe("claiming every pixel", () => {
     // A pixel with no neighbours is a component with no edges: it contributes no cycle, so it ends
     // up neither inside a face nor on any boundary and the area identity comes up short by it.
     const graph = graphOf(SPECK);
-    expect(graph.framed.data[3 * 9 + 4]).toBe(0);
+    expect(graph.skeleton.data[3 * 9 + 4]).toBe(0);
     expect(graph.stats.orphans).toBe(0);
   });
 });
@@ -234,9 +216,20 @@ describe("joining where exactly two ends meet", () => {
     // A node with two ends is not a junction, so the chains through it are one edge. This is the
     // one part of the sibling's welding that survives; joining *through a junction* is forbidden,
     // because it would destroy the incidence the faces are read from.
-    const graph = graphOf(BENT_RUN);
-    const run = graph.edges.find((edge) => edge.a !== edge.b);
-    expect(run).toBeDefined();
-    expect(run!.points.length).toBeGreaterThan(4);
+    /*
+      **Cleaned first**, and this test was passing for the wrong reason until 2026-09-08.
+
+      The corner of an L is a junction cluster: with 8-connectivity the pixel before the turn touches
+      both the corner and the pixel after it, so three mutually adjacent pixels bound a half-pixel
+      triangle and the run comes out of `buildWallGraph` as *four* edges, two of them parallel. Only
+      after sliver removal is it the single chain this is about.
+
+      What made it pass before was the border frame: `find` returned a frame edge, which is nine
+      points long, so the assertion never looked at the bent run at all. Removing the frame exposed
+      it — an accidental demonstration of why the sweep matters more than a fixture.
+    */
+    const graph = resolveFaces(graphOf(BENT_RUN)).graph;
+    expect(graph.edges).toHaveLength(1);
+    expect(graph.edges[0]!.points.length).toBeGreaterThan(4);
   });
 });

@@ -62,7 +62,14 @@ export interface WallGraph {
   readonly nodes: readonly WallNode[];
   readonly edges: readonly WallEdge[];
   /** The skeleton the graph was built from, with the border frame painted in. */
-  readonly framed: BinaryMask;
+  /**
+   * The skeleton the graph was walked from, specks erased.
+   *
+   * Called `framed` until 2026-09-08, when the border frame was removed — it is now simply the
+   * thinned skeleton. Kept because two things still want the raster it came from: `rasterizeGraph`
+   * rebuilds it exactly, and the point probe labels it.
+   */
+  readonly skeleton: BinaryMask;
   readonly stats: WallGraphStats;
 }
 
@@ -99,26 +106,41 @@ function at(data: Uint8Array, width: number, height: number, x: number, y: numbe
 }
 
 /**
- * Paint the raster border into the skeleton.
+ * Erase isolated single pixels from the skeleton.
  *
- * Without it the graph's outer face is unbounded and has no polygon, so the map's exterior could not
- * be produced at all — and §4 decided to emit the exterior rather than work out which region it is.
- * With the frame, the exterior is an ordinary bounded face whose outer ring is the frame and whose
- * holes are the buildings, which is what the labelling already gives.
+ * ## This was `frameSkeleton`, and the frame is GONE — 2026-09-08 (user)
+ *
+ * It used to paint the raster's outer row and column as skeleton before the graph was built, so that
+ * the map's exterior became an ordinary **bounded** face — the graph's outer face is unbounded and
+ * has no polygon, so without it there was no exterior to emit.
+ *
+ * > *"On most maps the exterior isn't a 'room'. It's not an explorable space. Not emitting a shape
+ * > for it would simplify what we emit, and be more true to the typical intent of the map."*
+ * > — user, 2026-09-08
+ *
+ * **What that buys, beyond intent.** Everything is fogged by default and an emitted shape is the
+ * region Owlbear will let a GM *reveal*, so emitting nothing for the outside leaves it fogged and
+ * unrevealable — which is what "not explorable" means. And a room that leaks to the outside now
+ * joins a face that is not emitted, so it becomes a room that **cannot be revealed**: this project's
+ * worst failure turned into its loudest.
+ *
+ * **And it removes an identification problem that had no sound answer.** Suppressing the exterior at
+ * the emit boundary instead would require *finding* it, and a line drawn across a page to separate
+ * two buildings carves the framed outside into two faces — largest-by-area picks one of them,
+ * touching-the-border matches both. With no frame there is exactly one unbounded face, by topology,
+ * on every map: nothing to identify and nothing to choose between.
+ *
+ * ## What is left here, and why it stays
+ *
+ * A pixel with no neighbours is a component with no edges: it contributes no cycle, so it ends up
+ * neither inside a face nor on any boundary. The island filter normally removes these upstream; this
+ * is the backstop, not the policy. It is also what keeps the orphan count meaningful — a speck would
+ * otherwise be reported as linework lost by the chain walk, which it is not.
  */
-export function frameSkeleton(skeleton: BinaryMask): BinaryMask {
+export function eraseSpecks(skeleton: BinaryMask): BinaryMask {
   const { width, height } = skeleton;
   const data = new Uint8Array(skeleton.data);
   if (width === 0 || height === 0) return { width, height, data };
-
-  for (let x = 0; x < width; x++) {
-    data[x] = 1;
-    data[(height - 1) * width + x] = 1;
-  }
-  for (let y = 0; y < height; y++) {
-    data[y * width] = 1;
-    data[y * width + width - 1] = 1;
-  }
 
   /*
     Isolated single pixels are erased here, and it is the area check that asks for it.
@@ -295,10 +317,10 @@ function walkChains(mask: BinaryMask): { chains: Chain[]; orphans: number } {
 /**
  * Paint a graph's edges back into a mask — the inverse of the chain walk.
  *
- * **This is what lets the stored graph leave its raster behind.** `WallGraph.framed` is a
+ * **This is what lets the stored graph leave its raster behind.** `WallGraph.skeleton` is a
  * full-raster bitmap, about a megabyte on the test map, and `graphCodec.ts` deliberately does not
  * store it. It does not have to: every skeleton pixel belongs to some chain, so the union of every
- * edge's points *is* the framed skeleton, and this rebuilds it exactly.
+ * edge's points *is* that skeleton, and this rebuilds it exactly.
  *
  * The one condition is the graph's own invariant — `stats.orphans` zero, meaning no skeleton pixel
  * was stepped over by the walk. That is asserted by the randomised sweep on every generated skeleton,
@@ -323,11 +345,11 @@ export function rasterizeGraph(graph: {
 }
 
 export function buildWallGraph(skeleton: BinaryMask): WallGraph {
-  const framed = frameSkeleton(skeleton);
-  const { chains, orphans } = walkChains(framed);
+  const cleaned = eraseSpecks(skeleton);
+  const { chains, orphans } = walkChains(cleaned);
   return assembleGraph(
     chains.map((chain) => chain.points),
-    framed,
+    cleaned,
     { chains: chains.length, orphans },
   );
 }
@@ -343,7 +365,7 @@ export function removeEdges(graph: WallGraph, dropped: ReadonlySet<number>): Wal
   const kept = graph.edges
     .filter((_, index) => !dropped.has(index))
     .map((edge) => [...edge.points]);
-  return assembleGraph(kept, graph.framed, {
+  return assembleGraph(kept, graph.skeleton, {
     chains: graph.stats.chains,
     orphans: graph.stats.orphans,
   });
@@ -352,7 +374,7 @@ export function removeEdges(graph: WallGraph, dropped: ReadonlySet<number>): Wal
 /** Nodes by exact position, then the degree-2 join, then the tables. Shared by both entry points. */
 function assembleGraph(
   chains: Vector2[][],
-  framed: BinaryMask,
+  skeleton: BinaryMask,
   carried: { chains: number; orphans: number },
 ): WallGraph {
   // Two ends are the same node when they are the same pixel. Nothing approximate about it: a node is
@@ -392,11 +414,11 @@ function assembleGraph(
   }));
 
   return {
-    width: framed.width,
-    height: framed.height,
+    width: skeleton.width,
+    height: skeleton.height,
     nodes,
     edges,
-    framed,
+    skeleton,
     stats: { chains: carried.chains, merged: merged.merged, orphans: carried.orphans },
   };
 }

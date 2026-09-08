@@ -85,7 +85,7 @@ export interface GraphFaces {
   /**
    * Cycles whose right-hand sample found no label at all.
    *
-   * Exactly one is expected — the unbounded face outside the border frame. More than one means a
+   * Zero is expected: there is no border frame, so the only unbounded face has no cycle. Any means a
    * face with no interior pixels, which is a degenerate sliver rather than a room.
    */
   readonly unlabelled: number;

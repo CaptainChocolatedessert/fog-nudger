@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { field as buildField, maskFromRows } from "./fixtures";
 import { labelSpace } from "./label";
 import { describePoint, readPoint } from "./probePoint";
-import { frameSkeleton } from "./wallGraph";
 
 /** A paint layer of the same size as a fixture, with the listed indices painted. */
 function painted(width: number, height: number, indices: readonly number[]) {
@@ -44,11 +43,19 @@ const INK = [
   ".........",
 ];
 /** The centreline of that wall, one pixel thick — what thinning leaves. */
+/**
+ * A wall spanning the raster, so the space above it and the space below are separate regions.
+ *
+ * It stopped one pixel short at each end until 2026-09-08, and the **border frame** closed those
+ * gaps — with the frame gone they let the two sides join round the ends into one region, which is
+ * what the "ink off the centreline" case needs to tell apart. Spanning edge to edge says the same
+ * thing about the map without depending on something painted around it.
+ */
 const SKELETON = [
   ".........",
   ".........",
   ".........",
-  ".#######.",
+  "#########",
   ".........",
   ".........",
   ".........",
@@ -56,9 +63,14 @@ const SKELETON = [
 
 const wall = {
   ink: maskFromRows(INK),
-  // `frameSkeleton` paints the one-pixel border, exactly as `buildWallGraph` does, so the faces are
-  // bounded and the frame itself is skeleton-without-being-ink.
-  labelled: labelSpace(frameSkeleton(maskFromRows(SKELETON)), { minArea: 0 }),
+  /*
+    The skeleton as `buildWallGraph` labels it — unframed since 2026-09-08.
+
+    The border frame used to be painted in here too, so the outside was a bounded face and the frame
+    itself was skeleton-without-being-ink. With it gone, the space outside the room is an ordinary
+    labelled region like any other, and the probe answers about it in the ordinary way.
+  */
+  labelled: labelSpace(maskFromRows(SKELETON), { minArea: 0 }),
   field: buildField(9, 7, (x, y) => (INK[y]![x] === "#" ? 0.12 : 0.94)),
 };
 
@@ -105,13 +117,18 @@ describe("readPoint", () => {
     expect(reading.region).toBe(0);
   });
 
-  it("calls unlabelled space the border frame rather than a filtered region", () => {
-    // Not ink, no face label. Under the graph the only way to reach this is the one-pixel frame
-    // `frameSkeleton` paints round the raster: the smallest-room filter is gone and every space
-    // labelling in the pipeline runs at minArea 0, so nothing else can be unlabelled.
+  /*
+    Unlabelled space is unreachable now, and that is worth an assertion rather than a deletion.
+
+    It used to be reachable at exactly one place: the one-pixel border frame, which was skeleton
+    without being ink. The frame went on 2026-09-08, and every space labelling in the pipeline runs
+    at `minArea` 0 — so nothing is unlabelled and a corner of the raster is ordinary outside space.
+    If this ever starts reporting `unlabelled` again, something has begun filtering regions.
+  */
+  it("gives the raster's corner an ordinary region, now that nothing frames it", () => {
     const reading = readPoint(wall.field, wall.ink, wall.labelled, 0, 0);
-    expect(reading.kind).toBe("unlabelled");
-    expect(reading.region).toBe(0);
+    expect(reading.kind).not.toBe("unlabelled");
+    expect(reading.region).toBeGreaterThan(0);
   });
 
   it("says space when no partition has been derived, whether or not it is ink", () => {
@@ -166,11 +183,19 @@ describe("describePoint", () => {
     expect(line).not.toContain("IS covered");
   });
 
-  it("names the border frame instead of a minimum area that no longer exists", () => {
+  /*
+    Nothing is ever "discarded" or below a "minimum area", and the wording must not imply otherwise.
+
+    The smallest-room control was deleted in August, the border frame in September, and every space
+    labelling in the pipeline runs at `minArea` 0 — so a probe can only land on ink, on a region, or
+    on space with no partition derived yet. A line offering a GM one of the retired explanations
+    would send them looking for a control that is not there.
+  */
+  it("offers no explanation that belongs to a deleted control", () => {
     const line = describePoint(readPoint(wall.field, wall.ink, wall.labelled, 0, 0));
-    expect(line).toContain("border frame");
     expect(line).not.toContain("minimum area");
     expect(line).not.toContain("discarded");
+    expect(line).not.toContain("border frame");
   });
 
   it("sends a GM to the erase brush rather than the threshold for ink they drew", () => {

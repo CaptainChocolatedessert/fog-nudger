@@ -134,8 +134,10 @@ export interface FrozenFaces {
   /**
    * Boundary cycles of the unbounded face — pieces of linework nested inside nothing.
    *
-   * One, on any graph carrying the border frame, which every frozen graph does. More than one means
-   * linework outside the frame, which the frame's construction should make impossible.
+   * **One per connected piece of linework nested inside nothing**, which since 2026-09-08 is the
+   * ordinary case rather than a warning sign. It used to be exactly one on every graph, because the
+   * border frame enclosed everything; with the frame gone a map showing two separate buildings has
+   * two, and that is correct. Counted rather than asserted, for that reason.
    */
   readonly unbounded: number;
   /** Connected pieces of linework, counting only vertices that have an edge. */

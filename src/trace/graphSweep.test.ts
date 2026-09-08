@@ -35,7 +35,8 @@ function randomInk(
   runs: number,
 ): BinaryMask {
   const mask = emptyMask(width, height);
-  // Kept one pixel clear of the edge, because the border frame is painted along it and linework
+  // Kept one pixel clear of the edge. The border frame that used to be painted there is gone, but
+  // linework
   // fused to the frame is a different case from linework near it.
   const put = (x: number, y: number) => {
     if (x >= 1 && y >= 1 && x < width - 1 && y < height - 1) mask.data[y * width + x] = 1;
