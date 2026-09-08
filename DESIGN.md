@@ -1934,6 +1934,15 @@ Named in advance so they are recognised rather than discovered.
 - **`probe/viewTransform.ts` is live production code.** The shell imports seven of its functions, so
   every pan, zoom and wheel gesture goes through it. It sits under `probe/` only because that is where
   the navigation constants were settled.
+- **`themeVariables` returns only the entries it could fill.** Emitting a key with an empty value
+  overrides the stylesheet's own default with nothing, rather than falling back to it — so a theme
+  missing one colour would blank that colour instead of leaving it alone.
+- **The theme and `onReadyChange` are subscribed to *before* being read**, not after. A change landing
+  between the read and the subscription would otherwise never be observed, silently. This is
+  "check-then-subscribe is a race" above, applied where it is least obvious.
+- **Slider rows are drawn from the defaults and disabled, not withheld until the SDK answers.** A
+  surface that renders nothing until a round trip completes looks broken; one that renders its
+  controls greyed says what it is waiting for.
 ---
 
 ## 10. Open questions and what is next
