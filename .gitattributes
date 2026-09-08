@@ -1,0 +1,12 @@
+# Line endings are LF everywhere, in the repository AND in the working tree.
+#
+# Without this, `core.autocrlf=true` hands out CRLF on checkout while the tools that
+# rewrite files here write LF, so the working tree ends up mixed by nothing more than
+# which files something has edited since. That is invisible until a script does a
+# multi-line search-and-replace, which then silently matches nothing.
+#
+# `eol=lf` overrides autocrlf for checkout, so a fresh clone is LF too.
+* text=auto eol=lf
+
+# Binaries, so nothing tries to translate them.
+*.png binary
