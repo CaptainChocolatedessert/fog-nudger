@@ -49,6 +49,7 @@ import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSimplifySeed } from "./workspace/seedSimplify";
 import { renderPruneAction } from "./workspace/pruneAction";
 import { renderSimplifyAction } from "./workspace/simplifyAction";
+import { renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
@@ -248,6 +249,14 @@ registerStepContent(
     */
     renderSimplifyAction(body);
     renderPruneAction(body);
+    /*
+      Framing sits after the two that remove and before the one that writes.
+
+      It is the only one of the three that *adds*, so it reads as a different kind of act — and it is
+      the last thing worth doing to the document before putting it on the map, since what it changes
+      is whether the outside is somewhere the party can go.
+    */
+    renderFrameAction(body);
     renderPushAction(body);
   },
   "bottom",
