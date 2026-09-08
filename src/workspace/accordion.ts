@@ -177,9 +177,20 @@ function stepBody(step: Step): HTMLElement {
     }
   }
 
-  if (stepParameters(step.id).length > 0) body.append(defaultsButton(step));
+  /*
+    The bottom slot comes BEFORE Defaults, and that ordering was a real discoverability failure.
 
+    It was the other way round until 2026-09-07, which put the Ink step's three tools — Suppress, Add
+    ink and **Breaks** — underneath a button labelled *Defaults*. A reset button reads as the end of a
+    section, so everything past it is furniture: a room went looking for the break tool and reported
+    *"I don't see a break tool"* while all three buttons were on screen the whole time.
+
+    Defaults belongs last on its own terms as well. It restores every control in the step, tool
+    widths and gap numbers included, so it is a footer rather than a divider.
+  */
   content.get(step.id)?.bottom?.(body);
+
+  if (stepParameters(step.id).length > 0) body.append(defaultsButton(step));
 
   return body;
 }

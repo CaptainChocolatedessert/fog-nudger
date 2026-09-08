@@ -34,11 +34,12 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { nodeDegrees, type FrozenGraph } from "../../trace/frozenGraph";
+import { nodeDegrees, spurEdgesToPrune, type FrozenGraph } from "../../trace/frozenGraph";
 import { addPainter, type Painter } from "../shell";
 import { inEditor } from "../mode";
 import { previewGraph } from "../regions";
 import { frozenGraph } from "../stage";
+import { currentSettings } from "../settingsState";
 import type { DrawPoint } from "../dragGesture";
 import {
   draggedNode,
@@ -51,6 +52,15 @@ import {
 
 /** Kept distinct from the wall lines' red and from the six proposal colours. */
 const WALL_COLOUR = "#2b6bff";
+/**
+ * What pruning would take, in the colour this canvas already uses for "about to go".
+ *
+ * The same red the erase tool marks a wall with, deliberately: both answer *what does the thing I am
+ * about to do remove*, and giving them two colours would invent a distinction a GM has to learn. It
+ * is drawn at the wall's own width rather than the erase highlight's, because there can be hundreds
+ * of them and a thickened red would swamp the picture it is meant to be read against.
+ */
+const DOOMED_COLOUR = "#ff2020";
 const WALL_CASING = "#ffffff";
 /** Screen pixels. A hairline over busy map art is not a wall anybody can judge or aim at. */
 const WALL_WIDTH_PX = 2;
@@ -119,6 +129,31 @@ function graphOnCanvas(): FrozenGraph | null {
   return inEditor() ? frozenGraph() : previewGraph();
 }
 
+/**
+ * The doomed set, remembered between frames.
+ *
+ * A canvas redraws for every pan, zoom and hover, and none of those changes which walls a budget
+ * would take. Recomputing per frame is a run walk plus a cascade — cheap on a real graph and pure
+ * waste sixty times a second. Keyed on the graph object and the budget, both of which are replaced
+ * rather than mutated when they change.
+ */
+let doomedFor: { graph: FrozenGraph; budget: number; edges: ReadonlySet<number> } | null = null;
+
+function doomedEdges(graph: FrozenGraph): ReadonlySet<number> {
+  // Only in the editor, and only for the editor's own budget. The ink mode re-derives its graph from
+  // the reading with the budget already applied, so there is nothing pending there to mark.
+  if (!inEditor()) return EMPTY;
+  const budget = currentSettings().trace.spurPruneFraction;
+  if (!(budget > 0)) return EMPTY;
+
+  if (doomedFor && doomedFor.graph === graph && doomedFor.budget === budget) return doomedFor.edges;
+  const edges = spurEdgesToPrune(graph, budget).edges;
+  doomedFor = { graph, budget, edges };
+  return edges;
+}
+
+const EMPTY: ReadonlySet<number> = new Set<number>();
+
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const graph = graphOnCanvas();
   if (!graph || graph.edges.length === 0) return;
@@ -156,6 +191,33 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   context.strokeStyle = WALL_COLOUR;
   context.lineWidth = WALL_WIDTH_PX;
   context.stroke();
+
+  /*
+    The walls the prune button would delete, marked while the slider moves rather than reported after.
+
+    Pruning cannot be undone, and the standing rule is that a control which can be wrong needs a
+    visual channel *before* it is used. A budget is also not a number anybody can picture on their own
+    map — the same setting takes four hairs off one and a third of the walls off another — so the only
+    honest way to choose one is to see what it would take.
+
+    Drawn **over** the ordinary walls and under everything interactive, so a doomed wall reads as a
+    wall that has been marked rather than as a different kind of thing.
+  */
+  const doomed = doomedEdges(graph);
+  if (doomed.size > 0) {
+    context.beginPath();
+    for (const index of doomed) {
+      const edge = graph.edges[index];
+      const from = edge ? at(edge.a) : undefined;
+      const to = edge ? at(edge.b) : undefined;
+      if (!from || !to) continue;
+      context.moveTo(x(from.x), y(from.y));
+      context.lineTo(x(to.x), y(to.y));
+    }
+    context.strokeStyle = DOOMED_COLOUR;
+    context.lineWidth = WALL_WIDTH_PX;
+    context.stroke();
+  }
 
   // The wall a click would erase, marked before it goes rather than reported after.
   const erasing = hoveredWall();

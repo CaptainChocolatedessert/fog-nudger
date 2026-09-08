@@ -408,7 +408,58 @@ export interface FrozenPruning {
  * the standing rule. Everywhere it is called, the caller stops holding ids across it.
  */
 export function pruneFrozenGraph(graph: FrozenGraph, budget: number): FrozenPruning {
-  if (!(budget > 0)) return { graph, removed: 0, segments: 0, length: 0, rounds: 0 };
+  const doomed = spurEdgesToPrune(graph, budget);
+  if (doomed.edges.size === 0) {
+    return { graph, removed: 0, segments: 0, length: 0, rounds: doomed.rounds };
+  }
+
+  const edges = graph.edges.filter((_, index) => !doomed.edges.has(index));
+  const segments = doomed.edges.size;
+  return {
+    // Compacted, because a pruned run leaves its interior vertices referenced by nothing, and this
+    // project does not leave junk lying around once a gesture is over.
+    graph: compactNodes({ nodes: graph.nodes, edges }),
+    removed: doomed.runs,
+    segments,
+    length: doomed.length,
+    rounds: doomed.rounds,
+  };
+}
+
+/** Which segments a spur budget would remove, without removing them. */
+export interface DoomedSpurs {
+  /** Indices into `graph.edges`. */
+  readonly edges: ReadonlySet<number>;
+  /** Whole wall runs those segments make up. */
+  readonly runs: number;
+  /** Total length, in map fractions. */
+  readonly length: number;
+  readonly rounds: number;
+}
+
+/**
+ * The segments a budget would prune — the question asked without the answer being applied.
+ *
+ * ## Why this is separate from doing it
+ *
+ * **Pruning is destructive and cannot be undone**, and the standing rule is that a control which can
+ * be wrong needs a visual channel *before* it is used rather than a report afterwards. So the editor
+ * draws the doomed walls in red while the slider moves, and this is what it asks. Reported from a
+ * room on 2026-09-07: *"the slider should show the spurs that will be pruned in red or something for
+ * visualization."*
+ *
+ * `pruneFrozenGraph` is written in terms of it, so the preview and the operation cannot disagree —
+ * which is the whole point. A second implementation of "which runs go" would be a picture that lies
+ * about what the button does, and this project has already paid for a preview and an emit path
+ * answering the same question differently.
+ *
+ * Cheap enough to call per frame on any real graph, but the caller memoises anyway: it is a run walk
+ * plus a cascade, and a canvas redraws sixty times a second for reasons that have nothing to do with
+ * the slider.
+ */
+export function spurEdgesToPrune(graph: FrozenGraph, budget: number): DoomedSpurs {
+  const empty = { edges: new Set<number>(), runs: 0, length: 0, rounds: 0 };
+  if (!(budget > 0)) return empty;
 
   const runs = walkRuns(graph);
   const prunable: PrunableRun[] = runs.map((run) => ({
@@ -417,31 +468,13 @@ export function pruneFrozenGraph(graph: FrozenGraph, budget: number): FrozenPrun
     length: runLength(graph, run.nodes),
   }));
   const decision = spursToPrune(prunable, budget);
-  if (decision.removed.size === 0) {
-    return { graph, removed: 0, segments: 0, length: 0, rounds: decision.rounds };
-  }
+  if (decision.removed.size === 0) return { ...empty, rounds: decision.rounds };
 
-  const dropped = new Uint8Array(graph.edges.length);
-  let segments = 0;
+  const edges = new Set<number>();
   for (const index of decision.removed) {
-    for (const edge of runs[index]!.edges) {
-      if (dropped[edge] === 0) {
-        dropped[edge] = 1;
-        segments += 1;
-      }
-    }
+    for (const edge of runs[index]!.edges) edges.add(edge);
   }
-
-  const edges = graph.edges.filter((_, index) => dropped[index] === 0);
-  return {
-    // Compacted, because a pruned run leaves its interior vertices referenced by nothing, and this
-    // project does not leave junk lying around once a gesture is over.
-    graph: compactNodes({ nodes: graph.nodes, edges }),
-    removed: decision.removed.size,
-    segments,
-    length: decision.length,
-    rounds: decision.rounds,
-  };
+  return { edges, runs: decision.removed.size, length: decision.length, rounds: decision.rounds };
 }
 
 /**

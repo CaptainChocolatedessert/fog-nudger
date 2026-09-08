@@ -217,7 +217,11 @@ export const STEPS: readonly Step[] = [
     modes: ["ink"],
     blurb:
       "What the trace calls a mark, which marks it keeps, and the tools for correcting that by hand. " +
-      "Everything the tools write goes into a layer of your own that no slider here can undo.",
+      "The sliders decide what counts as ink everywhere at once; below them are three tools that " +
+      "work on one spot &mdash; <b>Suppress</b> to cover marks the trace should ignore, <b>Add " +
+      "ink</b> to draw linework the map lacks, and <b>Breaks</b> to hunt for gaps in a wall, which " +
+      "are the faults that merge two rooms and are far too small to spot by eye. Everything the " +
+      "tools write goes into a layer of your own that no slider here can undo.",
     /*
       One step, and it took two others into itself on 2026-09-05 (user).
 

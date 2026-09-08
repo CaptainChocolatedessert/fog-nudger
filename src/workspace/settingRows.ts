@@ -300,8 +300,22 @@ export function settingRow(control: Control): HTMLElement {
     readout.textContent = format(control, current, Number(input.value), limits, scale);
     paintHint(current);
 
-    if (kind === "display") {
-      // Costs nothing but a repaint, so there is no reason to make the GM let go to see it.
+    if (kind === "display" || kind === "tool") {
+      /*
+        Costs nothing but a repaint, so there is no reason to make the GM let go to see it.
+
+        **`tool` joined `display` here on 2026-09-07**, and only for what a repaint shows. Held in
+        memory and not persisted — the scene write still waits for the release, so one sweep is still
+        one write. What it buys is the prune preview: the editor draws the walls a budget would delete
+        in red, and a budget is not a number anybody can picture on their own map, so seeing it follow
+        the drag is the difference between choosing one and guessing.
+
+        What a tool *recomputes* still waits for the release. The break search re-runs from
+        `recomputeFor`, because that costs a composite and a closing rather than a repaint.
+
+        **`pipeline` must never join them.** Its re-read is 690ms and synchronous, which is 690ms the
+        slider cannot move — tried live, reported unusable from a room, reverted.
+      */
       setSettings(writeParameter(currentSettings(), control.name, current));
       invalidate();
       return;
