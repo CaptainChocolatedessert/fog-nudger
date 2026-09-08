@@ -13,8 +13,10 @@ you reveal room by room.**
 > read, the wall centrelines it found and the regions it would produce, so a partition can be judged
 > and the settings tuned without touching the scene. Putting it on the map is then one deliberate
 > action, and it replaces whatever the previous run left — so the tool owns its own fog and nothing
-> else, but a hand edit to those shapes does not survive the next run. Editing belongs in the
-> workspace, and the tools for it are still being built.
+> else, but a hand edit to those shapes does not survive the next run.
+>
+> Editing belongs in the workspace, which has a wall editor: move a point, draw a wall, erase one, and
+> one-shot operations to straighten every wall, prune the dead ends, or wall the map's edge.
 
 ## The idea
 

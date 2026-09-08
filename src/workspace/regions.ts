@@ -27,12 +27,13 @@
  * stored one, and the ink mode freezes the trace's own and walks that. The faces themselves come
  * from `buildFrozenFaces` either way, which is the same function the push uses.
  *
- * **It used to draw the trace's own regions here, and that was a defect.** Those are grouped by the
- * raster labelling; a push writes faces grouped by containment off the frozen document. Same walk,
- * different grouping, so the ink mode previewed one answer and emitted another — introduced on
- * 2026-09-05 when Walls started drawing the fitted graph and the partition under it was left where
- * it was, found from the outside a day later. **Do not reach for `outcome.run.regions` here again**;
- * what the trace is for is the graph, the fitted edges and the checks over them.
+ * **It used to draw a region list the trace derived from a raster labelling, and that was a defect.**
+ * A push writes faces grouped by containment off the frozen document — same walk, different
+ * grouping — so the ink mode previewed one answer and emitted another. Nothing inside the code said
+ * the two were meant to agree, which is why it took an outside eye to spot.
+ *
+ * **Do not reintroduce a second source for the partition here**; what the trace is for is the graph,
+ * the fitted edges and the checks over them.
  *
  * The mode still decides which graph, and getting *that* wrong is not cosmetic either: reading the
  * stored graph in the ink mode would show the GM the rooms as **edited** while they moved sliders
@@ -409,15 +410,14 @@ async function derive(): Promise<void> {
     /*
       And the same traversal the push makes, which is the second half of that sentence.
 
-      The trace produces rooms of its own — `outcome.run.regions`, grouped by the raster labelling —
-      and they used to be what this drew. **They are not what a push writes.** Saving stores the
-      frozen graph and the push walks *that*, grouped by containment with no raster anywhere, so the
-      ink mode was previewing one face derivation and emitting another. Found from the outside on
-      2026-09-06; introduced on 2026-09-05, when Walls started drawing the fitted graph and the
-      partition under it was left on the traced regions.
+      The trace used to produce rooms of its own, grouped by a raster labelling, and they were what
+      this drew. **They were not what a push writes.** Saving stores the frozen graph and the push
+      walks *that*, grouped by containment with no raster anywhere, so the ink mode previewed one
+      face derivation and emitted another — a defect found from the outside, because nothing inside
+      the code said the two were meant to agree.
 
-      One derivation now. What the trace still derives for itself is the graph, the fitted edges and
-      the area check — a derivation, not a picture.
+      One derivation now, and the trace no longer carries a region list at all. What it produces is
+      the graph, the fitted edges, and the checks over them — a derivation, not a picture.
     */
     /*
       A grid square as a fraction of the map, which the ink mode can answer and the editor cannot.

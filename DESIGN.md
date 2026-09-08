@@ -3,52 +3,145 @@
 An Owlbear Rodeo extension: **trace a map image into the fog regions a GM reveals room by room —
 and, with Dynamic Fog installed, the walls that block sight, from the same shapes.**
 
-This file is the design record — architecture, constraints, rejected alternatives, open questions,
-build order. It is the place reasoning lives. Operating context for Claude lives in `CLAUDE.md`,
-which is private and gitignored; where the two disagree, this one wins.
+This is the design record: what the thing is, how it works, why it is built the way it is, and what
+is still open. It is written to be read start to finish by someone new to the code, and to be dipped
+into by someone who already knows it. Operating notes for Claude live in `CLAUDE.md`, which is
+private and gitignored.
+
+**It describes the present.** Where a past mistake explains why something is the way it is, the
+lesson is stated as part of the design rather than as history. Git holds the history.
 
 **Sibling project.** `../W - cartographers-fog` is a working Owlbear extension by the same author,
 public at [CaptainChocolatedessert/cartographers-fog](https://github.com/CaptainChocolatedessert/cartographers-fog).
-It is readable from here and it remains this project's most valuable asset: a year of Owlbear SDK
-facts that were expensive to learn, and a testing culture worth copying wholesale. **Read its
-`DESIGN.md` before designing anything here.** Note that its *pipeline* turns out to transfer less
-than first assumed — see §5.
+It is readable from here and it is this project's most valuable asset: a year of Owlbear SDK facts
+that were expensive to learn, and a testing culture worth copying wholesale. When something
+Owlbear-shaped is surprising, look there before theorising.
 
+---
+
+## Contents
+
+- [Vocabulary](#vocabulary) — read this first if any term below is unfamiliar
+
+1. [What this is for](#1-what-this-is-for)
+2. [The platform: Owlbear and Dynamic Fog](#2-the-platform-owlbear-and-dynamic-fog)
+3. [Architecture: the wall graph is the document](#3-architecture-the-wall-graph-is-the-document)
+4. [Reading the map into a graph](#4-reading-the-map-into-a-graph)
+5. [The frozen document](#5-the-frozen-document)
+6. [Emitting](#6-emitting)
+7. [The surfaces](#7-the-surfaces)
+8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
+9. [Constraints and pitfalls](#9-constraints-and-pitfalls)
+10. [Open questions and what is next](#10-open-questions-and-what-is-next)
+11. [Code sharing with the sibling](#11-code-sharing-with-the-sibling)
+12. [Licence](#12-licence--gpl-30-or-later)
+
+- [Appendix A: the code map](#appendix-a-the-code-map)
+- [Appendix B: build and deployment](#appendix-b-build-and-deployment)
+
+**If you are new to the code**, §1 and §3 are the two that matter — what the thing is for and why it
+is built around a graph rather than a partition. Appendix A says where everything lives.
+
+---
+
+## Vocabulary
+
+Several of these words drifted in conversation and mean one thing each here. **Say what a piece of
+machinery is the first time it comes up** — none of these is self-explanatory, and an algorithm's
+name is not an explanation.
+
+### The things
+
+| term | means |
+|---|---|
+| **ink** | the linework, as a binary mask. Whatever the reading decided is a mark rather than ground. |
+| **the reading** | binarise + polarity + ink width — the expensive first half of the pipeline, cached on its own. |
+| **skeleton** | the ink thinned to one-pixel centrelines. A raster, not a graph. |
+| **wall graph** | the skeleton chained into nodes and edges. Still in raster pixels, still derived. |
+| **the document** / **frozen graph** | the fitted wall graph, stored in scene metadata in fractions of the map. **The GM's own work.** Nothing re-derives it. |
+| **face** | a cycle of the graph traversal — the abstract thing. |
+| **region** / **room** | a face we emit as a fog shape. The GM-facing word. |
+| **wall** | a *run* of segments chained through degree-2 nodes — what a GM thinks they are editing. |
+| **segment** / **edge** | one straight piece between two nodes. **Every vertex is a node**, so these are the same thing in the frozen document. |
+| **bridge** | an edge with the same face on both sides. A stub wall is one. Bridges emit as lines. |
+| **spur** | a wall run with a free end. What pruning removes. |
+| **sliver** | a cycle enclosing no lattice point — sub-pixel, an artefact of junction clusters. |
+| **break** / **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink*. What merges two rooms. |
+
+### The stages, and the two words for them
+
+**"Stage one" and "the ink mode" are the same thing**, and so are "stage two" and "the wall editor".
+The first pair is the *architecture* word — where the freeze falls — and the second is the *surface*
+word, which is what a GM sees. Both are used; they are not two concepts.
+
+**Do not confuse either with the three cascade stages** (`read` / `derive` / `adjust`), which are
+about what a settings change **destroys**. Those are a property of a parameter, not a place.
+
+| | stage one — the ink mode | stage two — the wall editor |
+|---|---|---|
+| works on | the map image | the frozen document |
+| re-derives? | yes, on every change | **never** |
+| what a save does | writes the document, then pushes | pushes |
+
+### The checks
+
+| check | says |
+|---|---|
+| **orphan count** | every skeleton pixel was claimed by some chain. Not that it was claimed *correctly*. |
+| **Euler's identity** | the traversal of the document was coherent. Fails legitimately on a doubled wall, so it is a log line, not a gate. |
+| **planarity** | no two segments cross. The separate check Euler does not imply. |
+| **the point probe** | *"what is here?"* — the luminance actually read at one pixel, whether it was called ink, and whether the GM painted it. The one diagnostic that answers what looking cannot. |
+
+**The area check is gone**, and §8 says why. Do not reintroduce it.
 ---
 
 ## 1. What this is for
 
 Owlbear's fog is **subtractive**. The whole map starts hidden, and shapes drawn on the `FOG` layer
 are the regions that *can* be revealed. Anything falling inside no shape stays hidden permanently —
-which is the correct behaviour for the solid space between rooms, and it means the artifact a GM
+which is the correct behaviour for the solid rock between rooms, and it means the artifact a GM
 prepares is essentially **one shape per room and corridor**.
 
 Drawing those by hand, over every room of every map, is the single most tedious piece of prep in the
 tool. But the map already shows where the rooms are — they are drawn on it, in ink. A trace pipeline
-can turn the ink into the regions.
+can turn the ink into the regions, which changes the job from *drawing* them to *correcting* them.
 
 **One artifact, two payoffs.** Those same shapes are what Dynamic Fog derives walls from: it strokes
-each drawing on the `FOG` layer and takes the contour, so a region's boundary becomes a wall (§3). So
-the tracing produces a complete manual fog-of-war map on vanilla Owlbear with no extension at all,
-and line-of-sight occlusion for free the moment Dynamic Fog is present. Nothing extra is emitted for
-the second case.
+each drawing on the `FOG` layer and takes the outline, so a region's boundary becomes a wall (§2). So
+the tracing produces a complete manual fog-of-war map on **vanilla Owlbear with no extension at
+all**, and line-of-sight occlusion for free the moment Dynamic Fog is present. Nothing extra is
+emitted for the second case. Dynamic Fog is a bonus, not a requirement.
 
-That framing sets the shape of the whole project, and it is why this is a nudger rather than an
-extractor:
+### Why "nudger" and not "extractor" — the inverted quality bar
 
-- **Automatic extraction will never be perfect** on a hand-drawn map. Doors, arches, curtains,
-  windows, secret passages and rubble all read as ink and none of them means "solid wall".
-- So the output is a **proposal**, not a result. It must be reviewable, editable piece by piece, and
-  rejectable in pieces without discarding the rest.
-- A tool that gets a GM 85% of the way in one click and lets them fix the rest is a large win. A
-  tool that claims 100% and is wrong in three places nobody notices is *worse than nothing*, because
-  the failures are invisible until play: a gap in the ink merges two rooms into one region, so
-  revealing one reveals three, and a region grown slightly too far shows a secret door that was
-  meant to stay hidden.
+**Automatic extraction will never be perfect** on a hand-drawn map. Doors, arches, curtains, windows,
+secret passages and rubble all read as ink and none of them means "solid wall". So the output is a
+**proposal**: something a GM looks at and corrects before it goes near the scene, rather than an
+answer they are asked to trust.
 
----
+A tool that gets a GM most of the way in one click and lets them fix the rest is a large win. **A
+tool that claims to be finished and is wrong in three places nobody notices is worse than nothing**,
+because the failures are invisible until play.
 
-## 2. Why a separate extension from cartographers-fog
+That inverts the usual quality bar, and it is the single idea the rest of the design serves: *being
+wrong quietly is much worse than being wrong loudly.* Everything that follows — the review surface,
+the refusal to write into the GM's work unasked, the rule that a warning is not a safeguard — comes
+from it.
+
+### The two failure modes are not equally bad
+
+- **Merging** — a leak through a gap in the linework puts several rooms in one region, so revealing
+  one reveals all of them. Ruins a scene.
+- **Splitting** — one room emitted as several regions costs the GM extra clicks.
+
+**Bias toward splitting.** This is the opposite of what "be conservative" suggests at first glance,
+and it decides several parameter choices on its own.
+
+A third failure sits underneath both and is worse than either: **a region grown a little too far
+shows a secret door that was meant to stay hidden.** That sets the safe direction wherever a boundary
+can be moved — err toward showing less.
+
+### Why a separate extension from cartographers-fog
 
 Both trace a map image, and the temptation to merge them should be resisted:
 
@@ -59,96 +152,60 @@ Both trace a map image, and the temptation to merge them should be resisted:
 | Output | aesthetic — a hand-drawn sketch | functional — geometry the fog engine obeys |
 | Cost of being slightly wrong | a slightly ugly line | a room the party can see into |
 
-The lifecycles have nothing in common. A GM who wants one may not want the other, and bundling
-would mean a play-time extension carrying an authoring tool's weight on every client.
+The lifecycles have nothing in common. A GM who wants one may not want the other, and bundling would
+mean a play-time extension carrying an authoring tool's weight on every client.
 
 ---
 
-## 3. How Owlbear and Dynamic Fog handle fog and walls
+## 2. The platform: Owlbear and Dynamic Fog
 
-The foundation everything else rests on. Assembled 2026-08-04/05 from three sources of very
-different strength, and marked accordingly throughout:
+The foundation everything else rests on. Assembled from three sources of different strength, marked
+throughout:
 
 > - **Read from Dynamic Fog's source** — [owlbear-rodeo/dynamic-fog](https://github.com/owlbear-rodeo/dynamic-fog),
 >   GPLv3, published by Owlbear as an SDK example. Strong, but it establishes what *Dynamic Fog*
->   does, never what *Owlbear* does — the renderer is in Owlbear's closed client. The repository was
->   last pushed 2025-08-14, so the deployed extension may have moved; and the wall, door and light
->   reactors, the reconciler, the batching layer and the wall geometry helper were read, not the
->   whole repository.
+>   does, never what *Owlbear* does — the renderer is in Owlbear's closed client.
 > - **Read from the SDK's own type definitions** — strongest available, since it is what we compile
->   against.
-> - **Reported** — from Owlbear's documentation, relayed 2026-08-05, not verified here. Consistent
->   with everything else but flagged where load-bearing.
+>   against. They are in `node_modules/@owlbear-rodeo/sdk/lib/**/*.d.ts` and are greppable.
+> - **Measured in a room** — an actual observation in an actual Owlbear scene.
+> - **Reported** — from Owlbear's documentation, not verified here. Flagged where load-bearing.
 
-### Fog is subtractive, and fog shapes are ordinary items
+### The fog model, stated once and exactly
 
-Everything is hidden by default; shapes on the `FOG` layer are the revealable regions. Space in no
-shape can never be shown, which is what makes "fog the rooms, not the rock" correct rather than
-merely convenient.
+This is the paragraph most likely to be consulted, and a wrong inference from it has already misled
+one session, so it is worth being precise:
 
-**There is no fog-shape API.** The SDK's fog API is styling only — get and set the fog colour, the
-stroke width and whether fog is filled, plus a change subscription. Nothing creates, reads or
-enumerates fog shapes. They are ordinary `Shape`/`Path`/`Curve`/`Line` items on the `FOG` layer,
-distinguished by nothing else. This is what collapses the "emit native fog shapes" and "emit
-drawings Dynamic Fog can read" options into a single act.
+> **Everything is fogged by default. A shape we emit is fogged too — it is not a hole — but it is
+> the region Owlbear will let a GM *reveal*. Space in no shape is fogged and *unrevealable*,
+> permanently.**
 
-### Walls and lights are first-class SDK types, and local-only
+So "shapes on the `FOG` layer are the revealable regions" is exactly right, and so is "space in no
+shape can never be shown". **One exception, and it belongs to Dynamic Fog rather than to Owlbear**: a
+light still reveals unshaped space, because DF assumes everything is fogged and lights reveal.
+"Unrevealable" means unrevealable by Owlbear's own fog tools.
 
-`Wall` carries `points`, `doubleSided` and `blocking`; `Light` carries an attenuation radius, source
-radius, falloff, inner and outer angles, and a `PRIMARY | SECONDARY | AUXILIARY` type. The wall
-builder defaults `doubleSided` and `blocking` to `true`, puts the item on the `FOG` layer, and sets
-`zIndex` 0 with auto-z disabled.
+**`visible` is the hide/reveal flag**, and this is not obvious. On the `FOG` layer that flag is *not*
+"can this be seen" — it is the difference between a shape that **is** fog and one that has been
+**cleared**. An emitted room at `visible: false` comes back already revealed. Nothing else in the SDK
+expresses it: `Item` carries only `visible`, and `OBR.scene.fog`'s `filled` is scene-wide styling
+(filled versus outline-only). The flag means the opposite thing on the `DRAWING` layer, where false
+is what hides a thing from players — which is exactly how the error survived for a week.
 
-**Reported: both types can only be added to `OBR.scene.local`, not the networked scene.** Consistent
-with everything observed — the sibling's item census found Dynamic Fog's walls and lights only in
-the local set, and Dynamic Fog writes only there. If true it closes the old "do networked walls
-occlude" question from a different direction: the SDK refuses them outright. Worth confirming,
-because the confirmation is a thrown rejection rather than a judgement about a screen (§6, OQ3).
+### There is no fog-shape API
 
-**Reported: `zIndex` on walls and lights is not draw order in the usual sense.** It gates which
-walls affect which lights — a light only sees walls at or above its own `zIndex`, intended for
-multi-storey maps — and decides whether the item draws under or over static fog. Not relevant yet;
-recorded so the builder's default of 0 is not mistaken for meaningless.
+The SDK's fog API is **styling only** — get and set the fog colour, the stroke width and whether fog
+is filled, plus a change subscription. Nothing creates, reads or enumerates fog shapes. They are
+ordinary `Shape` / `Path` / `Curve` / `Line` items on the `FOG` layer, distinguished by nothing else.
 
-### Dynamic Fog is an editor for Owlbear's engine, not the engine
+This is what collapses "emit native fog shapes" and "emit drawings Dynamic Fog can read" into a
+single act.
 
-It builds ordinary `WALL` items with the SDK's own `buildWall()`. The occlusion rendering is
-Owlbear's.
+### One abstraction, two consumers
 
-Its architecture is a **one-way binding** from the shared scene to local children. A `Reconciler`
-subscribes to networked item changes; registered `Reactor`s filter for items they care about; each
-matching item gets an `Actor` that owns the derived local items; a `Patcher` batches the writes,
-every one of which targets `OBR.scene.local`. Its own source comment states the constraint that
-follows: because it cannot observe the local scene, its children must be unselectable and
-non-copyable, or an item added or deleted outside the reconciler leaves it in an invalid state.
-
-**That is Dynamic Fog deliberately making its walls un-clickable**, and it is why editing means
-editing the drawing rather than the wall.
-
-### The wall filter is layer plus type, and nothing else
-
-```
-WallReactor.filter(item) === item.layer === "FOG" && isDrawing(item)
-isDrawing === isShape || isPath || isCurve || isLine
-```
-
-The reconciler applies the reactor's filter and no condition of its own; the entry point registers
-the reactors plainly. **No metadata is involved.** An ordinary drawing on the `FOG` layer, from any
-source, becomes walls.
-
-**Correction on record.** An earlier draft of this document asserted that feeding Dynamic Fog would
-mean matching undocumented metadata, and that `doubleSided`/`blocking` had to be encoded somewhere.
-That was wrong, and it was one of two stated reasons for preferring to emit `WALL` items directly.
-The reasoning that survived it should be trusted no more strongly than it was.
-
-### A wall drawn in Dynamic Fog is an ordinary `LINE` — read from source, 2026-08-29
-
-**There is no second abstraction to interface with, and this is the fact the whole architecture turns
-on.** Dynamic Fog's line mode builds a plain `LINE` item on the `FOG` layer, at the scene's own fog
-stroke width and fog colour, snapped to the grid. Not a `WALL` item. Not a zero-area region. An open
-segment, of exactly the same *kind* of object as a fog region — just one with no interior. The wall
-the GM then sees is derived from it a moment later by the same machinery that derives walls from a
-room's boundary.
+**A wall drawn with Dynamic Fog's own tool is an ordinary `LINE`** — read from its source. Not a
+`WALL` item, not a zero-area region. Two points, `layer: "FOG"`, stroke width and colour from
+`OBR.scene.fog`, the end stored relative to the item's position. The wall the GM then sees is derived
+from it a moment later by the same machinery that derives walls from a room's boundary.
 
 So there is **one** abstraction — drawings on the `FOG` layer — with two consumers reading different
 aspects of the same object:
@@ -160,204 +217,161 @@ aspects of the same object:
 
 A closed filled region has both. An open line has only the second.
 
-**The choice is therefore never "Owlbear's abstraction or Dynamic Fog's".** It is whether the things
-we emit have interiors — and the answer is that some must and some must not. §4 settles which.
+**The choice is therefore never "Owlbear's abstraction or Dynamic Fog's".** It is only whether a
+thing we emit has an interior — and the answer is that some must and some must not. §3 settles which.
 
-**Stroking an open segment yields one contour**, a capsule around the line, so an open line gives one
-wall where a closed loop gives two (§3, two walls per closed contour).
+### The wall filter is layer plus type, and nothing else
+
+```
+WallReactor.filter(item) === item.layer === "FOG" && isDrawing(item)
+isDrawing === isShape || isPath || isCurve || isLine
+```
+
+**No metadata is involved.** An ordinary drawing on the `FOG` layer, from any source, becomes walls.
+This is why feeding Dynamic Fog needs no private schema and why the output degrades gracefully.
 
 ### Walls are derived state, recomputed from the drawing
 
-On any change, the actor recomputes the wall's `points` from the parent drawing, adding or deleting
-walls as the contour count changes. The geometry helper:
+Dynamic Fog is an **editor for Owlbear's engine, not the engine**. It builds ordinary `WALL` items
+with the SDK's own `buildWall()`; the occlusion rendering is Owlbear's.
 
-- converts the drawing to a path,
-- **strokes it to the drawing's own `style.strokeWidth`**, in Skia's sense of the word — `stroke()`
-  does not draw a stroke, it *replaces the path with the outline of the stroked region*. See below,
-- samples curves at a fixed interval (10 units by default),
-- subtracts every *open* door from the result with a boolean path operation, in world space, after
-  simplification (its comment notes subtraction interacts badly with curves).
+Its architecture is a **one-way binding** from the shared scene to local children: a reconciler
+subscribes to networked item changes, reactors filter for items they care about, each matching item
+gets an actor owning the derived local items, and a patcher batches writes — every one of them to
+`OBR.scene.local`. Because it cannot observe the local scene, its children are unselectable and
+non-copyable. **That is Dynamic Fog deliberately making its walls un-clickable**, and it is why
+editing means editing the drawing rather than the wall.
 
-Heavy lifting is Skia compiled to WebAssembly.
+On any change, the actor recomputes the wall's points from the parent drawing. The geometry helper
+converts the drawing to a path, **strokes it to the drawing's own `style.strokeWidth`** — in Skia's
+sense, where `stroke()` replaces the path with the *outline of the stroked region* — samples curves
+at a fixed interval, and subtracts every open door in world space.
 
-**So the wall lands at the boundary of whatever shape is on the `FOG` layer.** A filled region's
-edge becomes its wall. That is the mechanism the whole design depends on, and it is **confirmed in a
-room** — roadmap step 1, §6.
+**So the wall lands at the boundary of whatever shape is on the `FOG` layer.** That is the mechanism
+the whole design depends on, and it is confirmed in a room.
 
-### Two walls per contour, and why — 2026-08-15
+#### The stroke width IS the offset, and that is load-bearing
 
-Stroking a *closed* loop yields an annulus, and an annulus has two boundaries: an outer contour
-offset `+strokeWidth/2` and an inner one offset `−strokeWidth/2`. Each becomes its own polyline and
-each polyline becomes its own `Wall`. So the rule is **two wall items per closed contour** — not per
-shape, and not by anyone's decision. It falls out of the geometry.
+Stroking a *closed* loop yields an annulus, and an annulus has two boundaries: one offset
+`+strokeWidth/2` and one `−strokeWidth/2`. Each becomes its own polyline and each becomes its own
+`Wall`. So **two wall items per closed contour** — not per shape, and not by anyone's decision. A
+shape with a hole has two contours and yields four.
 
-- **They do not look like two walls** because they are exactly `strokeWidth` apart. Owlbear's fog
-  tool uses 5, against a grid cell of typically 150 world units — about 3% of a cell, which at any
-  normal zoom is one line rendered slightly fat.
-- **This explains the zero-stroke measurement** (§4), which was recorded as a fact with no mechanism
-  under it: at width 0 the two offsets coincide precisely, so the stroker still emits two contours
-  and they superimpose. Observation and source agree, which is as strong as an explanation gets
-  here.
-- **A shape with a hole has two contours, so it yields four walls.** The count scales with contours,
-  not regions — see §10.
+The consequence that matters is not the count but the **band between the two derived walls**, which
+is unreachable from either side. A shape carrying an outline W wide reveals only to its boundary
+− W/2, so two adjacent rooms sharing a centreline each fall short by half of W.
 
-**Walls are built with the `VISIBLE` and `COPY` attachment behaviours explicitly disabled.** This is
-load-bearing for us and was very nearly an untested assumption: we emit with `visible: false` to
-match Owlbear's fog tool (§4), but every step 1 measurement was taken with `visible: true`. An
-invisible fog shape still produces a live wall *because Dynamic Fog opts out of visibility
-inheritance*, not by luck. Worth one confirming glance in a room, but it is no longer a gamble.
+> **This is why emitted shapes carry no stroke at all** (`ACCEPTED_STROKE_WIDTH = 0`). A band of fog
+> down the middle of a wall is not the wall; it is a strip of map nobody can ever see.
 
-**Dynamic Fog does not draw walls, and there is nothing to imitate.** The thin white lines a GM sees
-while the fog tool is active are **Owlbear's own rendering of `WALL` items**. Walls are constructed
-in exactly one place in Dynamic Fog, carrying no styling at all — points, attachment, and the
-parent's transform. Its overlay system, which activates on the fog tool, registers only light and
-door overlays. So wall visualisation comes free with emitting walls, and costs us nothing to
-provide.
+**Zero is safe and it is measured, not assumed.** A zero-stroke shape produces exactly as many walls
+as a stroked one, and a zero-width `LINE` still yields a working wall — Skia's stroker returns
+something usable at zero rather than nothing. Confirmed in a room by lighting a wall from both sides:
+everything reveals, no fog line down the middle, and the walls still block sight. Tiny rendering
+artefacts sit on the division, visible only under a deliberately garish fog colour, and are accepted
+as cosmetic.
 
-### Doors ride on the same drawings; lights do not
+**Stroking an open segment yields one contour** — a capsule around the line — so an open `LINE` gives
+one wall where a closed loop gives two.
 
-`DoorReactor` filters on **exactly the same condition as walls** — `FOG` layer plus being a drawing.
-Doors are therefore annotations carried on the drawings themselves, and the wall derivation
-subtracts the open ones. Whatever their metadata shape is (unread), it lives on items we would
-already own.
+### What an emitted fog item must look like — measured in a room
 
-**Door subtraction is global, not per-drawing — read from `WallActor`, 2026-08-29.** The actor asks
-the door reactor for **every** door in the scene, and the geometry helper subtracts each open one
-from its polylines **in world space**. A door therefore cuts whatever wall geometry it overlaps,
-regardless of which drawing it hangs off or who created that drawing.
+| | ours | Owlbear's fog tool | decision |
+|---|---|---|---|
+| `fillOpacity` | 0.5 | **1** | **match — required** |
+| `visible` | false | **false** | **differ — must be `true`** |
+| `fillRule` | evenodd | nonzero | **differ, deliberately** |
+| `strokeWidth` | 9 | 5 | **0 — see above** |
 
-Two consequences, and the second is a scheduling decision:
+- **`fillOpacity` must be 1.** Below that, ground the party has *revealed* keeps a translucent tint
+  of the fog colour, for GM and players alike.
+- **`visible: true`**, per the fog model above. Owlbear's own tool writes cleared shapes; we write
+  fog.
+- **`fillRule: "evenodd"`, deliberately unlike Owlbear's `nonzero`.** Under even-odd an inner ring
+  cuts a hole regardless of winding, so winding direction never has to be got right. Dynamic Fog maps
+  anything that is not `"nonzero"` onto Skia's even-odd, so the two ends agree. **This retires the
+  winding-direction pitfall entirely.**
+- **A `SHAPE` is positioned from its corner; a `PATH`'s commands are relative to its position.**
+  Costs nothing since we emit paths, and it confirms the positioning semantics world placement
+  depends on.
 
-- **A wall represented twice needs only one door.** Two adjacent rooms emitted as separate fog shapes
-  put two boundaries along the wall between them, close together. One door spans both and cuts both.
-  An earlier draft of this record inferred the opposite — that a door would need duplicating per
-  drawing — and offered it as an argument for emitting walls as lines. **That inference was wrong**,
-  and the argument it supported does not exist.
-- **So doors can be left to Dynamic Fog entirely.** A GM adding them with its own tool afterwards
-  cuts our walls with nothing emitted by us. Doors are off this project's critical path by choice
-  rather than by postponement (user, 2026-08-29).
+The four values an emitted item must carry — layer, visibility, fill opacity, stroke width — are
+**declared together in `emit/fogShapes.ts`** so the next edit has one place to miss rather than four.
+That module imports no SDK, which is why the constants can be tested headlessly.
 
-`LightReactor` is the exception: it filters on `rodeo.owlbear.dynamic-fog/light` being present in an
-item's metadata. **There is no metadata-free route to a light.** Walls are free; lights are gated
-behind Dynamic Fog's private namespace. Do not assume symmetry.
+### Walls, lights and doors
+
+- **`Wall` and `Light` are first-class SDK types and are local-only.** Reported, and consistent with
+  everything observed: the sibling's item census found Dynamic Fog's walls and lights only in the
+  local set, and Dynamic Fog writes only there.
+- **Walls are built with the `VISIBLE` and `COPY` attachment behaviours explicitly disabled**, which
+  is why an invisible parent still produces a live wall — Dynamic Fog opts out of visibility
+  inheritance rather than us getting lucky.
+- **Dynamic Fog does not draw walls.** The thin white lines a GM sees while the fog tool is active are
+  Owlbear's own rendering of `WALL` items. So wall visualisation comes free and costs us nothing.
+- **Doors ride on the same drawings.** `DoorReactor` filters on exactly the same condition as walls,
+  and **door subtraction is global**: the actor asks for every door in the scene and subtracts each
+  open one from its polylines in world space. So a door cuts whatever wall geometry it overlaps,
+  regardless of which drawing it hangs off or who created it.
+
+  Two consequences. **A wall represented twice needs only one door**, so two adjacent rooms sharing a
+  boundary are cut by one door spanning both. And **doors can be left to Dynamic Fog entirely** — a
+  GM adding them with its own tool afterwards cuts our walls with nothing emitted by us. Doors are
+  off this project's critical path by choice rather than by postponement.
+- **Lights are the exception.** `LightReactor` filters on `rodeo.owlbear.dynamic-fog/light` being
+  present in metadata. **There is no metadata-free route to a light.** Walls are free; lights are
+  gated behind a private namespace. Do not assume symmetry.
 
 ### Forecast — noted, not pursued
 
-Owlbear 2.4 shipped a first-party computer-vision pipeline that fogs a battlemap automatically,
-[announced here](https://blog.owlbear.rodeo/owlbear-rodeo-2-4-release-notes/), in beta and limited
-to a paid tier, with the caveat that it "won't always get 100% of the way there". It produces the
-same artifact this project produces, which is a strong independent signal that the artifact is the
-right one.
+Owlbear 2.4 shipped a first-party computer-vision pipeline that fogs a battlemap automatically, in
+beta and limited to a paid tier, with the caveat that it "won't always get 100% of the way there". It
+produces the same artifact this project produces, which is a strong independent signal that the
+artifact is the right one.
 
-**Deliberately not treated as a blocker** (user, 2026-08-05): this project is primarily for its
-author's own use, that tier is not available to them, and the work is largely done. Revisit if it
-becomes broadly available — the interesting question then is whether this becomes the *nudging* half
-on top of Forecast's extraction, which is the half nobody ships.
-
+Deliberately not treated as a blocker: this project is primarily for its author's own use and that
+tier is not available to them. Revisit if it becomes broadly available — the interesting question
+then is whether this becomes the *nudging* half on top of Forecast's extraction, which is the half
+nobody ships.
 ---
 
-## 4. The decision: a wall graph is the document, fog items are its rendering
+## 3. Architecture: the wall graph is the document
 
-**Revised 2026-08-29 (user).** The emitted artifact is unchanged in kind — ordinary drawings on the
-`FOG` layer of the networked scene — but what the project *works in* is now a **graph of wall
-centrelines**, and the fog items are derived from it at emit time.
+**The project works in a graph of wall centrelines. The fog items in the scene are a rendering of
+it.**
 
 ```
-ink mask  →  wall graph (skeleton + GM edits)  →  { fog shapes for the faces, lines for the rest }
+ink mask  →  wall graph  →  frozen document  →  { fog shapes for the faces, lines for the rest }
+              (derived)      (the GM's own)
 ```
 
-**What did not change**, and it is most of the original 2026-08-05 reasoning:
+### The target: emulate a careful human's scene
 
-- The output is **useful with nothing else installed**. Vanilla Owlbear renders the shapes as manual
-  fog of war and the GM reveals room by room. **This is the primary play-time function, not a
-  fallback**, and it is why an edges-only emission was never on the table: a line has no interior to
-  reveal and nothing to click, so it would leave a GM with correct line-of-sight over a map that is
-  still entirely black.
-- It **degrades gracefully rather than failing**, and is **not coupled to a private schema** — the
-  filter that matters is layer plus item type (§3).
-- Regions are still emitted one per enclosed walkable area.
-
-**What changed** is that regions stopped being the thing we reason in. They are now derived, late and
-thin, and the reasoning is below under "Why a wall graph rather than a partition".
-
-### The target: emulate a careful human's scene — user, 2026-08-29
-
-The clearest available statement of what correct output means, and it is worth holding onto because
-it settles arguments that abstract reasoning does not:
+The clearest available statement of what correct output means, and it settles arguments abstract
+reasoning does not:
 
 > **Where possible, produce the scene a person would have got by drawing fog shapes in Owlbear, then
 > switching to Dynamic Fog, making any necessary additions, and adding doors.**
 
-That person's scene contains one fog shape per room and corridor, plus Dynamic Fog line items for the
-walls no room boundary covers, plus doors. So does ours. Three things follow directly:
+That person's scene contains one fog shape per room and corridor, plus line items for the walls no
+room boundary covers, plus doors. So does ours. Three things follow:
 
-- **Redundancy that the human version also has is not a defect.** Two adjacent rooms are two shapes
-  whose boundaries run along the same wall. That duplication is inherent in the requirement that
-  rooms reveal *independently*, and a hand-drawn scene has it too.
+- **Redundancy the human version also has is not a defect.** Two adjacent rooms are two shapes whose
+  boundaries run along the same wall. That duplication is inherent in the requirement that rooms
+  reveal *independently*.
 - **We are not obliged to use Owlbear's tools to produce it**, only to produce what they would have.
-- **Doors are the human's last step and they can stay that way** — see §3, door subtraction is global,
-  so doors added natively afterwards cut our walls for free.
+- **Doors are the human's last step and they can stay that way.**
 
 ### Fog the rooms, not the rock
 
-The wall geometry is identical either way, since the boundary curve between rock and room is shared.
-But only fogging the enclosed walkable areas produces useful native behaviour: unexplored rooms
-hidden, revealed one at a time. Fogging the solid material would hide decoration and nothing else.
+The wall geometry is identical either way, since the boundary between rock and room is shared. But
+only fogging the enclosed walkable areas produces useful native behaviour: unexplored rooms hidden,
+revealed one at a time. Fogging the solid material would hide decoration and nothing else.
 
-### Emit the outside as well, rather than working out which region it is — 2026-08-16
+### Why a wall graph rather than a partition of the map
 
-User's decision, and it dissolves a problem rather than solving one. The pipeline does **not**
-classify regions into interior and exterior. It emits every enclosed region it finds, and the space
-outside the dungeon becomes one more revealable shape — or one large one wrapping the rest.
-
-- **The classification is not reliably solvable.** "Touches the image border" fails on maps whose
-  rooms run to the edge. Tone fails because the convention varies by map: on this author's style
-  room interiors are largely white and the surrounding area is flooded with a mid tone, but shaded
-  interiors with white margins are just as plausible elsewhere (user, 2026-08-16). **Do not
-  generalise from one style** — that is the sibling's "property of the fixture" trap wearing a new
-  costume.
-- **Nothing needs the answer.** Fog is subtractive, so an unrevealed exterior region is visually
-  identical to space in no shape at all. A GM who simply never reveals it sees exactly what they
-  would have seen had we discarded it.
-- **So the worst case disappears.** A wrong classification on an unusually-styled map would have
-  discarded every room and kept the rock. That failure mode no longer exists, because no decision is
-  taken.
-
-**Costs, stated rather than minimised.** The exterior's boundary runs alongside every room's outer
-wall, so Dynamic Fog derives a second wall pair a wall-thickness away from each — roughly doubling
-the wall count, redundant for occlusion but not free. And the exterior is the most complex path in
-the output: an outer boundary plus one hole per enclosed room cluster.
-
-**Both are cheaper than they look, because the exterior is exempt from the rules that protect
-rooms.** §10's "never split to meet the cap" exists because a join between two adjacent regions
-becomes a wall across a room; outside the dungeon there is no room to cut in half and nobody to cut
-off, so the exterior may be **chunked freely** — which defuses the 8192-entry cap on precisely the
-item most likely to hit it. Simplification conservatism protects doorway gaps and room shape;
-neither applies out here, so the exterior can be simplified far harder than any room. Whatever
-tuning the rooms get, the exterior should be a separate and much looser setting.
-
-### There are two polarity questions, and only one still matters
-
-Worth separating, because the record previously ran them together:
-
-1. **Ink polarity** — is the linework darker or lighter than the ground it sits on? Real, must be
-   handled (§10), and answerable by measurement: the dry run's global split reports which class is
-   the minority, and on line art the ink is the minority.
-2. **Fill polarity** — is the enclosed interior lighter or darker than the exterior? Varies by
-   drawing style with no reliable signal, and **no longer needs an answer** given the decision
-   above.
-
-**Colour is discarded and that is a real loss.** Binarisation runs on luminance, so a water-filled
-room drawn in a mid tone can land in the same band as this style's exterior — separable by hue,
-which we have thrown away (user, 2026-08-16). It does not affect *connectivity*, since regions are
-separated by ink rather than by tone, so such a room is still its own region. The live risk is
-narrower: if a mid-tone fill ever falls on the ink side of the threshold, that room fills with
-"ink" and vanishes as a region entirely. Watch for it; hue is the reserve if it happens.
-
-### Why a wall graph rather than a partition — settled 2026-08-29 (user)
-
-**A wall is a blockage, not an area.** A partition of the map into regions can only express a wall
-as *the thing between two regions*, and a map contains walls that are between nothing.
+**A wall is a blockage, not an area.** A partition of the map into regions can only express a wall as
+*the thing between two regions*, and a map contains walls that are between nothing.
 
 #### The case that decides it: a stub wall
 
@@ -365,199 +379,83 @@ Take a square room with a short wall extending out from one corner into open spa
 that stub touch the **same** ground region — the outside. So:
 
 - It is not a boundary between two regions, because there is only one region there.
-- The partition can still *represent* it, as a slot cut into the outside region's polygon, with the
-  boundary running up one face, round the tip and back down the other.
+- A partition can still *represent* it, as a slot cut into the outside region's polygon.
 - But **any operation that grows regions into the ink destroys it**, because the slot is attacked
-  from both sides at once and closes. The wall does not merely thin — it disappears, and shortens
-  from the tip as it goes.
+  from both sides at once and closes. The wall does not merely thin — it disappears.
 
-That matters because growing regions into the ink is not optional; it is the half-wall reveal below.
+That matters because growing regions into the ink is not optional: it is how half the wall gets
+revealed, which §1's product judgement requires.
 
-#### The proof, from the *correct* version of that operation
-
-The crude implementation is a global outward offset, and it was rejected in 2026-08-05 for being
-unreliable against variable ink width. That is true and it is the shallow reason. The real one:
+#### The proof, from the correct version of that operation
 
 The right way to reveal half a wall is a **watershed** — give every ink pixel to the nearest ground
-region. Where two regions compete the boundary lands on the ink's medial axis: exactly half the wall,
-everywhere, under any ink width, with no radius to guess. Where only one region competes, every pixel
-goes to it and the feature is consumed.
+region. Where two regions compete, the boundary lands on the ink's medial axis: exactly half the
+wall, everywhere, under any ink width, with no radius to guess. Where only one region competes, every
+pixel goes to it and the feature is consumed.
 
 > **So the correct region operation deletes precisely the walls that are not region boundaries.**
 > That is not a bug in an implementation. It is the partition reporting what it can represent.
 
 And a watershed from ground regions *is* the medial axis restricted to its separating branches — half
-a skeleton. The region-first design would have us compute half the skeleton, discard the other half,
-and then patch the missing half back with special cases (user, 2026-08-29: "re-inventing
-skeletonization with a series of tweaks").
+a skeleton. A region-first design would compute half the skeleton, discard the other half, and then
+patch the missing half back with special cases, which is re-inventing skeletonisation by tweaks.
 
-#### Verified: the partition is already deleting pillars
-
-Not a prediction. A pillar — ink enclosed by floor, containing no region — becomes a hole in the
-room's region, and the containment rule fills any hole that encloses no surviving region. **The
-emitted polygon covers the pillar, so it derives no wall, blocks no sight, and is revealable floor.**
-Same for any freestanding barrier that closes on itself. Live today, and unnoticed only because no
-one has traced a map with a prominent pillar.
-
-That is the stub argument one topology up, and the containment rule cannot simply be relaxed: keeping
-every hole would make a wall ring around every speck of ink in a room.
-
-##### Why a hole is never decided by size — rescued from `contours.ts` before it was deleted
-
-The region-first tracer carried this argument in its module comment, and the file went on 2026-08-31
-once nothing referenced it. The rule survives the pivot; so does the reason, and the reason is the
-part that would be expensive to learn twice.
-
-Keeping a hole **when it is large enough** was the first rule, on the reasoning that anything too
-small to be a region is too small to be a hole. It does not hold, and a GM found the symptom before
-the reasoning was re-examined:
-
-> **A region's area is its own pixels, while a hole's area is everything its ring encloses** — the
-> thing inside, *plus the ink ring around it*.
-
-They are different quantities, so one threshold cannot govern both. Equal thresholds leave a band
-where a feature is too small to survive as a region and its hole is too big to fill, and every
-decorative feature in that band showed through as a white pocket — **44 of them on the test map**.
-
-Raising the threshold is worse than leaving it: a hole big enough to clear a room-sized cutoff can
-contain a *surviving* region, and a region covering another region means revealing one reveals the
-other, which is the merge failure this design biases hardest against. On the test map 156 of 269
-regions were under a grid square, so that was not a remote case. Containment cannot make that
-mistake and needs no threshold at all.
-
-**Live relevance, stated honestly:** under the wall graph there is no minimum-area filter at all, so
-the band cannot open and the hole rule almost never fires — a hole is kept unless the face beyond it
-holds no map. This is kept as the answer to a question that will be asked again the first time
-somebody proposes a size threshold anywhere near a hole.
-
-*The same file also recorded the diagonal-pinch turn rule — that where two pixels of one region touch
-only at a corner, the tracer must turn hard, because space is 4-connected and the polygon must not
-contradict the labelling that produced it. That decision is still live and still tested, one stage
-along: `label.test.ts` pins the labelling side and `wallGraph.test.ts`'s staircase fixture pins the
-chain walk's equivalent.*
+**This was verified rather than predicted.** Under the old partition a pillar — ink enclosed by floor,
+containing no region — became a hole in the room's region, and the containment rule filled any hole
+enclosing no surviving region. The emitted polygon covered the pillar, so it derived no wall, blocked
+no sight, and was revealable floor. The partition was already deleting pillars, silently.
 
 #### The real argument is parameter *coupling*, not parameter count
 
-Lines do not remove parameters. Spur pruning replaces the pullback; the gap threshold survives almost
-unchanged. What changes is that **each parameter does one job**:
+Lines do not remove parameters. What changes is that **each parameter does one job**:
 
 | | region model | wall graph |
 |---|---|---|
-| reveal extent | pullback — which **also** decides which thin features survive | an inset on the derived region, which cannot delete a wall because walls come from lines |
-| feature survival | the same pullback, plus the hole rule | spur pruning, beside the island filter, asking the same question a GM already answers |
+| reveal extent | a pullback, which **also** decides which thin features survive | true by construction — a face boundary *is* the centreline |
+| feature survival | the same pullback, plus a hole rule | spur pruning, asking a question a GM already answers |
 
 The region model forces one number to set how much wall is revealed *and* which walls exist, because
-the representation ties them together. §8's standing rule already forbids that: one parameter doing
-two jobs means neither can be tuned.
+the representation ties them together. **One parameter doing two jobs means neither can be tuned.**
 
-The patched version needs a coupled budget — pullback plus simplification tolerance under half the ink
-width — to avoid eating thin features, and a stub still shortens by the pullback at its free tip. The
-graph has no such coupling.
-
-#### The gap repair becomes a graph question
-
-What a repair asserts is that two wall segments are **connected** — a claim about the wall network,
-which is what a skeleton is made of. Today that is reconstructed from pixels with a closing, bank
-grouping and a bounded flood, and then expressed by inventing raster ink. On a graph it is two free
-endpoints and a graph distance: exact rather than budgeted, which also deletes the "guessed break"
-state (§11 item 3) that has never once been observed.
-
-#### Editing, and the freeze point that already exists
-
-A GM thinks *"shift this wall a little"*, not *"this room is slightly bigger and the region beside it
-is coincidentally slightly smaller"* (user, 2026-08-29). Moving one line is the natural edit; moving
-two polygon boundaries in step is not.
-
-The obvious objection — that a vector edit is an **output** a re-trace clobbers, where raster paint is
-an **input** that survives — does not hold, and it is worth recording why so it is not raised again.
-**The project already has a freeze point**: stage-three edits are made with Owlbear's tools and a
-re-run discards them. The graph does not introduce one, it *moves* it earlier, to where the edit is
-meaningful and local rather than one that leaves a join Dynamic Fog turns into a wall across a room.
-
-Finer than that: **additions and deletions can stay durable inputs**; only a *move* needs identity on a
-derived line, and identity is not stable when the ink threshold changes. So moves imply the freeze,
-editing in general does not.
-
-#### What it costs — stated, not minimised
-
-- **Thinning, never the medial axis — and the reason recorded here was wrong. Corrected by
-  measurement, 2026-08-29.** The claim was that the medial axis retracts half a wall width at a free
-  end while topology-preserving thinning "explicitly preserves endpoints". The first half is right.
-  The second is not: **Zhang–Suen pulls back too, by (w + 1) / 2 pixels** — two on a three-wide
-  stroke, four on a seven-wide one, measured on bars of known width. Nothing reaches the true end of
-  a stroke.
-
-  **What the distinction actually is, and it still holds:** the *branch survives*. A stub off a wall
-  thins to an edge hanging off a junction, shortened at the tip. A partition deletes it outright,
-  because a watershed provably drops every wall that separates nothing. A stub three pixels short is
-  a wall; a stub that is gone is not — and that is the difference the pivot rests on, not the
-  retraction.
-
-  **The retraction is a standing cost.** Half a wall width at the free tip of a stub is about 0.06 of
-  a grid square on this project's test map. If a room shows it mattering, the fix is extending each
-  branch end back along its own direction to the ink boundary — end restoration, not a different
-  skeleton.
-- **Spurs are a new failure mode — and on the test map they are a small one. Measured in a room,
-  2026-08-29.** Thinning keeps the spur from every bump on a hand-drawn edge, and a spur that
-  separates nothing would emit as a stub wall blocking sight where nothing does. That was the worry.
-  What a real map gave: a 15px prune budget removed **51 branches totalling 295 pixels out of 42,912**
-  — **0.7% of the skeleton** — rising smoothly from 15 branches at 3px through 32 at 7px, with no
-  cliff anywhere. The GM's summary was "not hairy".
-
-  **So pruning stays an off-by-default correction rather than becoming a required stage**, which this
-  section had allowed it might have to be. It still needs the visual channel §8 asks for, and it has
-  one: the skeleton is drawn.
-- **The area check stops covering the emitted walls.** It still covers derived regions, so it is not
-  lost, but the wall artifact becomes the unchecked part and there is no equivalent invariant for it
-  yet.
-- **Raw skeletons are enormous** — one vertex per pixel. "Simpler than what we store today" is a
-  property of the fitting stage, not of the skeleton.
-
-#### Expected size — reasoning, not measurement
-
-- **The internal graph is roughly half** today's geometry: one centreline replaces the two boundaries
-  flanking the same wall. Compounded a little by a looser simplification tolerance (below).
-- **The emitted scene is about the same.** One shape per room still means two adjacent rooms duplicate
-  their shared boundary — now exactly coincident instead of a wall-width apart, but still two copies.
-- **The graph adds content the boundaries never had** — stubs, pillars, freestanding walls. New
-  geometry, and the point of the exercise.
-
-### Reveal about half the wall — solved by the graph
+#### Half-wall reveal is then free
 
 A revealed region should extend into the wall, roughly to its centre, rather than stopping at the
-ink's inner edge (user, 2026-08-05). The reasoning is a product judgement, not a technical one: the
-wall is part of the drawing and makes the room look complete, sometimes carries detail worth seeing,
-and a region that stops at the floor reads as though the party is being shown a partial room.
-
-The risk is symmetrical and understood: too much wall can reveal a secret door. That sets the safe
-direction for tuning — **err toward showing less wall**, because a GM notices a room that looks
-clipped far more readily than a door they were never meant to see.
+ink's inner edge. The reasoning is a product judgement: the wall is part of the drawing, makes the
+room look complete, sometimes carries detail worth seeing, and a region stopping at the floor reads
+as though the party is being shown a partial room.
 
 **Under the wall graph this needs no parameter at all.** Regions are the faces of the line
 arrangement, so a face's boundary *is* the wall centreline and the reveal reaches half the wall by
-construction. If the safe direction is wanted, it is a pure inset on the derived region — and unlike
-the pullback it **cannot delete a wall**, because walls come from the graph rather than from the
-region's edge.
+construction. If the safe direction is ever wanted, it is a pure inset on the derived region — and
+unlike a pullback it **cannot delete a wall**, because walls come from the graph rather than from the
+region's edge. **The centreline is the ceiling**: any such inset moves the boundary back from it,
+never past it.
 
-*Superseded with it:* the global outward offset, which was the only automatic implementation available
-under the partition and is the operation shown above to destroy stub walls.
+### The exterior is not a room
 
-### Reconsidered: the two 2026-08-05 centreline rejections — 2026-08-29
+**We do not emit a shape for the space outside the dungeon.**
 
-Both were sound against what was proposed at the time, and **neither reaches the wall graph**. Recorded
-in this form so they are not quoted back at it.
+> *"On most maps the exterior isn't a 'room'. It's not an explorable space. Not emitting a shape for
+> it would simplify what we emit, and be more true to the typical intent of the map."*
 
-- **"Centreline extraction is unnecessary."** The argument was that the hollow gap between two rooms'
-  boundaries is inside solid ink, unreachable, and blocked by either boundary — so nothing can stand
-  in it. All true, and it addresses **only walls that separate two regions**. It says nothing about a
-  wall that separates nothing, which is the case above, and nothing about half-wall reveal, which it
-  explicitly left deferred.
-- **"Centrelines emitted as thin drawings make Dynamic Fog a hard dependency."** A thin line emitted as
-  fog is a thin revealable sliver, so that design did nothing without Dynamic Fog. Correct — and it
-  rejects emitting lines **instead of** regions. The wall graph emits lines **as well as** regions, so
-  vanilla Owlbear still gets a complete manual fog map and the dependency never arises.
+Per the fog model in §2, no exterior shape means the outside stays **fogged and unrevealable**, which
+is the intent. And it turns the project's worst failure into its loudest: **a room that leaks to the
+outside joins a face nothing emits, and so becomes a room that cannot be revealed at all.** A merge
+that used to be invisible until play is now obvious the moment the GM looks.
 
-### What emits as a shape and what emits as a line — the bridge criterion, 2026-08-29
+**It also removes an identification problem with no sound answer.** Deciding which face is the
+exterior is not reliably solvable — "touches the image border" fails on maps whose rooms run to the
+edge, and tone fails because the convention varies by drawing style. Worse, a single line across a
+page separating two buildings carves a bordered exterior into two faces, where largest-by-area picks
+one and touching-the-border matches both.
+
+**With no border frame painted into the raster there is exactly one unbounded face, by topology, on
+every map.** It has no polygon, so it drops out for free with nothing to identify.
+
+**The cost, stated:** a GM who *wants* the outside revealable has to say so, by drawing walls at the
+map's edge. That is one button — *Wall the map's edge* (§5) — and it is an ordinary edit afterwards.
+
+### What emits as a shape and what emits as a line — the bridge criterion
 
 Regions are the **faces** of the wall-graph arrangement, and each emitted face is a fog shape. A face
 boundary already carries every wall along it, so most walls need no line of their own. The rule for
@@ -565,135 +463,397 @@ the rest is exact:
 
 > **A wall emits as a line exactly when no emitted face boundary covers it.**
 
-Two cases produce that, and both are computable from the graph:
+The case that produces it is a **bridge** — an edge with the same face on both sides. A stub wall is
+a bridge, and no region boundary can ever cover one because there is only one region there.
+Bridge-finding is standard linear-time graph work.
 
-- **Bridges** — edges with the same face on both sides. A stub wall is a bridge, and no region boundary
-  can ever cover one because there is only one region there. Bridge-finding is standard linear-time
-  graph work.
-- **Edges bordering a face that was not emitted** — a face the smallest-room filter discarded. The far
-  side contributes no boundary, so the edge is uncovered.
+#### Emitting the slit instead was proposed and rejected
 
-Everything else is covered by the two faces it separates and is emitted only as their shared boundary.
-This is what produces the human-equivalent scene of "The target" above, with no coincident duplication
-beyond the duplication a hand-drawn scene already has.
+The traversal walks a bridge **out and back**, so a stub hanging into a room appears in the room's
+boundary cycle as a zero-width slit. That looks as though the room's own shape already carries its
+stub, and no line were needed.
 
-#### The criterion survived a challenge to it — 2026-08-30
+**Emitting that is wrong.** It puts our internal representation into the scene and leaves two other
+renderers to interpret a degenerate excursion: Skia may collapse a zero-area subpath when stroking,
+Owlbear may normalise it when storing, and neither is measured. It also produces something no human
+could have drawn, since Owlbear's fog tool cannot make a shape with a slit in it — against the target
+above. So the slit is **dropped from what is emitted** and the bridge goes out as its own line.
 
-Building step D made it look wrong, and it is worth recording why it is not. The half-edge traversal
-walks a bridge **out and back**, so a stub hanging into a room appears in the room's boundary cycle as
-a zero-width slit — which suggested the room's own shape already carries the stub and no line is
-needed. Measured on a fixture: it does, the ring repeats the stub's tip.
+**Traversal and rendering are different things, and this is the clearest case of it.** The slit is
+still walked; it is only not emitted.
 
-**Emitting that was the wrong conclusion** (user, 2026-08-30). It puts our internal representation
-into the scene and leaves two other renderers to interpret a degenerate excursion: Skia may collapse a
-zero-area subpath when stroking, Owlbear may normalise it when storing, and neither is measured. It
-also produces something no human could have drawn, since Owlbear's fog tool cannot make a shape with a
-slit in it — against §4's own target of emulating a careful human's scene. And it is the near
-neighbour of an idea already rejected here: bundling a stub into its room as a second subpath.
+#### Taking a bridge out of a ring SPLITS the ring
 
-So the slit is dropped from what is emitted, and the bridge goes out as its own line. **The criterion
-stands as written.** The slit is still walked, and still counted by the area check, which needs those
-steps — the traversal and the rendering are different things and this is the clearest case of it.
+Skipping a bridge's half-edges while walking the cycle looks safe — an excursion returns to where it
+left, so the ring stays continuous. **That is true for a plain stub and false for a lollipop**: a room
+on the end of a stalk, whose own outline is not a bridge because it separates two faces. Skip only
+the two stalk half-edges and the ring jumps from the stalk's base to the far room and back, cutting a
+chord across the map and dropping every wall in between.
 
-#### Taking a bridge out of a ring is a graph operation — found in a room, 2026-08-30
+Removing a stalk from a boundary genuinely **disconnects** it: one hole around building-plus-lollipop
+becomes two, one around each. Both naive rules fail in opposite directions — cutting at every omitted
+half-edge separates a plain stub's two sides, which should stay joined.
 
-The first version skipped a bridge's half-edges while walking the cycle, on the reasoning that an
-excursion returns to where it left, so the ring stays continuous. **A map showed that wrong within
-minutes**: the exterior's outline ran across the map to unrelated vertices and skipped long stretches
-of wall.
+What settles it: after the bridges are removed, every node has as many kept half-edges arriving as
+leaving, because an excursion always comes back. So the kept half-edges **decompose into closed
+loops**, found by following unused departures from each arrival. `LOLLIPOP` is a named test fixture
+because the shape is worth recognising.
 
-The reasoning holds for a plain stub and fails for a **lollipop** — a room on the end of a stalk. The
-stalk is a bridge; the room's own outline is not, since it separates two faces. So the exterior's
-boundary walks along the stalk, right around the room, and back. Skip only the two stalk half-edges
-and the ring jumps from the stalk's base to the room and back, cutting a chord across everything in
-between. Removing the stalk from the boundary genuinely **disconnects** it: what was one hole around
-building-plus-lollipop becomes two, one around each.
+### The document and its rendering
 
-Both naive rules are wrong in opposite directions — cutting at every omitted half-edge separates a
-plain stub's two sides, which should stay joined; never cutting produces the chord. What settles it is
-that after the bridges are removed every node has as many kept half-edges arriving as leaving, because
-an excursion always comes back. So the kept half-edges decompose into closed loops, and following
-unused departures from each arrival finds them.
+**Our graph is the document. The scene is a rendering of it.** Emitted items are an output, never the
+working state.
 
-**Three things this cost, worth having recorded.** The area check upstream could not see it, because it
-runs on the traversal before anything is dropped — a reminder that it checks the *derivation*, not what
-is emitted. The invariant that catches it is that an unfitted emitted ring's steps are all to an
-8-neighbour: a ring is a walk along the skeleton and a walk cannot teleport. And the sweep had to run
-with fitting **off** to assert areas exactly, since Douglas–Peucker legitimately moves a boundary by
-half a lattice unit at a time — checking the decomposition and the fitting together would have needed
-a tolerance, and a tolerance would have hidden the thing being tested.
+**This is forced rather than chosen: Owlbear cannot hold the graph.** Items are independent, each with
+its own geometry and transform, and there is no shared vertex between two items. Emit a room as a
+shape and its stub as a line and all they share is a coincidence in world space — drag the room's
+corner natively and the stub stays behind, silently, at a scale where the break is invisible until it
+is a fog leak.
 
-#### What a line is: a `LINE`, copied from Dynamic Fog — read from source 2026-08-30
+**Attachment does not help**: it carries the parent's *transform*, not its geometry. The proof is
+Dynamic Fog itself, whose wall actor recomputes a wall's points from scratch on every change to the
+parent drawing. If attachment propagated geometry it would not need to.
 
-`createLineMode.ts` is the whole answer, and it is short. A wall drawn with Dynamic Fog's own tool is
-an ordinary **`LINE`**: two points, `layer: "FOG"`, stroke width and colour from `OBR.scene.fog`, the
-end stored relative to the item's position, `zIndex` set to the timestamp. **No fill anywhere** — and
-that is the property that matters, because a `LINE` has no interior *by type*, so it cannot reveal
-ground. Every tidier alternative fails there: an open subpath inside a `PATH` risks being implicitly
-closed for filling, which would reveal a sliver of floor along every free-standing wall.
+**Precedent worth noticing:** this is exactly Dynamic Fog's own shape, one level down. Drawings are
+its document; walls are derived, recomputed, never read back. A one-way binding from a document to a
+rendering is the pattern the platform pushes you toward, and we apply it one level up.
 
-Dynamic Fog ships no other drawing tool. Everything else it reads is Owlbear's own fog tool output.
+**The trade, stated plainly.** A hand edit to one of our fog items does not survive the next push.
+That is the point rather than a regression — what the GM sees is the current state — but it means the
+wall editor is the *only* place to edit. Accepted on a second argument as well: Owlbear has no
+polyline continuity between line segments, so editing our output there would have been poor anyway.
 
-**The cost, stated:** a fitted polyline of n points becomes n − 1 items, so a wall is several entries
-in the Outliner and a GM nudging one segment moves only that segment. In exchange nothing rests on
-undefined behaviour in someone else's renderer, and a two-point item cannot have a vertex inserted
-into it — which is the degradation mode the vertex ids otherwise have to detect.
+**Nothing is ever read back out of the scene.** Everything the surfaces derive is a pure function of
+durable inputs — the settings, the nominated map and the paint layers, all in scene metadata, plus
+the frozen graph. Scene metadata belongs to the scene rather than to the extension or the browser
+session, so it survives closing the workspace, reloading the room, and disabling and re-enabling the
+extension. There is no `localStorage` use at all.
 
-**Two deliberate differences from Dynamic Fog's mode**, both in the safe direction. Ours are staged on
-`DRAWING` in a review colour first, and take the scene's fog colour and stroke width only when
-accepted. And ours are `visible: false`, where its lines take the default of true: a staged item that
-players can see leaks the map's layout during prep, which is the same reasoning the fog shapes already
-follow.
+> **This is why emitted geometry carries no vertex ids.** They existed so that grouping items by id
+> could reconstruct the graph, and so a stub's free tip could be told from a **doorway** — two ends
+> deliberately close and deliberately separate, which geometry alone cannot distinguish. With nothing
+> reading the scene back, the graph is always one re-run away and the question is never asked.
+>
+> **What would bring them back** is storing hand edits *as scene items* rather than as durable
+> inputs. That is the one arrangement where the scene becomes the source of truth for something the
+> pipeline did not derive, and it is already rejected.
 
-**A pleasant consequence: the pillar judgement falls out of a control that already exists.** Whether a
-pillar should block sight or merely decorate is a GM's call, and the smallest-room filter makes it. If
-the pillar's interior survives as a face, the pillar is a hole in the room — blocks sight, stays dark.
-If it is discarded, the pillar emits as a line loop — blocks sight, and the room reveals over it so the
-artwork shows. One knob, both behaviours, and it is the knob that already means "how small a thing
-counts".
+### Rejected alternatives
 
-### Faces come from the graph itself, not from a raster of it — settled 2026-08-30 (user)
+- **Emitting `WALL` items directly.** Three independent reasons, any one sufficient: reported to be
+  impossible on the networked scene at all; local walls are per-client and unpersisted, so **every
+  participant would need this extension running**, absurd for an authoring tool used once per map;
+  and Dynamic Fog's tools edit drawings and would ignore a `WALL` item entirely, so the output would
+  be geometry nobody can nudge — which defeats the project.
+- **Mimicking Dynamic Fog's private format for walls.** Unnecessary — there is no private format for
+  walls to mimic (§2). It remains the shape of any eventual *door* work.
+- **Bundling a stub into its room as a second subpath of one `Path`.** Fill would ignore the open
+  subpath and the stroke would give correct walls, so the two could not be separated by a whole-item
+  move. Declined because a **bent** stub, implicitly closed for filling, encloses and reveals a
+  sliver — and because it fails the general case anyway: a junction shared by three faces belongs to
+  no single item.
+- **Emitting centrelines as thin drawings, instead of regions.** A thin line emitted as fog is a thin
+  revealable sliver, so that design does nothing without Dynamic Fog. The wall graph emits lines **as
+  well as** regions, so vanilla Owlbear still gets a complete manual fog map and the dependency never
+  arises.
+- **A global outward offset to reveal half the wall.** One radius against variable ink width,
+  under-covering heavy walls and over-covering light ones on the same map — and, per the stub-wall
+  argument above, it destroys any wall that separates nothing.
+---
 
-Step D was first specified as "rasterise the graph, label, trace contours" — reuse of four trusted
-components with a different input. **That is wrong, and the user's objection is the one that settles
-it: the vector output is what we want in the end, so a raster route produces the geometry twice.**
-Worse than twice — the two copies disagree.
+## 4. Reading the map into a graph
 
-A raster trace gives a staircase boundary which is then simplified. The wall lines step E emits come
-from fitting the skeleton's own pixel chains. Those are two independent approximations of one
-centreline and they do not land on the same points. That breaks the read-back scheme outright: it
-requires a room and the stub wall meeting it to **carry the same vertex id at the shared corner**, and
-matches ids exactly with no epsilon. Two items can only share an id if they share a point.
+This is stage one: everything that turns pixels into the document. It is orchestrated in
+`pipeline.ts`, and every step of it lives under `trace/` as a pure, headless-testable function.
 
-A second failure is independent of the first. Under the partition, two adjacent rooms had boundaries a
-wall width apart, so simplifying each ring separately was harmless. Under the graph they are
-**coincident**, and independent simplification makes them disagree by up to the tolerance — opening a
-sliver between two rooms that share a wall. **Simplification therefore moves from per-ring to
-per-edge**: each graph edge is fitted once, and both faces carry the identical point list. That is a
-graph operation with no expression in the raster route.
+```
+load  →  binarise  →  compose the GM's paint  →  filter ink
+      →  thin  →  chain into a graph  →  remove slivers  →  fit  →  freeze
+```
 
-**What the raster is still good for is topology, not geometry**, and it keeps exactly that role. The
-labelling supplies face identity and the area check, and contributes no emitted geometry at all. That
-is the acceptable kind of twice: one geometry plus one invariant.
+### Resolution is native
 
-#### Why the arrangement is safe here
+**We trace at the map's own resolution.** The cap that exists is a memory limit, not a speed limit.
 
-Face traversal is normally feared because arrangement code has to **compute intersections** between
-float segments, where a single mis-sorted half-edge merges two rooms — this project's worst outcome.
-**We compute none.** The skeleton is already a planar embedding: nodes exist only where pixels are
-adjacent, which is exact integer work, and the traversal is combinatorial rather than geometric. The
-one residual geometric decision is the angular sort of half-edges at a node, and it is only close when
-two edges leave a node at nearly the same heading. **That safety is conditional on nothing moving a
-point**, which is what the withdrawn weld radius did — see below.
+The sibling traces at 1024 pixels wide, and it would have been easy to inherit that as prudence. Its
+actual reason does not transfer: **its tuning constants are raw pixel values measured at that
+raster**, so changing the width silently invalidates every one of them. The width is a calibration
+lock-in wearing the costume of a performance budget.
 
-#### Prior art: the sibling solved graph building, and one of its rules binds us
+The positive case is stronger than the absence of a reason to downscale. **Downscaling resamples the
+ink, and the ink's topology is the answer this project computes.** Averaging a thin dark line into
+its lighter surroundings lowers its contrast, and any stretch that then falls below threshold opens a
+gap that is not on the map — a manufactured leak between rooms. The same averaging can also close a
+genuine doorway. Both artifacts are real, they push in opposite directions, and which dominates on a
+given map is not predictable. At native resolution neither is introduced. The graph pivot strengthens
+this: the centreline of a resampled stroke is not the centreline of the drawn one, and centrelines
+are now the emitted geometry rather than an intermediate.
 
-`../W - cartographers-fog/` turns a thinned skeleton into strokes, and its four rules come in turn from
-the author's own `VTT_Maps`. Two transfer as they stand, one was taken and then **withdrawn**, and one
-is forbidden outright.
+The time is affordable for its own reason — this runs GM-only, once per map, at prep time.
+
+**The cap is memory**: roughly four bytes per pixel for the decoded image, one for the mask, four for
+the labels, inside a third-party iframe. The budget is stated in megapixels, reported on every run
+whether or not it bit, and when it bites the reduction is by an **integer** factor so it is uniform
+across the image — a fractional ratio resamples different regions against different sub-pixel phases
+and thins linework unevenly.
+
+**Named cost:** when the budget does bite, the reduction is done by the browser's own resampler
+during the draw, not by a box filter of ours. A box average would be better, but computing one needs
+the full-resolution pixels in memory, which is precisely what the budget exists to avoid. **The
+budget bounds the raster and says nothing about the decoded source image**, which is not capped and
+is the larger of the two on exactly the maps that trigger capping.
+
+### Units — there is no unit that is always right
+
+The original rule was *"denominate in measured ink width or grid squares, never raster pixels"*. Both
+halves have since failed, and stating it that way hid the fact that the choice has to be made **per
+parameter**.
+
+- **Grid squares fail when the grid is not the map's.** A GM who does not need a grid leaves it at a
+  default, or sets it wrong, and nothing about that is visible or reported. The pipeline still runs;
+  the control simply stops meaning anything.
+- **Ink width is not trusted across map styles.** It saturates at 2px, is biased thin, and is
+  measured by erosion on a mask that a heavily hatched or stippled map makes unrepresentative. It is
+  a good unit when it is good, and there is no way to know from inside which case you are in.
+- **Raster pixels stop meaning the same thing only when the megapixel budget bites**, which is
+  reported and rare — and they are always *exactly* what they say for the run in front of you.
+- **Fractions of the map** are independent of the raster, the source image's size and the grid, which
+  is what makes them the only unit the wall editor can speak: it pulls a graph from metadata and has
+  neither a raster nor a measurement.
+
+So the rule is: **prefer ink width where the parameter is genuinely about the linework's own scale;
+otherwise prefer pixels; use fractions of the map where a value must outlive the raster; use grid
+squares only where the quantity really is a distance on the map's own grid.** Nothing may depend on
+the grid *silently*.
+
+| parameter | unit | why |
+| --- | --- | --- |
+| Texture blur | px | a filter kernel size |
+| Detail window | px | a filter kernel size, tuned beside the blur |
+| Minimum stroke width | ink widths | genuinely a statement about stroke thickness |
+| Smallest ink island | px | a size on the image, and ink width is not trusted here |
+| Largest break to repair | px | a threshold that moved with a measurement would change what is repaired invisibly |
+| Same-wall distance | px | a distance travelled across the image |
+| Brush widths | px | what the GM is aiming with, on screen |
+| Edge simplification | fraction of the map | must be expressible in both modes |
+| Prune spurs | fraction of the map | same |
+
+**Nothing in the pipeline depends on the grid.** The one control that did — the deleted smallest-room
+filter — depended on it *squared*, so a grid off by four put it off by sixteen.
+
+*Rejected: choosing the raster to hit a target pixels-per-grid-square density.* The sibling tried it,
+reasoning that pixel-denominated constants are only meaningful against the ink scale they were tuned
+on. It broke on a map spanning 5.4 grid squares, where the rule picked a raster 174 pixels wide and
+thinned every line out of existence.
+
+*Rejected: a grid-plausibility check* that would compare pixels-per-square against measured ink width
+and report a grid that is not the map's. It is a **warning**, and §8 forbids those as safeguards. The
+fix was to remove the dependency instead.
+
+**A unit change is a rename, never a reinterpretation.** Keeping a settings key while changing its
+unit would read a stored `0.25` squares as `0.25` pixels — catastrophic and silent. A rename means
+the old key is ignored and the new default applies, which is the loud version of the same event. Any
+scene tuned before such a change comes back at defaults for that control alone.
+
+### Binarisation and polarity
+
+Sauvola's **local** adaptive threshold over summed-area tables, ported from the sibling, with an
+explicit Gaussian blur ahead of it as the texture-suppression control.
+
+**Ink polarity — is the linework darker or lighter than its ground — must be decided, and the obvious
+rule is wrong.** Taking whichever luminance class is the minority fails on a map with dark walls,
+light floors and a **dark fill outside the rooms**: ink and exterior both land on the dark side, so
+"dark" is most of the image while the ink is plainly still dark, and the rule inverts a map that
+needed nothing done to it.
+
+**What replaces it: ink is thin, not rare.** Linework is thin everywhere by construction; floors,
+fills and exteriors are not, and that property survives whatever a map does with its tones. Measured
+by eroding each candidate mask by one pixel and scoring the share of ink that fails to survive — a
+hairline scores 1, a three-pixel stroke about two thirds, a blob near zero. The higher score is the
+more line-like reading and therefore the polarity. Readings covering more than half the image are
+disqualified outright, since ink is never most of a map.
+
+Both polarities come from **one pass**: variance is invariant under negation, so a single pair of
+summed-area tables yields both thresholds and the second mask is nearly free. The two masks are *not*
+complements — Sauvola's threshold is asymmetric about the mean — which is itself why the decision has
+to inspect the masks rather than reason about the histogram.
+
+**Ink width falls out of the same measurement for free.** Eroding a stroke of width `w` leaves
+`w − 2`, so a long straight stroke has `thinness = 2 / w` and the width is `2 / thinness`. That is the
+denomination several parameters want, and it costs nothing beyond the arithmetic. The Sauvola window
+should be comfortably wider than the ink — below about 3× a heavy stroke fills enough of its own
+window to be read as ground.
+
+**Erosion is a ruler, not a stage.** It measures thinness for polarity and ink width; nothing ever
+writes an eroded mask back. There is no knob, because a knob would move the *unit* other parameters
+use. And **erosion is not a minimum line width**: erosion thins survivors, and since regions are
+bounded by ink, thinning ink **grows every region**.
+
+**Colour is discarded and that is a real loss.** Binarisation runs on luminance, so a water-filled
+room drawn in a mid tone can land in the same band as an exterior. It does not affect *connectivity*,
+since regions are separated by ink rather than by tone. The live risk is narrower: if a mid-tone fill
+ever falls on the ink side of the threshold, that room fills with "ink" and vanishes. Hue selection
+is the reserve if it happens.
+
+### The GM's paint — two layers, composed
+
+```
+base ink  −  suppression  +  added ink
+```
+
+Three independent inputs. The base is the reading; the GM owns the other two, painting each with a
+brush. **Position in the composition is load-bearing**: suppression composes first, and added ink is
+**last of everything**, which is what makes it immune to the ink filters below — nothing automatic
+second-guesses what the GM drew deliberately.
+
+`composePaint` is the one statement of that order, pure and tested. It could not be extracted while
+the break repair sat between its terms, which is why the repair becoming a tool (below) mattered more
+than it looked.
+
+**A raster, not a list of strokes.** The rule is that a document belongs in the space of the thing it
+produces: the frozen graph produces geometry, this produces ink pixels. What it buys is that the
+preview and the effect stop being two computations — the array the GM is shown **is** the array that
+composes — and that erasing needs no definition, it writes zero.
+
+**At the pipeline's raster**, so applying it is pixel for pixel forever. The document records its own
+dimensions, which is what makes a replaced image or a changed megapixel budget a *reported* resample
+instead of a silent one. Moving, scaling or rotating the map cannot invalidate a layer, because the
+raster comes from the decoded image's pixels and our budget alone.
+
+**Size decided the design, and it is measured.** At 3300×2550: untouched ~0, a hall covered solid
+(11.4% of the map) **4.2KB**, 100 wide strokes 10.6KB, 500 scattered dabs 34KB — and a grid *traced
+line by line* map-wide **1,674KB**, which does not fit in scene metadata. The reason that does not
+matter is a fact about people rather than about code: **nobody paints out crosshatching stroke by
+stroke, they cover the area with a wide brush**, and solid is about 400× cheaper than traced.
+`writePaintLayer` refuses above 128KB with a message saying what to do differently, rather than
+letting an obscure metadata failure land at the moment the GM finishes.
+
+**An empty layer is deleted rather than stored.** "No paint for this map" and "paint, and it is
+blank" are one fact told two ways, and the second can disagree with the first.
+
+### Repairing breaks in the linework
+
+**A break merges two rooms, which is this project's worst outcome**, and it is too small to spot by
+eye on a whole map.
+
+**The definition, after two wrong ones:** *a gap is a narrow channel of ground whose banks of ink are
+far apart when measured **along the ink**.* Both rejects are worth remembering:
+
+- *"a break that separates space when sealed"* — tests the space when the question is the integrity
+  of the **ink**. A freestanding wall in the middle of a room separates nothing, so a crack in it
+  would never be reported.
+- *"a break between two different ink blobs"* — fails on a crack in a **ring**, where both banks are
+  one blob by the long way round.
+
+**Three steps, and only the first costs anything.** A morphological closing gives the candidate
+channels. Grouping the ink touching a channel gives **one group for a dead end** and two or more for
+something that passes through — that step alone kills the ragged-edge confetti a raw closing
+produces, and it is free. Then a bounded flood through the ink from one whole bank group decides
+whether the banks are the same piece of wall locally.
+
+**It is a tool, not a filter.** Selecting it runs the search and rings every break; clicking inside a
+ring accepts that one; a button accepts every ring shown. **What is accepted goes into the added-ink
+layer**, so from that moment it is paint like any other, with no separate term in the composition and
+nothing that can re-invent itself.
+
+That is what makes the safety rule fully true. A non-zero threshold was never one-time consent — it
+re-invented ink on *every* recompose thereafter, whatever else moved underneath. As a tool, **the
+writing is an act**.
+
+- **A dead end is never repaired**, since it connects nothing.
+- **A guessed break** — one whose flood ran out of budget — is ringed but never filled. Marking on a
+  guess is a warning; inventing ink on a guess is not.
+- **The search runs against the composite**, not the base: a break already brushed closed is not a
+  break, and one the suppression opened is.
+- **Accepting re-runs the search**, so the caller can never draw marks the accept invalidated. The
+  rings visibly reshuffle, which is expected — channels merge and split as the ink changes.
+
+**Why the automatic search survives at all**, given a GM can now draw a wall by hand in the editor:
+*on a map that has a lot of little gaps, the automated fix is a huge time saving.* That is also why
+accept-all exists rather than click-one-at-a-time alone.
+
+**One control, after two were tried.** Finding and repairing were briefly separate — a width to
+highlight candidates and a share of it to select which got repaired. That failed on a fact about
+maps: **breaks are not discrete items** that appear one at a time as the width rises. Where two
+uneven lines run close together, a closing carves the space between them into several channels at the
+pinch points, and those channels **merge into one** as the radius grows. So there was no stable
+reference set to hold still, and **raising the highlight could prevent a repair a lower setting
+allowed** — non-monotonic. One control is well behaved because what it tunes is the *set of pixels*,
+which grows, rather than a set of marks, which does not. The channel count still jumps around, and is
+reported as a diagnostic rather than as a tally of distinct faults.
+
+**Predicted, not measured: a double-line wall is a false positive.** Hollow walls are narrow channels
+whose two strokes meet only at the ends of a run, so every one would get filled solid — one mark per
+run, not a shower.
+
+**A stated cost: an accepted fill goes stale where the search used to self-correct.** Change the
+threshold now and a break that closed on its own stops being filled; an accepted one does not. The
+direction that matters is a fill left across what has since become an open **doorway**, which Dynamic
+Fog would derive a wall across. Accepted because it is visible in the added-ink layer's own colour,
+and hand-painted ink already fails the same way.
+
+### The two ink filters, and why both go past useful
+
+Both act on the composed mask and neither is safe on its own. **Both maxima deliberately go far
+enough to erase the map**, because a control whose top end still looks reasonable gives no feel for
+where the edge is. That is only defensible because the surface draws the result.
+
+- **Minimum stroke width** — a morphological **opening** (erode k, then dilate k), denominated in
+  measured ink widths, default zero. It works on **width**, which is the axis a floor grid printed as
+  dark as the walls actually sits on; blur works on **contrast** and cannot reach it. It **runs after
+  the ink-width measurement, never before** — measuring a filtered mask would raise the mean width,
+  move the threshold, and change what it removes.
+- **Smallest ink island** — removes 8-connected ink components whose bounding box is short on **both**
+  sides, in raster pixels. Walls join into one network and decorations are islands, so connectivity
+  does the separating and size only has to catch islands. **Longest bounding-box side, not area**,
+  because that is the measure that means *stubby*.
+
+Two implementation rules that look like inconsistencies and are not:
+
+- **`erosionCounts` treats off-image as ground; the morphology passes clamp the window.** For
+  *measuring* thinness, counting off-image as ground can only make a shape look thinner, which is the
+  safe direction. For *filtering*, it would erode a band off every edge and delete a wall drawn along
+  the border. Opposite rules, both right.
+- **The island filter is 8-connected**, which is the conservative direction rather than merely the
+  consistent one: a decoration touching a wall diagonally is then part of the network and is never
+  removed.
+
+**Both filters are separable running-count passes** — O(pixels) and **independent of the radius**. The
+inner loop addresses pixels through a base and a stride rather than a closure choosing between two
+multiplications; measured in Node at 3300×2550, radius 6 went from 503ms to 235ms, and the new
+version is flat in the radius where the old one was not.
+
+### Connectivity — the pairing is not optional
+
+Connected-component labelling must use **8-connectivity for ink and 4-connectivity for space**.
+Using the same connectivity for both produces the classic paradox: a one-pixel diagonal touch
+simultaneously connects the ink and fails to separate the space, so regions leak diagonally through
+walls that look closed. **This is a correctness requirement, not a tuning knob**, and the turn rule at
+a diagonal pinch is the same decision one stage later.
+
+### Thinning
+
+**Topology-preserving thinning (Zhang–Suen), never a distance-transform medial axis.** It iterates a
+list of surviving ink pixels rather than the raster, and takes `floor(w / 2)` passes for ink of width
+`w` — pinned by a test across four widths rather than left as an impression.
+
+**The reason is not that thinning avoids the free-end retraction.** It does not: Zhang–Suen pulls back
+**(w + 1) / 2 pixels**, measured on bars of known width. What distinguishes it is that the **branch
+survives at all**, where a partition deletes it outright. A stub three pixels short is a wall; a stub
+that is gone is not. The retraction is a standing cost — about 0.06 of a grid square on the test map
+— and the fix, if a room ever wants one, is extending each branch end back along its own direction to
+the ink boundary, not a different skeleton.
+
+**Thinning runs on the COMPOSED ink**, not the base: a repair asserts two segments are connected, and
+thinning the unrepaired ink would show them as two.
+
+### Chaining the skeleton into a graph
+
+The sibling had already solved this, from the author's own `VTT_Maps`. Two of its rules transfer as
+they stand, one is forbidden, and one was taken and withdrawn.
 
 - **Walk the skeleton into pixel chains running node to node.** Interior pixels are marked as consumed
-  so a chain is not traced again from its far end; node pixels are never marked, because several
+  so a chain is not traced again from its far end; **node pixels are never marked**, because several
   chains legitimately share one.
 - **Join two chains where exactly two ends meet at a node.** Such a node is not a junction, so those
   chains are one edge.
@@ -702,4020 +862,1349 @@ is forbidden outright.
   wobble as one line. Merging two edges through a degree-3 node would destroy the incidence the faces
   are read from.
 
-### Welding was taken from the sibling and withdrawn — measured 2026-08-30
+#### Nothing between the skeleton and the faces may move a point
 
-The rule not listed above is **welding**: collapsing chain endpoints within a small radius onto one
-shared node, union-find over a hash grid, 3px there. It is the sibling's answer to the junction
-cluster, and nothing else it does removes one — thinning leaves junction pixels one or two apart, and
-the stubby chains between them survive stub pruning (both ends are junctions) and collinear merging
-(they are not path pixels) alike. It was adopted here on that reasoning, with a GM-facing radius.
+This is the strongest rule in the pipeline, and it was learned expensively.
 
-**It is wrong here, and the reason is specific to wanting faces rather than polylines.** Welding moves
-a chain's endpoint to a node it was not on. To keep every step between 8-adjacent lattice points — the
-area check is a lattice identity and needs that — the moved end was walked to its node along a
-straight lattice path. **That invented path can cross other linework.** Once the embedding is not
-planar, a half-edge traversal means nothing: the angular order at a node no longer corresponds to the
-order faces appear around it, and the walk crosses between faces without noticing.
+**Welding** — collapsing chain endpoints within a small radius onto one shared node — is the sibling's
+answer to the junction cluster, and it was adopted here with a GM-facing radius. **It is wrong here,
+and the reason is specific to wanting faces rather than polylines.** Welding moves a chain's endpoint
+to a node it was not on, and the moved end then has to be walked to its node along an invented lattice
+path. **That path can cross other linework.** Once the embedding is not planar, a half-edge traversal
+means nothing: the angular order at a node no longer corresponds to the order faces appear around it,
+and the walk crosses between faces without noticing.
 
-Measured over generated linework, by failure rate of the area check:
+Measured over generated linework, by failure rate:
 
-| weld radius | area-check failures |
+| weld radius | failures |
 | --- | --- |
 | 0 px | 21 / 600 |
 | 2 px | 30 / 600 |
 | **3 px — the default that shipped** | **459 / 600** |
 | 4 px | 540 / 600 |
 
-**So the rule for this project is stronger than the sibling's and is worth stating as a rule:
-nothing between the skeleton and the faces may move a point.** Every point in the graph is a pixel
-that was in the skeleton, and every step is to an 8-neighbour of the last. Deleting is allowed;
-inventing is not.
+> **Every point in the graph is a pixel that was in the skeleton, and every step is to an 8-neighbour
+> of the last. Deleting is allowed; inventing is not.**
 
-**The weld radius control is therefore gone**, not defaulted to zero. It was the only stage-one
-control this project has ever shipped that was wrong rather than risky, and it lasted one commit.
+The control was **deleted**, not defaulted to zero.
 
-### What replaces it: deleting the sub-pixel faces instead — 2026-08-30
+#### What replaces it: removing the sub-pixel slivers
 
 A junction cluster's real signature is not that its pixels are close together. It is that the chains
 between them **enclose a face with no space in it** — where thinning turns a T into a small Y, two
 chains run between the same pair of nodes and bound a triangle of half a pixel containing no lattice
 point at all.
 
-That is something to find rather than a distance to guess at, and the repair is to **delete one of
+That is something to *find* rather than a distance to guess at, and the repair is to **delete one of
 the sliver's bounding edges**, merging it into whatever lies on the other side. Deleting an edge
-cannot break planarity and moves nothing, which is exactly what welding could not promise. Two
-constraints on which edge, both learned by the area check failing:
-
-- **It must have no interior pixels.** Deleting an edge that has them takes those pixels out of the
-  graph entirely, leaving them neither inside a face nor on any boundary — and the identity then
-  comes up short by exactly them. A sliver is sub-pixel, so it nearly always has a direct
-  node-to-node link available; where it does not, it is left alone and counted.
-- **A diagonal link is preferred.** Three mutually-touching pixels form a triangle whose hypotenuse
-  is the redundant 8-connection; giving up a leg instead cuts the corner off the linework rather than
-  tidying it.
-
-**No parameter, and that is the point.** A sliver either encloses a lattice point or it does not.
-
-### Degree is counted two ways, deliberately — corrected 2026-08-30
-
-The record previously said degree here is the crossing number, on the strength of the spur-pruning
-bug where a raw count stopped a branch walk one pixel early and left a nub on the wall. **That is
-right for pruning and wrong for chain walking**, and the difference is load-bearing in both
-directions.
-
-The crossing number counts contiguous *runs* of ink around the ring, so a pixel with four neighbours
-falling in two runs reads as an ordinary path pixel. The chain walk then passes straight through it,
-consuming it, and whichever branch it did not take is **stranded** — on generated linework this
-silently dropped a free end out of the graph entirely. It is still skeleton, so the labelling does
-not count it as space either, and the face it sits in comes up one interior point short.
-
-So: **pruning counts runs, chain walking counts neighbours.** Two measures, two jobs.
-
-**The cost of counting neighbours, stated:** three mutually-touching pixels become two nodes and a
-redundant link, which is a half-pixel sliver. They are common — the border frame produces one at each
-of its own four corners, because the pixel beside a corner touches the pixel on the adjoining side
-diagonally. Sliver removal handles them; the price is that it has real work to do on every map rather
-than occasionally.
-
-**One ordering constraint of the sibling's does not apply to us.** It counts raw neighbours in
-*pruning* too, and therefore depends on welding running before pruning — otherwise the nub. We pay
-for the crossing number where it belongs, so our order is the natural one: thin, prune, chain.
-
-#### The steps
-
-0. **Paint the raster border into the skeleton first.** Without it the graph's outer face is unbounded
-   and has no polygon, so the map's exterior — 74.9% of the test map, and something §4 decided to emit
-   rather than identify — could not be produced at all. With a one-pixel frame the exterior becomes an
-   ordinary bounded face whose outer ring is the frame and whose holes are the buildings, exactly what
-   the labelling gives today. Exactly one face is then unbounded, the one outside the frame, and it is
-   discarded by having no interior at all.
-1. **Chain** the skeleton into a graph of nodes and edges, each edge carrying its full pixel chain.
-2. **Faces by half-edge traversal.** Two half-edges per edge; at each node sort them by outgoing angle;
-   walk by taking the next one clockwise on each arrival. Every cycle is a face.
-3. **Tie each face to a raster label during the traversal.** For each half-edge, sample the pixel one
-   step to its left at the chain's midpoint: that is the label of the face the cycle bounds. One trick,
-   three jobs — it identifies faces, it separates an outer ring from a hole, and it resolves nesting.
-   A room drawn wholly inside a hall is a separate connected component whose outer cycle reports the
-   *hall's* label, so the hole attaches to the right face with no containment test anywhere.
-4. **The area check, kept exact and sharpened.** Run it before fitting, while a cycle still carries one
-   vertex per skeleton pixel. The old identity does not hold as written, because the boundary now runs
-   *through* the wall pixels rather than around them. A lattice identity restores it exactly:
-
-   > **A = I + S/2 + h − 1**, where **A** is the summed signed area of the face's cycles, **I** the
-   > raster label's pixel count, **S** the total number of steps in those cycles, and **h** the number
-   > of holes.
-
-   **Plain Pick's theorem does not work here, and the failure was found before any code was written.**
-   Pick counts *distinct* boundary lattice points and requires a simple polygon, and a face containing a
-   **bridge** has neither: the stub is walked out and back, so it is a slit and its pixels are visited
-   twice. On a 2×2 square with a one-pixel slit, plain Pick gives 3.5 against a true area of 4. Counting
-   **steps** rather than distinct points is what fixes it, because a slit pixel is then counted twice,
-   which is exactly the correction the derivation needs. Verified numerically on three shapes — a plain
-   room, an annulus, and a room containing a free-floating stub. Since bridges are the whole point of
-   the pivot, an invariant that broke on them would have been inapplicable precisely where it is needed.
-5. **Fit once, per edge.** Douglas–Peucker over each edge's chain with both node endpoints pinned.
-   Vertex ids attach here.
-6. **Faces out**, with the edge-to-face incidence the bridge criterion needs. The smallest-room filter
-   is unchanged.
-
-#### Two consequences, recorded because they are easy to inherit wrongly
-
-- **No new control ships with this.** The weld radius briefly did, and it is gone — see above. What
-  remains is the Walls step drawing the **graph's nodes** as screen-space marks over the centrelines.
-  That was built to give the weld radius the visual channel §8 demands; with the control withdrawn it
-  is no longer owed, and it is kept because a picture of where the graph thinks its junctions are is
-  worth having while judging a skeleton. Capped at 4,000 marks, above which they are a wash rather
-  than a picture.
-- **The simplification cap loses its reason and needs a new one.** Today the tolerance is capped below
-  half the ink width, which is what stops a boundary crossing the centre of a wall into the next room.
-  Under the graph the boundary *is* the centre of the wall, and both faces move together, so that
-  particular sliver cannot open. A cap may still be wanted — cutting a corner across a doorway is the
-  new risk — but it must be re-derived rather than inherited.
-
-### The smallest room control is gone, and zero-width walls work — 2026-08-30 (user)
-
-**Every face holding any map is emitted, and there is no size threshold.** The smallest-room control
-deleted a *region* when what is usually wrong is a *wall*. Removing a sliver by deleting the wall that
-made it is exact, local, and something a GM can see happen; removing it by area is none of those. The
-judgement moves to the wall editing of step G, which the workspace now has somewhere to show.
-
-What remains is an invariant rather than a threshold: a face with **no interior pixels** holds no map,
-so there is nothing there to reveal. Those are the sub-pixel slivers a junction cluster leaves where
-no bounding edge was free of interior pixels to delete.
-
-**This closes the "bare map inside a revealed room" defect**, which this record has carried since the
-first staging run. A discarded face was never turned into ink — it was simply not emitted, so it
-stayed permanently unrevealable and showed through as untouched map. Nothing is discarded now, so
-there is no mechanism for it.
-
-**And zero-width emission is measured, not assumed.** Accepted shapes drop their outline and accepted
-wall lines carry no stroke at all; Dynamic Fog derives its walls by stroking the item at
-`style.strokeWidth`, so at zero the two walls it derives coincide *on* the centreline. Confirmed in a
-room: lighting a wall from both sides reveals everything with no fog line down it, and the walls still
-block sight. A zero-width `LINE` therefore does yield a wall — Skia's stroker returns something usable
-at zero rather than nothing, which was the open risk. Tiny rendering artefacts sit on the division,
-visible only under a deliberately garish fog colour, and are accepted as cosmetic.
-
-### The document and its rendering — settled 2026-08-29 (user)
-
-**Our wall graph is the document. The scene is a rendering of it.** Emitted items are an output, not
-the working state.
-
-**This is forced rather than chosen: Owlbear cannot hold the graph.** Items are independent, each with
-its own geometry and transform, and there is no shared vertex between two items. Emit a room as a shape
-and its stub as a line and all they share is a coincidence in world space — drag the room's corner
-natively and the stub stays behind, silently, at a scale where the break is invisible until it is a fog
-leak. Attachment does not help: it carries the parent's **transform**, not its geometry, and the proof
-is Dynamic Fog itself, whose wall actor recomputes a wall's points from scratch on every change to the
-parent drawing. If attachment propagated geometry it would not need to.
-
-**Precedent worth noticing:** this is exactly Dynamic Fog's own shape, one level down. Drawings are its
-document; walls are derived, recomputed, never read back. A one-way binding from a document to a
-rendering is the pattern the platform pushes you toward, and we are applying it one level up.
-
-*Rejected on the way: bundling a stub into its room as a second subpath of one `Path`.* Fill would
-ignore the open subpath and the stroke would give correct walls, so the two could not be separated by a
-whole-item move. Declined because it invites trouble it does not repay — a **bent** stub, implicitly
-closed for filling, encloses and reveals a sliver — and because it fails the general case anyway: a
-junction shared by three faces belongs to no single item (user, 2026-08-29).
-
-#### Reading a scene back
-
-- **Vertex matching is exact. There is no epsilon** (user, 2026-08-29). Anything we emitted is exact by
-  construction, and anything we did not is not ours to assume about. A GM who wants two near-misses
-  joined has the gap tool, which is the honest place for that judgement.
-- **Every vertex carries a stable integer id, stored per item alongside its points.** Two items meeting
-  at a corner carry the same id; grouping by id reconstructs the graph outright. Deliberately **not**
-  cross-references of the form "vertex 2 of this line is vertex 3 of that shape" — a local label means
-  no item needs to know another exists, so nothing breaks when one is deleted or copied.
-- **What the ids buy is specifically the ability to tell "these came apart" from "these were always
-  separate".** Geometry alone cannot: a doorway is two wall endpoints deliberately close and
-  deliberately unjoined, so a purely geometric check would flag every doorway on the map, which is the
-  permanently-noisy warning §8 rules out.
-- **A separated join is flagged, never re-joined automatically** (user, 2026-08-29). Same rule as the
-  gap repair being off by default: nothing writes into the GM's work unasked.
-- **Degradation is named.** If a GM inserts or removes a vertex with Owlbear's tools, that item's id
-  list and point list fall out of step. Detectable — the lengths disagree — and we fall back to geometry
-  for that item alone.
-- **Fog we did not emit has no ids**, so importing someone else's work is geometry-only and infers what
-  it can. **A permanently second-class path, accepted as a cost** rather than chased to parity (user,
-  2026-08-29): a map already fogged by hand yields shapes with no provenance and a graph we guessed.
-
-### Rejected: emitting `WALL` items directly — 2026-08-05
-
-Three independent reasons, any one sufficient:
-
-- Reported to be impossible on the networked scene at all (§3).
-- Local walls are per-client and unpersisted, so **every participant would need this extension
-  running**, which is absurd for an authoring tool used once per map at prep time.
-- Dynamic Fog's tools edit drawings and would ignore a `WALL` item entirely, so the output would be
-  geometry nobody can nudge — which defeats the project.
-
-### Rejected: mimicking Dynamic Fog's private format for walls — 2026-08-05
-
-Unnecessary. There is no private format for walls to mimic. Retained here only so the option is not
-re-proposed; it remains the shape of the eventual *door* work (§11).
-
-### What an emitted fog shape must look like — measured in a room, 2026-08-06
-
-Roadmap step 1 placed hand-built shapes and compared them against one drawn with Owlbear's own fog
-tool. The differences that matter:
-
-| | ours | Owlbear's fog tool | decision |
-|---|---|---|---|
-| `fillOpacity` | 0.5 | **1** | **match — required** |
-| `visible` | true | **false** | **match** |
-| `fillRule` | evenodd | nonzero | **differ, deliberately** |
-| `strokeWidth` | 9 | 5 | free |
-
-- **`fillOpacity` must be 1.** Below that, ground the party has *revealed* keeps a translucent tint
-  of the fog colour — for the GM and for players alike. Confirmed from both directions: a probe
-  shape at opacity 1 had no tint, and Owlbear's own tool sets 1.
-- **`visible: true` — corrected 2026-08-30, and it was load-bearing after all.**
-
-  This said `visible: false`, "because that is what Owlbear's fog tool produces", with the caveat
-  *not known to be load-bearing — our `visible: true` shapes behaved correctly as fog*. That caveat
-  was the whole finding, and it was overridden on cosmetic grounds without re-measuring. A room
-  reported the consequence: every accepted room came back **revealed** instead of fogged.
-
-  **On the `FOG` layer, `visible` is not "can this be seen".** It is the difference between a shape
-  that *is* fog and one that has been cleared. The SDK carries no other flag for it — `Item` has
-  only `visible`, and `OBR.scene.fog`'s `filled` is scene-wide styling, filled-or-outline-only — so
-  this is the mechanism, and it appeared for a while as though there were none.
-
-  The flag means different things on the two layers, which is exactly how the error survived: on
-  `DRAWING` false is what stops a staged proposal leaking the layout to players, and staging still
-  sets it false. Only promotion sets it true.
-
-  **What this does NOT correct is §3, and the claim that it did was itself wrong — withdrawn
-  2026-09-07 (user).** This note used to read: *"Everything is hidden by default; shapes on the `FOG`
-  layer are the revealable regions" describes what a scene looks like when the shapes are cleared
-  ones. A fog shape at `visible: true` is the fog. Space in no shape is not fogged at all.* The last
-  sentence is backwards, and §3 was right all along.
-
-  **The model, stated once and correctly.** Everything is fogged by default. A shape we emit **is
-  also fogged at the start** — it is not a hole — but it is the region Owlbear will let a GM
-  *reveal*. Space in no shape is fogged **and unrevealable**, permanently. So §3's "shapes on the
-  `FOG` layer are the revealable regions" is exactly right, and "space in no shape can never be
-  shown" is exactly right.
-
-  **One exception, and it belongs to Dynamic Fog rather than to Owlbear.** A light still reveals
-  unshaped space, because DF's own assumption is that everything is fogged and lights reveal. So
-  "unrevealable" means unrevealable by Owlbear's own fog tools; a DF light does not care whether we
-  emitted a shape there.
-
-  **How the error happened is worth keeping, because the shape of it recurs.** The `visible`
-  finding was real and is above: a fog item at `visible: false` comes back *cleared*, and setting it
-  true is what makes an emitted room behave as fog. From that true observation a second claim was
-  inferred — that a shape must therefore *be* the fog and bare space must not be — and never
-  measured. A conclusion outrunning its evidence, in the one place the record is most consulted. It
-  then misled a session on 2026-09-07 into telling the user that dropping the exterior shape would
-  leave the outside permanently visible, when it does the opposite.
-- **`fillRule: "evenodd"`, deliberately unlike Owlbear's `nonzero`.** Under even-odd an inner ring
-  cuts a hole regardless of winding, so winding direction never has to be got right. Dynamic Fog
-  maps anything that is not `"nonzero"` onto Skia's even-odd, so the two ends agree. **This retires
-  the winding-direction pitfall from §10 entirely.**
-- **`strokeWidth` is free, including zero.** Measured per shape, not inferred from a total: a
-  zero-stroke shape produced exactly as many walls as a stroked one. The silent failure this was
-  guarding against does not exist.
-- **A `SHAPE` is positioned from its corner; a `PATH`'s commands are relative to its position.**
-  Found by a control shape sitting half its width down and right of where its path equivalent
-  landed. Costs nothing since we emit paths, and it confirms the positioning semantics world
-  placement (§9 step 7) depends on.
-
-### Superseded: staging is gone, and the scene is written directly — 2026-08-30 (user)
-
-**There is one operation now: push.** Delete our old fog items, emit the current result onto `FOG`.
-No proposals, no accept, no back-to-staging, no apply-appearance, and no refusal to write over an
-existing set. It happens when the workspace closes, and on a button inside it for a mid-session
-update that leaves the GM still working.
-
-**What made staging redundant is the workspace.** The staging layer existed because judging a
-partition meant writing a few hundred shapes into the scene and looking at them, and because a first
-run had to be unable to affect play. Judging now costs opening a step, on a surface that draws the
-partition and the walls exactly as they will be emitted. The layer was answering a question nobody
-has to ask any more.
-
-**This finishes a decision §4 already made.** The wall graph is the document and the scene is a
-rendering of it; staging was the last place still treating the scene as working state. It also
-answers what the refusal to stage over an existing set was standing in for — "step 9's problem",
-choosing which copy survives. There is only ever one copy.
-
-**The trade, stated plainly.** A hand edit to one of our fog items does not survive the next push.
-That is the point rather than a regression — what the GM sees is the current state — but it means
-the workspace is the *only* place to edit, which leans on step G harder than the old design did.
-Accepted on a second argument as well (user): Owlbear has no polyline continuity between line
-segments, so editing our output there would have been poor whatever we did.
-
-**Old first, then new.** Ours are deleted before the replacements are written. The alternative —
-writing first, so the map is never briefly unfogged — was considered and rejected on the better
-argument: a fog layer holding nothing fogs everything, so the gap is safe, while overlapping
-duplicates of every shape on the map is a state nothing else here is designed for. *If a push is ever
-seen to flash the map visible, that premise is wrong and inverting the order is the whole of the fix.*
-
-**Closing pushes only when something changed.** Opening the workspace to glance at something must not
-rewrite every fog item on the way out. The fingerprint is the map plus every setting, held in memory:
-losing it costs one unnecessary push, which is the safe direction.
-
-**Two controls stopped describing anything emitted.** Proposal fill and proposal outline are
-*preview* fill and outline now — an emitted shape is fully opaque and carries no stroke at all, both
-for reasons that are about geometry rather than taste.
-
-**The vertex ids stay, with an end date on the question.** Their consumer was reading a scene back to
-tell a separated join from a deliberate one, and a scene that is purely output has no such consumer
-until step G. They are cheap to emit and impossible to add retroactively, so they stay — but
-**reconsider whether they earn their place once the editing tools exist** (user, 2026-08-30). The
-likeliest honest answer is that they matter only for recovering from lost metadata.
-
-### Review by staging on another layer — settled 2026-08-06
-
-**Fog shapes ignore their own colour.** They render in the scene's fog colour whatever the item
-says, which kills the cheapest review option this record ever considered: draw the proposal in a
-distinct colour and let the GM delete what is wrong.
-
-**The workaround is better than the thing it replaces** (user, 2026-08-06). Emit proposals onto the
-`DRAWING` layer with `visible: false`, and promote them to `FOG` when accepted. Measured:
-
-- On `DRAWING`, an item **does** render in its own colour, so proposals are visibly distinct.
-- With `visible: false`, the **GM sees it ghosted and players do not see it at all** — so a staged
-  proposal does not leak the dungeon's layout during prep. With `visible: true` players see it,
-  which is why the flag is not optional.
-- A ghosted staged item is still **selectable and editable**, so the GM can nudge a proposal before
-  accepting it.
-- Staged items produce **zero walls**. Dynamic Fog filters on the `FOG` layer, so a proposal is
-  inert by construction rather than by our being careful — it cannot affect play until promoted.
-
-**Full coverage, not the fog layer, is what makes a proposal hard to see — corrected 2026-08-22.**
-The first guess was that fog paints over `DRAWING`, which it does sit above; the GM's own reading is
-better and the evidence is theirs. **Owlbear's fog is transparent**, so a proposal underneath it is
-not hidden. What defeats the eye is that the proposals cover *everything* except the ink — the
-exterior is emitted like any other region (below) — so there is nothing for a filled shape to
-contrast against and the whole map reads as one flat tint. Hiding fog helps only because it removes
-one of the two tints. See §9's first-run notes; the fix belongs in how a proposal is *drawn*, not in
-which layer it sits on.
-
-**Accepting is a property update, not a re-emission**: layer to `FOG`, `visible` to false,
-`fillOpacity` to 1. Ids survive, and sixty items are one call rather than sixty. The magenta is
-left in place deliberately, so demoting back to `DRAWING` restores the marking with no extra
-bookkeeping.
-
-**This makes provenance metadata load-bearing** (user, 2026-08-06). Promote, remove and re-run all
-need to find exactly our items and never the GM's, so every emitted item carries a key under
-`io.github.captainchocolatedessert.fog-nudger`. That is already how the probe's removal avoids
-touching hand-drawn fog, and it is the same mechanism §10's re-run pitfall depends on.
-
-### Three stages, and why the ordering is architectural — revised 2026-08-23 (user)
-
-*Superseding the two-stage split of 2026-08-22. The reasoning below is that argument corrected, not
-a new one: what changed is where the boundary falls, not why there is one.*
-
-**The binary mask determines the partition completely.** Connected-component labelling has exactly
-one choice in it — the connectivity pairing — and that is forced by the diagonal-leak paradox, so it
-is a correctness requirement rather than a knob. Nothing downstream of the mask can split or join a
-region: the minimum-area filter can only *remove* one, simplification is bounded below half an ink
-width precisely so it cannot change topology, and tracing and placement are exact.
-
-Counted rather than asserted: of the eight parameters in the pipeline, five decide what is ink and
-three act after it — a size filter, a smoothing tolerance, and a ceiling on that tolerance. **None of
-the three can change which rooms exist.**
-
-Supporting evidence from the same week: the hole rule used to carry a threshold, and replacing it
-with containment **removed the parameter entirely** and made the result strictly better. Downstream
-parameters kept turning out to be the wrong lever because downstream is not where the decisions are.
-
-**But "downstream" is two things, not one, and the first version filed them together.** The
-minimum-area filter is not a pure delete. A hole is kept only when it encloses a surviving region
-and **filled in when it encloses nothing**, so dropping a sliver also dilates whatever surrounds it
-into the space the sliver held. Measured on *Lair Of The Lamb*, mask unchanged — the ink share is
-6.5% in both runs, which is the basis for saying only the minimum moved. **The control this
-measured was deleted on 2026-08-30**; the table stays because the finding it established — that the
-minimum-area filter is not a pure delete, since dropping a region dilates whatever surrounds it into
-the space it held — is what moved the control from the reading stage to the deriving stage and is
-still the reason the stages are cut where they are:
-
-| smallest room | regions | discarded | **holes kept** | bare floor |
-| --- | --- | --- | --- | --- |
-| 0.1 squares | 211 | 169 | **15** | 0.99 squares |
-| 0.0074 squares | 277 | 103 | **51** | 0.16 squares |
-
-Fifteen holes to fifty-one from one slider. Every one of those is a change to the *polygon of a
-surviving region*. That is abstracting ink into regions, not reading ink — so the size filter and
-the smoothing tolerance belong with the regions, and the earlier split put them with the threshold
-on the strength of their *destructiveness* rather than their subject.
-
-**So the GM's work divides in three, and the ordering is forced rather than stylistic:**
-
-1. **Reading the map** — what is ink. Every control acts on the mask, so changing one re-partitions
-   wholesale and **discards both later stages, by construction**.
-2. **Deriving the regions** — abstracting that ink into the shapes that will define walls. Neither
-   control can split or join a region; both regenerate every polygon, so both **discard hand edits**
-   and neither touches the reading.
-3. **Adjusting** — what the GM wants, which no amount of the first two can express: merge these
-   because they are one room to me; do not fog that at all; show me the proposals differently while
-   I judge them. **Destroys nothing.**
-
-**Destruction cascades one way**, and that cascade is the numbering. The two-stage version bought a
-tidier claim — "stage one destroys stage two, full stop" — at the price of being wrong about what
-stage one *was*. Three stages is the honest shape: the ordering was always three-deep and the binary
-hid the middle rung.
-
-**Each stage is now exactly what one representation can show**, which is the second payoff and was
-the argument that decided it. A pixel overlay explains all of stage one and nothing else; the
-coloured region view explains all of stage two. Under the two-tab split, neither view covered its
-own tab — the overlay explained three of stage one's five controls, and the region view explained
-none of them. The tab boundary and the representation boundary are now the same line.
-
-**This answers a question the roadmap has been carrying.** Step 9 has always said "a re-run destroys
-hand edits, so it must be deliberate and warned" without saying what to *do* about it. The answer is
-not to engineer around it: the stages are inherently ordered, and the honest tool makes that
-ordering visible instead of pretending edits are durable. Hence three tabs, numbered.
-
-### Six steps, and the panel that is left — settled 2026-08-29 (user)
-
-Nearly all the work moves onto the workspace, with a last confirmatory look at the real scene. The
-three stages above **remain** as the cascade — what a change destroys, which is what cache invalidation
-reads. The six steps are a *presentation and interaction* layer on top of them, and the two must not be
-conflated.
-
-1. **Map** — pick the image. **Built 2026-08-29.** The workspace opens with no map and draws nothing
-   until one is chosen, which handles the chicken-and-egg of a surface that needs a map to draw.
-2. **Ink** — threshold, blur, detail window, and the break repair under its own sub-heading. (Was 1a
-   plus the breaks.) The repair rides here rather than in a step of its own because it **invents
-   ink**, and because it is provisional: step F retires it, so nothing is arranged around it.
-3. **Walls** — **folded into Ink as a sub-heading, 2026-08-29 (user), and it returns at step C.**
-   Its two controls are ink *filters*: they decide which marks survive, not what a wall is, so they
-   change the same picture the threshold changes and are judged the same way. A step is a mode, and
-   there was no mode here — same canvas, same drag, same layers. The name comes back as a step when
-   it has a **skeleton** to paint, which is what a wall actually is; spur pruning joins it then.
-4. **Edit walls** — suppression, ink painting and line editing. **Not built, and deliberately not
-   created early to hold the gap repair**: this is the first step where a drag paints, and there is
-   nothing to paint with yet.
-5. **Regions** — edge simplification and the preview's fill and outline, with the partition drawn in
-   the six-colour cycle. **Built 2026-08-29.** Ends with **"Put on the map"**. Deliberately **thin
-   and late**: it is the export, not the main event. (Smallest room was here until 2026-08-30 and is
-   deleted; staging went at the same time, so the button writes rather than proposes.)
-6. **Doors** — a stub, and probably permanently (§3).
-
-Plus a **View** group that is persistent rather than a step. It held the ink colour and opacity and
-the proposal fill and outline — and it is **empty as of 2026-08-29 (user)**, kept as a stub.
-
-The argument that put those four together was that navigating away from the thing you are tuning in
-order to recolour it is absurd. That argument survives; what changed is what satisfies it. Each of
-those controls decides how **one step's own layer** is drawn, and every one of those layers is now
-drawn on this canvas — so the shortest distance from the thing to its appearance is *the same
-section*, not a group below all of them. They lead their steps, because looking at the thing comes
-before tuning it.
-
-What the stub is for: a control that is genuinely about the whole surface rather than about one
-step's layer. None exists yet.
-
-**An exclusive accordion — revised 2026-08-29 (user), from tabs.** Each step paints something
-different on the canvas *and* gives a drag a different meaning — pan in 1, 2, 3 and 5; a brush in 4 —
-so two open at once would be a lie: you cannot paint suppression and place a door with the same
-gesture. That was the case *against* collapsing sections, and it is an objection to the **implication**
-rather than to the shape. Enforce exactly one open and the implication is gone, and two advantages
-arrive with it:
-
-- **The ordering stays legible.** Every header is on screen in sequence, so where a step sits in the
-  cascade is a shape rather than something to remember. A tab strip flattens the order into a row.
-- **The controls column is tall and narrow**, which is what vertical stacking suits. Six tabs in a
-  22rem column would wrap, or shrink to abbreviations.
-
-**The cost, stated rather than argued away:** an accordion header is a weaker "you are here" than a
-selected tab, and a mis-click collapses what you were working in. The open header is marked in the
-accent colour and down its edge; nothing answers the second except that reopening is one click.
-
-**This dissolves a problem already on the books.** The workspace was recorded as owing a trackpad user a
-modifier-drag and a hand tool because "a left-drag becomes the brush". Under steps, a left-drag is only
-the brush in the steps that paint; elsewhere it stays pan, for free. The hand tool becomes a per-step
-affordance rather than a global mode.
-
-**A fourth axis, and it must not stand in for the other three.** `section` was declared presentation-only
-with "nothing may switch on it", because a control moved between headings for tidiness would silently
-change what it recomputes. The step now *does* carry behaviour — which layer is painted, what a drag
-means — so the rule is replaced rather than kept: **the step owns paint and tool binding and nothing
-else.** What a change destroys, what it recomputes, and which half of the reading cache it touches stay
-independently declared, with a test pinning what can honestly be pinned. Cache logic is untouched
-by this rework, which is most of what makes it low-risk.
-
-**What that test can and cannot assert — built 2026-08-29.** It pins independence where the
-declarations genuinely disagree: the View group holds a reading-stage control (overlay opacity) beside
-two adjusting ones (proposal fill and outline), and the reading stage is spread across three steps, so
-neither of step and stage can be recovered from the other. It deliberately does **not** demand the same
-of the kind or the post-reading boundary. Every parameter in the ink step happens to be a pipeline
-parameter and every walls parameter happens to be post-reading — facts about today's twelve parameters,
-not rules — and a test demanding they diverge would fail the day a step legitimately holds one of each,
-which is the freedom the separation exists to give. What is pinned for those is that each declaration is
-**total on its own**, since the only way to classify a parameter with no entry is to guess from a
-neighbouring axis, and every such guess is silent.
-
-**What stays in the panel:** the button that opens the workspace (an Owlbear action needs a popover,
-there is no skipping it); accept, back-to-staging and remove, because they act on scene items and the
-GM should be looking at the real scene to judge them; and the diagnostics. Everything else goes,
-including the dead overlay-probe buttons whose surface was deleted.
-
-**"What is here?" is a click on the canvas** rather than a button that probes the viewport centre —
-available from every step, like an inspector, and answering from the reading alone when no partition
-has been derived yet. **Built 2026-08-29.** A straight upgrade to the one diagnostic §8 insists on
-using instead of reasoning.
-
-The gesture is a press and release that did not move, with four pixels of slop. That is the one
-gesture neither pan nor brush wants — and it **needs revisiting when a step takes the drag for a
-brush**, because the same press will start a stroke, and a stroke that happens to end where it began
-is not a request for information.
-
-**Staging is kept, for the interlock alone.** Staged items sit on a non-`FOG` layer and therefore derive
-zero walls, so a first run cannot affect play whatever it gets wrong — a property of the layer rather
-than of our care. Its *other* justification, native editing, is genuinely weakened by §4: editing a
-region is editing the output, where editing a line is editing the input. Revisit once painting exists
-and it is clear how often a hand edit is still wanted.
-
-#### Choosing the map — settled 2026-08-29 (user)
-
-**Everything on the map layer is offered, and the largest is the default.** Four rules, and three of
-them are reversals worth keeping the reasoning for:
-
-- **No filter, no mark.** An area heuristic used to flag anything under a quarter of the largest as
-  "too small?". The sizes are on screen and the GM can see the picture, so the mark was an opinion
-  offered where the evidence was already in view.
-- **No *Auto* row.** It named a policy that decided later, which is a thing a GM cannot check. Every
-  row is a real image, and the one that would be traced is simply the one that starts selected — the
-  list states the outcome rather than the rule.
-- **No refusal.** Two comparable images and no choice used to produce *nothing at all*, on the
-  grounds that the wrong one might be a GM overlay whose linework would shape what players can see.
-  That was written when a wrong guess was **invisible**, from a popover with no picture anywhere. The
-  workspace inverts it: the chosen map is drawn full-screen with its name above the picker, so a
-  wrong guess is evident in the thing the GM is looking at and one click from being fixed — which is
-  §8's own standard for when a guess is allowed to be a guess.
-- **Pixel sizes, in z-order.** The size shown is the image's own resolution, which is the figure a GM
-  can match against the file they imported and the resolution the trace actually reads. It replaces
-  grid squares, which replaced world units; world units were misleading because a map reading
-  "10308x7965" beside its name is read as an image resolution by anyone who has seen one. The order
-  is the stack, bottom upward, so the base map comes before whatever was laid on top of it — and so
-  that scaling an image does not make rows move under the cursor.
-
-**The ranking is still world area, not pixel count**, because "the map" means the thing covering the
-most ground: a small image blown up to fill the table is the map, and a crisp 4000px inset of one
-room is not. **One function decides it, read by both the picker and the resolver**, since a picker
-showing one image selected while the trace read another would be two functions agreeing separately
-and lying together.
-
-#### The order within step A — split before growing
-
-The workspace is already a thousand lines and would absorb the panel's settings rendering, the derive
-stage, partition drawing, painting and eventually doors. **Split it first, then add steps** — the same
-refactor gets harder every session it is deferred.
-
-1. **Split the workspace into a shell plus per-step modules, with no behaviour change — DONE
-   2026-08-29.** The shell owns the transform, input handling and the canvas stack; a step owns its
-   controls, what it paints, and what a drag means.
-
-   What came out of the thousand-line file, and why each piece is where it is:
-
-   - **The shell** draws the map and then hands the frame to a list of **painters** in registration
-     order. That list *is* the canvas stack, and it is the registration argument as code: every layer
-     is drawn into the map's own rectangle, computed once and passed down, so no two painters can
-     derive it differently.
-   - **The reading** — asking the pipeline for a mask and deciding whether the answer is still wanted
-     — is its own module rather than a step's, because *three* steps change the reading and all three
-     want the same mask back. Steps subscribe. A listener that cannot take a reading returns false and
-     the generation is marked failed, so a step that fails to allocate cannot leave a half-updated
-     surface looking current.
-   - **A settings holder**, because the steps share one settings object and the alternative is each
-     keeping a copy and reconciling them.
-   - **The slider row** is shared, since what a row does on release is a property of the parameter
-     rather than of the step drawing it.
-   - **Four steps today** — ink, walls, breaks, and the persistent View group. Walls has no painter and
-     is fifteen lines; it is the obvious home for spur pruning.
-
-   **Verified as far as it can be without a room:** types, the whole suite, a production build, and
-   the page loaded outside Owlbear — where the rows render disabled from the defaults with their
-   derived readouts, the swatches are there, the pointer and wheel handlers are live, and the frame
-   loop sizes the canvas to the viewport. The reading path itself needs the SDK and therefore a room.
-2. **Promote `section` to a first-class step declaration** carrying paint layer and tool binding, with
-   a test pinning that the step, the stage, the kind and the post-reading boundary are declared
-   independently — **DONE 2026-08-29**, and it brought the accordion with it, because a declaration
-   nothing reads is a declaration that drifts.
-
-   - **`steps.ts` is the fourth axis**: the ordered steps, each with a title, a blurb, the **layers**
-     it shows and what a **drag** means in it, plus the total parameter-to-step map. `section` is gone
-     from the control declaration entirely.
-   - **A layer is drawn because the open step asks for it**, not because it exists. The shell keeps
-     painters keyed by layer and runs the ones the open step names, in registration order. That is
-     the user's convention: each step has its own display style — ink over the map here, linework and
-     coloured faces there.
-   - **One deliberate exception, and it is argued rather than incidental:** the walls step shows the
-     breaks as well as the ink, because the minimum stroke width is the one control that can *sever a
-     wall* — so it is the likeliest manufacturer of the thing the rings warn about, and hiding them
-     there would take the warning away from the place it is earned.
-   - **The hand tool button is gone.** A step owns the drag binding now, so a button that sets what is
-     already set was a control with nothing to do. Ctrl still pans whatever the step says.
-   - **A step still drawn by the panel is marked `pending`** and left out of the accordion, rather than
-     appearing as an empty section a GM can open and find nothing in. An explicit flag rather than
-     "skip a step that renders empty", because the derived version would silently hide a step that
-     legitimately has neither controls nor layers — picking the map is exactly that. It dies at A.5.
-3. **Sweep what is already dead — DONE 2026-08-29.** The overlay-probe buttons went: that probe asked
-   whether a *click-through* sheet over the map was possible at all, and the design it was for is
-   closed — the workspace owns its input instead, and the workspace probe answered a harder version of
-   the same question. **The probe itself stays**, unwired, in the posture the shape-placing buttons
-   already have: the code and its page are the record of how the answer was got, and re-importing one
-   function brings the buttons back. The stale note above the workspace button went with them, since
-   it still described stage one as two sections of this panel.
-
-   A scan for orphaned modules found none — every source file is reachable from an entry point, a
-   test, or another module.
-4. **Move the map picker in as step 1 — DONE 2026-08-29.** The panel loses it entirely: the picker,
-   its scene-items watcher and its styles are now the Map step's, and the panel keeps only the
-   actions that need the real scene in view.
-
-   - **The Map step shows no layers**, deliberately. Its question is *which image*, and the answer is
-     the image itself — a mask drawn on top would be answering the next question over this one. It is
-     also what resolves the chicken-and-egg of a surface that needs a map to draw: with nothing
-     chosen there is the picker and no canvas content, which is a complete state rather than an empty
-     one.
-   - **Choosing a map reloads everything**, because a different map is a different image, a different
-     reading and a different place in the world. The mask cache is keyed on map identity, so the
-     reading that follows is genuinely fresh rather than the previous map's.
-   - **Start-up moves the GM on once**, from Map to Ink, when a map is already chosen — the common
-     case, and where they were going anyway. It never moves them after a deliberate click on a
-     header, and never at all when there is no map, which leaves them in the one step that can fix
-     that.
-   - **The rules changed with the move — user, 2026-08-29.** Every `MAP`-layer image is listed,
-     unfiltered, in the layer's own **z-order** with its **pixel size** beside its name. There is no
-     *Auto* row and no plausibility mark, and the resolver no longer refuses an ambiguous scene: with
-     nothing nominated, the **largest by world area** is traced, and its row is simply the one that
-     starts selected. See "Choosing the map" below.
-   - **The picker had to be gated on `onReady`**, found by loading the page outside a room: asking
-     Owlbear for the scene's items before it is ready does not return an empty list, it **throws**,
-     and the message landed on the state line where the map's name belongs. Same rule as the
-     disabled sliders, sharper failure — the surface is built at module load, but anything that asks
-     the *scene* a question waits.
-5. **Move region derivation in as step 5, drawing the partition — DONE 2026-08-29.** The largest
-   piece, and the one that makes OQ6 answerable at last: judging a partition used to cost a scene
-   write, since staging it was the only way to see it. It now costs opening a step.
-
-   - **The partition is drawn as vectors**, not rasterised, in the emit path's own six colours cycled
-     the same way — so the preview and the staged shapes are the same picture. Holes are cut with the
-     even-odd rule, because a region with a courtyard must not be filled across the courtyard here
-     and hollow once it is in the scene.
-   - **The regions step shows no ink**, which is the clearest case yet for the convention that a step
-     shows its own thing: the question is whether these areas are the rooms a GM would have drawn,
-     and ink under them answers the previous question over the top of this one.
-   - **Deriving is lazy, and that is the cascade being spent rather than described.** A reading
-     invalidates the partition, but rebuilding it costs the better part of a second on top of a
-     cached mask and it is visible in exactly one step — so a change elsewhere only marks it stale,
-     and entering the step is what pays. The accordion tells the step when it opens.
-   - **`runTrace` takes a settings override**, the same one `maskForOverlay` already took and for the
-     same reason: the preview shows a value the GM released a moment ago, while the write to scene
-     metadata is still in flight.
-   - **It returns the raster rings beside the placed ones**, and states the raster they are in. The
-     alternative was measuring the extent of the rings to recover the scale, which works only because
-     the outside region covers the map — a guess dressed as arithmetic.
-   - **"Stage these" ends the step** and re-runs the trace rather than emitting the preview, because
-     the emit path owns the command cap, the batching and the provenance, and a second route into the
-     scene would be a second implementation of all three. The settings are persisted and *awaited*
-     first, closing the window where staging could use the value before the one just released.
-   - **The panel gave up every slider**, deriving and appearance alike — the appearance pair followed
-     the partition across, since it is drawn on this canvas now — along with the button that staged
-     them. What is left there is what acts on the *scene*, which is the one thing a full-screen sheet
-     over the map cannot show you.
-6. **Reduce the panel to open-workspace, accept / back / remove, and diagnostics — DONE
-   2026-08-29.** What is left has one thing in common: it acts on the *scene* rather than on a
-   picture, and a full-screen sheet over the map is the one place you cannot watch Owlbear draw the
-   result.
-
-   - **The three stage tabs went.** They carried a cascade that is still real and still declared, but
-     a cascade is a property of *settings* and there are none left on that side. Tabs over a short
-     list of actions with no ordering between them would have been claiming one.
-   - **"What is here?" became a click on the map**, in every step. It used to probe the *viewport
-     centre*, because a popover beside the map had no way to be pointed at anything; the workspace
-     does, so the GM aims at the thing that looks wrong instead of centring it first.
-   - **The probe answers from the reading when no partition has been derived**, rather than saying
-     "nothing traced yet" in three steps out of four. `readPoint` takes the labelling as optional and
-     a fourth outcome — *space, not yet derived* — says exactly what is and is not known. That
-     matters because the question it settles most often is about **luminance**, which the reading
-     alone can answer: the standing example is a bare patch that turned out to be floor at 0.991,
-     settled after four wrong explanations argued from aggregates.
-   - **It takes a fraction of the map rather than a pixel**, so a surface drawing the map at any size
-     never has to know the trace's raster — which §5's memory cap can reduce on a large map.
-   - **Defaults are per step now, not per stage.** A GM who has just wrecked the ink wants the ink
-     back; "the reading stage" is a phrase about cache invalidation, and it stopped naming anything
-     visible once the sections were cut differently from the stages. Deliberately **not disabled when
-     a step is already at its defaults**: that state went stale the moment a slider moved, since the
-     rows are not rebuilt on every release, and a button that is sometimes wrong about whether it
-     would do anything is worse than one that always says what it did.
-   - **The dry run stays**, under diagnostics. The workspace draws the same partition, but this is
-     the only thing that reports it in numbers — coverage, region counts, and the area check.
-
-**Do not renest the stored settings to match the six steps.** This was refused once already for the
-three stages, and the reason is unchanged: renesting means either a migration or a normaliser that
-resets a GM's whole tuning. The step mapping carries the semantics; storage keeps its existing groups.
-
-### The cache boundary, and what it is not — 2026-08-23
-
-Binarisation is the expensive half — **690ms of a 1.4s run**, against 360ms to label, 320ms to trace
-and 10ms to simplify — and it depends on no stage-two parameter. So a mask is kept and reused when
-the map and the reading are unchanged, and a stage-two sweep costs roughly half what it did.
-
-**It is not a second implementation, and that distinction is load-bearing.** The chain stays one
-linear function; the only thing that changes is whether the mask was computed just now or a moment
-ago. A second copy of the chain re-opens the sibling's worst diagnostic failure, where a harness and
-a real room disagreed *in direction* because the harness never ran world placement — 700ms is not
-worth that.
-
-**The decision is made from a fingerprint, never from which button the GM pressed.** Correctness
-therefore never depends on them working the tabs in order; the numbering is about *their* work being
-discarded, not about the code's sequencing.
-
-**The fingerprint is deliberately over-broad.** It covers the map's identity and geometry, the
-scene's grid — which sets pixels-per-square and therefore the Sauvola radius, so a regridded scene
-needs a fresh reading even though the image has not changed — and the reading parameters. A wrong
-reuse would derive regions from a stale mask and report them as current, which is §8's warning in
-its most expensive form. Recomputing needlessly costs 690ms; reusing wrongly costs a diagnostic that
-lies.
-
-**Which half ran is logged on every run**, and a reused mask restates the few figures the rest of
-the run is built on. A run that reused and a run that recomputed must not produce the same log.
-
-### Superseded: the click-through ink overlay — built, measured, and deleted 2026-08-23
-
-**The code is gone.** It was replaced by the workspace below, and `overlay.html`, `src/overlay.ts`,
-`overlayControl.ts` and `panelPresence.ts` were removed with it.
-
-**The reasoning is kept, and this subsection and the two under it should be read as history.** Two
-things in them are still live: the argument for *why stage one needs a picture at all*, which the
-workspace inherits unchanged, and the correction about the mask being binary. Everything else — the
-poll, the settle interval, blank-and-restore, the reserved band, the heartbeat — describes machinery
-that existed only because that sheet did not own the transform, and is worth reading only to
-understand why owning it mattered.
-
-Stage two's representation is the coloured proposals staged on the drawing layer. Stage one needs a
-different one, because its data is a different *kind* of thing: a per-pixel verdict at native
-resolution, dense and unsummarisable, answerable today only one pixel at a time by the point probe.
-**The overlay is the point probe made total.**
-
-*Corrected 2026-08-23 (user): stage one's mask is **binary** — ink or not.* An earlier draft of this
-section called it a tri-state of ink, kept floor and discarded floor, and that was wrong on two
-counts. "Discarded floor" is floor whose region fell below the **smallest-room** filter, which the
-three-stage split (§4) moved into **stage two** — so a tri-state overlay would put a stage-two
-outcome on a stage-one surface, breaking the property that makes the split worth having: each stage
-is exactly what one representation can show. And it describes something that was never built;
-`paintMask` has always painted ink and left everything else transparent. The code was right and the
-prose drifted. Discarded floor is still visible where it belongs — as bare map under stage two's
-proposals, which is how a GM found it — and the point probe still reports it, because a diagnostic
-answering "what is here?" is deliberately allowed to cross stages.
-
-**Rasters cannot go into the scene**, and that is settled rather than assumed: the sibling measured
-`data:` URLs rendering as a broken-image placeholder at 0.3KB, refused outright at 21.6KB, and
-wedging the message bus at 1.37MB, with asset upload the only mechanism that delivers pixels and no
-opacity, tint or blend on an image item anyway. So the overlay cannot be scene content.
-
-**The route that works is a full-screen modal** — `fullScreen`, `hideBackdrop`, `hidePaper`,
-`disablePointerEvents` — drawing on its own canvas. The pixels never enter Owlbear's scene graph, so
-none of the above applies. Neither Dynamic Fog nor the sibling opens a modal anywhere, so this was
-unprecedented and `overlayProbe.ts` was written to settle it. **Every answer came back usable:**
-
-- **It composites.** The map is visible through a translucent wash.
-- **`disablePointerEvents` passes drags through.** Owlbear beneath stays clickable and pannable.
-  This was the fatal one — a GM who cannot pan while the overlay is up has no overlay.
-- **No calibration is needed.** `iframe 1205x925 · viewport 1205x925 — same rectangle`, in every
-  run, and the crosshairs sit on the map's corners and follow pan and zoom. **Owlbear's map canvas
-  is the full window and its toolbars float on top of it**, so there is no inset to discover. The
-  "modal origin may not be the viewport origin" risk does not exist.
-- **The modal covers everything** — map, Owlbear's tools, and our own panel. Click-through means
-  nothing breaks, but the tint sits on the UI. The probe overstates this by construction, painting
-  a flat full-screen wash so transparency would be unmistakable; the real overlay paints only where
-  the mask says something, which is 6.5% of the raster on this map. If it irritates, the fix is
-  lower alpha — where Owlbear's furniture sits is not discoverable.
-
-**There is no viewport change event.** Verified against the types: the player record carries
-`syncView` but not the transform, and no API exposes an `onChange`. Polling is the only mechanism.
-
-**The poll costs 2–4ms**, over five runs of ~200 polls each, worst case 12/33/12/97/38ms. An order
-of magnitude cheaper than the sibling's contended-bus note led this record to expect.
-
-#### Superseded with it: blank and restore, and why the cheap poll did not retire it
-
-**An overlay that lags does not merely trail, it lies.** It shows ink displaced from the linework it
-exists to be compared against, and comparing those two is the whole of stage one — a GM would read
-the offset as the tool having found the wall in the wrong place. So the rule is: **blank on any
-movement, repaint only once the view is still.** The sheet is either absent or correct, never
-present and wrong. That is the same posture as the mask fingerprint, where recomputing needlessly is
-cheap and being confidently wrong is not.
-
-**3ms does not mean tracking continuously would do instead.** At any poll rate the sheet during a
-drag is offset by roughly velocity times the interval; a brisk pan at 2000 px/s with 16ms polling
-still puts ink 30-odd pixels from linework about five pixels wide. What the cheap poll buys is the
-fix to the one residual flaw — detection is itself a poll, so there is a window where the view has
-moved and the sheet is still up. At 120ms that window is 120ms; at 3ms a poll we can afford 30–40ms,
-about two frames.
-
-**View changes need no recompute, only re-projection.** Render the ink mask once
-into an offscreen canvas at raster resolution — 3300×2550 is about 34MB, and the pipeline already
-draws a canvas that size to read the map's pixels — and every subsequent view change is one
-`drawImage` with a different transform. So the blank is a flicker rather than a pause, and the
-cropped-binarisation idea is needed only for live *slider* feedback, which is a separate question.
-
-**Two calls do double duty.** Ask for the screen positions of two fixed world points: if either
-moved, blank; when they hold still, those two points *are* the transform to draw with. Two points
-rather than one because a zoom centred on a single probe point leaves it fixed, and the whole
-gesture would go unseen. The polling is the drawing's input rather than a cost on top of it.
-
-**Zoomed out the overlay is indicative, not diagnostic.** Squeezing 8.4 megapixels into a thousand
-screen pixels filters five-pixel ink away. That is the same limit as everywhere else here — ink can
-only be judged at a zoom where ink is visible — and not a defect to engineer around.
-
-#### Superseded with it: keeping off the panel
-
-A full-screen modal covers the panel, and at any zoom where the linework is thick the ink paints
-over the sliders. The panel is exactly where a GM is working while the overlay is up, so this is the
-common case rather than a corner.
-
-**The overlay keeps a band on the left clear while the panel is open**, and only while it is open —
-a permanent stripe would hide a third of the map on a 1205px window. Nothing in the SDK reports
-whether a popover is open, so **the panel says so on a heartbeat**.
-
-- **A heartbeat rather than open/close messages.** A popover is dismissed by clicking anywhere
-  outside it, and whether a frame torn down that way gets to send a farewell is not worth betting
-  on. A missed close leaves a permanent blank stripe with nothing to explain it. With a heartbeat
-  there is no ending to miss, and the state repairs itself within one stale interval however the
-  panel went away.
-- **The stale window is comfortably over two beats**, because a band that flickers is worse than one
-  that lingers: lingering costs a moment of hidden map, flickering makes the layout jump under a
-  slider being dragged. The relationship is asserted in a test rather than left as two numbers.
-- **The panel reports its own measured width**, so the band follows the manifest instead of a second
-  copy of the number going stale the first time the popover is resized. The extra margin covering
-  the gap between the screen edge and the popover is a **guess**, logged on every change so it can
-  be corrected by looking once.
-- **It clips rather than shrinking the drawn rectangle.** Shrinking would rescale the image into the
-  remaining space and slide every pixel of ink off the linework — the same lie the blanking exists
-  to prevent, arrived at from the other side.
-- **It fails safe.** If the broadcast never reaches a sibling iframe, no band is ever reserved and
-  the overlay draws over the panel exactly as before: the previous behaviour, not a new fault.
-
-### Superseding all of the above: stage one becomes its own workspace — user, 2026-08-23
-
-**Decided in principle, probe first.** The click-through overlay is not being kept and extended; it
-is the thing being replaced. Everything in the two subsections above — the poll, the settle, the
-blanking, the clip band, the heartbeat — is expected to be deleted rather than built on.
-
-**The case.** Look at what the overlay actually contains: a 40ms poll of two `transformPoint` calls,
-a settle interval, a movement threshold, blank-and-restore, a clip band, and a heartbeat from the
-panel so the band knows when to exist. Almost none of that is about *showing the mask*. It is all
-machinery for coping with the fact that **Owlbear owns the transform and publishes no event for it**,
-so we are perpetually inferring where someone else has put things.
-
-An opaque, interactive surface that draws the map itself owns the transform, and that deletes:
-
-- **The polling**, entirely. Pan and zoom become our own state, updated synchronously in an event
-  handler.
-- **Blank-and-restore.** There is no window in which we could be wrong about where the map is, so
-  there is nothing to be honest about by going blank. That was the one genuine wart in the design and
-  it was a symptom of not owning the transform, not a design choice.
-- **The registration risk.** Map and mask drawn into one canvas under one transform agree *by
-  construction* rather than by our arithmetic agreeing with Owlbear's. A whole failure class goes.
-- **The panel band, the heartbeat, and the note above about the band not lifting** — all moot, since
-  stage one's controls would live inside the workspace rather than in a popover the overlay covers.
-
-**The trigger is that painting cannot be added to what exists.** Pointer events are disabled, and
-that is not incidental — it is what makes the sheet click-through, which is what lets the map be
-panned while it is up. A mode toggle would mean "you cannot move the map while painting", which for
-a painting tool is a bad trade. Three of the four things §11 lists next want interaction the current
-surface structurally cannot provide.
-
-**And the surface split follows a data split already settled.** §4 established that stage one's
-artefact — a per-pixel classification — **can never be scene content**, because rasters cannot enter
-an Owlbear scene. Stage two's artefact **is** scene content by definition: items, edited with
-Owlbear's own tools, promoted to fog. So stage one gains nothing from Owlbear's renderer and stage
-two depends on it entirely. Different surfaces is the same line drawn one level up, not a workaround.
-Tabs 2 and 3 stay in the popover beside the scene; tab 1 becomes "open the workspace".
-
-**The risks, and the first is the one the decision rests on:**
-
-- **Pan and zoom feel.** Owlbear's viewer is good; ours would be minimal. Two navigation models in
-  one product jar if wheel direction, zoom rate or drag behaviour disagree. This is the question
-  nothing but a human's hands can answer, and it is why this is a probe rather than a build.
-- **A small map viewer to maintain forever**, including whatever turns up on a trackpad, a
-  touchscreen and a 4K display.
-- **Performance is unproven.** An 8.4-megapixel map plus an 8.4-megapixel mask per frame during a
-  drag *should* be fine — GPU-composited `drawImage` — but there is no measurement, and a pan that
-  stutters is worse than one that blanks.
-- **One unmeasured SDK question.** A full-screen modal *with* `disablePointerEvents` is proven. One
-  *without* it is not: keyboard focus, scroll ownership and whether `hidePaper: false` gives a usable
-  frame are all unknown.
-- **Everything Owlbear renders is lost** — tokens, existing fog, the grid. None of it matters for
-  deciding what is ink, which is the point; if judging scale against the grid turns out to matter, we
-  draw one ourselves.
-
-**The probe comes first and tests one thing.** A surface that opens opaque, draws the map, and pans
-and zooms. Nothing else — no mask, no controls. The question it answers is whether the navigation
-feels right beside Owlbear's own, and if it does not, the cost was a probe and the working overlay is
-still there. Same posture as the modal probe, which paid for itself.
-
-**Rejected for now, and worth recording because it is the cheaper schedule:** *let Owlbear do the
-painting.* Keep the click-through overlay and have the GM draw with Owlbear's own pen on a designated
-layer, read back as suppression or ink. Clicks already pass through, so it needs no viewer at all.
-Costs: our working data becomes scene items, networked and GM-only only if we manage it; the GM must
-select the right tool, colour and layer to mean "suppress" rather than "add", every time; and there
-could never be a purpose-built brush or a live preview of what a stroke would do. The worse product
-and the better schedule — declined because all four queued features want interaction.
-
-**Where the dividing line actually falls** is "what does the map say" against "what do I want" — and
-one operation moves across it on inspection. *Splitting a region because of something not on the
-map* reads like a stage-three edit and belongs in stage one, as **GM-drawn ink**: draw the wall, and
-the next trace splits the region. That survives re-runs because it is an *input* rather than an
-output; it re-derives both halves with correct boundaries, where splitting a polygon by hand leaves
-a join that Dynamic Fog turns into a wall across a room; and it uses tools the GM already has, which
-is the same argument §4 makes for editing fog natively. Not built; the highest-value thing that is
-not.
-
-#### The workspace probe, input half — measured in a room, 2026-08-23
-
-The unproven combination was a `fullScreen` modal **without** `disablePointerEvents`. It is proven
-now, and the answer the surface rests on came back the right way. Fifteen runs.
-
-**Input capture is total, and Owlbear gets none of it.** Drags arrive as drags — around 66 moves per
-gesture, dense enough for a brush. Every wheel event arrives `cancelable`, 86 of 86, so a zoom can
-be stopped rather than merely watched. Right-clicks reach us. Across every run, with hundreds of
-polls, **Owlbear's viewport never moved once**.
-
-**That zero is a measurement rather than an absence, and only because the detector was made to
-fail.** The sheet is opaque, so the map it might be leaking to is exactly what it covers: the
-question cannot be answered by looking, which is why the page polls two fixed world points and
-blames any movement on whichever input channel fired most recently. Attribution by timing, and
-labelled as a guess. It reported "moved 0 times" for four runs before anything checked whether it
-*could* report anything else — §8's rule about a clean diagnostic, walked into again. So the probe
-now moves the viewport itself, holds, and puts it back: **saw 2 of an expected 2**, every run since.
-
-**The keyboard is a different animal, and it is the one real finding.** It is not given — it is
-**taken**. Nothing reaches this modal unasked, ever: fourteen runs, waits from under two seconds to
-thirteen, including one where the GM typed nine digits and not one arrived. Calling `window.focus()`
-plus focusing an element claims it on the **first try, about 16ms** after the page's own script
-starts, after which keys arrive with no click.
-
-- **So the keyboard is the one channel that leaks, and it leaks completely** until claimed. Those
-  keystrokes are not merely lost — they reach Owlbear's page and do whatever they do there, under an
-  opaque sheet. The viewport detector cannot see that, because a key that triggers something other
-  than a camera move moves nothing.
-- **Escape belongs to whoever holds focus.** Before the claim, Owlbear closed the modal itself and
-  our handler never ran — which is why a modal dismissed by Escape used to leave no closing line at
-  all. After the claim, Escape is ours.
-- **The dead window is the iframe's load, not the claim.** Measured at 2,396ms cold against 166ms
-  for the claim, and the GM lost four keystrokes to it. **It is a development artifact, on the
-  evidence**: two consecutive opens went from click to first line of code in **76ms**, thirty times
-  faster, because the module graph was already fetched. Vite serves this page unbundled in
-  development, SDK included. Worth re-measuring against a production build before treating it as
-  real; if it survives, the panel is same-origin and already open, so prefetching the workspace's
-  graph would make every open warm.
-
-**`hidePaper` and `hideBackdrop` make no observable difference under `fullScreen`.** Both variants
-report the same rectangle and look identical. There is no frame to evaluate, which retires that
-question rather than answering it.
-
-**`iframe == viewport` holds without `disablePointerEvents` too** — 1246x1242 both, every run. The
-click-through overlay's finding was not a property of that flag.
-
-#### The workspace probe, navigation half — measured in a room, 2026-08-23
-
-**Item 0 is closed.** The surface works, the navigation is right, and the two constants it exists to
-find are settled.
-
-**Written rather than imported, after considering the alternative.** The requirement was never
-"zooming works" — it was *"it feels like Owlbear's"*, and a library supplies someone else's feel to
-be tuned through its abstractions instead of by changing a constant. The case here is one image, no
-rotation, no tiling, one transform, on a surface that already owns every pointer event; what remains
-is about sixty lines. The reasoning about a painting library, which is the same question one level
-up, is in §11.
-
-*The cost, stated:* device quirks are ours. That bill arrived immediately, below.
-
-**The feel constants, found by sweeping them during a run rather than guessed:**
-
-| | |
-| --- | --- |
-| Mouse wheel | **12% per notch** — right on the first try, unchanged after a sweep |
-| Trackpad pinch | **1.00% of zoom per pixel** of finger movement |
-
-Both are adjustable from the keyboard *while the probe is up*, which is what made one run enough.
-"Too fast" is a complaint; a number is something to build with.
-
-**It opens on exactly the view Owlbear was showing**, by asking where the map's own world corners
-currently sit on screen. Confirmed by eye: nothing moves as the sheet goes up. That also makes a
-comparison of *feel* honest, since both navigations start from the same framing rather than from two
-different ones.
-
-**A mouse notch and a trackpad gesture are three intents down one event**, and treating them as one
-was the whole of the first round's trouble — a two-finger scroll zoomed the map, and a pinch was
-unusably fast. Classified now: `ctrlKey` is a pinch, which is a browser convention rather than a
-guess; a `deltaMode` other than pixels is a mouse; a coarse, integer, purely vertical pixel delta is
-a mouse in a browser that reports pixels; anything else is a two-finger scroll and means pan.
-
-- **A pinch scales with its delta and a notch does not**, and that is the speed fix rather than a
-  smaller constant. A notch is one discrete event whose magnitude is a number the browser chose
-  arbitrarily. A pinch is continuous, delivered as a stream of small events, and applying a whole
-  notch to each was dozens of steps for one gesture. Exponential, so a pinch out exactly undoes a
-  pinch in.
-- **The classification is reported live**, because the last two rules are a guess about a device
-  from the shape of its numbers. A misread gesture is visible while the hand is still on the device
-  rather than being a mystery afterwards.
-
-**Frame cost is a non-issue, with margin.** 1,202 frames, both map-sized layers drawn every frame:
-**0.1ms mean and 1.0ms worst inside the draw call, against a 16.7ms frame**. The surface is bound by
-the display, not by us, and §4's expectation that a GPU-composited `drawImage` would be fine is
-confirmed rather than assumed. Measured during motion only — a still view redraws nothing and would
-have reported a flattering zero.
-
-**Owlbear's viewport never moved**, under real navigation, with the detector proving itself 2/2 on
-every run.
-
-##### Two platform limits, and neither is ours — 2026-08-23
-
-Both were reported as defects, both were measured, and both turned out to be Firefox. **Owlbear
-behaves identically** (confirmed by the user), which is what settles them: the bar was matching it.
-
-- **A two-finger scroll is axis-locked when the gesture starts along an axis.** 624 of 1,200 events
-  carried both deltas — so diagonals do arrive and are used, and a drag begun diagonally stays free
-  — against 163 x-only and 413 y-only from gestures begun straight. The lock is applied upstream at
-  gesture start and JavaScript receives only what is sent.
-- **A pinch cannot carry a pan.** Of 291 pinch events, **none** carried any horizontal delta and
-  **none** interleaved with a scroll event inside 200ms. Firefox delivers a pinch as pure vertical
-  `ctrl`+wheel; the pan half of a combined gesture never reaches the page.
-
-*A real bug was fixed on the way to that answer and was not its cause:* a pinch's `deltaX` was being
-discarded outright, since the zoom path read only `deltaY`. Correct to fix — a component that
-arrives and is thrown away is wrong regardless — but on this platform there is nothing for it to
-act on.
-
-**The design consequence, and it is the useful part:** the axis-lock applies only to the wheel.
-**Click-and-drag panning has no lock at all.** But in the workspace a left-drag becomes the brush,
-which would push a trackpad user back onto the locked gesture for panning. So the workspace needs an
-unrestricted drag-pan on another binding — **a modifier held while dragging, and/or a dedicated hand
-tool** (user, 2026-08-23). Probably both: a modifier for a moment's nudge, a tool for a while spent
-navigating.
-
-### The workspace — built 2026-08-23
-
-`workspace.html`. An opaque full-screen modal that draws the map, paints the binary ink mask over
-it, and carries 1a and 1b's controls on the same surface as the mask they decide. **Panel tab 1 is
-now a single button that opens it.** Run in a room the same day; two defects found and fixed there,
-both recorded below.
-
-**Map and mask go into one canvas under one transform.** That is the whole architectural payoff: they
-register **by construction** rather than by our arithmetic agreeing with Owlbear's, and the failure
-class the click-through overlay spent a poll, a settle interval and a blank-and-restore guarding
-against no longer exists. All of that machinery was deleted rather than ported.
-
-**It opens on the view Owlbear was showing**, so nothing jumps when the sheet goes up — the probe
-confirmed the behaviour and it matters more here, since a GM opening the workspace is continuing to
-look at the same map and a jump costs them their place.
-
-**Getting out is Escape or a button that survives hiding the controls, and there is no dismissal
-timer.** The probe had one because an opaque sheet that might swallow every click is a trap; that
-was true while input capture was unmeasured and is not now. Evicting a GM mid-tuning would trade a
-certain cost against a retired risk.
-
-#### The re-read happens on release — tried live, reverted the same day
-
-Recomputing per drag frame was the intent and it was reported unusable from a room. **The coalescing
-was not the problem and is untouched**: it blanks on change, keeps only the latest value, and drops
-any answer a newer one supersedes.
-
-**What defeats a live drag is that the re-read is synchronous.** Its ~690ms is 690ms the slider
-itself cannot move, so the cancel-and-retry can never fire — the work it would cancel is holding the
-thread that would do the cancelling. Live needs the work **off the main thread**, or **cropped to
-the visible region**; the number that decides between those is what a stage-one re-read actually
-costs on this surface, which the workspace logs on every mask. Measure, then choose.
-
-**While a slider moves the mask stays up**, and that is not a breach of the blank-rather-than-stale
-rule. That rule guards against ink drawn for settings the GM has *applied* and moved past; this is
-ink for the last reading they applied — the thing they are dragging away from, and so the thing
-worth seeing while they choose. Blanking there means adjusting blind, which was the complaint. The
-state line says the slider is ahead of the map, and that message deliberately outranks a completed
-reading's own: a mask started at load can land mid-drag, and announcing a figure for a value the GM
-is leaving is the smaller truth.
-
-#### Two defects found in the room, and what they have in common
-
-- **The pan handler ate every click.** It listened on the surface, which covers the viewport with
-  the controls drawn on top, so a press on a button bubbled up, started a pan, and
-  `setPointerCapture` redirected the rest of the gesture away from the button. Nothing on the page
-  could be clicked. It listens on the **canvas** now, which is *behind* the controls — structural
-  rather than a filter on event targets, so there is no list of exceptions to keep in step with the
-  markup, and scrolling over the controls scrolls the controls for free.
-- **The canvas was not filling the viewport.** A `<canvas>` is a *replaced* element, so `inset: 0`
-  does not stretch it the way it would a div: it keeps its intrinsic 300×150 until the first frame
-  sets explicit dimensions. In a room that self-corrects on frame one, which is exactly the shape of
-  a bug nobody can reproduce. Stated in CSS now.
-
-Both were found by asking `elementFromPoint` where a press actually lands, rather than reasoning
-about z-order — which had already been got wrong once.
-
-### Stage one is two things in series — settled 2026-08-23 (user)
-
-The GM's question changes partway through stage one, and the panel says so with two numbered
-sub-sections. Both halves are reading-stage pipeline controls — either re-partitions the map
-wholesale — so this is presentational and the cascade is untouched.
-
-- **1a · What counts as ink.** Separating marks from paper, shading and background. **Local contrast
-  is the only tool today**; selecting or ignoring by *hue* would join it here, since colour is
-  another question about what a mark is. Colour is currently discarded at binarisation, and §4
-  already names that as a real loss.
-- **1b · Which ink counts as walls.** Filtering marks down to linework. **A width filter is the only
-  tool today**; smoothing the nubs an opening leaves where a thick wall crossed a thin gridline
-  would join it here.
-
-Both lists are expected to grow, and the sections exist so that growth has somewhere to go that is
-not one long column of unrelated knobs.
-
-### The minimum stroke width — built 2026-08-23, previously rejected
-
-A morphological **opening**: erode by `k`, dilate by `k`, so marks narrower than about `2k` vanish
-and everything else keeps its original width. Denominated in measured ink widths, **default zero**.
-
-**Why it was rejected before, and what changed.** It can sever a thin wall anywhere, and a severed
-wall merges two rooms. That risk is unchanged and the control is still not safe. What changed is
-that it is no longer *invisible*: the stage-one overlay shows the mask registered on the map at any
-zoom, so a severed wall is a gap a GM can see, with the second-largest-region alarm behind it. The
-objection was about visibility, and visibility is what got built.
-
-**Why it earns its place beside the blur.** The blur is the other global lever and works on
-**contrast**, so a floor grid printed as dark as the walls costs linework to remove. An opening
-works on **width**, which is the axis a grid line actually differs on. The two are not redundant;
-they attack different properties, and the grid sits on the one the blur cannot reach.
-
-**It runs after the ink-width measurement, and that ordering is load-bearing.** The threshold is
-denominated in ink widths, and measuring a mask this has already filtered would raise the mean width
-— which moves the threshold, which changes what it removes. Measure the raw reading, then filter it.
-Polarity is decided on the raw reading for the same reason.
-
-**Implementation notes.** Separable square structuring element with running counts, so it is linear
-in the pixel count and *independent of the radius* — the naive neighbourhood is a billion tests at
-8.4 megapixels and a radius of five. Square rather than circular means a diagonal stroke must be
-slightly thicker to survive than an axis-aligned one, which on a printed grid points the right way.
-Borders **clamp** rather than counting off-image as ground: the opposite would erode a band off every
-edge and delete a wall drawn along the map's border, which the dilation could not restore.
-
-**The cost, stated rather than softened.** It deletes *everything* below the threshold — a thin
-doorway marking, a lightly drawn secret door, a wall hatched as fine parallel strokes. It is a
-scalpel for the grid only where the grid is thinner than everything worth keeping, and on some maps
-it will not be. GM-drawn "not ink" strokes remain the better, local tool; this does not replace them.
-
-### The smallest ink island — built 2026-08-23 (user)
-
-The second tool in stage 1b, and it exists because the first leaves a residue. Once the minimum
-stroke width has taken out a printed floor grid, what remains beside the linework is **decoration**:
-high-contrast, thick enough to survive an opening, and **stubby** — a compass rose, rubble, a
-furniture glyph. Reported from a room on the run that first cleared a grid.
-
-**It separates those from walls by connectivity first, size second.** Not because a wall is large —
-a wall segment between two doorways can be tiny — but because **walls join up**. The linework of a
-dungeon is one enormous connected network; a decoration is an island floating inside a room. So the
-threshold only has to be large enough to catch islands, and it is separating things that differ by
-orders of magnitude rather than by a margin.
-
-**The measure is the bounding box's longest side, in grid squares.** A GM can look at a map and say
-"that compass rose is two squares across"; nobody estimates an area by eye, and an irregular glyph
-makes that worse. It is also the measure that says *stubby*, which is the property distinguishing
-what survives an opening from what should.
-
-**Eight-connected, and here that is the conservative direction rather than merely the consistent
-one.** A decoration touching a wall *even diagonally* counts as part of the network and is never
-removed. Under 4-connectivity it would look separate, and deleting it would quietly edit ink that
-the space labelling one stage later treats as load-bearing. Note that `findInkBlobs` labels ink
-4-connected by inverting the mask — harmless there, since it only reports.
-
-**The alarm:** the largest surviving island should span most of the raster, because that is what a
-wall network is. If it drops below a quarter of the map's width the linework has been cut into
-pieces, by this filter or by the stroke width before it, and the run says so.
-
-**The cost:** a genuinely isolated short wall — a free-standing pillar, a lone threshold mark —
-looks exactly like a decoration and goes with them.
-
-### Both 1b controls go further than useful, deliberately — user, 2026-08-23
-
-Their maxima are past the point of sense: far enough to erase a map's decoration and then its walls.
-A control whose top end still looks reasonable gives no sense of where the edge is, and the GM is
-left guessing whether they have gone far enough. Being able to push it until the ink disappears is
-what makes the middle feel like a choice — too low, too high, then settle.
-
-That is only safe because the overlay makes both extremes visible immediately. It would be a poor
-trade on a control whose effect could not be seen.
-
-### The controls
-
-Three for stage 1a — ink threshold, texture blur, detail window. Two for stage 1b — minimum stroke
-width, smallest ink island. Two for the breaks — largest break to repair, same-wall distance.
-
-**Every control is independent of every other.** One pair briefly was not — a repair width expressed
-as a share of a separate marking width — and it was withdrawn when the premise behind the split
-turned out to be false (§11 item 3). What survives from it is that a derived readout is repainted
-when a reading lands rather than only when its own slider moves, because several of them report a
-setting against a *measurement* that does not exist until then. **One** for stage two — edge
-simplification; smallest room was the other and was deleted on 2026-08-30. Two for stage three, both
-about how the preview is drawn while it is being judged. Plus the overlay's colour and opacity, which sit on the
-reading tab but are **display** parameters (below).
-
-- **One declaration decides which stage owns which parameter**, and both the panel's tabs and the
-  pipeline's cache invalidation read it. Two lists would be two places to disagree about what a knob
-  invalidates, and the disagreement would be silent in the direction that matters — a stage-two
-  tweak reusing a mask it should have thrown away. A test asserts the mapping is total and that the
-  three stages partition the parameters exactly.
-- **A second declaration decides what a change *recomputes*, and it is not the same axis.**
-  `pipeline` invalidates the mask, `display` nothing but the next repaint. The stage says which
-  surface a control appears on; this says what turning it costs, and the workspace's rows are built
-  from it — so a control moved between headings cannot silently change what it recomputes. Filing a
-  display parameter as pipeline would re-binarise on every opacity nudge, which is the whole reason
-  the axis exists.
-- **A third declaration splits the pipeline parameters again**, into those that feed the reading and
-  those composed on top of it, so binarisation can be cached separately. Written **by exclusion**:
-  anything new invalidates the reading unless it is named, because a forgotten entry then makes that
-  cache useless rather than wrong.
-- **The stored shape was deliberately not renested to match.** Storage keeps its two groups and the
-  stage mapping carries the semantics. Renesting would mean either a migration or a normaliser
-  falling back to defaults for every field of a GM's existing tuning — and silently rewriting a
-  stored setting merely because the panel opened is the worst failure a control can have, which is
-  the same property the round-tripping tests exist to protect.
-
-- **They live in scene metadata**, like the map nomination and for the same reason: the panel is a
-  fresh iframe every time it opens and `localStorage` is partitioned in a third-party iframe. Tuning
-  arrived at by looking at *this* map should also travel with it.
-- **Everything read is normalised**, and the normaliser is total: it takes anything at all and
-  returns a usable set, clamping rather than rejecting and falling back **per field** so one bad
-  key cannot discard a GM's other four. A parameter panel that can put the pipeline into a state it
-  cannot recover from is worse than no panel.
-- **Edge simplification WAS capped below half an ink width**, because that was the bound past which a
-  boundary could cross the middle of a wall into the next room. **Retired 2026-09-06** (user): the
-  bound stopped meaning anything when the graph pivot made both faces of a shared wall move together,
-  and the top of the track is now meant to reach obviously useless values, the same as the two ink
-  filters. The control is a fraction of the map on a graph-measured track; see §11a.
-- **Sliders, not number boxes.** These are values arrived at by feel — drag until the map looks
-  right — so the control should support a sweep rather than a typed guess. The readout and the
-  derived figure update *during* the drag, on `input`; only releasing writes, on `change`, so one
-  sweep is one write to scene metadata rather than a hundred.
-- **The smallest-room control is logarithmic**, and that is not polish. It spans 0.002 to 6 grid
-  squares — three orders of magnitude — with every value a GM would ever pick near the bottom. On a
-  linear track its default sits **1.6% along**, three pixels from the stop, and the rest of the
-  slider chooses between absurd and more absurd. On a log track the same default sits at 49%.
-- **Two maxima were tightened once the widget made range legibility matter**: blur to 3px, window
-  radius to 0.75 squares. Nothing usable was lost — a 5px blur against 5.7px ink erases the linework
-  outright — and both defaults moved off the left stop.
-- **Round-tripping is tested, and it is the property that matters.** A value from scene metadata
-  positions the slider and the slider must reproduce it; if those disagree, merely *opening the
-  panel* rewrites a GM's setting, which is the worst failure a control can have because nothing
-  announces it.
-- **Every hint says which way to turn the knob.** Raising Sauvola's `k` finds *less* ink, which is
-  the opposite of what "threshold" suggests to most people, and a control whose direction has to be
-  discovered by experiment is one that gets turned once and abandoned.
-- **Settings are logged with every run**, so a set of numbers can be read beside the parameters that
-  produced it — which is the entire claim §8 makes for comparison between runs.
-
-
+cannot break planarity and moves nothing. Two constraints on which edge:
+
+- **It must have no interior pixels.** Deleting one that has them takes those pixels out of the graph
+  entirely, leaving them neither inside a face nor on any boundary.
+- **A diagonal link is preferred.** Three mutually-touching pixels form a triangle whose hypotenuse is
+  the redundant 8-connection; giving up a leg instead cuts the corner off the linework.
+
+**No parameter, and that is the point.** A sliver either encloses a lattice point or it does not — by
+Pick's theorem in doubled integers, where **B is DISTINCT boundary points, never the step count**. A
+slit walked out and back visits its pixels twice, and using steps there scores real slivers at
+I = −2 and lets them through.
+
+**A sliver with no interior-free bounding edge is left alone and counted.** Never observed.
+
+#### Degree is counted two ways, deliberately
+
+**`walkChains` counts raw neighbours. Anything deleting a branch counts contiguous runs around the
+ring (the crossing number).** Making these consistent reintroduces a defect either way:
+
+- A **raw count** stops a branch walk one pixel early and leaves a nub on the wall.
+- The **crossing number** reads a pixel with four neighbours falling in two runs as an ordinary path
+  pixel, so a chain walk passes straight through it and **strands** whichever branch it did not take.
+  A stranded pixel is still skeleton, so it is not space either — the smallest possible failure, and
+  exactly the kind no eye finds.
+
+**The cost of counting neighbours, stated:** three mutually-touching pixels become a half-pixel
+sliver, so sliver removal has real work on every map rather than occasionally.
+
+### Fitting, and the freeze
+
+**Each edge is fitted once, and both faces sharing it are assembled from that one fitted edge.**
+Under a partition, two adjacent rooms' boundaries were a wall width apart, so simplifying each ring
+separately was harmless. Under the graph they are **coincident**, and independent fitting lets them
+drift apart by up to the tolerance — opening a sliver between two rooms that share a wall. Fitting
+per edge makes that impossible by construction rather than by a tolerance.
+
+**Escalation is therefore global**: when anything exceeds the command cap, the tolerance rises for the
+whole map, because a region escalated alone would stop matching its neighbours. **Cost stated: one
+enormous region can coarsen every other one.**
+
+**Douglas–Peucker selects a subset of its input** rather than computing new points, so a fitted vertex
+is still a lattice point and every later comparison stays exact. `simplifyIndices` is the decision and
+`simplifyPolyline` is that plus a lookup — one Douglas–Peucker, not two.
+
+**A collinear pass runs at the freeze**, dropping any point lying exactly on the line between its
+neighbours. It is the only simplification that **moves nothing** — every remaining point is where it
+was and the enclosed area is identical.
+
+- **The test is an exact cross product, and it has to be.** Asking the fitter's distance function
+  whether a point is zero from the chord fails: it divides by a squared length and multiplies back,
+  so a collinear lattice point comes out at ~1e-30 and a `> 0` test keeps it.
+- **It runs at the freeze, not in the fitter.** The randomised sweep runs the derivation at a
+  tolerance of zero precisely to get *unfitted* rings, and asserts every step of one is to an
+  8-neighbour. Collapsing a straight run inside the fitter would break that assertion for a reason
+  unrelated to what it guards.
+- **No figure is quoted for what it saves, and none should be.** A thinned centreline is a
+  **staircase**, so a wall at exactly 45° or exactly axis-aligned collapses and one at three degrees
+  off horizontal keeps every step. **It is not a substitute for choosing a tolerance.**
+
+**Simplification stays conservative, and the reason changed.** The sibling's warning was that a
+simplifier cuts concave corners *outward*, and outward beside a wall means into the next room. Here
+outward means **into the wall**, which is harmless — a centreline that drifts is still inside the ink.
+The risk that remains is a **corner cut across a doorway**, bridging into a corridor and merging two
+regions.
+
+**The old half-ink-width cap is retired.** Its reason went when the graph made both faces of a shared
+wall move together, and the top of the slider is now meant to reach obviously-useless values like the
+two ink filters. *"The user will be looking at the consequences."*
+
+**Never split a region to meet the 8192-command cap.** Raise the tolerance; report what still will not
+fit. Splitting puts a boundary — and therefore a wall — down the join, in the middle of a room.
+
+### The two caches, split where the pipeline stops reading the image
+
+- **The reading** — binarise, polarity, ink width; ~690ms of a ~1.4s run — is cached on map identity
+  plus the reading parameters alone.
+- **The composed ink** is cached on everything, and is built from a possibly-reused reading.
+
+So a sweep of a later control skips the expensive half. **It is still one implementation**: two
+functions in series, not two copies of the chain — a second copy re-opens the sibling's worst
+diagnostic failure, where its harness and a real room disagreed *in direction* because the harness
+never ran world placement.
+
+**The boundary is declared by exclusion**, so anything new invalidates the reading unless it is
+explicitly named as post-reading. That polarity is deliberate: a forgotten entry makes the cache
+*useless* (690ms, obvious in the log) rather than *wrong* (a stale mask reported as current). **Do not
+tidy it into an opt-in list.**
+
+Both fingerprints are deliberately over-broad on the map side — identity, geometry, scene grid — since
+a wrong reuse would report stale regions as current. Which halves ran is logged every time.
 ---
 
-## 5. The pipeline
+## 5. The frozen document
 
-```
-load → binarize → filter ink → thin → prune → wall graph → faces → simplify → place → emit
-```
+**Stage one is the map; stage two is the graph.** The freeze is where the pixels stop being needed:
+everything before it derives from the image, and nothing after it ever re-derives.
 
-*Superseded 2026-08-29, and kept for one turn because most of the code still has this shape:*
-`load → binarize → fill and label → discard outside → trace boundaries → simplify → place → emit`.
-Everything up to and including `binarize`/`filter ink` is unchanged — stage 1a and 1b are untouched by
-§4's revision, because the ink mask is still what the skeleton is built from. `faces` reuses the
-existing labelling and contour tracing, run on the rasterised graph rather than on the ink mask, so
-the area check and the hole rules survive with a different input.
+That is what makes editing possible at all. Re-deriving renumbers everything, so stored edits would
+point at vertices that no longer exist. Stage two never re-derives, so **a moved vertex is just a
+stored coordinate** rather than a thing that has to be found again.
 
-### What transfers from the sibling, and what does not
+**No edit list, deliberately.** Replaying GM actions would have to happen twice — on the raster and
+again on the graph — and grows more error-prone with every tool added. Accepting the information loss
+from earlier stages is the price.
 
-**Transfers:** image loading and the cross-origin pixel path; binarisation (Sauvola adaptive
-threshold, blur); the geometry helpers; polygon simplification, with a changed constraint; and the
-whole testing and diagnostic culture, which is the most valuable part.
+### What is stored
 
-**Now also transfers: thinning, and chain chopping — reversed 2026-08-29.** The expensive, well-tested
-middle of the sibling's pipeline is back on the critical path, because §4's wall graph is built from a
-skeleton. This reverses the 2026-08-05 assessment below, and it recovers the head start the earlier
-note said was lost.
+**Two flat tables**: nodes as coordinates, positionally indexed, and edges. **Faces are derived, not
+stored**, which is what makes add and delete tractable — change an edge, re-traverse, and the faces
+fall out. **Node ids are the only identity the document has.**
 
-*The superseded reasoning, kept because it names the thing that changed:* "Region filling does not need
-a medial axis. The head start on this project is concentrated in the parts that were never going to be
-hard; the stages that took the sibling the longest are the ones we are not using." True while regions
-were the artifact. §4 establishes that a partition cannot represent a wall that separates nothing, so
-they no longer are.
+- **Coordinates are FRACTIONS OF THE MAP.** The raster is an artefact of our own memory budget rather
+  than of the map, so a document denominated in it goes stale when a budget constant moves. Fractions
+  are independent of the raster *and* of the source image's size, and convert to world at emit time
+  from the map's **current** bounds — so moving or scaling the map in Owlbear carries the fog with
+  it, which absolute world coordinates would not.
+- **float32, quantised with `Math.fround` on the way in**, so the round trip is exact rather than
+  nearly so and nothing downstream needs a tolerance for storage having moved a number.
+- **Segments, not polylines**, so **every vertex is a node** and a junction cannot hide at an interior
+  point. A polyline store needed the invariant "a junction is always an edge endpoint", and that is
+  violable: a wall meeting another head-on at a middle vertex makes a junction the walk passes
+  straight through. Segments make it *impossible* rather than checked. Junction-ness is then purely
+  derived — degree 1 is a free end, 2 is a bend, 3+ is a junction — and a **wall** is recovered by
+  `wallRuns`, chaining through degree-2 nodes. Storage roughly doubles: tens of kilobytes against a
+  512KB ceiling.
+- **A checksum (FNV-1a over the body)**, because this format lost the integrity check a lattice walk
+  had for free. A flipped bit in a lattice step threw the walk off its end node; a flipped bit in a
+  *coordinate* is a different, entirely plausible coordinate.
+- **The store records which map the graph is for.** Fractions of *a* map say nothing about which, so a
+  mismatch reads as "no graph here": nominating a second image drops the GM into stage one for it
+  without touching the first map's work. One graph at a time; per-map keys are the fix if it ever
+  matters.
 
-**Two cautions carried from §4 rather than repeated here:** it must be topology-preserving
-**thinning** rather than a distance-transform medial axis — not because thinning avoids the free-end
-retraction, which it does not (see §4, corrected by measurement), but because it keeps the branch at
-all where a partition deletes it. And thinning keeps a spur for every bump on a hand-drawn edge, so
-pruning is a required stage rather than a refinement.
+**Three decisions in the store, each easy to undo by accident:**
 
-### Resolution — native, decided 2026-08-15
+- **The graph's *presence* is what says the editor has something to show**, with no separate flag that
+  could disagree.
+- **It has its own metadata key**, or a slider release would rewrite tens of kilobytes and two writes
+  could race.
+- **`writeFrozenGraph` throws where `readSettings` swallows.** A failed read falls back to defaults
+  and carries on; a failed write means the GM keeps editing something that is not being saved.
 
-**We trace at the map's own resolution.** The cap that exists is a memory limit, not a speed limit,
-and on an ordinary map it does not bite at all.
+**`decodeFrozenGraph` refuses all-or-nothing**, unlike the settings normaliser which degrades field by
+field. Settings are independent — a bad blur can take its default while the others survive. A graph is
+not: an edge referencing a node that does not exist has no sensible fallback, and **a graph with an
+edge quietly dropped is a corrupt document presented as a valid one.** So it is a complete graph or
+`null`, and it distinguishes "nothing stored" from "stored and unreadable" — both yield no graph, but
+the second has cost the GM their editing and must not read as "you have not started".
 
-The sibling traces at 1024 pixels wide, and it would have been easy to inherit that as prudence. Its
-actual reason does not transfer: **its tuning constants are raw pixel values measured at that
-raster**, so changing the width silently invalidates every one of them. The width is a calibration
-lock-in wearing the costume of a performance budget. We have no tuned pixel constants yet, so
-adopting the same number would not be caution — it would *manufacture* the same trap, since we would
-then tune against it and be stuck there permanently for a reason nobody could later reconstruct.
+### The freeze itself
 
-The positive case is stronger than the absence of a reason to downscale. **Downscaling resamples the
-ink, and the ink's topology is the answer this project computes.** Averaging a thin dark line into
-its lighter surroundings lowers its contrast, and any stretch that then falls below threshold opens
-a gap that is not on the map — a manufactured leak between rooms, the failure mode this record
-biases hardest against. The same averaging can also close a genuine doorway gap. Both artifacts are
-real, they push in opposite directions, and which dominates on a given map is not predictable. At
-native resolution neither is introduced.
+Fitted edges are positionally aligned with the derived graph's edges, and fitting keeps both ends, so
+the shared points *are* the derived graph's nodes with their indices intact; each edge's interior
+points become ids of its own.
 
-**The cost side does not invert, and this said it did until 2026-09-01.** The argument ran: the
-sibling's downscale bought *thinning*, and thinning is exactly the stage we dropped. Thinning came
-back at step C on 2026-08-29 — as the section above already says — and it is the most expensive
-stage after the reading, 428ms on the test map, growing roughly linearly in pixels. So a larger
-raster does cost more time.
+**Coincident and zero-length segments are dropped, counted and reported.** Two walls bounding a room
+thinner than the smoothing tolerance both fit to the same straight line between the same two corners,
+so the room closes up and the document gains a doubled wall — which is not an embedding a traversal
+can mean anything over. **The stated cost: that thin room is gone from the document and will not be
+emitted.** Restoring the unfitted chain was the alternative and was declined.
 
-The decision stands on the benefit leg alone, and **the graph pivot strengthens that leg**: the
-centreline of a resampled stroke is not the centreline of the drawn one, and centrelines are now
-the emitted geometry rather than an intermediate. The time is affordable for its own reason — this
-runs GM-only, once per map, at prep time.
+### Faces from the graph, with no raster anywhere
 
-**The cap is memory.** Roughly four bytes per pixel for the decoded image, one for the mask, four
-for the labels, inside a third-party iframe. The budget is stated in megapixels, reported on every
-run whether or not it bit, and when it bits the reduction is by an **integer** factor so it is
-uniform across the image — a fractional ratio resamples different regions against different
-sub-pixel phases and thins linework unevenly.
+The walk: sort the walls at each vertex by heading, leave by the entry **before** the one arrived
+along, face on the right, enclosing cycles positive.
 
-**Named cost:** when the budget does bite, the reduction is done by the browser's own resampler
-during the draw, not by a box filter of ours. A box average would be better, but computing one needs
-the full-resolution pixels in memory, which is precisely what the budget exists to avoid.
+> **The successor rule takes the entry BEFORE the one it arrived along, not after.** This is invisible
+> on any fixture whose nodes have two departing half-edges, which is every plain room. At a junction,
+> the wrong rule walks a stub hanging into a room as part of the band *outside* it.
 
-**The lesson worth carrying.** The sibling's real trap was denominating its parameters in raster
-pixels, which made the raster load-bearing forever. Ink width is this project's natural unit where
-it can be used, since the half-wall coverage target in §4 is stated as a fraction of the wall's own
-thickness.
+**Grouping is by containment, and the exclusion is a correctness requirement rather than a speed
+one.** Each connected piece of linework contributes exactly one outward-facing cycle plus one
+enclosing cycle per bounded face of its own, so an outward cycle is a hole of the *smallest* enclosing
+ring containing it. **A cycle is only ever tested against cycles of other pieces**: a piece's outward
+cycle runs along the same vertices as its own rings, so testing it against one of them asks whether a
+point exactly on a polygon is inside it — a coin flip, and the case that arises on every single room.
+Different pieces share no vertex, so the test is never degenerate.
 
-#### Amended 2026-08-23 (user): pixels are allowed, and there is no unit that is always right
+**Areas are summed per half-edge, dropping any whose twin is in the same cycle.** A slit's two terms
+are exact negations, but summing point by point separates them by the whole rest of the walk.
+Measured, not assumed: **about one random float32 chain in a thousand fails to cancel**, and the
+fixture that pins it sums to +5.55e-17 — positive, which is the direction that turns a loose stub into
+a room. Dropping the terms before they are added is exact by construction.
 
-The original rule was **"denominate in measured ink width or grid squares, never raster pixels"**.
-Both halves have since failed, and the rule stated that way was hiding the fact that a choice has to
-be made per parameter rather than once.
+**Nothing is dropped for being small.** Slivers are the GM's to keep — they may be reducing an area to
+a sliver on purpose, to get a wall where they want one. Nothing downstream breaks: even-odd fill
+retired winding long ago, and a degenerate ring contributes zero to any area total. **Warn, never
+prevent**, including for an exactly degenerate shape: refusing assumes the gesture is finished, and
+doubling a line in order to drag the copy elsewhere is a legal intermediate state.
 
-- **Grid squares fail when the grid is not the map's.** A GM who does not need a grid leaves it at a
-  default, or sets it wrong, and nothing about that is visible or reported. The pipeline still runs;
-  the control simply stops meaning anything. This is the failure that prompted the amendment.
-- **Ink width is not trusted across map styles** (user). It saturates at 2px, is biased thin, and is
-  measured by erosion on a mask that a heavily hatched or stippled map makes unrepresentative. It is
-  a good unit when it is good and there is no way to know from inside which case you are in.
-- **Raster pixels stop meaning the same thing only when the megapixel budget bites**, which is
-  reported and rare — and they are always *exactly* what they say for the run in front of you.
+Worth putting in any such warning's wording: **a sliver is not small in its effect**, because Dynamic
+Fog strokes a boundary to derive walls, so a few pixels of shape still block line of sight.
 
-So the amended rule is: **prefer ink width where the parameter is genuinely about the linework's own
-scale; otherwise prefer pixels; use grid squares only where the quantity really is an area or a
-distance on the map's own grid.** Nothing may depend on the grid *silently*.
+**No fitting happens here, which is the freeze point paying off.** The frozen graph *is* the fitted
+geometry, so a ring is its own nodes and nothing is approximated twice.
 
-Where each parameter landed:
+### Editing the graph
 
-| parameter | unit | why |
-| --- | --- | --- |
-| Texture blur | px | always was; it is a filter kernel size |
-| Detail window | **px** (was squares) | a filter kernel size, and it is tuned beside the blur |
-| Minimum stroke width | ink widths | genuinely a statement about stroke thickness |
-| Smallest ink island | **px** (was squares) | a size on the image, and ink width is not trusted here |
-| Largest break to repair | px | ink widths was the first plan; rejected by the user for the row above's reason — a threshold that moves with a measurement changes what is repaired invisibly |
-| Same-wall distance | px | a distance travelled across the image; nothing about it is a stroke or a square |
-| ~~Smallest room~~ | ~~squares~~ | **Control deleted 2026-08-30.** Kept in the table only because it was the one entry justifying a square-denominated unit; nothing takes squares now |
-| Edge simplification | **fraction of the map** (was ink widths) | changed 2026-09-06: the safety bound it was denominated for is retired, and the wall editor has neither a raster nor an ink width, so a fraction of the map is the only unit both modes can express |
-| Prune spurs | **fraction of the map** (was raster px) | same change and the same reason — pruning became an operation on the fitted graph, which both modes hold |
+Every edit is planar-safe and every one goes through one crossing sweep.
 
-**Those two are the exception to "a threshold that moves with a measurement changes the result
-invisibly", and it is worth saying why it is not one.** Their *stored* value is an absolute fraction
-of the map and nothing moves it. What is measured off the graph is the **top of the slider's track** —
-the longest spur, the largest bend — so a re-measurement moves the handle and never the setting. A
-fixed ceiling cannot work here: two maps of the same pixel size carry 3px or 12px linework, and a
+- **Crossings are SPLIT, not refused.** The crossing test is exact integer arithmetic where it can be;
+  the crossing point is **rounded to the nearest pixel**, since two integer segments meet at a
+  rational point. Up to ~0.7px of movement, accepted so every later comparison stays exact rather
+  than committing the project to floats and epsilons permanently.
+- **Collinear overlap is reported, never fixed.** Splitting cannot separate two edges lying along each
+  other, and it is a legal intermediate state.
+- **Only the segments an edit touched are checked** — a correctness argument before a speed one, since
+  a graph that was planar before can only have gained a crossing involving something that moved.
+  Sweeping everything is quadratic: order 10^8 pairs on a real map, at every drag-end.
+- **`removeEdge` runs no crossing sweep**, because deleting cannot break planarity.
+- **`mergeNodes` is what snapping produces**, and it is a different operation from a move: every
+  reference to the folded id is renamed, so the walls genuinely *share a point*.
+
+**Identity is by id and is exact — never introduce a matching epsilon.** Two walls meet because they
+**share a node id**, not because two coordinates are close. A doorway is two ends deliberately near
+and deliberately separate, so a geometric test alone would flag every one. What floating-point
+coordinates did reintroduce is a *degeneracy* threshold in the crossing predicate and *screen-derived*
+radii in the tools — neither is an identity test, and both are decisions the GM can see being made.
+
+**Snapping is the TOOL's job, not the geometry's.** A dragged or placed vertex snaps to a nearby
+existing vertex by default, with the target drawn in green; **Shift suppresses it**. That is why
+`insertEdge` matches nodes by exact coordinate and never by proximity — the caller has already
+decided, and a second proximity rule underneath would be a second opinion nobody asked for.
+
+> **Shift, not ALT.** Firefox raises its menu bar on ALT and takes the keyboard away mid-drag. Ctrl
+> was never available because it pans. The shell names the field for its *role* rather than for the
+> key, so the choice lives in one place.
+
+**Renumbering node ids is forbidden mid-gesture.** Ids are the only stable identity the document has.
+`compactNodes` — which drops every vertex no wall uses and renumbers the rest — runs at exactly one
+moment: after a gesture has ended and cleared its state, with the in-flight write blocking another.
+**The caller answers "hold no ids across it" by *stopping holding them*** and re-asking what is under
+the pointer, which is also more correct: the graph just changed, so what the cursor is over may
+genuinely be something else. Measured at 0.05ms for 430 vertices and 1.06ms for 44,000, against a
+scene write of about 1,200ms — speed was never the objection.
+
+**The layer's rule and the query's rule must agree.** Between them they are what "there is something
+here" means. Erasing and merging leave vertices no wall uses; the layer skips them, because a handle
+that moves nothing would be a lie — and the snap query has to skip them too, or drawing catches on
+points nobody can see.
+
+### The three verbs
+
+A drag can only mean one thing, so the editor has a sticky tool picker: **Move**, **Draw**, **Erase**,
+Move by default. The alternative — hiding draw and erase behind modifier keys — was rejected for
+putting a destructive action on an unannounced click and leaving both verbs undiscoverable.
+
+- **Two of the three decide by looking.** Move takes a press only when a vertex is under it and Erase
+  only when a wall is, so a plain drag on empty map still pans. **Draw is the exception and takes
+  every press**, because a wall has to be able to start on empty map. Ctrl pans regardless.
+- **Draw supports both forms.** Press-drag-release puts a wall down in one gesture; press-release then
+  click puts one down in two, with the far end re-aimable in between. Neither is more correct — a drag
+  is quicker and two clicks are more precise — so both are served.
+- **Both ends of a drawn wall snap, and that is what makes it useful.** A wall that merely *ends* where
+  another begins is two coincident points agreeing until one moves; one that shares a node is joined
+  for ever. Attaching ends are drawn green and larger, loose ends amber.
+- **Erase deletes ONE SEGMENT, not the wall run.** The cost is stated in the UI rather than left to be
+  discovered: a long wall drawn as many segments takes a click each. What it buys is that punching a
+  doorway through a room's boundary is a single ordinary action rather than a modifier.
+- **A minimum drawn length, in screen pixels.** Two clicks in nearly the same place otherwise make a
+  wall a few thousandths across, which cannot be seen or aimed at. The floor is on what can be aimed
+  at, not on what the map may contain, so zooming in to draw fine detail still works.
+- **Escape belongs to the tool first.** The shell asks the handler before closing, so abandoning a
+  half-drawn wall does not also close the workspace and push to the scene. Right-click asks the same
+  question.
+
+**`nearestEdge` is pure proximity and was never asked to prefer longer walls.** What makes a long wall
+*feel* preferred is geometry rather than a rule: it is within the radius from far more places. If a
+bias is ever wanted, the narrow change is a tie-break toward the **shorter** wall.
+
+**The drag holds nothing in the graph.** The tool holds where the vertex *would* be and the layer
+substitutes that one coordinate, so a drag costs no graph rebuild and no crossing sweep per frame. The
+sweep runs once, on release, which is also the scene write. **The grab keeps an offset** so a vertex
+does not jump to the cursor when touched — a few pixels of the GM's own work moving because they
+touched it is not something this surface may do at any size. **The snap is measured from the vertex,
+not the cursor**; they differ by that offset, and measuring from the cursor makes the merge mark appear
+beside a wall that never comes close.
+
+**A snap is drawn in the target's place, not merely coloured**, because that is exactly what releasing
+produces. A merge cannot be undone, so the boundary has to be visible **before** it is crossed.
+
+**A press and release that did not move writes nothing**, and does not fire the point probe either — a
+gesture the tool took is finished by the tool.
+
+### One rule for the cursor
+
+> **A crosshair means the tool will act at this point; a hand means the surface will move.**
+
+An **arrow** is the null statement ("ordinary surface, clicking picks things"), which under-promises on
+a map where every press does something. A **crosshair** says the exact position matters and keeps its
+own target visible — which is why it replaced the grab hand, whose fingers sat exactly over the dot
+being aimed at. An **open hand** says the surface moves and misleads wherever moving it is not the
+point.
+
+**A release ends the gesture, not the hovering**, so the hint persists over the vertex the pointer is
+still on — the dragged one, or the one it was folded into.
+
+### The one-shot operations
+
+Three buttons at the foot of the editor, each an operation on the graph as it stands. **They replay
+nothing**, which is why they are coherent despite the freeze: the GM's edits are already inside the
+thing being transformed.
+
+- **Straighten the walls** (`simplifyWalls`) — Douglas–Peucker **per wall run**, which is what makes
+  junctions safe without special-casing them: a run's ends are junctions or free ends by construction,
+  and the fitter keeps both ends of what it is handed. **The collapse guard applies to CLOSED runs
+  only** — an open wall is safe at any tolerance, since the worst it becomes is one straight segment
+  between its ends, while a closed loop fits to a single point and the room disappears. Its crossing
+  sweep is **total and quadratic**, because this touches everything and the "only what moved" argument
+  offers no saving.
+- **Prune the dead ends** (`pruneFrozenGraph`) — deletes wall runs with a free end shorter than a
+  budget, cascading, since every arm of a junction becomes a dead end once its neighbours go. **The
+  doomed runs are drawn in red while the slider moves**, in the same red the erase tool uses, because
+  deleting cannot be undone and a budget is not a number anybody can picture on their own map — the
+  same setting takes four hairs off one map and a third of the walls off another. **`spurEdgesToPrune`
+  is the question and `pruneFrozenGraph` is written in terms of it**, so the picture cannot lie about
+  what the button does. **The handles go red too, and by a narrower rule than the walls**: only
+  vertices that actually go, since the junction where a stub meets its wall keeps its other walls and
+  stays put.
+- **Wall the map's edge** (`addFrameWalls`) — four segments at the map's extent as **one closed run**,
+  so the corners are shared vertices by construction. **It adds, so it asks nothing first**, unlike the
+  two above. **A second press is refused rather than absorbed**: four segments laid on four existing
+  ones are collinear overlaps, which splitting cannot separate and which make Euler's identity fail —
+  corrupt with nothing to see until the next traversal. **The already-framed test is strict on
+  purpose**: a segment must lie *along* an edge, not merely touch it, because a single wall drawn
+  corner to corner reaches all four edges and a looser test would call that map framed.
+
+  There is no un-frame button, and none is wanted: once added they are ordinary walls, and the erase
+  tool takes them a segment at a time.
+
+**Pruning does NOT rebuild the raster**, and the alternative was measured and abandoned. Prune the
+graph, rasterise the survivors, rebuild the graph: it works, and it leaves the sub-pixel-sliver
+artefact on **181 of 400** generated seeds against **1 of 400** for a pixel-walking prune — because
+deleting a whole edge takes one pixel further into every pruned junction. The table is kept because
+"rebuild the graph and rasterise it back" is an idea that will occur to somebody again.
+
+### The graph-derived tracks
+
+Both simplification and pruning need a unit both modes can speak, and the editor has neither a raster
+nor an ink width. **The answer is to denominate the stored value in fractions of the map, and to
+measure the top of the slider's track off the graph itself.**
+
+- **A log scale**, from a **pinned floor** — a small fraction of the map — to a **graph-derived top**:
+  the longest wall run for pruning, the largest bend for simplification, re-measured when the tool
+  opens and held for that opening.
+- **The floor is PINNED, not the observed minimum**, and the reason is sharp: **both tools delete from
+  the bottom**, so the minimum is the most mobile quantity there is. Prune at budget B and the shortest
+  surviving run is B. A tracking bottom would chase the slider upward every time, and "30%" would mean
+  a larger bite on each pass — the same non-monotonicity that collapsed the two-slider break design.
+- **The far left is a literal zero**, so the tools are exactly off rather than doing a little work at
+  the floor. **Keyed on the POSITION, not the value**: keying on the value makes the floor a sentinel
+  meaning two things, and since the scale snaps to three significant figures, whether a low position
+  collided with the floor would depend on the leading digit of the floor constant.
+- **The floor is a new field on the limits, NOT `min`, and that is forced.** The settings normaliser
+  clamps a stored value into `[min, max]`, so a positive `min` would raise a stored zero to the floor
+  on every read and destroy the off state where nothing is watching.
+
+**A fixed ceiling cannot work here**: two maps of the same pixel size carry 3px or 12px linework, and a
 ceiling generous enough for one puts the whole useful range of the other in the first percent.
 
-**Nothing in the pipeline depends on the grid any more.** Stage one never did; stage two's exposure
-was the smallest-room control, which depended on it *squared*, so a grid off by four put it off by
-sixteen. That control was deleted on 2026-08-30 and the exposure went with it. The grid still feeds
-diagnostics — the census reports areas in squares — where being wrong is a misleading number rather
-than a wrong partition.
+**These are the exception to "a threshold that moves with a measurement changes the result invisibly",
+and it is worth saying why it is not one.** The *stored* value is an absolute fraction and nothing
+moves it. What is measured is the **top of the track**, so a re-measurement moves the handle and never
+the setting.
 
-*Rejected: choosing the raster to hit a target pixels-per-grid-square density.* The sibling tried
-it, reasoning that pixel-denominated constants are only meaningful against the ink scale they were
-tuned on. It broke on a map spanning 5.4 grid squares, where the rule picked a raster 174 pixels
-wide and thinned every line out of existence. Grid-derived *sizing of the raster* remains a trap.
+Three details that were each learned the hard way:
 
-*Note on migration:* both controls were **renamed** rather than reinterpreted. Keeping the key while
-changing the unit would have read a stored `0.25` squares as `0.25` pixels, which is catastrophic
-and silent. A rename means the old key is ignored and the new default applies, which is the loud
-version of the same event.
+- **The prune track's top is the longest wall RUN, not the longest spur.** Measuring only runs that have
+  a free end *today* means a run that sits between two junctions was never counted — and the cascade
+  frees exactly such runs on later rounds, so at the far right, where a GM reasonably expects every
+  dead end to go, those are the walls left standing. No run can be longer than the longest run, so a
+  budget there reaches anything the cascade ever frees, while staying a real measurement. It must be
+  the *run*, not the longest segment, because pruning removes a whole run at a time.
+- **`largestBend` is per VERTEX, not per wall** — how far one point sits off the line joining its
+  neighbours. A whole wall's deviation from the chord between its ends is dominated by the exterior,
+  which departs from its own chord by something like half the map, and every useful setting would sit
+  in the first percent.
+- **The measured top is capped at the declared storage maximum.** Without that, a map whose measurement
+  overshoots hands back a value the normaliser silently clamps on the next read — a setting rewritten
+  with nothing announced, which is the failure the round-trip tests exist to prevent. **And the
+  measurement is rounded up** to the scale's three significant figures, or the far right fails to reach
+  the very run it was measured from.
 
-*Rejected: choosing the raster to hit a target pixels-per-grid-square density.* The sibling tried
-it, reasoning that pixel-denominated constants are only meaningful against the ink scale they were
-tuned on. It broke on a map spanning 5.4 grid squares, where the rule picked a raster 174 pixels
-wide and thinned every line out of existence. Grid-derived sizing is a trap in its naive form; ink
-width is the unit that survives.
+**A release that did not move the handle writes nothing.** With a moving top, `fromSlider(toSlider(v))`
+is no longer exactly `v`, so a drag away and back would otherwise rewrite the setting.
 
-### Connectivity — the pairing is not optional
+**Two keys, not one, for simplification** — `simplifyFraction` in the ink mode and `editSimplifyFraction`
+in the editor — and that is forced rather than chosen. They need different defaults, which is what says
+they are different settings: the ink mode's is a *fitting parameter* re-applied on every derive, so a
+sane non-zero start is what stops a fresh map producing a graph too large to write, while the editor's
+deletes vertices that do not come back and must not arrive holding a proposal to destroy detail.
 
-Connected-component labelling must use **8-connectivity for ink and 4-connectivity for space** (or
-the reverse, consistently). Using the same connectivity for both produces the classic paradox: a
-one-pixel diagonal touch simultaneously connects the ink and fails to separate the space, so regions
-leak diagonally through walls that look closed. This is a correctness requirement, not a tuning
-knob.
+**The cost of both tools, stated: it is a ratchet.** You can always simplify further or prune more; you
+can never get detail back without regenerating.
 
-### Simplification — the direction inverts, again
-
-The sibling's warning was that a simplifier cuts concave corners *outward*, and outward beside a
-wall means into the next room. Here, outward means **into the wall**, which is desirable up to about
-half the ink width and harmful past it — and at a doorway gap, outward growth can bridge into a
-corridor and merge two regions.
-
-So simplification stays conservative, but for a changed reason: not because outward error is always
-wrong, but because it is only correct within a bound the simplifier does not know about. Prefer more
-vertices over fewer; nobody looks at a fog region's vertex count.
-
-*Since built, that bound has a number* (step 6). Douglas–Peucker moves the boundary by at most the
-tolerance, so a tolerance under **half the measured ink width** cannot carry a region's edge past
-the centre of the wall beside it. The parameter therefore has to be denominated in ink width for the
-sentence to mean anything, which is the same conclusion §5 reaches from portability alone.
-
-Whatever half-wall coverage eventually arrives must be a **deliberate, separately-controlled**
-stage, never a side effect of loosening simplification — otherwise one parameter is doing two jobs
-and neither can be tuned. It is not in the initial pipeline at all (§4).
-
-**The bound roughly doubles under the wall graph — 2026-08-29.** Everything above is about simplifying
-a *region boundary*, where drifting more than half the ink width carries the edge past the wall's centre
-and into the next room. A **centreline** that drifts by the same amount is still inside the wall; it only
-leaves the ink at a full width. So the same risk tolerates about twice the simplification, which is where
-part of §4's expected size saving comes from.
-
-Half-wall coverage still must not ride on the tolerance — under the graph it needs no parameter at all,
-so this is easier to honour rather than harder.
-
-**Corrected 2026-08-30: the second "does not change" was wrong.** It read that the *region*
-simplification producing the emitted faces is still bounded the old way, because a face boundary is
-still a region boundary whatever produced it. Under the re-planned step D there is no separate region
-simplification at all — a face boundary is assembled from **edges fitted once each**, so it *is* the
-centreline simplification above, and the old bound's stated reason does not apply to it. The half-ink-
-width cap has to be re-derived on its own terms rather than inherited; the risk it now guards is a
-corner cut across a doorway, not an edge crossing into the next room. Until that is done the cap stays
-where it is, because it is conservative in the safe direction.
-
-### The two failure modes are not equally bad
-
-- **Merging** (a leak through a doorway gap) puts several rooms in one region, so revealing one
-  reveals all of them. Ruins a scene.
-- **Splitting** (one room emitted as several regions) costs the GM extra clicks.
-
-Bias toward splitting. This is the opposite of what "be conservative" suggests at first glance, and
-it is worth stating because it decides several parameter choices — minimum region area especially.
-
+**A stated gap: the default is a fixed fraction, and that is less map-independent than an ink width.**
+4e-4 of the map is 1.3px on a 3300px map and 0.30px on a smaller one — sub-pixel, so very nearly no
+simplification. It is close enough because linework is drawn to be legible at a printed size, and it is
+the price of a unit both modes speak.
 ---
 
-## 6. Open questions
+## 6. Emitting
 
-Each names how to answer it. The inherited rule: a diagnostic that cannot distinguish its outcomes
-will be believed anyway and will invent findings, so these want direct tests.
+**There is one operation: push.** Delete our old fog items, then write the current result onto `FOG`.
+No staging, no proposals, no accept step, and no refusal to write over an existing set.
 
-### OQ1–OQ5 — closed in a room, 2026-08-06
+Staging used to exist because judging a partition meant writing a few hundred shapes into the scene
+and looking at them, and because a first run had to be unable to affect play. Judging now costs
+opening a step on a surface that draws the partition and the walls **exactly as they will be emitted**,
+so the layer was answering a question nobody has to ask. Removing it also finished §3's decision: the
+graph is the document, and staging was the last place still treating the scene as working state.
 
-All five settled by roadmap step 1, and every answer was the one the design needed. Details and the
-resulting emission spec are in §4; in brief:
+### What goes out
 
-- **A programmatically-created filled `PATH` on the `FOG` layer is fog.** It renders as fog rather
-  than as a drawing, propagates to the networked scene, reaches players, and reveals correctly.
-- **A GM can select and edit one by hand**, so the refining half of the product is possible.
-- **They list properly in Outliner**, named, on the fog layer, unlocked.
-- **Dynamic Fog walls them**, at two wall items per closed contour. Measured per shape rather than
-  inferred from a total, which the first run's single number could not have supported. The *why* was
-  read out of the source afterwards and is in §3: stroking a closed loop produces an annulus with
-  two boundaries.
-- **Holes work**, under an even-odd fill rule: the ring is revealable and the hole is not.
+- **One filled `PATH` per face**, on `FOG`, `visible: true`, `fillOpacity: 1`, `fillRule: "evenodd"`,
+  no stroke.
+- **One `LINE` per segment of every wall no face boundary covers** (§3's bridge criterion), on `FOG`,
+  `visible: true`, no fill anywhere, at the scene's own fog stroke width and colour.
 
-**OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
-its adjacent corridor stub? Only answerable by running a real map at a real table.
+**A fitted polyline of n points becomes n − 1 items**, so a wall is several Outliner entries and
+nudging one segment in Owlbear moves only that segment.
 
-**OQ7. What does the GM review, and how?** *Largely answered, and the answer changed twice.* It was
-staging — emit onto `DRAWING` where proposals are visibly distinct and inert, let the GM edit them
-with tools they already know, promote to `FOG` on acceptance. **Staging was deleted on 2026-08-30**
-and the answer is now the workspace: the Regions step draws the partition and the wall lines exactly
-as they will be emitted, for the cost of opening a step, and closing pushes. What remains open is
-whether anything is wanted on top of that — jump to the next suspect region, or a re-run diff — and
-that is best judged after a real map has been traced rather than guessed at now.
+**Every emitted item carries a key under `io.github.captainchocolatedessert.fog-nudger`.** Provenance
+is load-bearing: removing and re-running both need to find exactly our items and never the GM's.
 
-### Four raised by the code review and deliberately not decided — 2026-09-01
+### Delete first, then write
 
-The review of 2026-08-30 to 09-01 is implemented in full. Four of its findings were **not** actioned,
-each because the choice belongs to the user rather than to whoever was holding the review. They are
-recorded here rather than in the review document, which is disposable.
+The alternative — writing before deleting, so the map is never briefly unfogged — was rejected on the
+better argument: **a fog layer holding nothing fogs everything**, so the gap is safe, while
+overlapping duplicates of every shape is a state nothing here is designed for.
 
-**OQ8. Should `GRAPH_ONLY` become a fourth cascade stage?** One fact — "changing this rebuilds the
-graph but not the mask" — is currently spread across three declarations: `PARAMETER_STAGE` says
-`read`, `GRAPH_ONLY` lists the exception, and `maskFingerprint` filters on it. They agree today and a
-test pins that they do. Collapsing them into a fourth stage between `read` and `derive` would make it
-one fact in one place, at the cost of a stage that is not a step and does not appear in the UI. **This
-is a question about the shape of the cascade, which is architecture, not tidying.** Spur pruning is
-the only member.
+> *If a push is ever seen to flash the map visible, that premise is wrong and inverting the order is
+> the whole of the fix.*
 
-**OQ9. Is the workspace deriving the graph twice worth fixing?** The Walls step thins and builds the
-graph to draw the skeleton; entering Regions builds it again to derive the faces. The second is the
-one that counts, and the first is what a GM looks at while judging pruning. Sharing them means caching
-a graph against a settings fingerprint, which is a third cache beside the two the pipeline already
-has. **Measure the cost in a room before paying that complexity** — the thinning is ~430ms on the test
-map and the graph build is cheaper, so the whole duplicate may be under a second and entirely
-affordable.
+### When a push happens
 
-**OQ10. Who is `index.html` for?** It says "Pre-release — nothing to install yet", while the manifest
-is served from the same Pages site and can be added to Owlbear by URL. So the only public front door
-tells a visitor who *could* install it that they cannot. Either the page carries the manifest URL, or
-it says plainly that this is not ready for strangers. **Both are honest; they are different decisions
-about who the project is for.**
+- **The two buttons at the foot of the ink mode's last step** — *Put the walls on the map* and *Edit
+  the walls*. Both write the graph to metadata and then push.
+- **The editor's *Put on the map*.**
+- **Closing the editor**, when something changed. The fingerprint is the map plus every setting, held
+  in memory; losing it costs one unnecessary push, which is the safe direction.
 
-**OQ11. Should `overlay-probe.html` keep shipping?** It is listed in `rollupOptions.input`, so 325
-lines of retired probe plus its page are built and published on every deploy — and nothing can open
-them, since the panel's button was unwired when the click-through design closed. Keeping it costs
-bundle size and puts a page on the public site that opens blank outside a room. Removing it from the
-input list means re-adding two lines before it could ever be run again. **The probe's source stays
-either way**; this is only about whether it is built.
+**Closing the ink mode commits nothing.** That is what makes reopening it over an edited graph
+harmless, and it is what "opening stage one is just looking" costs — a GM who tunes and presses Escape
+gets nothing. It is deliberate, and it is the behaviour most likely to surprise.
 
-The skeleton project already declares an action with a popover, and **that is not an answer to
-OQ7.** It exists as a second, independent signal: the background page reports through the dev log
-and the popover reports on screen, so the two separate "the manifest never loaded" from "the
-manifest loaded and the background script died". Whether the shipped surface is an action, a tool,
-or context menu items is still open, and a tool remains the likelier fit for an authoring workflow.
+**The modal is dismissed before a closing write, not after.** Waiting would leave a GM staring at an
+opaque sheet that has stopped responding for the seconds a large map takes. **`pushOnClose` never
+rethrows**: the way out of a full-screen sheet cannot depend on a scene write.
 
-### Closed without testing: are networked `WALL` items refused? — 2026-08-05
+### The escape hatch
 
-Previously an open question, and dropped deliberately rather than answered. With fog shapes settled
-as the output, no decision anywhere in this project turns on the answer, so a test would produce a
-fact with nothing attached to it. The reported local-only restriction stands as reported (§3).
+Owlbear gives a scene write about five seconds, and a large enough push saturates the message bus —
+observed at 5,881 wall segments, where `OBR_SCENE_ITEMS_ADD_ITEMS` timed out repeatedly and eventually
+even `OBR_SCENE_IS_READY` did.
 
----
+**`withEscapeHatch` wraps every write**: after a few seconds it says what is happening and reveals a
+button that requests a stop. **Three things about it are deliberate.**
 
-## 7. Constraints inherited from the sibling — verified, not guessed
+- **It stops the write and reports; it closes nothing.** Only the caller knows whether stopping meant
+  *leave* or *give me the surface back*, so closing reads the answer and goes anyway while a button
+  reads it and re-enables itself.
+- **The label is the caller's.** "Exit anyway" is right when leaving is what happens next and a lie
+  when it is not, so a button-driven push says **Stop writing**.
+- **A stopped push does not hand off.** Pressing stop during *Edit the walls* stays put and says the
+  map is partly written. The graph is saved either way, because the freeze runs before the push.
 
-Every item here was measured in a real room by the sibling project. Do not re-derive them.
+**The stop is cooperative and lands between batches**, leaving the partial set rather than rolling
+back — which is safe precisely because the next push deletes all of ours before writing.
 
-- **The SDK cannot be imported into a headless test.** Its index calls `getDetails()` at module
-  load, which reads `window.location.search`, so any node-environment test importing it dies with
-  `ReferenceError: window is not defined`. **This dictates the layering:** every module touching the
-  SDK is split from its pure half, and the pure half is where the tests live. Type-only imports are
-  erased and therefore safe. This is not negotiable without adding jsdom, and the sibling's entire
-  trace pipeline is testable precisely because it obeyed this from the start.
-- **Items cap at exactly 8192 array entries.** Bisected to the single command: 8192 accepted, 8193
-  refused. A fixed constant, not a shared budget. **Live concern here** — a traced room boundary at
-  pixel resolution can exceed it easily, and see §10 for why the obvious remedy is a trap.
-- **Writes are rate limited** (`RateLimitHit: "Too many requests"`), and this is *distinct* from
-  validation failure. Distinguish them at every call site: retrying a size failure is futile, giving
-  up on a throttle loses data. Committing sixty regions at once is exactly this workload.
-- **SDK rejections are not `Error`s.** The SDK rejects with the parent frame's raw payload —
-  `{ error: { name, message } }` — so `instanceof Error` is false for every failure it can hand
-  back, and `.message` on the rejection is `undefined`. `describeError` is already ported.
-- **Dynamic Fog's walls and lights are LOCAL items.** Read via `OBR.scene.local.getItems()`;
-  querying the scene returns zero in a room where the fog plainly works. `scene.items.onChange`
-  never fires for them.
-- **Walls are not there at startup.** Dynamic Fog materialises them ~1.2s after a fresh load.
-  Nothing may assume they exist on load — including a probe checking whether our shapes produced any.
-- **Check-then-subscribe is a race.** Subscribe *before* checking `isReady()`, and make the
-  operation idempotent — checking first leaves a window where the transition happens unobserved and
-  the work silently never runs. A popover's connection going ready is **not** the scene being ready;
-  the sibling lost two days to that one.
-- **Scene metadata has no limit below 512KB per key** — measured.
-- **The grid covers only MAP-layer images.** Anything outside the map image is outside the grid.
-- **No textures can ever reach a shader**, and **raster rendering is not available** — `data:` URLs
-  do not render. Both are settled; do not re-propose. The extraction preview has to be vector
-  geometry for the same reasons.
-- **Map pixel access works** cross-origin, and the sibling ships a startup probe that asserts it.
-  The trace harness there can take a pasted Owlbear asset URL to exercise the real path.
+**All three in-workspace pushes lacked the hatch and only closing had it**, which was backwards:
+closing is the one case where the GM is already leaving, and a button is where they are stuck
+watching. Every push routes through one place now, so there is one set of terms rather than three call
+sites drifting.
 
----
+### The item budget
 
-## 8. Testing and diagnostic practice — copy it
+**A warning stands in front of the ink mode's two exit buttons**, naming the item count and pointing at
+the slider that reduces it. Its threshold of **1,500 items is provisional and calibrated on two
+observations** — 274 items writes in a couple of seconds, 5,881 cannot be written at all — and nobody
+has bisected between them.
 
-The sibling's culture is the reason it works, and it costs almost nothing to adopt from day one.
-
-- **Mutation testing earns its keep.** Break the code deliberately and confirm a test fails. A green
-  suite on first run is evidence about the *tests*, not the code.
-
-  **This project has now paid for it twice, both on 2026-09-01.** The code review found three tests
-  asserting less than their names claimed — including the one the operating notes believed was the
-  area check's own failure test, which never ran the area check at all. And when the shared-wall test
-  was rewritten, sabotage showed the *replacement* could not fail either: its fixture's divider was
-  straight, so the shared wall simplified to two graph nodes that are pinned whichever way the fitting
-  is done, and there was nothing left to drift. Which is the bullet below, arriving from a direction
-  nobody predicted.
-- **A fixture that is easy to read can be too symmetric to fail.** A tangent test on a horizontal
-  run cannot detect a search being disabled when the fallback is `(1, 0)` — the right answer for
-  that fixture. Sampling has to actually visit the discontinuity it claims to check. **Applies
-  immediately here:** a fixture of one square room cannot distinguish correct region labelling from
-  code that returns the whole image.
-- **8-connectivity means single-pixel junctions barely exist.** Every pixel beside a junction is
-  itself degree 3+, so a tee traces to eight chains, not three. **Central again as of 2026-08-29**,
-  since §4 puts skeletonisation back on the critical path.
-- **A diagnostic that cannot distinguish its outcomes will be believed anyway and will invent
-  findings.** The sibling paid for this seven times in five disguises. Its `CLAUDE.md` lists them;
-  read that list before building any diagnostic here.
-- **Change one variable at a time.** A question was called closed twice before it was, both times
-  after changing two things at once.
-- **Diagnostics that fire unconditionally are worth their noise.** One that only fires when
-  something is known to be wrong cannot distinguish "fine" from "never ran".
-
-### The area check, in plain terms — clarified 2026-08-29
-
-It is **not** a measure of how well the map was read. It says nothing about the threshold, the ink, or
-whether the linework was found correctly. It is a check on the **boundary tracer**, and it works by
-computing the same quantity twice by two unrelated routes:
-
-1. The labelling stage walks the mask and **counts pixels**: this region is 12,904 pixels.
-2. The tracing stage independently produces the region's outline, and the **area enclosed by that
-   outline** is computed from the polygon.
-
-Those two numbers must be equal, exactly, for every region — plus any hole the fill swallowed, which is
-added to the expected figure rather than excused from it. "Area check exact" on every run means the
-shape we are about to emit encloses precisely the space the labelling found.
-
-**Why it is worth keeping even though looking at the map is also required.** The bugs it catches —
-winding direction, the diagonal turn rule, a hole attached to the wrong region — all produce polygons
-that *render perfectly plausibly*. A hole parented to the wrong room draws as a room with a pillar in
-it. Looking at that tells you nothing. It is the §8 silent failure in its purest form: wrong looks
-exactly like right, so an exact numeric identity is the only channel available.
-
-It is also the one check that runs against shapes no hand-written fixture will ever have — 285 rings,
-16 holes, 5 of them nested inside the largest region — and nested holes containing regions is precisely
-where a parenting bug lives.
-
-**It survives §4's revision, but in a changed form — 2026-08-30.** The earlier claim here was that
-faces are still derived by the same labelling and tracing, just from a rasterised wall graph. That
-route is dropped: faces now come from walking the graph, so there is no contour tracer on this path to
-check. What replaces it keeps the essential property — one quantity computed twice by unrelated routes.
-A face's cycles, before any fitting, are lattice polygons whose vertices are skeleton pixel centres, so
-an exact lattice identity is available: **A = I + S/2 + h − 1**, where A is the summed signed area of
-the face's cycles, I the labelling's pixel count for it, S the total steps walked, and h the number of
-holes. The area comes from the polygon, the interior count from the labelling, and the step count from
-the traversal — three quantities from three unrelated routes, where the old check coupled two. It fails
-loudly on the same class of bug: winding direction, a hole attached to the wrong face, a half-edge
-walked the wrong way.
-
-**Not plain Pick's theorem**, which was the first proposal and is wrong here. Pick counts *distinct*
-boundary points and needs a simple polygon; a face containing a bridge is a slit region whose stub
-pixels are walked twice, and Pick under-counts it — 3.5 against a true 4 on the smallest example.
-Counting **steps** counts a slit pixel twice, which is exactly the correction required. Caught by
-working the example rather than by a failing test, which is the cheaper end of §8's own rule.
-
-### It has now failed, and it was right — 2026-08-30
-
-This section carried a caveat for weeks: the check had never failed, and by this document's own rule
-*a clean diagnostic is evidence about the diagnostic until it has failed once*. **The caveat is
-discharged.** On the first new map tried after step D shipped, the log read:
-
-> area check FAILED on 4 of 27 faces — 196 handedness disagreements, 1 faces with no single outer ring
-
-It was reporting two real defects, both in code written the day before, and **neither was visible in
-the picture**. The regions drew plausibly; a GM's report was that one wall had gone missing from the
-Regions view, which turned out to be a separate and correct behaviour. Nothing but the check said the
-geometry was wrong.
-
-- **Welding moved points and broke planarity.** Full account in §4. The failure rate against the weld
-  radius was measured afterwards: 76% of generated cases at the 3px default.
-- **The chain walk counted contiguous runs instead of neighbours**, and stranded a free end out of the
-  graph. Being skeleton it was not counted as space either, so its face came up one interior point
-  short — which is the smallest possible failure and exactly the kind an eye cannot find.
-
-**Two practices came out of it, both cheap and both now in the suite.** A test that corrupts a ring
-and confirms FAILED, which this section had asked for and which did not exist. And a **randomised
-sweep**: 700 generated skeletons across three sizes, asserting the identity, the handedness, that
-every skeleton pixel reached the graph, and that exactly one cycle has no interior. Both defects lived
-in configurations no hand-written fixture contained, because a fixture is a shape somebody thought of.
-The sweep pins invariants rather than values, so it does not have to be rewritten when the generator
-changes.
-
-### A warning is not a safeguard — settled 2026-08-23 (user)
-
-**Nobody reads the log, and probably nobody reads the little messages on the panel either.** So a
-control is not made safe by warning about what it might have done. Either it is **right**, or its
-failure is **evident in something the GM is actively looking at**.
-
-This corrects a habit that had been accumulating. Several controls here were justified partly on the
-grounds that the run "says so" when they go wrong — the minimum stroke width warns that it can sever
-a wall, the island filter warns when the largest surviving island is too small, the trace warns when
-the Sauvola window is too narrow for the ink. Every one of those is a real signal and none of them
-is a safety mechanism, because the person who needs it is looking at a map.
-
-**What this does not mean.** The log is not being cut back. It remains the instrument that lets a
-fault a GM *reports* be diagnosed without either party looking at pixels, which is the census's whole
-justification, and it is how this project debugs itself. The change is in what a warning is allowed
-to *license*: it may not be offered as the reason a risky control is acceptable.
-
-**What it means in practice**, and this is the design consequence rather than a slogan:
-
-- The stage-one overlay is the model. It made a global width filter defensible where a log line
-  could not, because the damage appears under the GM's cursor as they drag.
-- **A new control that can be wrong needs a visual channel before it ships**, not a warning. The
-  gap-bridging control below is the immediate case: a closing that seals a doorway looks exactly
-  like correct wall, so bridged pixels have to be drawn in their own colour or the control should
-  not exist.
-- *Rejected on these grounds, 2026-08-23: a grid-plausibility check.* Comparing pixels-per-square
-  against measured ink width would have detected a grid that is not the map's and reported it. It
-  was the natural answer to §5's amendment and it was declined, because it is a warning — the fix
-  was to remove the dependency instead.
-
-### The region census — a troubleshooting instrument, not a quality signal
-
-Every pipeline run reports, unconditionally: region count, coverage, the largest few shares, how many
-regions clear a whole grid square, the median area, how many touch the raster border, and what the
-minimum-area filter dropped.
-
-**Settled 2026-08-17, and it settles the "revisit later" below.** The GM will judge the output by
-looking at it; that was always going to be true and the census cannot substitute for it. Its role is
-the *reverse* direction — when the user reports something wrong, the census is what makes the fault
-diagnosable, and possibly autotunable, without either party looking at pixels together. So it stays
-as it is and gets **no further investment for its own sake** (user, 2026-08-17). Add to it when a
-specific fault needs a number it does not yet report.
-
-*Declined on the same basis:* reporting bounding-box fill alongside area for the largest regions, to
-tell long thin slivers apart from compact cells. It would answer a live question about the test map
-(below) and it is a few lines, but it is diagnostic polish ahead of the first visible output.
-
-**The claim being made for it is deliberately narrow** (user, 2026-08-05, sceptical and right to
-be). Absolute thresholds across different maps are exactly the "property of the fixture" trap this
-project has already recorded twice, and a healthy count varies wildly between a six-room dungeon and
-a sprawling cave. What it is likely to catch is the catastrophic case — one region holding most of
-the map area, which is rooms merged through a doorway gap — and what it is likely to be *good* at is
-**comparison**: same map, one parameter changed, did the numbers move. That is a much safer claim
-than "these numbers tell you if the output is right", and it is the one to hold until evidence says
-otherwise.
-
-There is a second, more reliable justification that does not depend on it being diagnostic at all:
-it is the **only channel through which the output can be reasoned about without looking at pixels**.
-An image-processing project where every judgement requires rendering and inspecting an image is
-enormously expensive to work on. Numbers are cheap. Even a census that turns out to be a weak
-quality signal earns its place by making the results discussable.
-
-*Superseded 2026-08-17: "revisit once it has been run against several real maps; if it is measuring
-the fixture, say so and cut it." It is not being cut, and it is not being trusted either — it is
-being kept at exactly its current size for the troubleshooting role above.*
-
----
-
-### Rejected: scoring extraction against hand-drawn walls — 2026-08-04
-
-Proposed and closed the same day. A map whose walls the GM has already drawn looks like ground
-truth, and the appeal is obvious: it would turn "does this look about right" into a number.
-
-It does not survive contact with what a wall is.
-
-- **Where a wall goes along a stroke of ink is a judgement.** Inner edge, centre and outer edge are
-  all defensible, and whether a gap is a doorway or a break in the linework is a *reading* of the
-  map rather than a fact about it. A diff would score the extractor down for disagreeing with an
-  arbitrary choice, which drives tuning toward reproducing one GM's habits instead of toward being
-  useful (user, 2026-08-04).
-- **One map cannot generalise**, and a different drawing style would score differently for reasons
-  that say nothing about the algorithm. The sibling has already paid for this exact mistake once,
-  in a different costume: its wall margin's safety turned out to be *a property of the test map*,
-  not of the margin — fine on the map it was judged against, a spoiler on a tighter one.
-
-The compounding danger is that such a score would look rigorous while measuring the fixture.
-
-**The surviving form of evaluation is topological, not geometric** — and the direction taken since
-makes that more natural rather than less. What matters is not whether a boundary is within some
-distance of where a human would have put it, but whether regions *merge*. The region census above is
-that idea in its cheapest possible form, and it is already the plan.
-
----
-
-## 9. Roadmap
-
-Front-loads the unknowns: nothing downstream is worth tuning before the emit path is known to work,
-and the emit path can be tested with hand-built geometry before any pipeline exists.
-
-**0. Skeleton project — done, verified in a room.** Vite, TypeScript, vitest, manifest with a
-background page and an action popover, Pages deploy workflow, dev log shim with per-surface labels,
-`describeError` with tests. Confirmed loading in a real room on two independent signals.
-
-**1. Validate the emit path in a room, with no pipeline.** Hand-build a handful of shapes through
-the SDK and observe. Answers OQ1–OQ5, each on one variable: does a filled `FOG`-layer shape render
-as revealable fog; does the native reveal tool cut it; can a GM select and edit it by hand; does it
-appear usefully in Outliner; does Dynamic Fog produce a wall at its boundary and does that depend on
-`strokeWidth`; does a shape with a hole work. **This validates the entire architecture before a line
-of pipeline exists**, and a failure in the first three is a redesign rather than a bug.
-
-**2. Dry-run mode in the extension — done, run in a room 2026-08-15.** A control that
-traces the scene's own map, reports to the dev log, and **emits nothing**. This is where tuning
-happens, and it replaces the separate trace harness the roadmap originally called for.
-
-*What it does not yet report, stated plainly:* the roadmap called for the **region** census, and
-regions do not exist until steps 4 and 5. What is built is the rig around the hole they will fill —
-map selection, pixels, transform, luminance — and calling that a census would let a smaller set of
-numbers wear a name it has not earned. Delivered:
-
-- **Map selection**, closing §10's "which map". **Revised 2026-08-29 (user) — the largest wins, and
-  nothing is filtered or refused.** A picker carries the nomination because a scene map is normally
-  locked and so cannot be nominated by clicking it, which is how the sibling's selection-based flow
-  became unreachable in exactly the scene that needed it. The choice lives in scene metadata — local
-  storage is partitioned in a third-party iframe and can vanish. See "Choosing the map" in §4 for the
-  rules as they now stand.
-- **Pixels** at native resolution, per §5. `crossOrigin = "anonymous"` is mandatory regardless of
-  what the CDN sends, or the canvas is tainted; that failure reports through `console.error` rather
-  than the dev log, since the dev log compiles away in a production build and this is the one
-  failure about the platform rather than the map.
-- **Placement**, which is step 7's arithmetic arriving early because the dry run must *report* the
-  transform even though nothing goes through it. Per-axis scaling, aspect mismatch with rotation
-  named as the likely cause, and the far corner logged — the only corner that disagrees under every
-  wrong transform.
-- **A luminance histogram and a global Otsu split**, which is the one number here that is not
-  bookkeeping: it answers step 3's polarity question by measurement rather than assumption. Not
-  binarisation and no substitute for it — step 3 wants Sauvola, which is adaptive and local.
-
-*Rejected: the trace harness — 2026-08-05.* The sibling built one, and the plan here inherited it
-without examining the premise. Two things caught that. The user, who used it, reports looking at it
-once or twice and testing naturally sliding into an Owlbear room instead. And the sibling's own
-record shows why both are true: nearly every mention of its harness is a **number** — stroke costs
-at 1024×768, `fieldMax` and `fieldMean`, a bug found by it returning zero, density targeting
-settled by comparison, seven tuning constants. It was a measurement rig with a viewer attached, and
-the viewer is the part nobody needed.
-
-Numbers do not need a page. Measurement on synthetic input belongs in unit tests — note that the
-sibling measured against a *synthetic parchment map*, which is a generated fixture with a UI wrapped
-around it. Measurement on real maps belongs wherever the real maps already are, which is Owlbear.
-
-The dry run is also strictly better on the point the harness was worst at. The sibling's record
-states that a real bug was diagnosed only after harness and room disagreed *in direction*, because
-the harness never ran the world-placement stage. A dry run inside the extension executes the same
-code the emit path executes, so that class of disagreement cannot arise by construction.
-
-**Kept in reserve, to be built when the question exists:** a throwaway local page that renders an
-intermediate raster. Owlbear cannot display one at all — no textures reach a shader and `data:`
-URLs do not render, both settled — so this is the single capability neither tests nor the dry run
-can supply. It is perhaps thirty lines at the moment something is inexplicable, and building it
-before then would be infrastructure guessing at its own question.
-
-**Known cost of dropping the harness:** trying an unfamiliar map means uploading it to Owlbear
-first. Cheap per map, not free. Mitigable later by letting the dry run accept a pasted asset URL,
-which is what the sibling's harness took anyway.
-
-**3. Binarisation — done, run in a room 2026-08-16.** Sauvola's local threshold over
-summed-area tables, ported from the sibling, with an explicit Gaussian blur ahead of it as the
-texture-suppression control. Plus **polarity handling**, which turned out to be the substantial part.
-
-*Rejected: deciding polarity from which luminance class is the minority.* The obvious rule, and the
-histogram already reports what it needs. It fails on a map with dark walls, light floors and a
-**dark fill outside the rooms** — ink and exterior both land on the dark side, so "dark" is most of
-the image while the ink is plainly still dark, and the rule inverts a map that needed nothing done
-to it. This project's own test map is the near miss: its exterior is a mid tone, light enough to
-fall on the ground side, and shading it a little darker would flip the verdict with nothing about
-the linework having changed.
-
-*What replaced it: ink is thin, not rare.* Linework is thin everywhere by construction; floors,
-fills and exteriors are not, and that property survives whatever a map does with its tones. Measured
-by eroding each candidate mask by one pixel and scoring the share of ink that fails to survive — a
-hairline scores 1, a three-pixel stroke about two thirds, a blob near zero. The higher score is the
-more line-like reading and therefore the polarity. Readings covering more than half the image are
-disqualified outright, since ink is never most of a map.
-
-Both polarities come from **one pass**: variance is invariant under negation, so a single pair of
-summed-area tables yields both thresholds and the second mask is nearly free. The two masks are
-*not* complements — Sauvola's threshold is asymmetric about the mean — which is itself why the
-decision has to inspect the masks rather than reason about the histogram.
-
-The dry run reports both readings, the verdict, whether the margin was wide enough to be confident,
-and **whether the retired minority rule would have disagreed** — that disagreement is the signal
-that this is one of the maps the rule was replaced for.
-
-*Measured 2026-08-16, on the test map:* dark reading 7.1% ink at thinness 0.357, light reading 12.6%
-at 0.235 — dark ink, correctly, but by a margin of 0.122 against a confidence threshold of 0.1. The
-verdict is right and the daylight is narrower than an easy case deserves. Binarisation of 8.4
-megapixels took 708ms, both polarities included.
-
-### Ink width — the unit §5 asked for, free from the polarity measure
-
-Eroding a stroke of width `w` leaves `w - 2`, so a long straight stroke has `thinness = 2 / w` and
-the width is `2 / thinness`. The polarity decision already computes thinness, so the width costs
-nothing beyond the arithmetic — and it is exactly the denomination §5 says every parameter in this
-project should use instead of raster pixels.
-
-On the test map: **ink about 5.6px wide at 48 raster px per grid square**, or 0.12 of a square,
-which is a plausible wall. The Sauvola window at 25px is about 4.5× that, comfortably clearing the
-condition the radius is supposed to satisfy — and the dry run now checks that ratio rather than
-assuming it, warning below 3×. Below that a heavy stroke fills enough of its own window to become
-the local *ground*, and Sauvola declines to call it ink; the failure loses the boldest linework on
-the map, which is the opposite of what anyone predicts.
-
-**What the figure will not support.** For a mask holding several stroke widths the result is the
-area-weighted *harmonic* mean, which is dominated by its smallest terms — so a scattering of
-one-pixel noise specks drags it below the real linework. And it **saturates at 2px**, since erosion
-removes a one-pixel and a two-pixel stroke alike. Read it as a checkable indicator, not a
-measurement: a map with visibly heavy walls has no business reporting 2.
-
-*Not done, and worth considering later:* deriving the Sauvola radius from the measured ink width
-rather than from a grid fraction. It is circular in one pass — the mask is needed to measure the
-ink — but a second pass at a corrected radius would cost only another binarisation.
-
-*Consequence for §5's memory budget:* the summed-area tables are eight bytes per pixel and there are
-two of them, live at once, and they cannot be narrowed to 32-bit — the running total reaches the
-pixel count while every window statistic is a difference of two such totals, so the answer lives in
-the low bits that a 24-bit mantissa has already spent. Real peak is around 34 bytes per pixel, so
-the megapixel budget dropped from 48 to 16. Tiling the binarisation with an overlap of the Sauvola
-radius is the reserve if a larger map ever turns up.
-
-**4. Fill and label — done, run in a room 2026-08-17.** Two-pass connected-component
-labelling of the non-ink space over union-find, with the connectivity pairing from §5, a minimum-area
-filter denominated in grid squares, and the census. **No interior/exterior classification** — the
-outside is labelled and kept like anything else (§4), which removes the one stage here that had no
-reliable rule.
-
-*The checkerboard is the fixture that matters.* Under 4-connected space every light cell is its own
-region; under 8-connected space they all join through the diagonals into one. A single number
-separates the correct rule from the wrong one, on a fixture nothing else in the suite could
-distinguish — and it doubles as pressure on the union-find, allocating a few thousand provisional
-labels.
-
-*Where the merge signal moved, now that the outside is kept.* The census was designed around "the
-fraction of map area in the largest region", on the reasoning that one region holding most of the map
-means rooms merged through a doorway gap. That reading is dead: **the largest region is now normally
-the exterior, and its large share is correct.** Treating it as an alarm would fire on every healthy
-map, which is how a diagnostic gets ignored. The signal moved rather than vanished — rooms merging
-into each other show up in the *second* largest region growing; a room merging with the exterior
-through a gap in an outer wall shows up in the largest growing while the count falls. Neither has an
-absolute threshold, and both are obvious comparing two runs, which is the claim §8 makes for the
-census anyway.
-
-*Reported per run:* region count, coverage, the largest few shares, how many clear a whole grid
-square, the median area, how many touch the raster border, and what the minimum-area filter dropped.
-Border contact is **reported and never acted on** — it was the candidate rule for finding the
-exterior and it fails on any map whose rooms run to the edge.
-
-#### Measured in a room, 2026-08-17 — *Lair Of The Lamb*
-
-**Not comparable with the 2026-08-22 figures below.** The map was resized in the scene between the
-two, from 68.7 grid squares across to 64.7, so the raster density went from 48 to 51 px per square
-and every grid-denominated constant moved with it. Both readings are of the same image; only its
-placement changed.
-
-> 260 regions covering 92.8% of the raster; largest first 75.0%, 1.5%, 1.2%, 0.6%, 0.5%; 115 at
-> least a grid square, median 0.84 sq; 1 touches the border; dropped 247 below the minimum (0.1% of
-> the raster). Labelled in 342ms; whole dry run 1259ms.
-
-**No catastrophic merge.** The second largest region is 1.5% — about 55 grid squares. Wholesale
-leaking through doorway gaps would have put it in the 5–15% range. This is the one thing the census
-was built to catch and it says the ink is holding.
-
-**The arithmetic closes**, which is a real check: 92.8% space + 7.1% ink + 0.1% dropped ≈ 100%.
-
-**The minimum-area filter is doing its job and only its job** — 247 regions dropped holding 0.1% of
-the raster between them, so it is eating specks rather than threatening a closet.
-
-Open, and carried into step 5 rather than resolved:
-
-- **Whether 115 room-sized regions is right for this map.** Only the GM knows how many rooms the
-  dungeon has, and the question was asked and not yet answered. Excluding the exterior, 259 regions
-  share 17.8% of the raster: mean 2.5 squares, median 0.84, with 144 of them *smaller than a single
-  grid square*. That skew is normal; the absolute count may not be.
-- **What the sub-square fragments are.** Candidates: walls drawn as double lines, leaving the gap
-  between them as a thin region; furniture leaving slivers against a wall; a printed grid picked up
-  in patches. A printed grid caught properly would give many hundreds of cells rather than 260, so
-  at most it is partial. Bounding-box fill would separate slivers from compact cells and has been
-  declined for now (§8).
-- **A room merging with the *exterior* has no single-run signal.** It would show as the largest
-  going 75% → 78% with the count down by one, indistinguishable from a correct result. Only a
-  comparison between runs catches it.
-- **That the 75% region is the exterior is an assumption, not a measurement.** Consistent with the
-  histogram's 79% mid-tone and with only one region touching the border; not confirmed.
-
-**5. Boundary tracing — done, run in a room 2026-08-22.** One closed polygon per region,
-plus a ring per hole, traced along the *cracks between* pixels so every vertex lands on an integer
-lattice corner. All three of the things it had to get right are done:
-
-- **Corner coordinates, not pixel centres.** Two rooms either side of a wall meet it from opposite
-  faces — the left one stops at the wall's left edge, the right one begins at its right — so neither
-  claims half a pixel of the wall and neither claims a sliver of the other.
-- **Holes**, falling out of the traversal rather than needing a containment test. The walk keeps the
-  region on a fixed hand throughout, so an outer boundary has positive signed area and a hole
-  negative, and the sign *is* the classification.
-- **The exterior's shape**, one outer contour plus a hole per enclosed cluster, with no stage
-  anywhere deciding that it is the exterior.
-
-*The invariant that ties this stage to the last.* A region's ring areas sum exactly to its pixel
-count — a room of 900 pixels with a 25-pixel pillar traces to +925 and −25. Every coordinate is an
-integer, so this is exact rather than approximate, and a hole traced the wrong way round, a boundary
-off by one, or a ring silently lost all break it. It is asserted per region in the tests and
-reported on every dry run as "area check exact".
-
-*The diagonal pinch, and the turn rule that decides it.* Where two pixels of one region touch only
-at a corner, the traversal can continue two ways, and the choice decides whether the geometry treats
-that touch as a join or a seal. Space is 4-connected, so it must be a seal: the contour turns toward
-the region, hugging the pixel it is on. Getting this backwards writes a diagonal leak into the
-geometry after the labeller has correctly refused one — the same paradox from §5, one stage later.
-**A single number separates the rules on the fixture built for it**: the correct rule gives one
-ring, the wrong one cuts a spurious hole loose and gives two.
-
-*A hole is kept because of what is inside it, never because of how big it is — revised 2026-08-22
-after a room.* A hole renders as bare map inside an area the GM has revealed. That is right when
-something else will be revealed separately there, and wrong everywhere else.
-
-**So the test is containment**: keep a hole when it encloses a surviving region, fill it when it
-encloses only ink and specks the minimum-area filter discarded. Filling happens before any boundary
-is traced — the pixels simply become part of the region — so no ring is produced and nothing
-downstream knows it happened. A pillar is filled in under this rule, which is correct rather than
-incidental: nothing is revealed separately inside solid ink, and an unrevealed pillar-shaped blob in
-a revealed room reads as a bug.
-
-*Rejected: keeping a hole when it clears the region minimum.* The first rule, on the reasoning that
-anything too small to be a region is too small to be a hole. It does not hold, and a GM found the
-symptom before the reasoning was re-examined: **a region's area is its own pixels, a hole's area is
-everything its ring encloses — the thing inside plus the ink ring around it.** Equal thresholds
-therefore leave a band where a feature is too small to survive as a region and its hole too big to
-fill, and 44 decorative features on the test map showed through as white pockets because of it.
-
-*And raising the threshold would have been worse than leaving it.* A hole big enough to clear a
-room-sized cutoff can contain a **surviving** region, and a region covering another region means
-revealing the one reveals the other — the merge failure §5 biases hardest against. 156 of the test
-map's 269 regions are under a grid square. Containment cannot make that mistake and needs no
-threshold at all, which is one fewer thing to tune.
-
-*Fixtures are drawn, not computed.* Step 4 paid for this: two of its fixtures were wrong before its
-code was, and both were predicates. A grid drawn as text cannot hide a comb whose teeth are secretly
-joined, and the whole of step 5's suite is built that way.
-
-**Steps 5 and 6 are a pair.** An item's command array caps at exactly 8192 entries (§7), and step 5
-alone produces polygons that are correct and unusable. Do not read its vertex counts as a problem.
-
-**6. Simplify — done, run in a room 2026-08-22.** Douglas–Peucker, ported from the sibling,
-with the tolerance denominated in **measured ink width** rather than raster pixels (§5).
-
-*That unit is the safety argument, not just portability.* Douglas–Peucker keeps a subset of the
-original vertices and discards only points within the tolerance of the chord replacing them, so the
-simplified boundary stays inside a band of that width either side of the traced one. Inward error
-eats into the room and is merely ugly; outward error runs into the wall, which §4 *wants* up to
-about half its thickness and which becomes a merge past it. So the rule is one inequality: **keep
-the tolerance below half the measured ink width and the boundary provably cannot cross the centre of
-a wall.** The default is a quarter, leaving room for the ink-width figure itself to be off.
-
-**Named as a bound on displacement, not a promise about topology.** A doorway notch shallower than
-the tolerance can still be cut off, and Douglas–Peucker on a closed ring can in principle
-self-intersect. Both need a tolerance comparable to a room feature, which the default is far below —
-but neither is excluded by the argument above, and saying so is cheaper than discovering it.
-
-*Meeting the cap by simplifying harder, never by splitting.* A region over 8192 commands has its
-tolerance doubled and is re-simplified, up to a ceiling of eight ink widths. Splitting is the
-obvious remedy and it is §10's sharpest trap. A region still over the cap at the ceiling is
-**reported rather than fixed** — emitting it fails at the SDK boundary, splitting it puts a wall
-through a room, and crushing it further produces a room shaped like nothing on the map.
-
-*The exterior gets no special case, though §4 grants it one.* It cannot: the pipeline deliberately
-does not know which region the exterior is. The escalation ladder covers it without a guess — only a
-region with an enormous boundary escalates at all, and the exterior's boundary wraps every room on
-the map. It ends up loosely simplified because it is large, not because something decided it was the
-outside. Every region escalated past the half-width bound is **named individually in the log**,
-because "the outside" is the expected answer and a room in that list is not.
-
-*Simplification never removes a ring.* A ring small against the tolerance flattens onto its own
-diagonal and stops being a shape — for a hole that means the region covers what the hole was hiding,
-for a small room it means the room is simply absent from the output. The original is kept instead,
-which costs a handful of commands, because a ring that collapses is by definition tiny. Vertices are
-the cheap thing here and a room is not.
-
-*Checked rather than assumed: a rising tolerance ladder gives the same answer either way.*
-Re-simplifying from the previous pass and re-simplifying from the original produce identical
-polygons, because Douglas–Peucker's split point in an interval does not depend on the tolerance, so
-the retained sets nest. Two hundred thousand random polylines found no rising ladder that differed,
-and a *falling* one differed within four trials — which is what says the search could see a
-difference at all. The code re-simplifies from the original anyway, so the tolerance a region
-reports is the one its shape is within, with no appeal to that property needed to read it.
-
-**No outward offset** — the half-wall reveal is deferred to the tweaking tools (§4, §11), so the
-first output stops at the ink's inner edge and rooms look slightly clipped. Known and accepted.
-
-#### Measured on a synthetic map-sized raster, 2026-08-22
-
-Not a real map, and it is worth being clear about what it can and cannot say. A generated raster of
-3300×2550 with wobbled walls and 91 regions, of which the outside carries 132 holes:
-
-> label 1368ms, trace 507ms, simplify 144ms. 222 rings, 153,056 vertices; area check exact.
-> Simplified to 18,008 vertices in 18,230 commands across 91 items — 88% of the vertices gone.
-> Worst item is the outside at 4,673 commands of 8,192, reached after one escalation to 2.8px.
-> Nothing over the cap.
-
-**What this establishes:** tracing is cheap next to labelling, the escalation ladder works at scale,
-and an exterior carrying over a hundred holes fits the cap with headroom. **What it does not:**
-anything about real ink. The raggedness is a sine wave, and vertex count is exactly the quantity
-raggedness drives, so the reduction figure is a property of the fixture. The real numbers come from
-a room.
-
-**7. World placement — done and settled 2026-08-22.** Confirmed by eye in a room: the regions sit
-correctly on the map in all four corners, which is the one check no number can make.
-
-Raster pixels to Owlbear world coordinates, per axis, with each region anchored at
-the centre of its own world box and its rings expressed relative to that anchor — which is the
-contract a `Path` wants, since its commands are relative to its `position` (§4, measured in a room).
-
-*The transform is not composed by hand, and that is inherited rather than decided here.* It comes
-from `getItemBounds`, because dpi, grid offset, image scale and rotation compose in an order the SDK
-documents nowhere and this pair of projects has paid for guessing at an undocumented convention
-once. The cost is that the box is axis-aligned, so a **rotated** map image reports the box its
-corners span instead of its own footprint; the aspect mismatch is the signal, and the dry run warns
-on it.
-
-*Anchoring at the region's centre has one solid reason and one that is reasoning.* Solid: command
-magnitudes stay small and symmetric about zero, so a wrong number looks wrong in a log rather than
-being a small perturbation of a large world coordinate. Reasoning, and **unchecked**: an item's
-`rotation` and `scale` almost certainly pivot about its `position`, so a GM rotating a proposed
-region would swing it about its own middle rather than about a distant shared origin. Worth
-confirming in the same room session as everything else here, since it is the difference between a
-nudging tool that behaves and one that flings a closet across the map.
-
-*What the tests establish, and what they cannot.* Per-axis scaling, the relative-to-position
-contract, holes sharing their region's anchor, and an asymmetric shape keeping its orientation are
-all covered — on a fixture whose two axes scale by deliberately different factors, since the test
-map's 0.000% aspect mismatch would leave the per-axis machinery unexercised and a square fixture
-could not tell a correct transform from a transposed one. **What no test here can settle is that
-raster (0,0) is the world box's minimum corner.** That is a claim about Owlbear's conventions, and a
-flip or a transpose fills exactly the same box, so every number the pipeline can produce is happy
-with a mirrored map.
-
-*So the pre-room diagnostic is aimed at that specific gap.* The dry run reports where each of the
-largest regions landed as a **fraction across and down the map**, plus its size in grid squares —
-figures a GM can check against the map in front of them without anything being emitted. Stated as
-shares rather than world units deliberately: this project has already had world units read as image
-pixels once. Alongside it, the placed geometry's world box is compared against the map's own and the
-shortfall reported in raster pixels, which catches a scale error, the one class of failure that does
-not need eyes on a map.
-
-**Verifying this properly needs the emit path.** A transform nobody can see is not verified, and the
-asymmetric shape §9 asks for has to be *looked at*. So step 7's room check is really step 8's first
-run, the same way step 5 was unusable without step 6.
-
-**8. Emit — done, run in a room 2026-08-22.** Four gestures on the panel: **stage**, **accept**,
-**back to staging**, **remove** — plus **apply to staged**, which restyles proposals without
-re-tracing, since appearance is a stage-two question and must be answerable without touching stage
+**It warns and does not refuse**, because it is a prediction about a scene rather than a measurement of
 one.
 
-*Staging writes proposals to `DRAWING`, not fog*, per §4. Every property of that decision was
-measured in step 1, and together they make a first run inert: a staged item renders in its own
-colour so it is visibly a proposal, is invisible to players so a prep run does not leak the
-dungeon, stays selectable and editable so the GM can nudge it, and derives **zero** walls because
-Dynamic Fog filters on the `FOG` layer. Nothing about that safety is us being careful — it is a
-property of the layer, which is why it holds even when the trace is wrong.
-
-*Accepting is a property update, not a re-emission*: layer to `FOG`, `fillOpacity` to 1, `visible`
-to false. Ids survive and hundreds of items are one call. The magenta is left in place, so demoting
-restores the marking with no bookkeeping.
-
-*The pipeline is one implementation with two modes, and that is load-bearing.* The dry run and the
-emit path call the same function; the dry run simply declines to write. The sibling's trace harness
-diagnosed a real bug only after it and a real room disagreed **in direction**, because the harness
-never ran the world-placement stage — and anything keeping a second copy of the chain re-opens
-exactly that gap. The log prefix changed from `dry run:` to `trace:` for the same reason: those
-lines are now emitted during a real write, and a label that lies is worse than no label.
-
-*Throttle and refusal are separated at the write, which is the only place the distinction can be
-acted on* (§7). A throttled batch waits and retries on a short backoff; anything else stops the run
-immediately, because retrying a refusal is a hang wearing the costume of resilience. The match for
-a throttle is deliberately **loose** — either the name or the message will do — since the two
-mistakes are not symmetric: a throttle read as a refusal silently loses regions, while a refusal
-read as a throttle costs three pointless retries and then reports itself anyway.
-
-*Writes are batched and paced.* Two limits, guarding different things: an item count that paces
-against the rate limiter, and a command count that bounds one call's payload, since two dozen
-regions near the 8192-entry cap is a quarter of a million numbers crossing a `postMessage`
-boundary and that failure is not a clean refusal. **Both numbers are first guesses**; the item cap
-was bisected in a room by the sibling, but nothing has ever measured where a write starts being
-refused for size. Expect them to move, and move one at a time.
-
-*A region still over the command cap is skipped and named, never truncated or split.* Owlbear
-refuses an oversized item and the refusal fails the whole batch it travelled in, so attempting one
-known-invalid shape would take a few dozen valid ones down with it. What lands is therefore correct
-as far as it goes, with the gaps stated.
-
-*A partial failure is left in the scene rather than rolled back.* Undoing it would mean more writes
-through the limiter that just refused one, and the GM can see what landed. The panel says how far
-it got and that removal is manual.
-
-*Staging over an existing set is refused, not merged.* Emitting twice would double every region, and
-choosing which copy survives is the re-run question — a product decision §10 assigns to step 9, and
-one a first emit path has no business answering quietly. The remedy is the explicit remove.
-
-**What the first room session has to settle**, in rough order of how much depends on it:
-
-- **Whether the regions are in the right places at all**, which is step 7's check and cannot be made
-  any other way. An asymmetric map, looked at.
-- **Whether the partition is one a GM wants** — OQ6, and the first time it has ever been askable.
-- **Whether an item's `rotation` pivots about its `position`**, which regions are anchored on the
-  assumption of.
-- **What the batch limits should actually be**, and whether the rate limiter is reached at all at
-  260 items.
-- **Whether 115 room-sized regions is right for this map**, carried forward unanswered since step 4.
-
-#### First staging run in a room — 2026-08-22
-
-The first time anything this pipeline computes has been looked at. Three findings, one of which
-changes a design decision.
-
-**Measured, 2026-08-22 — the whole chain on *Lair Of The Lamb*.** The map has been resized in the
-scene since step 4's run, so it now spans 64.7 grid squares rather than 68.7 and the raster density
-is 51.0 px per square rather than 48. Constants moved because the map moved, not because the code
-did.
-
-> 269 regions covering 92.7%; largest 74.9%, then 1.5%, 1.2%, 0.5%, 0.5%; 113 at least a grid
-> square, median 0.74 sq; dropped 260 below the minimum (0.1% of the raster). Traced to 367 rings
-> (98 holes, **0** diagonal pinches), 49,110 vertices, **area check exact**. Simplified to 10,298
-> vertices in 10,665 commands across 269 items; worst item 2,029 of 8,192; **nothing escalated**.
-> Whole trace 1.3s; staging 269 shapes in 12 batches 1.6s; accept 2.9s; remove 2.6s. **No throttling
-> at any point, and no warnings.**
-
-**Placement is exact and confirmed by eye.** The placed geometry fills the map's world box with zero
-shortfall on both axes, and the GM reports the shapes sitting correctly on the map **in all four
-corners** — which is what a numeric check cannot establish, since a mirror fills the same box.
-**Step 7 is settled.** The one thing this scene still cannot exercise is per-axis scaling: the aspect
-mismatch is 0.000%, so a single uniform scale would produce identical numbers.
-
-**Accept and remove behave correctly**, so the review cycle works end to end.
-
-**The command cap is not a live concern on this map, and the synthetic benchmark overstated it
-threefold.** The exterior carries 55 rings and costs 2,029 commands against a cap of 8,192 — where
-the generated raster of the same size predicted 4,673 for 132 rings. Its raggedness was a sine wave
-and vertex count is exactly what raggedness drives, so that figure was a property of the fixture,
-as it was labelled at the time. Real linework is cheaper than invented linework.
-
-**Diagonal pinches: zero.** The turn rule has a fixture and a correctness argument and, on this map,
-nothing to do. Worth knowing before anyone spends effort there.
-
-**The batch limits are untested rather than validated.** Twelve batches went out with no throttling,
-which means the limiter was never reached — so 24 items / 20,000 commands is *at most* conservative,
-and where the ceiling actually sits is still unknown.
-
-**The floor grid is traced as walls, and the GM counts that as correct.** Step 4 listed "a printed
-grid picked up in patches" as one of three candidate explanations for its sub-square fragments, and
-this is it, confirmed by eye rather than inferred from a count. The user's judgement is that nothing
-could have known better, and that stands.
-
-*What it costs, stated rather than waved past:* grid lines detected in patches are the worst of the
-three outcomes for region shape — a fully-detected grid would at least be uniform, and an
-undetected one leaves rooms whole, while a partial one wanders a boundary along a line that is not a
-wall. It is a splitting failure rather than a merging one (§5), which is the side to fail on.
-
-*And there is a signal, which is worth knowing even though nothing acts on it.* Grid rules are
-thinner than walls, and the pipeline already measures ink width. A thickness-based filter is
-therefore possible in principle; it is not free, because ink width is an area-weighted harmonic mean
-over the whole mask rather than a per-stroke measurement (§9 step 3), so a real version needs a
-per-component thickness. Logged, not scheduled.
-
-**Proposals are hard to see, and the cause is coverage rather than layering.** The first reading was
-that fog paints over the staging layer — `DRAWING` is third in the stack and `FOG` is eleventh, so it
-does sit above. **That is not the operative cause**, and the correction is the GM's: Owlbear's fog is
-*transparent*, so being under it does not hide anything.
-
-What actually defeats the eye is that the proposals **cover the whole map**. The exterior is emitted
-like any other region (§4), so every pixel that is not ink is under a magenta fill, and a fill with
-nothing to contrast against is a flat wash rather than a shape. Turning fog off helped only by
-removing one of the two tints laid over the same art.
-
-**So the fix belongs in how a proposal is drawn, not in where it sits.** Which is fortunate, because
-there is nowhere else to put it: every ordinary layer is below `FOG`, and the four above it —
-`POINTER`, `POST_PROCESS`, `CONTROL`, `POPOVER` — are not places for editable content.
-
-*Step 1 could not have caught this*, and it is worth seeing why rather than filing it as an
-oversight. It placed six hand-built shapes at the viewport centre and asked whether a staged item
-renders in its own colour, hides from players, stays editable, and derives no walls. Every one of
-those answers is still correct. The question it never asked was what a proposal looks like when
-there are two hundred of them and they tile the map, which is not a question six shapes can raise.
-
-**Decorative features inside rooms show through as bare map, and the hole filter is why.** The GM
-reported small areas inside rooms left unfilled. They are **kept holes**: of the 98 holes traced,
-54 belong to the exterior and are the enclosed room clusters, which is correct — the other **44 sit
-inside rooms**, and each one renders as untouched map inside an area the GM will reveal.
-
-A hole is kept when it encloses at least the minimum region area, which is the same threshold used
-to discard a region. **The two numbers are equal and do not mean the same thing**, which is the
-error: a region's area is its own pixels, while a hole's area is everything its ring encloses —
-the thing inside *plus the ink ring around it*. So there is a band where a feature is too small to
-survive as a region and its hole is too big to be filled, and every feature in that band leaves a
-white pocket.
-
-**The obvious fix is wrong.** Raising the hole threshold to something room-sized would cover these
-pockets and would also cover any *surviving* region that happens to be enclosed — and a room shape
-covering another region means revealing the one reveals the other, which is the merge failure §5
-says to bias hardest against. 156 of the 269 regions here are under a grid square, so this is not a
-remote possibility.
-
-**Fixed the same day, by containment rather than by size:** keep a hole when it encloses a surviving
-region, fill it when it encloses only ink and discarded specks. Exact, incapable of merging
-anything, and it removes the threshold rather than retuning it. Full reasoning at §9 step 5. The
-mechanism is a flood of the region's complement inward from its bounding box — whatever the flood
-cannot reach is enclosed, each enclosed component is exactly one hole, and one look at the label map
-says whether anything inside it survives.
-
-*Reported from now on:* the count and size spread of holes kept inside anything but the largest
-region. Under the new rule every one of those encloses a nested region, which is unusual enough to
-be worth seeing.
-
-**Bare patches are discarded floor, and the diagnostic that ruled that out was broken — 2026-08-22.**
-A GM reported light areas inside rooms showing through. Five explanations were offered before the
-answer arrived, and the last four were all rejections of the right one:
-
-1. Fog painting over the staging layer. Wrong: Owlbear's fog is transparent.
-2. Tokens rendering above it. Wrong: they are map details.
-3. Holes kept by a size rule. **Half right** — it was a real defect and fixing it removed 39 of the
-   44 pockets, but it was not what remained.
-4. A filled tone landing on the ink side of the threshold. Wrong, and the GM refuted it in one
-   sentence: the patches are *white*, and a local threshold marks a pixel ink for being **darker**
-   than its window's mean. No composition of that window calls white ink.
-
-**The answer came from pointing at one pixel:**
-
-> raster (772, 1640) luminance 0.991 is floor, but its region was below the minimum area and was
-> discarded, so no shape covers it
-
-Floor, genuinely white, discarded by the minimum-area filter — the one stage nobody had questioned,
-because a diagnostic said it could not be responsible.
-
-**That diagnostic was wrong, and it is the more important finding.** The coverage line computed bare
-floor as *uncovered area minus total ink*. But some ink **is** covered — the containment fill
-swallows ink whenever it fills a hole — so subtracting the whole ink total oversubtracts, and the
-result went negative and was clamped to `0.00%`. It read as "nothing is bare" on a map with visible
-bare patches, and it was believed twice.
-
-The failure is the one §8 names, in its most expensive form: **a diagnostic that cannot distinguish
-its outcomes will be believed anyway**. This one could not distinguish "no bare floor" from "bare
-floor exists and the arithmetic conflated two quantities", it was consulted precisely when that
-mattered, and it was used to reject the correct explanation. Building it felt like the disciplined
-move; it cost two rounds.
-
-*Fixed by measuring rather than inferring.* Tracing now counts, per filled hole, how much of what it
-swallowed was **floor** rather than ink. Bare floor is then exactly the area the minimum-area filter
-discarded less the floor that fills reached, and the run says so in pixels and grid squares and
-warns when it is not zero.
-
-**Why the containment fill does not reach these.** A feature whose ink joins the wall linework is
-*not enclosed* by the room — the flood reaches its interior from outside the region, so it is no
-component's hole and no fill ever sees it. Its interior is simply a region below the minimum,
-discarded, covered by nothing. The same geometry makes it invisible to the compact-ink check, which
-is recorded there as a limitation.
-
-**The lever is the minimum area, and §5's bias points at lowering it.** A spurious region costs the
-GM one click; a bare patch is a visible defect in a revealed room. The threshold is 0.1 grid squares
-and every discarded region is by definition smaller than that, so the question is only how far down
-to go — which is a judgement about *this* map's noise, and now has a number attached to it on every
-run.
-
-**And the lesson about instruments, which is worth more than the fix.** Every diagnostic this project
-had reported a *total*, and a total cannot say what is happening at the place a human is pointing.
-Four wrong explanations were argued from aggregates. The point probe — "what is here?", answering
-region / ink / discarded floor with the luminance actually read — settled it on the first use.
-
-**Staged proposals do sit under every scene item but the map and the grid**, which is true, was
-found while chasing the wrong explanation, and is worth keeping. `DRAWING` is third in the layer
-stack; props, mounts, characters, attachments, notes, text and rulers are all above it, and `FOG` is
-eleventh — so acceptance reverses the order and a proposal's appearance changes on promotion. A
-proposal is hardest to see exactly where a GM has put something. No layer avoids it: everything
-above `FOG` is special-purpose. Review with tokens hidden.
-
-**Rotation pivots about the bounding-box centre**, which is what step 7 anchored regions on the
-assumption of. Note precisely what this does and does not establish: our anchor *is* the geometry's
-bounding-box centre, so "rotates about `position`" and "rotates about the bounding box" name the
-same point here and the observation cannot separate them. It does not need to — both give the
-behaviour the anchor was chosen for, and the ambiguity is now permanently harmless rather than
-merely unresolved.
-
-**9. Re-run and review — next.** Idempotency — replace our own shapes, never touch the GM's — and
-whatever OQ6 resolves to. A re-run destroys hand edits, so it must be deliberate and warned. Step 8
-holds the placeholder for it: staging over an existing set is simply **refused**, which is safe and
-is not an answer.
+**Shapes have the command cap and escalate the tolerance to fit; wall lines have no equivalent at
+all** — and at a tolerance of zero the escalation ladder cannot even start, because doubling zero is
+zero. That is the gap the warning stands in for.
 
 ---
 
-## 10. Likely pitfalls
+## 7. The surfaces
 
-Named in advance so they are recognised rather than discovered. Roughly in order of how expensive
-they are to find late.
+**One page, two modes**, chosen by `?mode=` on the URL and by which of two panel buttons opened it.
+The shell, the accordion, the map loading, the transform and every layer are shared; `steps.ts` gives
+every step a `modes` field.
 
-**Splitting a region to fit the item cap creates a wall across the middle of a room.** Dynamic Fog
-derives a wall from *every* shape boundary, so cutting one oversized region into two adjacent shapes
-puts a boundary — and therefore a wall — down the join. The cap must be met by simplifying harder,
-and an oversized region is a signal that simplification is too timid, not an invitation to chunk.
-This is the sharpest trap in the design, because chunking is the obvious remedy and is correct
-everywhere else in Owlbear.
+- **Ink mode** — *Map*, *Ink*, *Walls*.
+- **Wall editor** — *Edit walls*.
+- **View**, a persistent group in both, outside the accordion and never entered.
 
-**Inverted ink polarity produces a confident, complete, exactly wrong answer.** A binarizer assuming
-dark ink on a light ground, run on light-on-dark linework, traces the complement of the structure.
-Spectacular when noticed, and the census will not catch it — the region statistics of a correct
-answer and its complement can look similar. Note this is *ink* polarity specifically; the second
-polarity question, interior versus exterior brightness, is retired by §4 and is not a hazard.
+### Why the workspace is a full-screen modal
 
-**~~The outside region.~~** *Retired 2026-08-16.* It was to be identified and discarded, and no rule
-for identifying it survived contact with real maps — border-touching fails when rooms run to the
-edge, tone fails because the convention varies by drawing style. The outside is now **emitted like
-any other region** (§4), so nothing has to recognise it. The census should still report the largest
-region's share of the map, but as information rather than as a decision waiting to be made.
+**A modal without `disablePointerEvents` owns its input completely** — measured over fifteen runs.
+Pointer, wheel and right-click all arrive and **Owlbear's viewport never moved once**, against a
+detector that deliberately moves the viewport to prove it can see one. Every wheel event is
+`cancelable`, so a zoom can be stopped.
 
-**Diagonal leaks.** The connectivity pairing in §5. A one-pixel diagonal gap in ink is invisible to
-the eye and merges two rooms.
+That is what makes the whole design possible: **the map and the mask go into one canvas under one
+transform**, so they register by construction rather than by our arithmetic agreeing with Owlbear's.
+It opens on Owlbear's current view, so nothing jumps when the sheet goes up.
 
-**~~Holes and winding direction.~~** *Retired 2026-08-06.* Under an even-odd fill rule an inner ring
-cuts a hole whichever way it winds, and even-odd is what we emit (§4). Fixtures should still include
-a room with a pillar, but for the hole itself rather than for its winding.
+**The click-through overlay it replaced is deleted**, and with it the viewport poll, the settle
+interval, blank-and-restore, the clip band and the panel's presence heartbeat — every one of which
+existed only because that sheet did not own the transform.
 
-**~~`strokeWidth` of zero.~~** *Retired 2026-08-06.* Measured: a zero-stroke shape produced exactly
-as many walls as a stroked one. Stroke width is free.
+**Drawing costs nothing worth measuring.** 1,202 frames with two map-sized layers drawn every frame:
+0.1ms mean, 1.0ms worst, against a 16.7ms frame. Display-bound, not draw-bound.
 
-**Hatching and texture traced as rooms.** Cross-hatching outside walls encloses hundreds of tiny
-areas. The minimum-area filter is the guard, and it is the sibling's `minContourLength` trap in a
-new costume: set high enough to kill hatching, it eventually eats a genuine closet.
+**Three things about input that bite:**
 
-**Re-running over hand edits.** Once a GM has nudged the output, a re-run that replaces everything
-destroys their work silently. Our own metadata tag makes "replace only ours" possible; making it
-*safe* is a product decision, not a technical one.
+- **The keyboard is taken, not given.** Nothing reaches the modal unasked — fourteen runs, including
+  one where nine digits were typed and none arrived. `window.focus()` plus focusing an element claims
+  it on the first try, ~16ms in. Until then every keystroke goes to **Owlbear's page** and does
+  whatever it does there, invisibly, under an opaque sheet.
+- **Escape belongs to whoever holds focus.** Unclaimed, Owlbear closes the modal itself and our handler
+  never runs.
+- **`hidePaper` / `hideBackdrop` change nothing under `fullScreen`.**
 
-**Which map.** A scene can hold several `MAP` images — one of them may be a GM-only overlay that
-must not be traced. The sibling needed an explicit nomination flow for exactly this and so will we.
+**No dismissal timer.** The retired probes had one because an opaque sheet that might swallow every
+click was a trap while input capture was unmeasured. It is measured now, and evicting a GM mid-tuning
+would be a certain cost against a retired risk.
 
-**Pre-existing fog.** A scene may already have fog shapes, drawn by the GM or by Forecast. Ours add
-to them rather than replace them, and Dynamic Fog derives walls from theirs too. Neither is wrong,
-but the interaction should be a decision rather than a surprise.
+#### The wheel: three intents down one event
 
-**Wall count is twice the contour count, not the region count.** Every closed contour we emit
-becomes two `Wall` items (§3), and a region with a pillar has two contours. Sixty rooms, three of
-them with a pillar, is 126 walls rather than 60 — so any budget, rate-limit or performance
-estimate reasoned from "one shape per room" is out by rather more than a factor of two. Cheap to
-know now, expensive to discover at scale.
+Measured over 1,200 events, and **Owlbear behaves identically**, so matching it is free.
 
-**Performance.** Labelling and tracing a 4000×4000 map in JavaScript. Typed arrays throughout,
-single-pass where possible. Probably fine; worth measuring before it is a complaint.
+- **`ctrlKey` means pinch** — a browser convention, not a guess. A `deltaMode` other than pixels means
+  mouse; a coarse integer purely-vertical pixel delta means mouse. Everything else is a two-finger
+  scroll and means pan.
+- **A pinch scales with its delta; a notch must not.** A notch's magnitude is arbitrary — browsers send
+  3, 100 or 120 for one physical click — while a pinch's is the fingers actually moving. Settled
+  constants: **12% per notch, 1.00% of zoom per trackpad pixel.**
+- **A two-finger scroll is axis-locked if the gesture begins along an axis** (163 x-only and 413 y-only
+  against 624 diagonal), applied upstream at gesture start and unfixable from JavaScript.
+- **A pinch never carries a pan.** 291 pinches, zero with a horizontal delta, zero interleaved with a
+  scroll inside 200ms. So pinch-and-drag together is not available.
+
+Click-drag panning has no such lock, which is the workaround — and the reason **Ctrl-drag pans in every
+step**, since a plain drag is the brush in some of them.
+
+### An exclusive accordion, not tabs
+
+Each step paints something different on the canvas **and** gives a drag a different meaning, so two
+open at once would be a lie. Collapsing sections *imply* two can be open; enforcing exclusivity removes
+the implication and adds two things: **every header stays on screen**, so the ordering is a shape
+rather than something to remember, and a **tall narrow column** is what vertical stacking suits.
+
+**At most one open, not exactly one — clicking the open header closes it.** This is the one thing an
+accordion can do that a tab strip cannot, and it was missing at first: some step was always open, so
+its layers were always on the map and its controls always over part of it. **On a surface whose whole
+job is looking at a map, being unable to see the map plainly was the state it most needed and did not
+have.** Nothing open is a coherent mode — no layers, plain pan — and every listener is told, which is
+also how a paint mode in progress gets finished and written rather than abandoned.
+
+**The cost:** a header is a weaker "you are here" than a selected tab. Answered with accent colour and
+an edge mark.
+
+### The steps
+
+- **Map** — the picker, and it **gates the rest**: until an image is loaded every step below is dimmed
+  and its header disabled, because they are about a picture that is not there. A locked step cannot
+  stay open either, so nominating a different map drops the GM back to Map.
+
+  **Map shows no layers on purpose**: its question is which image, and a mask on top would answer the
+  next question over it.
+- **Ink** — colour and opacity, then what counts as ink, then a **Linework** sub-heading for the two
+  ink filters, then a tool picker: **Suppress**, **Add ink**, **Breaks**. The picker names the *layer*,
+  and paint-versus-erase is a pair inside whichever brush is chosen.
+
+  **Both paint layers are open at once.** Entering Ink takes a working copy of each, either brush
+  writes into its own, leaving writes both. Keying the mode to the *tool* would have put a scene write
+  — about a second — between every flick from one brush to the other.
+
+  **Clicking the chosen tool puts it down**, which is the state where a plain drag pans. That is what
+  keeps the sliders above usable without holding Ctrl.
+- **Walls** — spur pruning and edge smoothing, drawing the **fitted graph** over the partition over the
+  ink. The last thing the ink mode shows and the first thing the editor shows are one picture, because
+  both come from the same freeze.
+- **Edit walls** — the tool picker, the three one-shot buttons, and the graph over the partition. With
+  no saved graph it says where walls come from rather than offering three buttons that would do
+  nothing.
+- **View** — preview fill and outline. A control describing a layer that *two* steps draw cannot live
+  with "its" step, and a group that is never entered answers that objection rather than reintroducing
+  it.
+
+### Layers
+
+A layer is drawn because the open step asks for it, by name. Each step has its own display style —
+with **one deliberate exception**: `paint` is drawn wherever the ink is, because a picture of the ink
+that omits the GM's edits is a picture of something that no longer exists downstream. Amber for ink
+taken away, cyan for ink put in, both at full alpha whatever the ink opacity is.
+
+**The ink layer draws the BASE, not the composite.** Handing it the composite would make invented
+pixels indistinguishable from read ones.
+
+**The regions layer sits below the graph in the canvas stack**: a fill drawn after a two-pixel line
+covers the thing being judged.
+
+**Wall lines are blue in the editor and red in the ink mode**, and cased — a white stroke two pixels
+wider under a saturated core. A centreline lies exactly on top of the map's own linework, so a dark
+line is invisible; a room once reported "no stubs showing" when all 22 were being drawn.
+
+**The preview draws wall lines at a fixed 2 screen pixels**, not the fog stroke width. That is settled
+rather than outstanding: it is a **preview** affordance, and what a GM judges there is where a wall
+runs rather than how thick it will be.
+
+**Handles are capped on what is *visible*** — 2,000 on screen, rather than on the graph's size — so
+zooming in to work brings them back and zooming out leaves the linework readable.
+
+### The parameter axes — four, and they must not be conflated
+
+| axis | asks | read by |
+|---|---|---|
+| `PARAMETER_STAGE` | what does a change **destroy** | cache invalidation, the recompute cascade |
+| `PARAMETER_KIND` | what does a change **recompute** | the mask fingerprint (`pipeline` alone) |
+| `POST_READING` | which **half of the reading cache** does it touch | the reading fingerprint |
+| `PARAMETER_STEP` | **where** does the control appear | the accordion |
+
+**The three stages are the cascade, and destruction flows one way:**
+
+1. **read** — what is ink. Re-partitions wholesale and discards both later stages.
+2. **derive** — abstracting that ink into shapes. Regenerates every polygon, so it discards hand edits
+   but not the reading.
+3. **adjust** — destroys nothing.
+
+**The evidence that the middle rung is real**, and it is not obvious: a minimum-area filter is **not a
+pure delete**. A hole is kept only when it encloses a surviving region and filled in when it encloses
+nothing, so dropping a sliver *dilates whatever surrounds it* into the space it held. Measured, mask
+unchanged: **15 holes kept at one threshold against 51 at another.** That is abstracting ink into
+regions, not reading ink.
+
+**`PARAMETER_KIND` is `pipeline | display | tool`**, and the third is not a synonym for the second.
+`display` here does not mean "about appearance" — it means the answer to *what does a change
+recompute* is **nothing**. A brush width is `display` in that sense, because what is stored is pixels
+rather than a recipe, so a stroke keeps the width it was painted at. **What distinguishes `tool` is
+behaviour**: a `display` control stays live wherever it applies, and a `tool` control is closed when
+the tool it belongs to is.
+
+**`tool` controls apply live on drag**, in memory only — the scene write still waits for the release,
+and so does anything the tool must *recompute*. **`pipeline` must never join them**: its re-read is
+690ms and synchronous, which is 690ms the slider cannot move.
+
+**`PARAMETER_STEP` is a COVER, not a partition.** A parameter may name several steps, and one does:
+the spur budget, which both modes draw. What is asserted instead is that **nothing appears twice within
+one mode**, which would be two handles on one setting.
+
+**What the axis test can and cannot pin.** It asserts each declaration is **total on its own**, since
+the only way to classify a parameter with no entry is to guess from a neighbouring axis, and every such
+guess is silent. It asserts stage, kind and the reading boundary are each independent of the step. It
+deliberately does **not** assert that step cannot be recovered from stage — which direction happens to
+be a function is a fact about today's sixteen parameters and moves whenever the sections do.
+
+**The stored metadata shape was NOT renested to match the stages.** It keeps its own groups and the
+mapping carries the semantics. Renesting means a migration or a normaliser that resets a GM's whole
+tuning, which is the failure the round-tripping tests exist to prevent.
+
+**Settings live in scene metadata, read through a TOTAL normaliser**: it clamps rather than rejects and
+falls back per field, so one bad key cannot discard the rest.
+
+### Deriving is lazy
+
+A reading marks the partition stale; rebuilding is visible in one step, so **entering that step is what
+pays**. A slider release consults `PARAMETER_STAGE` to decide which cycle it triggers — the cascade, not
+a third list.
+
+**The prune budget has a fast path.** The freeze's output is kept, so a budget change is a run walk and
+a traversal — single-digit milliseconds — rather than a full re-derive.
+
+**The partition's source is the MODE, not the presence of a stored graph.** Reading a stored graph in
+the ink mode would show the GM the rooms as *edited* while they moved sliders that do not produce them.
+Equally, **a stage change re-derives only in the editor**: in the ink mode the rooms come from the
+reading whatever is stored, so a re-derive after a save would cost a full trace to arrive at the picture
+already on screen.
+
+### The map picker
+
+**Everything on the `MAP` layer is offered, and the largest by world area is the default.** Four rules,
+each a reversal of something more clever:
+
+- **No filter, no mark.** An area heuristic used to flag anything under a quarter of the largest as "too
+  small?". The sizes are on screen and the GM can see the picture, so the mark was an opinion offered
+  where the evidence was already in view.
+- **No *Auto* row.** It named a policy that decided later, which a GM cannot check. Every row is a real
+  image, and the one that would be traced is simply the one that starts selected.
+- **No refusal.** Two comparable images used to produce *nothing at all*, on the grounds that the wrong
+  one might be a GM overlay. That was written when a wrong guess was **invisible**, from a popover with
+  no picture. The workspace inverts it: the chosen map is drawn full-screen, so a wrong guess is evident
+  and one click from being fixed.
+- **Pixel sizes, in z-order.** The size is the image's own resolution — the figure a GM can match
+  against the file they imported. The order is the stack, bottom upward, so the base map comes before
+  whatever was laid on top of it, and scaling an image does not make rows move under the cursor.
+
+**The ranking is world area, not pixel count**, because "the map" means the thing covering the most
+ground: a small image blown up to fill the table is the map, and a crisp 4000px inset of one room is
+not. **One function decides it, read by the picker and the resolver alike** — two functions deciding
+separately would show one map selected while tracing another.
+
+**A stale nomination is reported, never cleared.** If the scene no longer contains the nominated image
+the resolver falls through to the largest, and the picker **says so under the rows**, because "you
+chose this" and "your choice is missing, so we picked the largest" otherwise look identical. It is not
+cleared because writing to metadata unasked is the thing this project does not do — and here it would
+also be *unsafe*, since the map list is briefly empty while a scene loads.
+
+### Painting is a mode with a Done
+
+Entering a step takes a working copy, the brush edits that, finishing writes once and recomposites
+once. A scene write is about a second, so per-stroke writes were never possible.
+
+**Leaving any other way saves rather than warns**: switching step or closing the workspace finishes
+exactly as Done does, which is what keeps *nothing on this surface is ever lost by navigating away*
+true. Discard is the only control that throws work away.
+
+**A stroke does NOT blank the surface, and this is the one change that may not.** What the ink layer
+draws is the *base*, and paint composes strictly after it, so painting cannot change the picture on
+screen. Nothing goes stale, so blanking would remove the GM's own map for a recompose in exchange for
+nothing.
+
+### Sliders re-read on release, not live
+
+Tried live, reported unusable from a room, reverted. **The re-read is synchronous**, so its 690ms is
+690ms the slider cannot move, and cancel-and-retry can never fire because the work it would cancel
+holds the thread. Live needs a worker or a crop-to-viewport — **measure the real cost first, then
+choose**.
+
+The coalescing is not the problem and is still there: it blanks on change, keeps only the latest value,
+and drops a superseded answer.
+
+**The mask stays up while a slider moves**, which is not a violation of the blanking rule: it is the
+last reading the GM *applied*. Blanking there means adjusting blind. The state line says the slider is
+ahead of the map.
+
+### The panel
+
+Down to what acts on the scene: **open either mode**, **Remove ours**, and the diagnostics.
+
+**Remove ours drops the fog AND the stored graph.** On its own it would be half a removal, since the
+next save from either surface would put the same walls straight back.
+
+### Draw the control yourself
+
+**A native popup opened from our iframe paints against the SYSTEM background, not the page's.** Measured
+the expensive way: an early map picker was a `<select>` whose options rendered white-on-white and looked
+empty, because a 12%-alpha border colour stopped being a dark grey the moment the list escaped the
+iframe.
+
+Explicit opaque option colours would fix that one symptom, but a native popup inside a sandboxed
+third-party iframe is a rendering path we neither control nor can style reliably. **So we draw the
+control ourselves** — the map picker is a list of radio rows, the ink colour is a row of swatch buttons
+— and each also happens to be better for its job, since choosing a map is a *comparison* and a dropdown
+hides what you compare on. The native `<input type="color">` is still offered beside the swatches,
+because when it works it beats any fixed palette.
+---
+
+## 8. Testing and diagnostic practice
+
+The sibling's culture is the reason it works, and it costs almost nothing to adopt. **766 tests across
+52 files**, all pure — everything that needs a DOM or a scene is not tested, which is why the gesture
+*decisions* were pulled out into pure functions after three defects in a row came from sequencing left
+in the event handlers.
+
+### The rules
+
+- **Mutation testing earns its keep.** Break the code deliberately and confirm a test fails. **A green
+  suite on first run is evidence about the *tests*, not the code.** Every non-trivial module here has
+  been through it, and the counts are recorded in the code (`nine mutations, nine caught`) so a later
+  reader knows what was actually checked.
+
+  It has repeatedly found tests asserting less than their names claimed — including one the record
+  believed was a check's own failure test, which never ran that check at all.
+- **A fixture that is easy to read can be too symmetric to fail.** A tangent test on a horizontal run
+  cannot detect a search being disabled when the fallback is `(1, 0)` — the right answer for that
+  fixture. One rewritten shared-wall test turned out to have a *straight* divider, so the shared wall
+  simplified to two nodes that are pinned whichever way the fitting is done, and nothing was left to
+  drift.
+- **Change one variable at a time.** Questions have been called closed twice before they were, both
+  times after changing two things at once.
+- **Treat a clean diagnostic as evidence about the diagnostic** until it has failed at least once. A
+  coverage line once reported "0.00% bare" on a map with visible bare patches — and was believed
+  twice, and used to reject the correct answer.
+- **Diagnostics that fire unconditionally are worth their noise.** One that only fires when something
+  is known to be wrong cannot distinguish "fine" from "never ran".
+- **Say what a check *is* the first time it comes up.** None of them is self-explanatory, and an
+  algorithm's name is not an explanation.
+- **8-connectivity means single-pixel junctions barely exist.** Every pixel beside a junction is
+  itself degree 3+, so a tee traces to eight chains, not three.
+
+### Never look at map images
+
+This is the big one for an image-processing project. **Pipeline fixtures are generated in code** —
+small pixel grids built by `maskFromRows`, drawn as text — so tests never load an image file and
+nothing needs to be viewed to be verified.
+
+Judgement about real maps happens in a room, where the user looks and the dev log reports numbers.
+
+*Rejected: a trace harness.* The sibling built one and the plan here inherited it without examining
+the premise. Two things caught that. The user, who used it, reports looking at it once or twice and
+testing naturally sliding into an Owlbear room instead. And the sibling's own record shows why: nearly
+every mention of its harness is a **number**. It was a measurement rig with a viewer attached, and the
+viewer is the part nobody needed.
+
+Numbers do not need a page. Measurement on synthetic input belongs in unit tests; measurement on real
+maps belongs where the real maps already are, which is Owlbear. **And the dry run is strictly better on
+the point the harness was worst at**: the sibling diagnosed a real bug only after harness and room
+disagreed *in direction*, because the harness never ran world placement. Code inside the extension
+cannot diverge from itself that way.
+
+*Kept in reserve:* a throwaway local page that renders an intermediate raster. Owlbear cannot display
+one at all, so it is the single capability neither tests nor the dry run supply. Perhaps thirty lines
+at the moment something is inexplicable, and building it before then would be infrastructure guessing
+at its own question.
+
+### The live checks, and what each can and cannot say
+
+- **The orphan count** — a skeleton pixel no chain claimed. It is ink, so it is not space; no edge
+  represents it, so it is not a wall. Linework that fell out between the two representations.
+  **Its limit, stated:** it says every pixel was *claimed*, not that it was claimed **correctly**. A
+  walk that routed a pixel into the wrong chain claims it just the same.
+- **Euler's identity**, on the frozen document — *vertices − walls + enclosing cycles = pieces of
+  linework*, the left side from geometry and the right from a union-find. It catches a missed
+  half-edge, a cycle partition that does not partition, and a successor rule tracing the wrong way
+  round — that last as soon as there are two rooms.
+  **It does not catch a crossing**, and **a doubled wall makes it fail legitimately** (two coincident
+  segments are not an embedding it describes, and that is a legal state to pass through). So it is a
+  line in the log rather than a gate.
+- **Planarity** (`findCrossings`) — the separate check Euler does not imply.
+- **Sliver detection**, which is a definition rather than a check: a cycle enclosing no lattice point,
+  by Pick's theorem in doubled integers, counting **distinct** boundary points.
+
+### The area check is gone — do not reintroduce it
+
+It compared two routes to one number: the labelling **counted the pixels** in a region, the traversal
+**computed the area its polygon enclosed**, and they had to agree exactly. It caught real defects in
+rooms — the weld radius on the second map ever tried, and a stranded pixel no eye could find.
+
+**It has no subject any more.**
+
+> *"Since we aren't treating faces as the underlying data, we don't need to check that every part of
+> the map is under a face — it is by definition."*
+
+The document is a planar graph, a planar graph partitions the plane by construction, and faces come
+from walking it. What the check uniquely covered was the **raster-to-graph conversion**, which is the
+orphan count above.
+
+**What it was really doing was serving as a test oracle at runtime**, and that is where it went.
+`faces.test.ts` has a room, a room with a stub, a nested box, a lollipop and a freestanding line, with
+the answers written down. **A written answer is the stronger statement**, because an identity can hold
+over two consistently wrong numbers.
+
+Two things from it that still bind:
+
+- **Winding IS defined on the graph.** The signed area of a cycle is what separates an enclosing ring
+  from an outward-facing one, and reversing it inverts every room. Euler's identity guards it now.
+- **Holes can be mis-parented**, which is why a cycle is only ever tested against cycles of *other*
+  pieces (§5).
+
+### The randomised sweep
+
+`graphSweep.test.ts` generates **700 skeletons across three sizes** and asserts the invariants: orphans
+zero, sliver removal settled, Euler and planarity over the frozen document, every ring a real polygon,
+and every segment either covered by a ring or emitted as a wall line.
+
+**It pins invariants, never values**, so changing the generator does not force a rewrite. Both of the
+defects that welding and the degree confusion produced lived in configurations no hand-written fixture
+contained, **because a fixture is a shape somebody thought of**.
+
+**It runs with fitting OFF, deliberately.** Douglas–Peucker moves a boundary half a lattice unit at a
+time, so checking the ring decomposition and the fitting together would need a tolerance, and a
+tolerance would hide the thing being tested.
+
+### A warning is not a safeguard
+
+**Nobody reads the log, and probably nobody reads the small print on the panel either.** So a control
+is not made safe by warning about what it might have done. **Either it is right, or its failure is
+evident in something the GM is actively looking at.**
+
+**What this does not mean.** The log is not being cut back — it remains how a fault a GM *reports* gets
+diagnosed without either party looking at pixels. What changed is what a warning may **license**: it
+may not be offered as the reason a risky control is acceptable.
+
+> **A new control that can be wrong needs a visual channel before it ships.**
+
+The two ink filters are the model: a global width filter is defensible because the damage appears under
+the GM's cursor as they drag. The break repair draws every proposal in its own colour. The prune
+preview draws the doomed walls in red. Each of those is the licence.
+
+### When a GM reports a gap, probe it — do not reason about it
+
+Every other diagnostic reports a **total**, and a total cannot say what is happening *there*.
+
+**"What is here?"** — a click on the map, in every step — answers with the luminance actually read,
+whether that was called ink, and whether the ink was *drawn by the GM* rather than read from the map.
+It survived the cull of the censuses for a precise reason: **it answers what looking cannot.** The
+picture shows ink; it cannot show that a pixel read 0.991, or that what you are pointing at was
+painted.
+
+It takes a **fraction of the map**, so the surface never needs to know the trace's raster.
+
+**Both censuses are deleted.** The region census existed so a fault could be diagnosed "without either
+party looking at pixels", which was written when the panel was a popover with no picture; the workspace
+draws the partition in six colours now. The scene census's question — do our shapes derive Dynamic Fog
+walls — is closed.
+
+**The merge alarm went with them**, and its argument is the one worth remembering: it assumed a dungeon
+of many small rooms with one dominant exterior, so a single large cavern trips it legitimately; nothing
+acted on it; and it was a numeric proxy, in a log nobody reads, for something now visible in the drawn
+partition.
+
+### Rejected: scoring extraction against hand-drawn walls
+
+A map whose walls the GM has already drawn looks like ground truth, and the appeal is obvious — it
+would turn "does this look about right" into a number. It does not survive contact with what a wall is.
+
+- **Where a wall goes along a stroke of ink is a judgement.** Inner edge, centre and outer edge are all
+  defensible, and whether a gap is a doorway or a break is a *reading* of the map rather than a fact
+  about it. A diff would score the extractor down for disagreeing with an arbitrary choice, driving
+  tuning toward reproducing one GM's habits.
+- **One map cannot generalise.** The sibling has already paid for this in a different costume: its wall
+  margin's safety turned out to be *a property of the test map*.
+
+The compounding danger is that such a score would look rigorous while measuring the fixture. **The
+surviving form of evaluation is topological, not geometric**: not whether a boundary is within some
+distance of where a human would have put it, but whether regions *merge*.
 
 ---
 
-## 11. Future ideas — logged, not scheduled
-
-### Closed: half-wall coverage, and skeleton snapping as the way to get it — 2026-08-29
-
-**Both halves of this are answered by §4 and neither is a future idea any more.**
-
-The problem was that a region's boundary stops at the ink's inner edge, so a revealed room looks
-clipped, and the only automatic fix available was a global outward offset — one radius against variable
-ink width, under-covering heavy walls and over-covering light ones on the same map. The proposed
-solution was to run skeletonisation *separately*, keep centrelines as a non-emitted overlay, and offer a
-GM-invoked tool that expands a boundary outward until it meets a centreline and never past it.
-
-**What happened instead is that the centrelines became the pipeline.** Faces are the graph's own
-regions, so a face boundary *is* the centreline and half-wall coverage is true by construction, with no
-tool, no search distance and no parameter. The snapping tool has nothing left to do.
-
-**Two things from it are worth keeping, because they were right and still bind:**
-
-- **The centreline is the ceiling.** Whatever inset is eventually offered for the "err toward showing
-  less wall" direction moves the boundary *back* from the centreline, never past it.
-- **Where the skeleton is noisy — thick filled walls, hatching — it proposes nonsense.** That risk did
-  not go away by being promoted; it moved from a GM-invoked tool onto the critical path, which is
-  strictly worse and is exactly why §11 step C looks at a real map before anything is emitted.
-
-### Next, in order — user, 2026-08-29
-
-**This supersedes the 2026-08-23 order below**, which is kept because items 0 to 3 of it are *built*
-and their reasoning is how those features work. Items 4 and 5 of it survive into step A here.
-
-The pivot in §4 does **not** disturb stage one. Every model starts from the same ink mask, so
-"what counts as ink" and "which ink counts as walls" are untouched; only what happens after them
-changes.
-
-**A. The UI rework — six steps in the workspace.** Most of the work moves onto the workspace surface,
-the panel shrinks to an entry point plus the actions that need the real scene in view, and the steps
-become real modes rather than headings. Full description under "Six steps, and the panel that is left"
-below. Agreed 2026-08-29; unaffected by the pivot, which is why it goes first.
-
-**B. Dropped.** A partial watershed plus a hole-rule fix would have repaired every defect §4 names
-while staying region-first. Correct, and not worth building on a representation we are leaving —
-"re-inventing skeletonization with a series of tweaks" (user).
-
-**C. The skeleton as a workspace *view*, before it is an emit path — BUILT AND SEEN IN A ROOM,
-2026-08-29.** Thinning plus pruning, drawn over the ink, emitting nothing.
-
-**What the room said, which is what this step existed to ask.** The skeleton is **not hairy**; the
-centreline **sits down the middle** of the linework; nothing over-pruned at any setting tried. On
-*Lair Of The Lamb*:
-
-> Thinned **430,721 ink pixels to 42,912 in 428ms over 11 passes**. Pruning **38–130ms** in three
-> rounds, independent of the budget: 15 branches at 3px, 32 at 7px, 51 at 15px — 295 pixels, 0.7% of
-> the skeleton, at the widest setting tried.
-
-- **428ms is cheaper than a reading**, so running it synchronously on entering the step is settled and
-  there is no case for a worker.
-- **Pruning does not re-thin**, which the flat ~100ms confirms: the thinned skeleton is kept and only
-  the branch walk is redone. A slider sweep costs a tenth of a second rather than seven.
-- *Not read as a contradiction:* ink-to-skeleton is 10:1 against a recorded ink width of ~5.7px. That
-  figure was measured on the raw reading, this ink is after the Linework filters, and a diagonal
-  skeleton run covers more ground per pixel than a straight one. Spur density, junction behaviour and stub survival on a
-real hand-drawn map are exactly what reasoning cannot settle, and finding out costs a view rather than
-a rewrite. **Nothing about it has been seen on a real map yet** — that is the next thing it is for.
-
-- **The Walls step comes back**, this time with something to paint: the skeleton over the ink, which
-  is the only pairing that answers the question. A centreline alone says nothing; what is being judged
-  is whether it runs down the middle of the stroke it came from and whether its hairs are artefacts or
-  stubs. The Ink step's "Walls" sub-heading is renamed **Linework**, since those two controls decide
-  which marks are linework and a wall is what this step makes of them.
-- **Thinning is Zhang–Suen**, iterating over a list of surviving ink pixels rather than the raster —
-  a few per cent of the map, shrinking as the skeleton emerges.
-- **Pruning walks branches from their free ends**, counting pixels stepped rather than straight-line
-  distance, and stops at a junction without deleting it. **Junctions are counted by crossing number,
-  not by neighbour count**, and that was a bug first: a pixel one row above a horizontal line touches
-  three of its pixels diagonally, so a neighbour count calls it a junction, stops the walk one pixel
-  short, and leaves a nub on the wall for every spur pruned.
-- **A high budget erodes the whole graph, and that is a property rather than a bug.** Every arm of a
-  junction is a dead end once the arms around it go, so a budget longer than a wall's own arms eats
-  the wall. Same deliberate over-reach as the two ink filters, defensible for the same reason — the
-  skeleton is drawn, so it is visible rather than silent — and the reason the default is off.
-- **A third recompute target, `SKELETON_ONLY`, with an end date.** Pruning is a reading-stage pipeline
-  parameter but changes nothing the mask is used for today, so it is excluded from the mask
-  fingerprint and a sweep costs a walk of the branches rather than 690ms. It stops being safe at step
-  D, when faces come from the graph; the tests that pin it say so.
-
-**D. Faces from the graph — re-planned 2026-08-30 (user), and the raster route is dropped.** The
-original wording was "rasterise the graph, label, trace contours". That produces the emitted geometry
-twice, in two copies that disagree — full argument in §4 under "Faces come from the graph itself, not
-from a raster of it". Instead: chain and weld the skeleton into a graph, walk its faces by half-edge
-traversal, tie each face to a raster label as you go, check areas by Pick's theorem while the cycles
-are still pixel chains, and fit each edge **once** so both faces sharing it carry identical points.
-The raster labelling stays in as the checker, not the producer. Half-wall reveal still falls out with
-no parameter. Two things it changes: the **weld radius** is a new control that needs the Walls step to
-draw the *graph* rather than the skeleton, and the **simplification cap** loses its stated reason and
-needs a new one.
-
-**E. BUILT 2026-08-30.** Fog shapes for the faces, lines for the uncovered edges by the bridge
-criterion (§4), vertex ids in metadata. Read-back matching is deferred: a scene that is purely output
-has no consumer for it until G. Staging went with it — see "Superseded: staging is gone" above.
-
-**F. The gap repair gains a graph half — it does NOT retire the pixel one (user, 2026-08-30).** This
-said the vector repair would replace the pixel repair outright, and that is wrong. A **scanner
-artefact** settles it: a thin light line running across a scanned map breaks linework in *pixel*
-space, before any skeleton exists, and no amount of endpoint pairing on a graph can see a break the
-graph does not have — the ink is severed, so the graph is severed, and the two ends may be nowhere
-near each other. That is a pixel problem and it wants a pixel fix.
-
-So the two are **different tools for different faults**, and the split is principled rather than
-transitional:
-
-- **Pixel repair** — the ink is wrong. Scanner lines, dropout, a stroke the binariser lost. It runs
-  before thinning, so what it mends becomes one wall rather than two.
-- **Graph repair** — the ink is right and the *skeleton* is broken, or the map itself has a gap a GM
-  wants closed. Endpoint pairing and graph distance, which are exact where a closing is a guess.
-
-Uncommon does not mean droppable: the pixel repair is the only tool that can act before the graph
-exists, and there is no vector expression of "this line across the scan is not a wall".
-
-**What the graph half actually buys, stated precisely.** The pixel repair's travel test — are these
-two banks the same wall, measured *along the ink* — is an approximation of a graph distance, computed
-with a bounded flood because there was no graph to ask. With one, the question is the shortest path
-between two nodes: cheap, exact, and with no budget to run out of. **The guessed-break state goes
-with it** — the empty ring drawn when the flood ran out of budget, which this record notes has never
-actually been observed.
-
-**And repairing before thinning is not merely earlier, it is different.** Ink mended before the
-skeleton exists becomes *one* stroke with one centreline. The same mend made on the graph afterwards
-leaves two edges that happen to meet. That is a second reason the pixel tool cannot be folded into
-the graph one.
-
-**Two questions to settle before F is built, and both point at G.**
-
-- **What a graph repair writes.** The pixel repair invents ink, so a re-run reproduces it from the
-  same settings. A graph repair adds an **edge** — and now that the scene is a rendering rather than
-  working state, that edge must live in our durable inputs or it dies on the next push. That is the
-  same storage question G has to answer for additions and deletions, so the representation should be
-  decided once rather than twice.
-- **Automatic or a gesture.** The pixel repair is a threshold, off by default. A graph repair could
-  be the same — pair every pair of ends closer than N along the graph — or it could be a GM clicking
-  two ends. Given the standing rule that nothing writes into a GM's work unasked, and that G supplies
-  click-two-things anyway, **the gesture version may make the automatic one unnecessary**.
-
-Taken together: F is smaller than this record implies once G exists, and awkward before it. The
-ordering F-then-G is worth revisiting rather than inherited.
-
-
-**G. Vector editing.** Additions and deletions as durable inputs; a move implies the freeze point (§4).
-
-#### The freeze point is SETTLED — two stages with a one-way door (user, 2026-08-31)
-
-The question F and G both hang on, decided before either was built.
-
-**Stage one: the map.** Load it, tune the reading, make **pixel** edits — suppressing ink, drawing
-ink — and generate the graph. **Stage two: the graph.** Nudge vertices, add and delete edges. The
-graph is stored in scene metadata, so the workspace can be closed and reopened and the editing
-resumed. **Going back to stage one discards the graph**, and that is the whole of the rule.
-
-**Why this is better than the alternatives it replaces.** The hard problem in storing a *move* is
-identity: to re-apply "this vertex moved here" after a re-derivation, the vertex must still be
-findable, and it is not — any reading change renumbers the graph. Three answers were on the table
-(lock the reading settings once editing starts; replay edits onto a fresh derivation; warn and
-discard). This does not solve that problem, it **removes** it: stage two never re-derives, so nothing
-is ever renumbered and a move is just a stored coordinate. It also makes "the graph is the document"
-literally true rather than aspirational.
-
-**Freeze AFTER fitting, not before — corrected 2026-09-02 (user).** This section said the opposite,
-and the reasoning was: Douglas–Peucker tolerance is a *rendering* choice, so freezing the pixel-chain
-graph keeps it adjustable in stage two where freezing the fitted graph bakes it in.
-
-**That position is incoherent with editing, which is what stage two is.** Re-fitting re-derives the
-vertex set, so changing the tolerance after a GM has nudged vertices destroys their edits — the
-points they moved no longer exist. The adjustability being protected survives exactly as long as
-nobody edits, which is the state we are leaving. It was never a real trade: once editing exists the
-tolerance is fixed at the freeze whatever we store.
-
-And the pixel-chain graph is the wrong thing to hand a GM anyway. What the workspace *draws* is the
-fitted geometry — some 8,700 vertices on the test map, against 43,000 lattice points. Editing has to
-operate on what is visible.
-
-**The cut is not "after fitting", it is "where the pixels stop being needed".** Fitting is simply the
-last thing before that line. Four jobs need the raster and all four are on the near side:
-
-- **Face identity.** A traversal cycle is matched to a labelled region by sampling the pixel one step
-  to the right of each step it walks.
-- **Sliver detection.** A cycle that encloses area but matches no label is a sub-pixel sliver from a
-  junction cluster. That is the signal sliver removal runs on, and it must run before the freeze
-  because the cleaned graph is what gets edited.
-- **The empty-face invariant.** A face with no interior pixels holds no map and is not emitted. This
-  *must* happen before the freeze: afterwards there is no raster to evaluate it against, and the only
-  substitute is an area threshold — which is precisely the mechanism deleted when the smallest-room
-  control went.
-- **The area check and the handedness check.** Both validate the derivation. After the freeze there
-  is no derivation, so there is nothing left for them to check.
-
-#### What is stored: a flat node table and segments, in fractions of the map
-
-**Node identity is the whole point, and it is what the emitted form throws away.** A stub wall
-emitted as fog is a run of independent `LINE` items whose endpoints merely happen to be coincident;
-the GM's intent is that they are one shared point. That is why editing cannot be pulled back from the
-scene and has to live in metadata.
-
-So the stored record is two tables:
-
-- **Nodes** — a flat list of coordinates, positionally indexed. **Every fitted vertex is a node**,
-  not just the junctions. The derived graph reserves "node" for a topologically special point because
-  its path points are *pixels*, 43,000 of them each referenced once. After fitting that inverts: there
-  are 8,700 points and what matters about them is whether they are **shared**.
-- **Edges** — **one segment each**, two node ids and nothing else.
-
-**Segments rather than polylines, corrected 2026-09-03 (user).** The first version stored a wall as a
-polyline, which meant the face traversal needed the invariant *a junction is always an edge
-endpoint* — and mutation testing found that invariant is violable. A wall meeting another head-on at
-one of its *interior* vertices makes a junction at a point that is structurally an interior point,
-and the walk goes straight through it without turning. It was repaired by a normalisation pass for a
-day; segments make it **impossible**, which is better by this project's own standard. A *wall* is
-recovered by chaining through the degree-2 nodes, which is what emitting a run of lines wants anyway.
-Storage roughly doubles — tens of kilobytes against a 512KB ceiling.
-
-**Coordinates are fractions of the map, not raster pixels** (user, same day). The raster is an
-artefact of the megapixel cap: a 52.9-megapixel map halves for reasons that have nothing to do with
-its content, so a document denominated in it goes stale the moment a budget constant moves. §5 already
-records the general form — the sibling's real trap was denominating *parameters* in raster pixels,
-which made the raster load-bearing forever — and storing the GM's **work** that way is that trap one
-level worse, because a parameter can be re-tuned and their editing cannot.
-
-Fractions are also independent of the source image's pixel size, and convert to world at emit time
-from the map's *current* bounds, so moving or scaling the map carries the fog with it. Held as
-float32 and quantised on the way in, so the round trip is exact and nothing downstream needs a
-tolerance for storage having moved a number.
-
-**The cost, stated: exact integer geometry is gone.** The crossing predicate now carries a degeneracy
-threshold — when is a crossing close enough to a segment's end to count as being *at* it. That is
-**not** an identity epsilon and the standing exactness rule is untouched: identity is by node **id**,
-and whether a click near a vertex attaches to it is the editing tool's decision, not the geometry's.
-
-Junction-ness is derived: it is how many edge-ends reference an id. Two rooms sharing a wall reference
-the *same ids*, so the shared geometry is identical **by reference** rather than by a build-time
-construction that holds only until something is edited. Move the vertex once and both rooms follow,
-with no code keeping them in step.
-
-**Faces are derived, not stored**, by the half-edge traversal that already exists. That is what makes
-add and delete tractable: add or remove a segment, re-traverse, and the faces fall out. Storing shapes
-instead would mean recovering topology by comparing geometry — finding the run of ids two shapes
-share in order to merge them — which works until two walls coincide for an unrelated reason. Faces
-being renumbered on every edit costs nothing: nothing stores them, and a push rewrites the scene
-wholesale. **Node ids are the only identity that has to be stable, and they are.**
-
-Walls that no face boundary covers still emit as lines, decided by the bridge criterion at emit time
-exactly as now, so they need no separate storage either.
-
-**The store records which map the graph is for.** Fractions of *a* map say nothing about which, so
-nominating a second image would otherwise have the first map's walls silently reinterpreted over it.
-A mismatch reads as "no graph here", which drops the GM into stage one for the new map without
-touching the first map's work; switching back restores it. **One graph is stored at a time**, so
-freezing on the second map replaces the first's — per-map keys are the fix if that ever matters.
-
-**No edit list, deliberately** (user, 2026-09-02). Replaying a list of GM actions was considered and
-rejected: it would have to happen twice — once on the raster and again on the graph — and it grows
-more error-prone with every tool added. Accepting the information loss from earlier stages is the
-price, and the one-way door is what makes it honest.
-
-#### What stage two loses, and owes
-
-**The area check does not cover it.** It is a lattice identity, counting interior points and steps,
-and fitted geometry has neither. That is coherent — it validates a derivation and stage two has none
-— but it means a graph edit has no equivalent safety net, and the area check is the diagnostic this
-project leans on hardest because the bugs it catches all render plausibly.
-
-**Two checks answer that, and they check different things** (2026-09-02 and 09-03). **Planarity**
-says the embedding is one a half-edge traversal can mean anything over at all: two walls crossing at
-a point that is a node of neither leaves the faces either side of the crossing undefined rather than
-wrong. **Euler's identity** — vertices minus walls plus enclosing cycles equals the number of
-separate pieces of linework — says the traversal of that embedding was coherent. Neither catches the
-other's failures: a crossing satisfies Euler, and a mis-partitioned walk can be perfectly planar.
-
-**Both are diagnostics rather than gates, and that is forced by the same argument that keeps
-degenerate shapes legal.** Two walls on one pair of vertices are coincident, which is not an
-embedding Euler describes — and doubling a line in order to drag the copy away is exactly the legal
-intermediate state the section below refuses to prevent. So the identity is reported and the
-derivation carries on producing what it can.
-
-**The point probe changes mechanism.** "Which room is this?" is answered from the labelling today; in
-stage two it becomes point-in-polygon against the fitted faces.
-
-**Re-tuning the smoothing means starting over**, so the door's warning has to say so alongside "this
-closes the reading".
-
-#### Faces from the frozen graph — BUILT 2026-09-03
-
-**Stage two derives its own partition, from the document and nothing else.** This is what made
-"faces on release" buildable: stage one reads face identity out of a raster labelling, one sample to
-the right of each boundary step, and that single lookup does three jobs — names the face, separates
-an outer ring from a hole, and resolves nesting. After the freeze there are no pixels, so all three
-are geometric.
-
-**The walk is the same walk**, on purpose: sort the walls at each vertex by heading, leave by the
-entry before the one arrived along, keep the face on the right. Two implementations of one
-convention, so both produce the same partition from the same graph.
-
-**Grouping is by containment, with one exclusion that is a correctness requirement.** Each connected
-piece of linework contributes exactly one outward-facing cycle, plus one enclosing cycle per bounded
-face of its own; an outward cycle is therefore a hole of the smallest enclosing ring that contains
-it. A cycle is tested only against cycles of *other* pieces — because a piece's outward cycle runs
-along the same vertices as its own rings, so testing it against one of them asks whether a point
-lying exactly on a polygon is inside it. That is a coin flip, and it is the case that arises on every
-room rather than an exotic one.
-
-**Areas are summed per half-edge, dropping any whose twin is in the same cycle.** A stub is walked
-out and back, and its two terms are exact negations that a point-by-point sum separates by the whole
-rest of the walk. **Measured: about one random chain in a thousand fails to cancel**, and the case
-kept as a fixture sums to +5.55e-17 — *positive*, which is the direction that turns a loose stub into
-a room. Removing the terms before they are added is exact by construction rather than by luck.
-
-**Nothing is dropped for being small.** Stage one drops a face with no interior pixels; there is no
-pixel count here, and the only substitute would be the area threshold that was deleted with the
-smallest-room control for deleting a region where what is usually wrong is a wall. **The cost is
-stated rather than argued away: a sub-pixel sliver stage one refused to emit is one stage two will
-emit.** It should be none, because sliver removal runs before the freeze.
-
-**And there is no simplification, which is the freeze point paying off.** The frozen graph *is* the
-fitted geometry, so a ring is its own vertices and no boundary is approximated a second time.
-
-#### Stage two gets a step — BUILT 2026-09-04
-
-**"Edit walls" is a step of its own**, between Walls and Regions, which is where the A-plan's six put
-it before any of this existed. It carries no controls: a step is a mode rather than a group of
-sliders, and this one's mode is the graph.
-
-**The door moved into it**, from the end of Regions where it had been placed provisionally against
-exactly this. A door belongs at the boundary it opens rather than one step short of it, and it reads
-differently from inside — in stage one the step is empty and the button is what puts something in it,
-in stage two it is the way out. Regions keeps the push, which is the button that acts on the thing
-beside it.
-
-**The step draws the partition with the graph over it.** The standing convention is that each step
-draws its own thing, and Regions makes the strongest case for it — ink under a partition answers the
-previous question over the top of this one. This is the argued exception, and it is the same shape as
-the one the Walls step carries: what a GM decides here is not where a line *is* but what moving it
-would do, and what it does is change which rooms exist. The consequence is drawn under the cause.
-
-**The partition therefore has two sources, chosen by stage.** In stage one it is what the trace
-makes of the map; in stage two it is what the traversal makes of the frozen graph. That is a
-different input rather than a parallel chain — there is still exactly one place faces come from a map
-and one place they come from a graph. Getting it wrong would not be cosmetic: the traced partition in
-stage two is the rooms *before* the GM's edits, which is precisely what this surface exists to
-prevent showing them.
-
-**One cost, stated rather than hidden: the region outline is drawn at its screen-pixel floor in stage
-two.** The setting is denominated in grid squares, converting it needs a pixels-per-square
-measurement only a trace produces, and a GM who reopens a room already in stage two has never run
-one. Honouring it only when a trace happens to have run this session would be an invisible
-divergence, which is the worse failure. Fills and shapes are unaffected.
-
-#### The vertex drag — BUILT 2026-09-04
-
-**The first tool in this project that changes the GM's own work rather than a setting.** Everything
-before it turns a number and re-derives; this moves a point, and the point stays moved because stage
-two never re-derives. That is what the freeze was for.
-
-**The gesture is taken by looking rather than by a mode.** A press is offered to the step's tool
-before panning is decided, and the tool takes it only when there is a vertex under it. A drag on
-empty map still pans and Ctrl still pans anywhere. That matters more here than it would in a painting
-step: editing a graph is mostly *looking*, and a mode that took every drag would charge for the
-looking in order to pay for the editing.
-
-**Snapping is shown by moving the wall, not by colouring a dot.** While a release would merge, the
-dragged vertex is drawn in the target's position — which is exactly what releasing produces. §8 wants
-a boundary visible *before* it is crossed, and a merge cannot be undone; showing the outcome is a
-stronger statement than announcing that one is available. Shift suppresses it, and the suppression is
-simply not asking.
-
-**A snap is a merge and not a move**, and the distinction is the reason the document exists. Merging
-renames every reference to the folded vertex, so two walls genuinely share a point and follow each
-other for ever. A move that happened to land on identical coordinates would leave two vertices
-agreeing until one of them moves again — which is the state emitted fog is permanently stuck in, and
-the reason editing cannot be recovered from the scene.
-
-**Nothing is written while the gesture runs.** The tool holds where the vertex *would* be and the
-layer substitutes that one coordinate, so a drag costs no graph rebuild and no crossing sweep per
-frame. The sweep runs once, on release — which is also when the scene is written and the rooms are
-re-derived, as decided.
-
-**A failed write loses the drag, loudly.** The graph is stored before what is in hand changes, so a
-failure leaves the GM with the graph they had rather than one the scene does not agree with. Losing a
-single drag is the safe direction against editing for an hour against something unsaved.
-
-#### Three verbs, so the step grew a tool — BUILT 2026-09-05
-
-**A drag can only mean one thing, and stage two has three things to do with one.** Moving a point,
-drawing a wall and erasing a wall cannot all be a press, so the Edit walls step carries a picker:
-Move, Draw, Erase, sticky, Move by default.
-
-**A step is still the mode; the tool says which verb within it** (user, 2026-09-05). The alternative
-was gestures with no visible tool — a right-click to delete, a modifier to draw — and it was rejected
-for two reasons: it puts a destructive action on an unannounced single click, and it leaves both
-verbs undiscoverable on a surface that already says nothing about being interactive.
-
-**Two of the three still decide by looking.** Move takes a press only when there is a vertex under
-it, erase only when there is a wall, so a plain drag on empty map still pans. Draw is the exception
-and takes every press, because a wall must be able to start on empty ground; Ctrl pans regardless.
-That is the "brush" case the shell was written to expect.
-
-**Drawing snaps at both ends, and that is the point of it rather than a convenience.** A wall that
-merely ends where another begins is two coincident points that agree until one of them moves; a wall
-that shares a vertex is joined permanently. Closing a break in the linework means the second, so
-attaching ends are marked differently from loose ones while the wall is still being drawn. This is
-also the gesture expected to shrink step F: a GM pointing at two ends is a better answer than a
-threshold guessing which ends belong together.
-
-**Erasing removes one segment rather than the whole wall** (user, 2026-09-05). The cost is real and
-is stated in the interface rather than left to be discovered — a long wall drawn as many segments
-takes a click each. What it buys is that punching a doorway through a room's boundary, which is a
-thing GMs will want, is an ordinary click rather than a modifier on a destructive action.
-
-**Escape belongs to the tool before it belongs to the surface.** Abandoning a half-drawn wall must
-not also close the workspace, because closing pushes to the scene — one keystroke would mean two
-things, and the second cannot be taken back.
-
-**One rule for the cursor, and the reasoning is worth keeping because it decides the next one.** A
-**crosshair** means the tool will act at this point; an **open hand** means the surface will move. An
-**arrow** was considered and rejected: it is the null statement — "ordinary surface, clicking picks
-things" — which under-promises on a map where every press does something specific, and gives nothing
-to aim with. The crosshair says the exact position matters and keeps its own target visible, which is
-why it replaced a hand whose fingers sat on the handle being aimed at.
-
-**What the cursor cannot say goes on the canvas.** Whether a drawn end would *attach* to the vertex
-under it is a third state, decided before the press, and a shape nobody can look directly at will not
-carry it. It is marked on the canvas in the same green the merge target uses — and **only** where it
-would attach: a mark that merely follows the pointer says where the pointer is, which the pointer
-already says, while sitting in the middle of the thing being aimed at.
-
-**Vertices no wall uses are compacted away after an edit** (user, 2026-09-05). Erasing and merging
-both leave them, because renumbering invalidates every id a caller holds — including, mid-drag, the
-one being carried. That rule stands; what changed is that compaction is a *separate* operation run at
-one safe moment, after a gesture has ended and cleared its state. The caller satisfies "hold no ids
-across it" by stopping holding them and re-asking what is under the pointer, which is also the more
-correct answer, since the graph has just changed. Speed was never the objection: 0.31ms at ten
-thousand vertices, against a scene write of about 1,200ms.
-
-#### Putting stage two on the map — BUILT 2026-09-05
-
-**The push traced unconditionally until now, which made stage two unusable end to end.** A GM could
-edit their walls all evening and the scene would receive the rooms as read from the map. The second
-half of the same defect was quieter: the "has anything changed?" fingerprint was the map plus the
-settings, and a vertex drag changes neither, so closing after an edit could decide there was nothing
-to push at all.
-
-**The frozen graph is a second *source*, not a second emit path.** The deletion order, the batching,
-the rate limiting, the stop, the provenance and the item shapes are all the existing ones — that is
-where this project's hard-won scene behaviour lives, and a parallel route into the scene would be a
-second implementation of it, drifting until a room disagreed with a preview.
-
-**Placement reuses the raster's own transform at a raster of one by one.** A frozen graph is stored
-in fractions of the map, and `createPlacement` maps a raster linearly onto the map's world box — so a
-1×1 raster *is* fraction space. That is worth more than the arithmetic it saves: the placement path
-carries per-axis scaling and a stated position on rotation, and a separate "fractions to world"
-routine would be a second opinion about both. The workspace's partition layer already leans on the
-same identity.
-
-**Which stage it is in is the caller's question, not the emit path's.** The graph is handed in. Emit
-has no business knowing about a workspace's stage holder, and a push driven from the panel could not
-answer it.
-
-**An oversized face is skipped and named, never simplified.** Stage one meets the command cap by
-smoothing harder and refitting everything; stage two must not, because the vertices are the GM's and
-moving them to fit a transport limit would be editing their work in order to make it sendable. This
-should not arise — the freeze stores the escalated fitted set, so what fitted at the freeze still
-fits — but it is handled rather than assumed away.
-
-#### Simplification can close a room up, and the freeze drops what is left — 2026-09-05
-
-**Found in the first stage-two room run, by the check rather than by eye.** The traversal reported
-Euler's identity failing on every run, and the trace in the same session found 35 regions where the
-traversal found 34. Both discrepancies are exactly what one pair of coincident segments produces.
-
-**The cause is the smoothing, not the graph.** Two walls bounding a room thinner than the
-simplification tolerance each fit to the same straight line between the same two corners, so the room
-closes up and its two walls land on top of each other. Stage one already guards against this at the
-*ring* — it keeps the unfitted ring when fitting would collapse it, and says so in the log — and the
-freeze stores fitted *edges*, where no equivalent guard existed.
-
-**The freeze drops coincident and zero-length segments, counts them, and says so** (user, 2026-09-05,
-choosing this over restoring the unfitted chain for one of the pair). The cost is stated rather than
-argued away: the thin room is gone from the document and will not be emitted. What it buys is an
-embedding the traversal can mean something over — two coincident segments enclose nothing, and a
-graph containing them is not one Euler's identity describes.
-
-**The more expensive half of this finding was where the warning went.** Crossing the door re-derives
-the partition, which writes its own line to the state line; the freeze's message is composed a moment
-later and replaced it. So stage two's only invariant was reporting into a channel that was painted
-over within milliseconds, and it went unread for a day — §8 in its purest form, and a reminder that a
-check is only as good as the place it reports to. The freeze message carries the check now, and
-entering a step that draws the partition re-states its figures.
-
-#### Degenerate and near-degenerate faces — decided 2026-09-02 (user)
-
-**A sliver a GM creates is theirs to keep.** They may be reducing an area to a sliver deliberately, to
-get a wall where they want one. Nothing downstream breaks: emitted shapes use an even-odd fill rule so
-winding never mattered, and a degenerate ring contributes zero to the coverage total. **Warn, do not
-prevent.** Worth knowing when wording that warning: a sliver is not small in its *effect*, because
-Dynamic Fog derives walls by stroking a boundary — so a few pixels of shape still block line of sight,
-and the GM gets an obstruction they may not be able to see. *(Reasoning; a degenerate path has not
-been put through DF.)*
-
-**An exactly degenerate shape is warned about too, not refused** (user). Refusing assumes the gesture
-is finished, and it may be a step towards something — doubling a line in order to drag the copy
-elsewhere is the obvious case. A tool that rejects a legal intermediate state is worse than one that
-reports an odd final one.
-
-#### Diagnostics: both censuses go, the point probe stays — 2026-09-02 (user)
-
-**The region census and the scene census are both deleted.** The region census existed "so a fault the
-GM reports can be diagnosed without either party looking at pixels", which was written when the panel
-was a popover with no picture at all; the workspace draws the partition in six colours now. Its
-coverage figure had already become noise, reading ~99.5% on any map since the pivot.
-
-**The merge alarm goes with it**, and its own argument is worth recording because it was the last part
-with a defender. The alarm reads the second-largest region's share — healthy at ~1.5%, rooms leaked
-together at 5–15%. It assumes a dungeon of many small rooms with one dominant exterior, so a single
-large cavern or two big halls trips it legitimately; nothing acts on it; and it is a numeric proxy, in
-a log nobody reads, for something that is now **visible** in the drawn partition. That is exactly the
-pattern §8 says not to rely on. *Cost, stated: the recorded baseline for the test map quotes the
-census's figures, so that measurement cannot be reproduced after this.*
-
-**The scene census's question is closed.** "Do our shapes derive Dynamic Fog walls, and how many
-each" was answered long ago, and finding that DF's walls live only in the local item set was the
-sibling's single most productive diagnostic. It has done its job.
-
-**The point probe stays**, and the reason it survives where the censuses do not is precise: it answers
-what *looking cannot*. The picture shows ink; it cannot show that a pixel read 0.991 luminance, that
-the threshold did not call it ink, or that the ink under the cursor was **invented by the gap repair**
-rather than read from the map. Those are the questions that arise exactly when something looks wrong,
-which is the situation the whole diagnostic exists for.
-
-**Keep stage one's inputs anyway, even though stage one is closed.** The settings and the ink strokes
-are small, and keeping them means "start over" lands the GM back at their tuned ink with their
-suppression and drawn ink intact rather than at a bare map. That is the difference between a one-way
-door nobody will walk through and a re-roll — and it costs kilobytes.
-
-**Store strokes, not masks.** A GM's pixel edits are polylines with a brush width, which re-apply to
-a reading at any resolution. A rasterised mask of the test map would be about a megabyte and would be
-wrong the moment the raster cap changed.
-
-**Sizing, which is no longer an open question.** Scene metadata takes arbitrary JSON with no limit
-measured below **512KB per key** (measured by the sibling; a "reportedly 16KB" figure that once
-shaped decisions there was simply wrong). What is stored is the *fitted* graph: the test map's ~8,700
-vertices as coordinates, plus about as many node-id references in the edge sequences — tens of
-kilobytes, before any delta-coding along an edge. Against a megabyte as a bitmap. This retires the
-deferred item below.
-
-*(A packed 3-bit-step encoding of the **pixel-chain** graph was built on 2026-09-01 and measured at
-0.45–0.55 bytes a step, putting 43,000 skeleton pixels in about 21KB. It is superseded: consecutive
-points are only 8-adjacent in a *derived* graph, so the format cannot represent an edited one, and
-finding that is what moved the freeze point. Recorded because the measurement is sound and the
-technique would apply again if anything ever needs to store a lattice walk.)*
-
-**What it owes, under §8.** The boundary must be visible *before* it is crossed. "Generate the graph"
-becomes a commitment, and a control that can be wrong needs a visual channel — so it has to say what
-it is about to close off, not report it afterwards.
-
-*Deferred deliberately, not forgotten:* **doors** stay with Dynamic Fog (§3 — door subtraction is
-global, so they cut our walls with nothing emitted by us). **Sizing the graph against the metadata
-limit** and **measuring what Owlbear does with overlapping fog shapes** were both raised and both
-dropped by the user on 2026-08-29 as not blocking the direction.
-
-### The 2026-08-23 order, and what it built
-
-Items 0 to 3 are done, and what follows is how those features work rather than a plan. Items 4 and 5
-were never built and now live inside step A above.
-
-#### 0. The workspace probe — CLOSED, 2026-08-23
-
-**Stage one moves to its own opaque, interactive surface.** The reasoning is in §4 under "Superseding
-all of the above"; the short version is that the click-through overlay is mostly machinery for coping
-with not owning the transform, and that everything queued below wants interaction it structurally
-cannot provide.
-
-Both halves are answered and the full results are in §4 under "The workspace probe". In brief:
-
-- **The surface owns its input.** Pointer, wheel and right-click are ours with no leak to Owlbear,
-  against a detector made to fail before its zero was believed. The keyboard is *taken rather than
-  given* — until claimed, every keystroke reaches Owlbear's page — and claiming it succeeds on the
-  first try, about 16ms after this page's own script starts. `hidePaper` changes nothing. (This
-  summary said 150ms until 2026-09-01, against §4's detailed record of 16ms. The figure that
-  matters to a GM is neither: the dead window is the iframe's **load**, 2,396ms cold and 166ms
-  warm.)
-- **The navigation feels right**, at **12% per mouse notch** and **1.00% per trackpad pixel**, and it
-  opens on the view Owlbear was already showing so nothing jumps.
-- **Frame cost is negligible** — 0.1ms of a 16.7ms frame with both map-sized layers.
-- **Two trackpad limits are Firefox's, not ours**, and Owlbear has them too, so we match: a
-  two-finger scroll is axis-locked when begun along an axis, and a pinch cannot carry a pan.
-
-**Carried forward into item 3 and 4:** because a left-drag will become the brush, the workspace owes
-a trackpad user an unrestricted drag-pan on another binding — **a modifier held while dragging,
-and/or a dedicated hand tool**. The wheel's axis-lock makes the two-finger gesture an inadequate
-substitute on its own.
-
-**The next thing is the workspace itself**, not another probe: the real mask instead of the
-stand-in, stage one's controls inside the surface, and the click-through overlay deleted along with
-its poll, settle, blank-and-restore, clip band and panel heartbeat. Items 1 to 4 are then built
-**on that surface**.
-
-#### 1. The workspace itself — BUILT 2026-08-23
-
-Stage one now lives on the proven surface: the real binary ink mask, 1a and 1b's controls on the
-same surface, and the click-through overlay deleted with all of its coping machinery. Panel tab 1 is
-one button that opens it. Full write-up in §4 under "The workspace"; two defects were found in a
-room and fixed the same day.
-
-**Carried forward, and both are the reason the next items are next:** the re-read is on release
-rather than live until the work moves off the main thread or is cropped to the visible region, and
-the surface owes a trackpad user an unrestricted pan on a binding other than a plain left-drag
-(**Ctrl held while dragging, and a dedicated hand tool** — both, user 2026-08-23) once that drag
-becomes the brush. The hand tool exists as a button today with nothing to switch to.
-
-#### 2. Gap marks — BUILT 2026-08-23, and merged into item 3
-
-**These two items are one feature.** Marking and repairing were built as separate controls and
-collapsed into one the same day — the reasoning is under item 3, and it is a fact about maps rather
-than a change of mind about the UI. Everything below about *what counts as a gap* and how it is
-detected survived that unchanged; only the controls and the drawing did not.
-
-**Highlight small breaks in the ink.** A wall with a thin section eroded away — by the minimum
-stroke width, or simply drawn faintly — leaves a break, and a break merges two rooms into one
-region, which is this project's worst failure. There is an example on the current test map.
-
-This is the visual channel §8 requires before the bridging control below can be justified: a break
-must be *seen*, not reported. The mark is conspicuous rather than subtle, since it flags the failure
-that matters most and the GM is scanning a whole map.
-
-##### What counts as a gap — settled after two wrong answers
-
-> **A gap is a narrow channel of ground whose banks of ink are far apart when measured *along the
-> ink*.**
-
-Two definitions were proposed and both were wrong, and they are recorded because each failed on a
-case that reads as obviously correct once stated.
-
-- **"A break that separates the space when sealed."** Exact-sounding, and it tests the wrong thing:
-  the *space*, when the question is the integrity of the *ink*. **A freestanding wall standing in
-  the middle of a room separates nothing**, so a crack in it would never be reported — yet it is
-  just as broken, and a map may hold a great many meaningful walls inside one area of space (user,
-  2026-08-23). It also costs a full space labelling, about 400ms.
-- **"A break between two different ink blobs."** Fails on **a crack in a ring**, where both banks
-  belong to one blob by way of the long trip round the other side.
-
-The user's own formulation is what fixed it: *cracks between blobs of ink that appear to be
-different blobs when cut off at a local area.* "Locally different pieces" and "far apart along the
-ink" are the same statement. Two ink pixels three pixels apart across a crack, where getting from
-one to the other through the ink means travelling most of the way round a room, are different pieces
-of wall whatever the global labelling says. Two ink pixels three pixels apart across a ragged notch
-in one wall's edge, where the trip through the ink is eight pixels, are the same stroke.
-
-**Travel through the ink, not connectivity inside a cropped window.** A wall that bulges out of a
-window and back is still one wall, and travel says so where a crop would not — and travel needs no
-window shape, so it is rotation-invariant for free.
-
-##### How it computes, and why only the first step is expensive
-
-1. **A closing** at the gap radius. What it converts from ground to ink is exactly the set of narrow
-   channels — cracks, notches, enclosed pockets, and the hollow interiors of double-line walls. The
-   candidate set, and nothing more.
-2. **The bank groups.** The ink touching one channel, grouped into the pieces it arrives in. **One
-   group means a dead end**, because the banks wrap round it continuously; a channel that passes
-   *through* has ground at both ends, so its banks arrive as two or more separate faces. This step
-   alone throws out the ragged-edge noise a raw closing produces in quantity, and it costs nothing.
-   Without it the marks are confetti.
-3. **The travel test.** Flood through the ink from one **whole** bank group — whole, so a bank
-   running the length of a long channel cannot be judged far from itself — stopping at the travel
-   distance. Every other bank reached means the ink is locally one piece. Any bank unreached means a
-   break.
-
-**Both thresholds are GM controls, and both are in raster pixels** (user, 2026-08-23). Stage one
-stays close to the raster, and the ink width is itself a measurement that can come out oddly on an
-unusual map — a threshold that moved with it would change the marks for reasons the GM cannot see.
-The travel distance is exposed rather than fixed in code deliberately, on the argument that if it
-turns out never to be touched it can be dropped; it is the number in this design with the least
-evidence behind it.
-
-##### What it is expected to get wrong, predicted rather than discovered
-
-- **A double-line wall.** Where a map draws walls as two parallel strokes with white between, that
-  white is a narrow channel and the strokes meet only at the ends of a run — so every hollow wall
-  gets marked. This is reasoning, not measurement. It comes out as one mark per wall run rather than
-  a shower of them, the width control tunes it away, and on such a map bridging is arguably the
-  right answer rather than the mark being wrong.
-- **A speck of ink lying close to a wall.** Two locally different pieces, so a gap. Guardable by
-  demanding both sides amount to a real stroke; not done, because a speck that close to a wall is
-  worth a glance and the island filter is the tool for removing it.
-- **A crack beside a corner or a T-junction** can be missed, since the two banks meet round the
-  corner within a short travel. Lowering the travel distance is the answer, and it is the reason
-  that control exists.
-
-##### What it draws
-
-**Breaks are painted in their own colour, on their own layer, at full alpha** — so tinting the ink
-down to look at the map underneath does not also turn the warning down. That layer was built here to
-satisfy §8's rule for the bridging control **before** the control that needed it existed; item 3
-then arrived and the two became one feature, so it now carries the repaired pixels themselves.
-Invented pixels and read pixels must never be indistinguishable.
-
-**A ring in screen space at each break**, dark stroke then bright over one path so it reads against
-pale paper and dark stonework alike. Screen space is the point: a break is a handful of raster
-pixels and would be sub-pixel with a whole map on screen, which is exactly the situation the mark
-exists for. It grows to enclose the break once the view is zoomed past it.
-
-**The count goes on the state line in the neutral tone, not the error tone.** Most maps will have a
-few, and a status line that is permanently red is a status line nobody reads — which is the §8
-failure wearing different clothes. The rings are the channel that must be noticed; the count only
-tells a GM whether the ones they can see are all of them.
-
-**The gap colour is fixed rather than a swatch row.** The argument that makes the ink colour
-adjustable — no colour is readable on every map — applies here too, and this is the honest cost: the
-ring is what carries the identification when the colour collides. A picker is the fix if a room
-reports the marks disappearing into the paper.
-
-##### Superseded within a day: a third value on the kind axis
-
-`PARAMETER_KIND` gained `gaps` here and lost it again under item 3. The reasoning while the marks
-only *highlighted* was sound — derived from the mask so not `pipeline`, but costly enough that
-treating them as `display` would have run half a second of morphology on every frame of a drag. Once
-the repair became real every gap parameter fed the mask, the third value had no members, and a kind
-with no members is a filter that silently matches nothing. The cost it was avoiding is answered by
-caching the reading separately instead; item 3 has the account.
-
-**What survived it, and is the durable part:** the workspace's row builder switches on the kind
-rather than on which heading a control is drawn under. That was a live conflation — a control moved
-between headings for tidiness would have silently changed what it recomputed.
-
-##### Measured — the morphology inner loop, 2026-08-23
-
-The separable pass addressed each pixel through a closure that chose between two multiplications,
-twice per pixel. At 8.4 megapixels that is sixty-seven million decisions per opening, and a room had
-measured an opening at 440ms. Replaced with a base and a stride. Measured in Node on the development
-machine, at 3300x2550 with linework-shaped ink:
-
-> radius 3 — old opening 310ms, new opening 236ms, new closing 208ms
-> radius 6 — old opening 503ms, new opening 235ms, new closing 219ms
-
-**The new one is flat in the radius and the old one was not**, which it should have been in both
-cases — the algorithm is O(1) in the radius by construction, so the old version's climb was the
-interpreter rather than the arithmetic. **This is not the room's number**: Node on a desktop is not
-Firefox in a third-party iframe, and the 440ms figure needs re-measuring there. What the A/B
-establishes is the ratio, not the absolute.
-
-So a gap search costs roughly one closing plus a linear scan plus some bounded local floods — call
-it the same order as a stage-1b filter, against 690ms for a reading. That is the whole reason the
-search runs off the mask rather than off the map.
-
-#### 3. Bridging small gaps — BUILT 2026-08-23, and it absorbed item 2
-
-**One slider** (user, 2026-08-23, after two were tried and abandoned — see below). It sets the widest
-break to find, and everything it finds is repaired.
-
-**Confirmed in a room — user, 2026-08-29. It works.** The one-slider shape and the ring-plus-fill
-drawing both do what they were built to do on a real map, which closes the last thing this feature
-was waiting on.
-
-**And it is provisional.** Step F moves the repair onto the wall graph — endpoint pairing and graph
-distance in place of the closing, the bank grouping and the bounded flood — and this version is
-expected to be **retired** rather than kept alongside it. Until then it stays where it is, with the
-reading controls (user, 2026-08-29). Two consequences worth stating rather than discovering: it is
-not a candidate for further investment, and the six-step layout should not be arranged around it,
-since the step that would exist to hold it is the one thing here with a known end date.
-
-**Repaired pixels are drawn purple, at full alpha on their own layer, with a screen-space ring round
-each break.** Purple is the only ink on the surface that the map does not contain.
-
-##### The fill is not a closing, and that is a safety property
-
-Morphologically a repair *is* a closing, and the obvious implementation is to close the mask at the
-fill radius and keep the result. **That would be wrong, and invisibly so.** A blanket closing also
-seals channels that **failed the travel test**, and the clearest example of one is a narrow doorway
-right beside a corner, where the two banks meet round the corner within a short travel. It would be
-sealed with nothing at all to see — where an opening's failures at least leave a visible absence —
-and Dynamic Fog would then derive a wall across an open door and block line of sight through it.
-
-So the fill adds the pixels of **marked breaks** and nothing else. That gives the invariant the
-whole design rests on:
-
-> **Every pixel the fill invents belongs to a break that has a ring on it.**
-
-Consequences worth stating:
-
-- **A dead end is never filled.** It connects nothing to anything, so sealing it could not have
-  helped, and it carries no mark.
-- **A break the search only guessed at** — one where the flood ran out of budget — is marked but
-  never filled. Marking on a guess is a warning; inventing ink on a guess is not.
-- **A break only partly inside the fill width stays open.** A break sealed along part of its length
-  is still a break at the rest of it, so a partial fill is no fill at all.
-- **Filling defaults to off while highlighting defaults to on.** Looking costs nothing but time;
-  inventing ink changes what gets emitted, and no control that writes into a map's linework should
-  do so before a GM has looked at what it would write.
-
-##### Superseded within a day: two controls, discover and fill — user, 2026-08-23
-
-**Built, tried in a room, and abandoned.** One width highlighted candidates; a second, expressed as a
-share of the first, selected which of them were repaired. Purple rings for a break left open, green
-for one filled. The workflow it was for: settle the first to get a stable set of places worth
-attention, then sweep the second and watch how many of that fixed set turn green, judging the trade
-with the reference set held still underneath.
-
-**The premise was false, and a map said so.** Breaks are not discrete items discovered one at a time
-as the width rises. Where two uneven lines run close together — which is most hand-drawn linework —
-a closing carves the space between them into **several channels at the pinch points**, and those
-channels **merge into one** as the radius grows. A break therefore has no stable identity across
-radii, so there is no reference set to hold still.
-
-It was worse than merely odd. A channel was only repaired when **all** of it fell inside the fill
-radius, so once several small channels merged into one large one, that one no longer fitted — and
-**raising the highlight could prevent a repair that a lower setting allowed.** Non-monotonic, and
-unexplainable to anyone turning the knob.
-
-**One control is well behaved for a precise reason.** What a GM tunes is then the **set of pixels
-repaired**, which grows with the radius, rather than a set of discrete marks, which does not. The
-channel count still moves around as channels merge — it stays in the log and on the state line as a
-diagnostic, and it is explicitly **not** a tally of distinct faults.
-
-**What carried over unchanged**, because none of it depended on there being two controls: the
-definition of a gap, the three-step detector, the targeted fill and its invariant, the separate
-full-alpha layer, and the screen-space rings.
-
-**What changed with it:**
-
-- One colour, purple, for repaired pixels and their rings. The second colour survived only for the
-  one case that is genuinely different — see below.
-- `Control.format` was introduced so the share could read as `50%` rather than `0.50`, and went with
-  it. So did `derive` taking the whole settings object: nothing is expressed relative to another
-  setting any more, and a readout that cannot see its neighbours cannot go stale when one moves.
-- The per-row hint repainting **stayed**, on a better justification than the one it arrived with.
-  Several readouts report a setting against a *measurement*, and before a first trace they say "trace
-  once for a figure"; without a refresh they would go on saying it until that row's own slider was
-  touched.
-- `gapWidthPx` was **renamed** to `gapFillPx` rather than reinterpreted. The old key meant "highlight
-  only", so a scene storing it would silently have begun inventing ink at whatever width had been
-  chosen for looking. A rename falls back to the default, which is the loud version.
-
-##### One exception to "everything found is repaired"
-
-A channel whose flood ran out of budget was never *proved* broken. **Marking on a guess is a warning;
-inventing ink on a guess is not.** Those get a ring and no fill, which reads on the surface as an
-empty ring — a state that is visibly different from a repair without needing a second colour. The
-painter takes `null` for that state rather than a colour, so it cannot be drawn as though ink had
-been added where none was. The state line names the count separately.
-
-##### Off by default — user, 2026-08-23
-
-**This is the only control in stage one that invents ink** rather than deciding what to make of ink
-the map already has, and nothing should write into a map's linework before a GM has asked it to. It
-was briefly on at 12px, on the argument that a break merges two rooms and the GM who never reaches
-for the control is the one who needs it. That argument is about *warning*, and warning is no longer
-what this control does — it repairs.
-
-**The cost, named: a break goes unreported until the control is reached for.** The separate
-always-on marking that covered that went with the two-slider split, so nothing between a GM and a
-merged room announces itself except the second-largest-region alarm in the log — which §8 says
-nobody reads.
-
-**Accepted, and the reason is that the failure announces itself downstream** (user, 2026-08-23): a
-break usually makes the *regions* visibly wrong, and a GM looking at a partition that has merged two
-rooms comes back here to find out why. So the control is where you go once you have seen the
-symptom, rather than a warning that fires before you have.
-
-That is a real argument rather than a concession, and it is worth separating from the §8 rule it
-looks like it contradicts. §8 forbids a **silent** failure — one with no channel at all. This one has
-a channel: the proposals themselves, which the GM is already obliged to review before staging. What
-§8 rules out is a control that can be wrong with nothing to look at, and stage two's output is the
-something to look at.
-
-If a room shows the symptom is *not* obvious enough — two rooms merging in a corner nobody was
-studying — the answer is a warning that costs nothing and writes nothing, not a repair that runs
-unasked.
-
-##### The ink is composed from layers now — the user's framing, 2026-08-23
-
-The mask the regions come from is no longer "the reading, filtered". It is a composition, and it was
-built to take all four terms even though two of them do not exist yet:
-
-```
-basic ink  −  GM-suppressed areas  +  gap fills  +  GM-drawn ink
-```
-
-The order is not arbitrary. Suppression comes **before** the gap search, so repairs are derived from
-ink the GM has already corrected. GM-drawn ink comes **last**, so nothing automatic second-guesses a
-line drawn deliberately — which is the standing requirement for §11 item 5.
-
-Two consequences already visible:
-
-- **The surface draws the base ink, not the composite.** Handing it only the composite would make
-  invented pixels indistinguishable from read ones, which §8 forbids. The fills arrive separately
-  and are drawn in their own colours.
-- **The gap search moved out of the workspace and into the pipeline.** While the marks only
-  highlighted, computing them on the surface was right. The moment the fill became real they had to
-  be the same computation that produces the mask — a second copy on a surface is the sibling's
-  harness-versus-room failure waiting to happen.
-
-##### The mask cache is now two caches
-
-**Splitting is right** (user), and the composition above is the reason it is more than an
-optimisation: the layers will keep multiplying, and every one of them acts on the mask rather than on
-the image.
-
-- **The reading** — binarise, decide polarity, measure the ink width — is cached on the map's
-  identity plus the 1a parameters alone. About 690ms of a 1.4s run.
-- **The composed ink** is cached on everything, and built from a reading that may have been reused.
-
-So a sweep of a 1b filter or either gap slider re-runs only the cheap half. Without the split, every
-notch of a slider whose whole purpose is comparative would have paid a full re-read.
-
-**The boundary is declared by exclusion, and the polarity of that is the point.** Everything counts
-as a reading input *unless it is named* as post-reading. Add a new binarisation parameter and forget
-this file, and the reading cache goes **useless** — 690ms, obvious in the log. Write it as an opt-in
-list, forget the same edit, and a reading gets **reused when it should not have been**, which is a
-mask that is quietly wrong. This project has already paid once for a diagnostic that lied.
-
-Four tests pin it: every non-excluded reading parameter moves the reading fingerprint; every excluded
-one does not; every excluded one still moves the *mask* fingerprint, so none of them is a setting a
-GM can change with no effect at all; and both sides of the boundary are non-empty, since every one of
-those tests is a filtered loop and a filter matching nothing passes.
-
-##### The third parameter kind lasted one commit
-
-`PARAMETER_KIND` went `pipeline | display` → `pipeline | gaps | display` → back again. The `gaps`
-value was right while the marks only highlighted: derived from the mask so not pipeline, but costly
-enough that treating them as free would have run half a second of morphology on every frame of a
-drag. The fill made all three gap parameters feed the mask — the highlighting ones included, since
-the fill repairs only what is *marked* — and a kind with no members is a filter that silently
-matches nothing. The cost it was avoiding is answered by the reading cache instead, which is a
-better answer because it makes the 1b filters cheaper too.
-
-The one test that would have caught a silently-empty kind is the one asserting every kind has a
-member, and it is kept.
-
-#### 4. Painting to suppress ink
-
-**Let the GM paint areas where ink is ignored** — meaningless crosshatching being the motivating
-case. Local where the global controls are blunt, and the counterpart to the global width and island
-filters: those cannot distinguish hatching from linework by measurement, and the GM can by looking.
-
-#### 5. Painting ink
-
-**Let the GM draw ink that is applied after everything in stage one.** Already the record's
-"GM-drawn ink", and long identified as the highest-value unbuilt thing. Applied last, so it is
-immune to the opening and the island filter — the GM drew it deliberately and no automatic filter
-should second-guess it.
-
-Both 3 and 4 exist for the same reason: **they are how a GM fixes details once the general settings
-are as good as they are going to get.** Every global control has a point past which it costs more
-than it gains, and that point arrives with the map still imperfect. They also survive re-runs by
-being *inputs* rather than outputs, which is what a stage-two hand edit is not.
-
-### Painting — BUILT and confirmed in a room, 2026-09-05, items 4 and 5 above
-
-The two painting features were built together, on one piece of machinery, and the shape they took is
-different from the one items 4 and 5 describe. Those two sections stand as the *motivation*; this is
-what was decided and made.
-
-**A room confirmed it working on the day it was built, with no defects** — the only feature here to
-manage that first time. What that establishes is narrower than it sounds and is worth stating: the
-mechanism is right and the surface behaves. It says nothing yet about the conventions layered on top
-— a brush width per tool, Shift inverting the verb, and Done beside Discard and Clear — which are
-decisions taken during the build rather than asked for, and which only a session of real correction
-can judge.
-
-#### Three stages, each making a layer — the user's framing, 2026-09-05
-
-Stage one is a **stack**, not one filtered reading:
-
-```
-base ink  −  suppression  +  added ink
-```
-
-**A fourth, derived term sat between them until 2026-09-05** — the break repair — and it became a
-tool that writes into the added-ink layer, which is what leaves the stack at three.
-
-- **A. Process the map image** — multiple parameters, produces the base ink.
-- **B. Suppression** — painting tools now, others could be added later; produces the suppression layer.
-- **C. Added ink** — the same; produces the added-ink layer.
-
-When any of the three is finished the stack is re-composited, and **that composite is what becomes
-walls**. The three are independent inputs: any can be revisited without disturbing the other two, and
-the order they are *edited* in does not matter.
-
-**What this replaced was a single Paint step with three verbs** — paint ink, suppress, clear — which
-would have made the picker choose *which document a drag writes to*. That is a mode wearing a tool's
-clothes, and it broke the project's own rule that a step is a mode and shows its own layer. With a
-step per layer, a picker chooses **how you edit the layer you are in**, which also leaves room for
-the tools the user named as coming later: suppression by picking a whole ink blob, added ink by
-drawing a straight line.
-
-It also states a requirement that would otherwise have been a note to remember: added ink is immune
-to the stroke-width opening and the island filter *because of where C sits*, not because of a rule.
-
-**The one term that is not one of the three is the break repair.** It is derived rather than made — a
-search with two parameters — and it sits between B and C, taking suppression as input, so that a
-repair works on ink the GM has already corrected. So editing suppression changes what the repair
-finds, and therefore changes what the *Ink* step draws. That is the one asterisk on "order does not
-matter", and it is in the picture rather than in the documents.
-
-#### The repair becomes a tool inside C — decided and built 2026-09-05
-
-**It stops being a derived term and becomes something the GM stamps.** The parameters highlight
-candidates and show what would be filled; **nothing is filled by default**; clicking inside a break's
-ring accepts that ink, effective immediately and therefore changing what the remaining detection
-finds; and a button accepts everything currently shown. Once accepted, the pixels are **added ink,
-indistinguishable from ink painted by hand**.
-
-What it buys:
-
-- The stack becomes exactly three layers with nothing derived in it, and the asterisk goes.
-- **A rule that is currently only nearly true becomes true.** The repair is off by default because
-  nothing should write into the linework unasked — but a nonzero slider is not one-time consent, it
-  re-invents ink on *every* recompose from then on. As a tool the writing is an act.
-- Nothing has to be remembered about gaps across a change underneath them.
-- The rings stop being a by-product of a slider and become the preview the numbers are adjusted
-  against, and the search can see ink the GM has already brushed on — which the pipeline version
-  cannot.
-
-The stated cost, so it is a trade rather than a free simplification: **a stamped fill goes stale
-where the search self-corrects today.** Change the threshold now and a break that closed on its own
-stops being filled; a stamped fill does not. The direction that matters is a fill left across what
-has since become an open **doorway**, which Dynamic Fog would derive a wall across. It is acceptable
-on the user's own argument — a stale mark of added ink, visible in that layer's colour like any
-other, and hand-painted ink already has exactly this failure mode — but it is a real one.
-
-**A behaviour to expect rather than treat as a bug:** accepting one fill re-runs the detection, so
-the remaining rings visibly reshuffle. Channels merge and split as the ink changes, which is the same
-non-monotonicity that collapsed the two-slider design. There it was fatal because a slider changed
-the set invisibly; here the GM watches it happen one accept at a time.
-
-**Deferred deliberately** (user, 2026-09-05). The repair stays exactly where it is until painting is
-in a room: nothing is removed from a working build, painting is purely additive to the composition,
-and converting afterwards is self-contained. By then painting will also have changed the ground — a
-break closed by hand is a two-second stroke, so the automatic tool has to justify itself against a
-real alternative rather than against nothing. A future improvement worth noting: un-selecting
-individual gaps while still in the tool.
-
-#### The repair became a tool — BUILT 2026-09-05, the same day it was designed
-
-**Built as designed, and the deferral held for exactly as long as it was meant to**: until painting
-had been through a room. It had, clean, so the conversion went in behind it.
-
-**The question the deferral raised was answered rather than dropped.** Painting made a break a
-two-second brush stroke, so the automatic search had to justify itself against a real alternative —
-and three options were put: build the tool as designed, keep detection and drop filling entirely so
-the brush does the fixing, or leave it and take the door revisit instead. The user chose the first,
-on a ground I could not have judged: *on a map that has a lot of little gaps, the automated fix is a
-huge time saving.* That is what the accept-all button is for, and it is why detection-only would have
-been the wrong economy.
-
-**What was built**, matching the specification above: selecting the tool runs the search; every break
-is ringed and its pixels shown in purple as a proposal; a click inside a ring accepts that one and
-re-runs the detection immediately; a button accepts every ring shown. Accepted pixels are written
-into the added-ink layer and are thereafter indistinguishable from a brush stroke over the same
-ground.
-
-##### The payoff, which is larger than the feature
-
-The stack is now exactly three layers with nothing derived in it:
-
-```
-base ink  −  suppression  +  added ink
-```
-
-That let the composition come out of the pipeline into a single pure function, `composePaint`. It had
-been inline in `composeInk`, behind the SDK boundary where no headless test can reach it — recorded
-as a stated limitation the day painting landed, with the note that the fix would have to be
-structural rather than another test. It could not be extracted while the repair sat between the two
-terms. It can now, and the order is pinned by a test that a mutation pass confirms fails when the two
-are swapped.
-
-Three things went with it, each because its last reader had gone: the full-raster **gap label array**
-(eight megabytes per search, and the search now re-runs after every accept), **`applyGapFill`**, and
-the point probe's **`invented-ink`** answer — an accepted fill is added ink and says so.
-
-##### A third parameter kind, on the condition the record set
-
-`PARAMETER_KIND` gains `tool`, with four members: the two brush widths and the two gap numbers. The
-value it replaced — `gaps` — lasted one commit and was deleted for having no members, and the note
-that replaced it named the condition for trying again. The test it had to pass was that it differ
-from `display` in *behaviour*: it does, at the freeze. A display control stays live in stage two
-because recolouring while editing walls is ordinary; a tool control is closed, because the tool it
-belongs to is.
-
-##### Costs, stated rather than argued away
-
-- **An accepted fill goes stale where the search self-corrected.** The bad direction is one left
-  across what has since become an open doorway, which Dynamic Fog would derive a wall across. It is a
-  stale mark of added ink, visible in that layer's colour, and hand-painted ink already fails the same
-  way — but it is a trade, and it is the one the conversion bought.
-- **The break rings left the Ink and Walls steps.** Walls therefore loses its severed-wall warning,
-  which was the one argued exception to "each step shows its own layer". On-demand detection leaves
-  nothing to draw in a step that did not ask for it. A wall the minimum-stroke-width filter cut is now
-  found by running the tool rather than by noticing a ring.
-- **The reading's state line no longer counts breaks**, for the same reason: it reported a total on
-  every recompose, which is how a break somewhere nobody was looking got mentioned at all.
-- **`gapFillPx` defaults to 12 rather than 0.** The reason for zero was that this was the only
-  stage-one control that *invented* ink, and it invents nothing now. What zero would cost instead is
-  a tool that shows nothing on arrival, with no way to tell "this map has none" from "the slider is
-  at zero".
-
-#### A raster, not a list of strokes — user, 2026-09-05
-
-The first design stored strokes as polylines in fractions of the map, by analogy with the frozen
-graph. **The analogy was wrong.** The rule the graph obeys is that a document belongs in the space of
-the thing it produces, and the graph produces geometry where this produces **ink pixels** — the same
-rule that killed the raster route at step D, pointing the other way.
-
-What a raster buys, beyond matching the rule:
-
-- **The preview and the effect stop being two computations.** A stroke document is drawn once by the
-  canvas with its line-drawing and stamped again by the pipeline with different arithmetic, so the GM
-  approves one picture and the trace uses another, with nowhere for the divergence to show up. The
-  array the GM is shown **is** the array that composes.
-- Erasing stops needing a definition. It writes zero.
-
-**At the pipeline's raster** (user), which is the mask the layer acts on — so applying it is pixel for
-pixel with no resampling and no rule that would have to differ between adding ink and taking it away
-(and those differ: "any painted pixel counts" adds ink safely and removes it eagerly). That raster
-depends on the decoded image's own pixels and `MEGAPIXEL_BUDGET`, and on nothing about the scene, so
-moving, scaling or rotating the map cannot invalidate a layer. **The document records its own
-dimensions**, which is what turns a replaced image or a changed budget into a reported resample
-rather than a silent one.
-
-#### The size question, measured 2026-09-05 — and the answer is a fact about how people paint
-
-Scene metadata is 512KB and the test raster is 8.4 million pixels, a megabyte at a bit each. So the
-encoding — run-length, base64 — had to earn its place, and the worry was that suppression's motivating
-case is crosshatching, which sounds like the worst case for run-length coding.
-
-**It is not, because nobody paints out crosshatching stroke by stroke** (user): they take a wide brush
-and cover the area solid. Measured at 3300x2550:
-
-| paint | encoded |
-|---|---|
-| untouched | ~0 |
-| a hall covered solid, 11.4% of the map | **4.2KB** |
-| 100 wide strokes | 10.6KB |
-| 500 small scattered dabs | 34KB |
-| a grid traced line by line, map-wide | **1,674KB** |
-
-Covering an area solid is about 400x cheaper than tracing the same area's lines. The last row is the
-one that does not fit and is the one nobody would paint — but it is reachable, so `writePaintLayer`
-refuses above 128KB with a message that says what to do differently, rather than letting an obscure
-metadata failure happen at the moment Done is pressed.
-
-#### A mode with a Done — user, 2026-09-05
-
-Entering a painting step takes a **working copy**; the brush edits that; finishing writes it once and
-recomposites once. A scene write is the better part of a second, so one per stroke would make the
-tool unusable, and this is also what keeps everything underneath from having to track a brush.
-
-**Leaving any other way saves rather than warns.** Closing the workspace warns about nothing because
-nothing is ever lost, and unsaved paint would be the first thing to break that claim — so switching
-step or closing the workspace finishes the mode exactly as Done does. Discard is the only control
-that throws work away, which is the right shape for the one that does.
-
-#### A stroke does not blank the surface, and this is the one change that may not
-
-The standing rule is blank-rather-than-stale. Painting is exempt **structurally**: what the ink layer
-draws is the *base* — the reading after its two filters — and both paint layers compose strictly
-after it, so painting cannot change the picture on screen. There is nothing that goes stale, and
-blanking would take the GM's own map away for the length of a recompose in exchange for nothing.
-
-The stated cost: **the break rings lag one recompose behind a saved suppression**, because they are
-found on the suppressed mask. A lag rather than a lie, bounded, and self-resolving.
-
-#### The layer rule that `paint` breaks, and why
-
-Every other layer is drawn only in the step that is about it. The two paint layers are drawn
-**wherever the ink is drawn** — Ink, both painting steps, and Walls — because a picture of the ink
-that leaves out what the GM has done to it is a picture of something that no longer exists
-downstream. Concretely: the break rings in the Ink step are found on the suppressed mask, so without
-the amber a ring appears beside ink that looks untouched; and the skeleton in Walls is thinned from
-the whole composite, so without both colours the centreline and the ink under it visibly disagree.
-
-Amber for ink taken away, cyan for ink put in, both fixed and both at full alpha whatever the ink
-opacity is — the same arrangement the break fill has, resting on §8: what the map said and what we
-did to it must never look alike.
-
-**How the GM paints was the open question, and the workspace is the answer** (user, 2026-08-23).
-The click-through overlay cannot be painted on: its pointer events are disabled, and that is exactly
-what lets the map be panned while it is up. A mode toggle would mean no panning while painting,
-which for a painting tool is a bad trade. An opaque interactive surface owns all input, so both of
-these become ordinary — and a purpose-built brush with a live preview of what a stroke would do
-becomes possible, which neither alternative allowed. This is the single biggest reason item 0 comes
-first.
-
-### Retired: the overlay's panel band did not lift — logged and dissolved 2026-08-23
-
-**Dissolved rather than fixed.** The band, the heartbeat and the overlay that needed them were all
-deleted when stage one moved to the workspace: controls that live *on* the surface need no space
-reserved for a popover somewhere else. Kept because it is a clean example of the pattern this
-project keeps meeting — a bug whose right fix turned out to be removing the thing that had it.
-
-Measured in a room: the band is reserved correctly while the panel is open, but **closing the panel
-does not bring the ink back**. The heartbeat stops, so the band should expire within one stale
-interval and the next poll should repaint — it does not, and why is not yet established. My first
-suspicion is that the repaint on a band change only fires from inside the poll's settled branch, so
-a view that has not moved since may never take it; that is reasoning from the code, not a diagnosis.
-
-**The user's fix is better than repairing this** (2026-08-23): when the panel is put away, the
-overlay should **disappear entirely** rather than expanding to fill the space. It is a working
-surface for stage-one tuning, and stage-one tuning happens in the panel — an overlay left painting
-over a map nobody is currently tuning is clutter that hides the map at exactly the moment the GM has
-signalled they are done with it. That also dissolves the bug rather than fixing it: there is no band
-to lift if there is no overlay.
-
-It would want the presence signal to distinguish "panel closed" from "panel never heard from",
-since a stale heartbeat and a broadcast that never arrives currently look identical, and one of
-those must not take the overlay down. Not urgent; the overlay is usable as it stands.
-
-### The overlay colour controls want a second look — logged 2026-08-23 (user)
-
-Built as seven preset swatches plus a native `<input type="color">`, with the swatches as the floor
-because a native colour dialog inside a sandboxed third-party iframe is the rendering path that
-already made the map dropdown paint white-on-white and look empty. **The native picker works** —
-confirmed in a room — so the hedge turned out to be unnecessary.
-
-The swatches stay anyway (user), because one click to cycle contrast on a difficult map is worth
-having and the picker is several. But *how the two sit together* was never designed: a row of
-squares and a system colour well side by side is what you get from adding the second control to the
-first, not from deciding what the pair should look like. Revisit both the arrangement and whether
-seven is the right number, alongside whatever other display controls the overlay grows.
-
-Not urgent. Nothing here is wrong, it is merely unconsidered, and it will be easier to judge once
-there is more than one thing being drawn on the overlay.
-
-*Still open, and the controls moved 2026-08-23:* they live on the workspace now rather than in the
-popover, beside the mask they colour instead of a tab away from it. That is the arrangement question
-made easier rather than answered — and the "more than one thing being drawn" it waits on is now
-concretely the next two items, since gap marks and bridged pixels each need a colour of their own
-that cannot be confused with read ink.
-
-### Erosion and a minimum line width are different tools — clarified 2026-08-23 (user)
-
-Worth writing down because the record's own shorthand invites the confusion, and this session made
-it: naming a filter by its *effect* rather than its *operation*.
-
-- **Erosion** shrinks every ink region by `k`. Thin marks vanish; thick marks survive **thinner**.
-- **An opening** — erode by `k`, dilate by `k` — deletes marks narrower than `2k` and returns
-  everything else to its original width. This is what "minimum line width" means.
-
-The difference is not academic, because **regions are bounded by ink, so thinning ink grows every
-region**. Erosion alone therefore pushes every fog boundary outward by `k`, which makes it not a
-crude minimum-width filter but *the global outward offset* — already considered and left out above,
-since one radius against variable ink width under-covers heavy walls and over-covers light ones on
-the same map.
-
-**The two were rejected for different reasons, and only one has expired.** The offset's problem is
-*accuracy*: it is wrong in both directions at once and no single value fixes both, which seeing it
-does not help with. The minimum width's problem was *visibility* — it can sever a thin wall
-anywhere, and nothing would say so — and the stage-one overlay is exactly visibility. That is the
-one worth reopening, and §9 carries it.
-
-### Doors
-
-Wanted as soon as the fog works well. Dynamic Fog's door reactor filters on the same condition as
-walls, so doors are metadata on drawings we already own — the smallest possible version of the
-coupling, and it changes nothing about what we emit today. It does mean writing into
-`rodeo.owlbear.dynamic-fog/…`, which is the one place this project would touch a private namespace.
-Read `DoorActor` before committing to it; it is the one part of the wall/door path still unread.
-
-### Lights — declined
-
-Not extracted from map images, and nothing consumes a light without Dynamic Fog anyway. Dropping
-them removes the only place where its private namespace was unavoidable.
-
+## 9. Constraints and pitfalls
+
+### Inherited from the sibling — verified, not guessed
+
+Every item here was measured in a real room. **Do not re-derive them.**
+
+- **The SDK cannot be imported into a headless test.** Its index calls `getDetails()` at module load,
+  which reads `window.location.search`, so any node-environment test importing it dies with
+  `ReferenceError: window is not defined`. **This dictates the layering:** every module touching the
+  SDK is split from its pure half, and the pure half is where the tests live. Type-only imports are
+  erased and therefore safe.
+- **Items cap at exactly 8192 array entries.** Bisected to the single command: 8192 accepted, 8193
+  refused. A fixed constant, not a shared budget.
+- **Writes are rate limited**, and this is *distinct* from validation failure. Distinguish them at every
+  call site: retrying a size failure is futile, giving up on a throttle loses data.
+- **SDK rejections are not `Error`s.** The SDK rejects with the parent frame's raw payload, so
+  `instanceof Error` is false for every failure it can hand back and `.message` is `undefined`.
+- **Dynamic Fog's walls and lights are LOCAL items**, read via `OBR.scene.local.getItems()`. Querying
+  the scene returns zero in a room where the fog plainly works, and `scene.items.onChange` never fires
+  for them.
+- **Walls are not there at startup.** Dynamic Fog materialises them ~1.2s after a fresh load.
+- **Check-then-subscribe is a race.** Subscribe *before* checking `isReady()`, and make the operation
+  idempotent. A popover's connection going ready is **not** the scene being ready; the sibling lost two
+  days to that one.
+- **Asking the scene a question before `onReady` throws — it does not return empty.** Anything reading
+  scene items or metadata waits for the start-up sequence; only DOM that needs no answer is wired at
+  load.
+- **Scene metadata has no limit below 512KB per key** — measured.
+- **The grid covers only `MAP`-layer images.**
+- **Rasters cannot enter a scene.** `data:` URLs draw a broken-image placeholder at 0.3KB, are refused
+  at 21.6KB, and wedge the message bus at 1.37MB. Asset upload is the only mechanism that delivers
+  pixels, and `Image` has no opacity or tint. **This is why the workspace's view can never be scene
+  content.**
+- **Map pixel access works cross-origin.** `crossOrigin = "anonymous"` is mandatory regardless of what
+  the CDN sends, or the canvas is tainted.
+- **`iframe == viewport`, always**, and Owlbear's map canvas is the full window with its tools floating
+  over it — so `viewport.transformPoint` output is directly usable as page coordinates.
+- **There is no viewport change event.** `Player` carries `syncView`, not the transform. *The workspace
+  makes this irrelevant by owning its own transform.*
+- **Storage is partitioned.** The extension runs in a third-party iframe, so Firefox buckets
+  `localStorage`/IndexedDB per top-level site. Keep durable state in scene metadata; treat any local
+  cache as something that can vanish.
+
+### Likely pitfalls
+
+Named in advance so they are recognised rather than discovered.
+
+- **Splitting a region to fit the item cap creates a wall across the middle of a room.** Dynamic Fog
+  derives a wall from *every* shape boundary. The cap must be met by simplifying harder, and an
+  oversized region is a signal that simplification is too timid. **This is the sharpest trap in the
+  design, because chunking is the obvious remedy and is correct everywhere else in Owlbear.**
+- **Inverted ink polarity produces a confident, complete, exactly wrong answer.** A binarizer assuming
+  dark ink on a light ground, run on light-on-dark linework, traces the complement of the structure.
+  Spectacular when noticed, and aggregate statistics will not catch it.
+- **Diagonal leaks.** The connectivity pairing in §4. A one-pixel diagonal gap in ink is invisible to
+  the eye and merges two rooms.
+- **Hatching and texture traced as rooms.** Cross-hatching outside walls encloses hundreds of tiny
+  areas. The ink filters are the guard, and they are the sibling's `minContourLength` trap in a new
+  costume: set high enough to kill hatching, they eventually eat a genuine closet.
+- **Re-running over hand edits.** A push replaces everything of ours. Our metadata tag makes "replace
+  only ours" possible; making it *safe* is a product decision, not a technical one.
+- **Pre-existing fog.** A scene may already have fog shapes drawn by the GM or by Forecast. Ours add to
+  them rather than replace them, and Dynamic Fog derives walls from theirs too. The test map's scene
+  carries 419 hand-drawn `LINE` fog items plus 8 paths, so this is live rather than hypothetical.
+- **Wall count is twice the contour count, not the region count.** Every closed contour becomes two
+  `Wall` items, and a region with a pillar has two contours. Any budget reasoned from "one shape per
+  room" is out by more than a factor of two.
+- **Hole containment is checked one step across, not transitively.** A discarded face that itself
+  contains a surviving one leaves its hole filled. Nothing on the test map produces that shape.
+- **A room thinner than the smoothing tolerance is lost at the freeze**, because both its walls fit to
+  the same line and one of the pair is dropped. Counted and reported, never silent.
+
+### Things an optimisation pass would take, and must not
+
+- **`Float64Array` for the integral tables.** A `Float32Array` mantissa exhausts at exactly 16
+  megapixels, and the failure is silent — thresholds slightly wrong everywhere, worst in the
+  bottom-right.
+- **The `Math.max(0, …)` variance clamp**, against a `NaN` that would mark every pixel as ground.
+- **`strictPort: true` in the dev server**, which is what stops a URL registered in Owlbear pointing at
+  another project's build.
+- **`npm ci` rather than `npm install` in CI**, which catches a lockfile assembled on Windows and
+  missing the Linux entries.
+- **Four functions that look test-only to an export sweep and are not** — `erodeMask`, `dilateMask`,
+  `eraseSpecks` and `isPostReading` each have an in-module caller and are exported so the halves can be
+  tested separately, which is the right shape for modules whose whole risk is the two halves
+  disagreeing.
+- **`src/pagesBase.ts` and `src/probe/fogProbeGeometry.ts` look unreachable and are not.** The first is
+  read by `vite.config.ts`, which a grep for production callers does not see; the second supplies
+  fixtures for eleven assertions about live emit-path code.
+- **`probe/viewTransform.ts` is live production code.** The shell imports seven of its functions, so
+  every pan, zoom and wheel gesture goes through it. It sits under `probe/` only because that is where
+  the navigation constants were settled.
 ---
 
-## 11a. The two-mode restructure — designed and BUILT 2026-09-05 (user)
+## 10. Open questions and what is next
 
-**Three of the four pieces are built; item 1 is not.** This section was written as a plan and is kept
-as the argument, because the reasoning is what a future session needs and it did not change in the
-building. Two things to read it with:
+### Where the project stands
 
-- **Everything except "the order" below describes what now exists.** Where it says "becomes", read
-  "became". `CLAUDE.md` carries the operating account of what was actually built, including the parts
-  the plan did not settle.
-- **None of it has been in a room.** It types, the suite passes and both pages were inspected outside
-  Owlbear, which says the surface renders and not that it is the surface a GM wants.
+**The whole chain works, confirmed in a room on real maps**: read a map, tune the ink, correct it by
+hand, generate the graph, edit the walls, put it on the map. Dynamic Fog respects a moved wall, and the
+fog on the table is what the GM edited.
 
-**Item 1 — simplifying and pruning inside the editor — is still to build.** It is the piece that
-carries the design value, and it is a feature rather than a UI change, which is why it was not
-folded into the three that were.
+**Everything structural holds.** Euler's identity has held on every derive of a real map, in both
+modes. Placement is confirmed correct in all four corners, and rotation pivots about the bounding-box
+centre.
 
-### The shape
+**What is unproven is the thing the project exists to get right: whether the partition it finds is the
+one a GM wants.** It is now cheap to judge — the workspace draws it without touching the scene — and
+nobody has yet gone room by room and said whether these are the rooms they would have drawn. **That is
+the most useful next thing: a real session of map correction end to end, rather than another feature.**
 
-Stage one goes from nothing to a simplified graph, in three sub-stages:
+### Two things genuinely unimplemented, and both need a conversation before code
 
-1. **Map** — pick one. Finishing displays the map and unlocks the rest.
-2. **Ink** — adjust the reading parameters, suppress ink, paint ink, close breaks. **One step with
-   divisions**, not three steps.
-3. **Walls** — the derived graph over the coloured partition, with the parameters that shape it:
-   spur pruning and simplification.
+**1. The small-area-face tool.** Wanted eventually, and **not designed**: *it's not obvious how it
+should work.*
 
-When those are done there is something that can be emitted. **Then a separate mode**, launched
-separately, in the same basic layout: it pulls the graph from metadata, displays it, and provides
-editing tools.
+Worth recognising what it is: **the smallest-room control returning in the form this record already
+said was correct.** That control was deleted rather than defaulted off, because it removed a *region*
+when what is usually wrong is a *wall*, and "removing a sliver by deleting the wall that made it is
+exact, local and visible, where removing it by area is none of those". **In the editor, deleting a
+small face IS deleting the walls that bound it.** Same control, right stage.
 
-### Why — the user's argument, 2026-09-05
-
-> *That way, each stage feels like a complete process that starts and ends with looking at the scene.
-> It makes it evident that edit can be re-opened to make further adjustments.*
-
-Both halves matter. The first is about shape — a mode that begins by looking at a map and ends by
-putting fog on it is a thing a GM can hold whole, where a seven-header accordion spanning both is a
-list to be worked down. The second is about a defect: today the editor is a step inside the same
-accordion, reachable only by scrolling past the stage-one controls that are dimmed out because you
-are in stage two.
-
-**And there is a third payoff the framing produces rather than aims at: opening stage one stops being
-destructive.** Today crossing back discards the graph the moment you do it. As two modes sharing one
-document, opening the first is just looking — only *Generate the graph* replaces the edited one, and
-that button can warn and name what goes. That is the all-or-nothing door revisit **answered rather
-than reworded**, and it retires the item that has been sitting on the next list since 2026-09-02.
-
-### Simplification and pruning belong in BOTH modes — the key decision
-
-Offered in stage one so the graph is never raw, and offered again in the editor as operations on the
-graph as it stands.
-
-**Why that is coherent, and it is the user's observation** (2026-09-05):
-
-> *We don't need to keep the vertex ids constant anymore, because we aren't trying to re-assert vertex
-> moves after a change. It would just operate on the graph as it exists when the tool is selected.*
-
-The freeze exists because **re-deriving** renumbers everything, so stored edits point at vertices that
-no longer exist. That only bites when edits are being **replayed across a re-derivation**. An
-operation applied to the graph as it stands replays nothing — the GM's edits are already inside the
-thing being transformed. It is the same shape as erasing a wall: destructive, immediate, and holding
-no ids across it, exactly as `compactNodes` already does after every gesture.
-
-**What this changes about the freeze.** It stops being a loss and becomes a provenance note: not "the
-door that costs you your editing" but "where this graph came from". The tolerance chosen in stage one
-stops being the last word and becomes a starting point.
-
-**The cost, stated: it is a ratchet.** You can always simplify further or prune more in the editor;
-you can never get detail back without regenerating. Same for stubs.
-
-**And the half-ink-width cap on simplification is retired** (user, 2026-09-06). Both controls are
-meant to reach obviously-useless values at the top — every trace to one segment, every wall pruned —
-on the same argument the two ink filters already rest on: a control whose top end still looks
-reasonable gives no feel for where the edge is.
-
-#### What the editor's versions need
-
-- **A unit. SUPERSEDED 2026-09-06 (user) — the ink width is NOT frozen into the document.** The
-  plan was one number stored beside the graph and a format version bump, because stage one's tolerance
-  is a fraction of the *measured ink width* and an editor that only pulls a graph from metadata has no
-  measurement.
-
-  What replaces it needs no storage at all: denominate both controls in something measured off **the
-  graph itself**, which both modes have. A **log scale** from a **pinned floor** — a small fraction of
-  the map, since the editor has no raster — to a **graph-derived top**, the largest observed bend for
-  simplification and the longest spur for pruning, re-measured each time the tool opens. The floor is
-  pinned rather than tracking the observed minimum because **both tools delete from the bottom**, so a
-  tracking floor would chase the slider upward on every application. The far-left position is a
-  literal zero, so off is exactly off.
-
-  Measured rather than asserted: one ink width sits about a third of the way up such a track, so the
-  range a GM tunes in is a third of the slider rather than a few pixels against the stop. `CLAUDE.md`
-  carries the figures, the storage decision and the order of work.
-
-  **BUILT 2026-09-06, and not yet seen in a room.** Both controls are fractions of the map on a log
-  track with a pinned floor and an off position at the far left; the top is `longestSpur` or
-  `largestBend`, measured when the step opens and held for that opening. `largestBend` is per
-  **vertex** — how far one point sits off the line joining its neighbours — because a whole wall's
-  deviation from its own chord is dominated by the exterior, which would put every useful setting in
-  the first percent. Both measurements exclude what their tool cannot reach: a run with no free end,
-  a vertex that is a junction or an end.
-
-  **Pruning also moved past the freeze**, which is what let the editor have it at all: it is an
-  operation on the fitted graph now, a slider in the ink mode and a slider plus a **one-shot button**
-  in the editor, where applying a budget deletes walls that do not come back. The alternative —
-  prune the graph, rasterise the survivors, rebuild — was measured and abandoned: it left the
-  sub-pixel-sliver artefact on 181 of 400 generated seeds against 1 of 400 for the raster prune it
-  would have replaced, because deleting a whole edge takes one pixel further into every pruned
-  junction than the pixel walk did.
-
-  **Simplification itself did not move**, and the record was wrong to bundle it: `simplifyPolyline`
-  already takes a polyline and nothing else. Only its unit changed. The editor's own simplification is
-  still the unbuilt half of item 1 below.
-- **A crossing rule, and it is: let it split** (user, 2026-09-05). Simplification can make a wall
-  cross one that used to be clear of it, where pruning cannot — deleting never breaks planarity.
-  The user's argument, and it holds on the geometry rather than only intuitively: Douglas–Peucker
-  guarantees the fitted line stays within the tolerance of every point it discards, so a crossing
-  means the other wall was **within one tolerance of the original path** — under half an ink width,
-  which is visually touching. Splitting there adds a junction where they already met to the eye, and
-  the existing sweep splits already, so it costs nothing to build.
-- **Per wall run.** A *wall* is a run of segments chained through degree-2 nodes (`wallRuns`), and
-  fitting keeps both ends, so junctions survive without being special-cased.
-
-#### The small-area-face tool — wanted eventually, and NOT YET DESIGNED
-
-The user's cleanup for what a split leaves. Worth recognising: **this is the smallest-room control
-returning in the form this record already said was correct.** It was deleted rather than defaulted
-off, on the grounds that it removed a *region* when what is usually wrong is a *wall*, and that
-"removing a sliver by deleting the wall that made it is exact, local and visible, where removing it
-by area is none of those". In the editor, deleting a small face **is** deleting the walls that bound
-it. Same control, right stage.
-
-**It needs a design discussion before anyone implements it** (user, 2026-09-05): *it's not obvious
-how it should work.* That is a decision to be made in conversation, not one to be inferred from this
-paragraph — which says only what the tool is *for*, and nothing about what it does. It is deliberately
-**not** part of the four-piece order below, and taking it up should start with the questions rather
-than with code. The ones visible from here, offered as a starting point and not as an agenda:
+The questions to start from, offered as a starting point and not as an agenda:
 
 - **Which walls go?** A face is bounded by several. Deleting all of them merges it into *every*
   neighbour at once; deleting one merges it into exactly one, and **which one is a choice nothing in
-  the geometry makes for you**. The old control had no such question because it deleted a region
-  rather than a wall — which is precisely the deletion this record rejected.
-- **A threshold, or a click?** A sweep over everything under an area is what the deleted control was.
-  A click on the face you actually want gone is the exact, local, visible version, and the argument
-  that killed the old control points at it — but it is one click per sliver where a split may leave
-  many.
+  the geometry makes for you.**
+- **A threshold, or a click?** A sweep over everything under an area is what the deleted control was. A
+  click on the face you actually want gone is the exact, local, visible version — but it is one click
+  per sliver where a split may leave many.
 - **What unit is the area in?** Fractions of the map squared means nothing to a GM; grid squares needs
-  a pixels-per-square figure the editor does not have. **Same shape as the ink-width problem item 1
-  already solves by freezing the measurement into the document**, so the fix may be free — but only if
-  the tool turns out to want a threshold at all, which is the previous question.
+  a pixels-per-square figure the editor does not have.
 - **A face bounded partly by a stub is not a merge.** Deleting a bridge deletes the stub and merges
-  nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or
-  simply a different action has not been asked.
+  nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or a
+  different action has not been asked.
 
-### Ink is one step with divisions — user, 2026-09-05
+**2. A graph-side break repair**, and the question to settle first is **whether it is wanted at all.**
 
-> *I think it's reasonable to be seeing each of those tools at the same time. If necessary, there
-> could be a behavior where selecting a tool reveals a little "accordion" section for that tool, if it
-> needs tuning parameters, or a choice of brushes, or whatever. You're in the Ink workspace, and
-> there's a special effect of leaving it. But within that workspace you can jump between tools freely.*
+The idea: pair free endpoints by graph distance, which is exact where a pixel closing is a guess, and
+turns the bounded flood into a shortest path. But there are already **four** ways to close a break — a
+brush stroke, an accepted proposal from the search, drawing a wall in the editor, and walling the map's
+edge — and a graph repair can only see breaks the graph already has.
 
-This reverses the step-per-layer arrangement built on 2026-09-05, and the reversal is about *where
-the mode boundary is* rather than about the layers. The three-layer architecture is untouched:
-suppression and added ink are still independent raster documents composed in a fixed order. What
-changes is that they are edited from one place.
+**The pixel repair stays regardless, and this is the thing most likely to be got wrong.** A **scanner
+artefact** — a thin light line across a scanned map — severs linework in *pixel* space, before any
+skeleton exists. The graph then has no break to pair up; it has two pieces whose ends may be nowhere
+near each other. **Only a pixel tool can see that fault.** Repairing before thinning is also different
+in kind, not merely earlier: ink mended first becomes one stroke with one centreline, where the same
+mend on the graph leaves two edges that happen to meet.
 
-**The consequence that forces a real change: a paint mode must key to the STEP, not the tool.**
+### Carried open questions
 
-Today a mode is entered by opening a painting step and finished by leaving it — working copy in,
-one scene write out. With both brushes as tools inside one step, keying to the tool would mean a
-scene write every time a GM flicks between them, at about a second each, which directly contradicts
-"jump between tools freely". So:
+- **OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
+  its adjacent corridor stub? Only answerable by running a real map at a real table. **This is the
+  blocking question above wearing its original name.**
+- **OQ7. What does the GM review, and how?** Largely answered by the workspace. What remains open is
+  whether anything is wanted on top of it — jump to the next suspect region, or a re-run diff — and
+  that is best judged after a real session rather than guessed at now.
+- **Should the graph-only recompute become a fourth cascade stage?** One fact — "changing this rebuilds
+  the graph but not the mask" — is spread across three declarations that agree today, with a test
+  pinning that they do. Collapsing them would make it one fact in one place, at the cost of a stage
+  that is not a step and does not appear in the UI. **A question about the shape of the cascade, which
+  is architecture rather than tidying.** The spur budget is the only member.
+- **Who is `index.html` for?** It says "Pre-release — nothing to install yet", while the manifest is
+  served from the same Pages site and can be added to Owlbear by URL. So the only public front door
+  tells a visitor who *could* install it that they cannot. Either the page carries the manifest URL, or
+  it says plainly that this is not ready for strangers. **Both are honest; they are different decisions
+  about who the project is for.**
+- **Should `overlay-probe.html` keep shipping?** It is in `rollupOptions.input`, so a retired probe and
+  its page are built and published on every deploy — and nothing can open them. **The probe's source
+  stays either way**; this is only about whether it is built.
 
-> **Entering Ink opens both layers as working copies; either brush writes into its own; leaving Ink
-> writes both.**
+### Gaps in coverage, rather than missing features
 
-That is *less* machinery than exists, not more. `requestPaintMode`'s serialisation exists only
-because switching between two painting steps is a write-then-open; with one step it has nothing to
-serialise.
+- **The handle cap has never been exercised.** It suppresses handles above 2,000 *on screen*, and the
+  test map has 410 points in total, so no amount of zooming out reaches it.
+- **The break tool has never been in a room.** Whether a ring is easy to hit, whether the reshuffle
+  after an accept reads as working or as flickering, and whether accept-all does what it is for on a
+  map with many gaps are all open.
+- **What Owlbear does with a zero-area path at zero stroke width is unmeasured.** Retiring the
+  empty-face invariant means such a face is now drawn *and* emitted. Our arithmetic is fine — a
+  degenerate ring contributes nothing to any area total — but that is a statement about us, not about
+  Skia's stroker or Owlbear's storage. The count is already reported, so it is cheap to look at.
+- **Switching maps.** The picker's *listing* is exercised; the reload path is not.
+- **A large map, with the dev log running.** A 52.9-megapixel map is the only one that can answer three
+  things: why closing it was slow (the decoded-source-versus-budget note in `rasterPlan.ts` is the
+  first candidate and is explicitly unproven), whether break rings land correctly at a reduction factor
+  of 2, and three log lines a receiver missed. **None is closable from a desk, none is urgent**, and
+  the map is the expensive part of the setup — so do all three in one sitting whenever it is loaded for
+  some other reason.
 
-**The drag binding needs no new mechanism.** The step declares `brush`, and the tool handler declines
-a press when the selected tool is not a brush — which falls through to a pan, which the shell already
-does and already has a comment explaining.
+### Two things that look like loose ends and are decisions
 
-### Regions dissolves — user, 2026-09-05
+Recorded here so they are not re-opened as to-dos.
 
-> *"regions" as a separate step isn't needed anymore. We can always display colored regions when we
-> display the graph.*
+- **The preview draws wall lines at a fixed 2 screen pixels** rather than the fog stroke width. *"That
+  has felt fine to me."* It is a **preview** affordance, and the emitted stroke is the scene's own fog
+  width regardless.
+- **Nothing removes the frame walls again, and no un-frame button is wanted.** *"It's easy enough to
+  remove manually like any other wall."* Once added they are ordinary walls.
 
-So the partition is drawn wherever the graph is drawn, in both modes, and the step that existed only
-to show it goes. Its simplification control moves to Walls; its preview fill and outline become
-display controls for the combined picture; and **"Put on the map" needs a home**, which is the end of
-Walls in the ink mode and the end of the editor in the other.
+### One unexplained observation
 
-### Two modes, probably ONE page
-
-Worth stating because it changes the size of the job. The shell, the accordion, the map loading, the
-view transform and every layer are already shared, and the A.1 split exists precisely so the surface
-is *a shell plus a list of steps*. The difference between the two modes is **which steps are
-declared** — a variation in one declaration, not a second application. Two buttons on the panel, one
-page, one entry in the build's page list.
-
-A genuinely separate second page would duplicate the composition root and add a manifest entry, and
-the Pages subpath is already hardcoded in ten places. Cheaper and less drift-prone as one page.
-
-### What does NOT change
-
-Worth saying explicitly, because a restructure this size invites re-opening settled things:
-
-- **The freeze stays**, and so does its position — after fitting. Four jobs need the raster and all
-  four are pre-freeze: face identity, sliver detection, the empty-face invariant, and the area and
-  handedness checks.
-- **Vertex ids are still the only stable identity inside the editor**, and renumbering mid-gesture is
-  still forbidden. Simplification and pruning are whole-document operations run between gestures,
-  which is the same slot `compactNodes` occupies.
-- **The three-layer ink composition is untouched**, including the order.
-
-### The cost, stated
-
-**The sequence becomes less legible.** Today the accordion shows the whole chain as one ordered list,
-which the record calls "the cascade made visible" and is how a GM learns the order at all. Split
-across two modes, the editor's existence is invisible from the ink mode's surface. So **finishing
-stage one has to offer the editor** rather than leaving it to be discovered — the hand-off is part of
-the feature, not a nicety.
-
-### SETTLED — what "losing how it was generated" means
-
-The user described leaving the ink mode as *"saving the graph and losing how it was generated"*, and
-that was carried as an open question for one turn because it has a weak and a strong reading. **The
-weak one is what was meant** (user, 2026-09-05): it is a statement about the **editor's point of
-view** — the graph is the document there and its provenance stops mattering — and **not** about
-discarding the inputs.
-
-So the reading settings and both paint layers survive, as they do today: reopening stage one lands a
-GM back at their tuned ink rather than a bare map. That is what makes reopening cheap, and it is the
-whole reason opening the ink mode can be non-destructive — the third payoff above stands.
-
-### The order, agreed 2026-09-05 — and what happened to it
-
-Four pieces, each confirmable in a room on its own. The record's own warning is that a whole UI rework
-landing in one day leaves a long list of things nobody has looked at.
-
-1. **Simplify and prune in the editor**, with the ink width frozen into the document. Smallest,
-   self-contained, no UI restructure — and it is the piece that dissolves the freeze's tension.
-   **BUILT 2026-09-06 and 2026-09-07**, as two one-shot buttons on the frozen document, with the
-   walls a prune would delete drawn in red first.
-
-   **Its prerequisite was removed rather than met.** Freezing the ink width into the document — a
-   format version bump — was how both modes were to speak one unit. They speak fractions of the map
-   instead, on a track whose top end is measured off the graph itself, which both modes have and
-   neither has to store.
-2. **Dissolve Regions**: the partition draws wherever the graph draws; simplification moves to Walls.
-   **BUILT**, one commit. Preview fill and outline went to the persistent View group rather than to
-   either step that draws the partition — the plan did not say where, and two steps drawing one layer
-   is what makes a persistent group the honest home.
-3. **Merge Ink, Suppress and Add into one step**, with the tool picker, per-tool disclosure, and both
-   layers held open together. **BUILT**, one commit.
-4. **Split into two modes**, with the map gate and the hand-off. **BUILT**, one commit — and it
-   carried one thing the plan did not: the ink mode's last step draws the graph *after simplification*
-   rather than the pixel skeleton, and saving out of that mode is what freezes and pushes it (user,
-   2026-09-05). The skeleton layer was deleted with that change. Closing the ink mode therefore
-   commits nothing, which is what makes reopening it harmless and is a reversal of every build before
-   it.
-
-**They were kept as three separate commits, deliberately.** Each is confirmable on its own, and a
-room run that finds a defect can say which of the three it belongs to.
+A derive has twice been seen to run twice, two milliseconds apart, with identical output. Synchronous
+and sub-millisecond at this size, so it costs nothing today; **the route to it has not been found, and
+it is recorded rather than assumed understood.**
 
 ---
 
-## 12. Code sharing with the sibling — decided: copy, and the case has weakened
+## 11. Code sharing with the sibling
 
-The genuinely shared surface is now **smaller than it was**: image loading, binarisation, the
-geometry helpers. The middle of the sibling's pipeline — thinning, skeletonisation, chain chopping —
-is not on this project's critical path at all.
+The genuinely shared surface is **image loading, binarisation, the geometry helpers, thinning and
+chain chopping**. That middle section came back onto the critical path when the wall graph made a
+skeleton necessary.
 
-**Still copying, and the reasoning holds but for a different reason.** It is no longer "the tuning
-will diverge before it converges"; it is that the overlap has turned out to be small enough that a
-shared package would be mostly ceremony. Versioning, a release step, a second lockfile and CI for
-both is real cost, and it would buy sharing for a few hundred lines of well-tested pure functions.
+**Still copying rather than extracting a package.** The overlap is small enough that a shared package
+would be mostly ceremony: versioning, a release step, a second lockfile and CI for both is real cost,
+and it would buy sharing for a few hundred lines of well-tested pure functions.
 
-**The cost of copying is real and should not be dressed up as a virtue: bug fixes will not
-propagate.** A defect found in binarisation here will still be present there, and nothing will tell
-either project about it. Note fixes in both design records when they happen. This has already been
-paid once — two dev-log defects found here in the first session exist unfixed in the sibling.
+**The cost of copying is real and should not be dressed up as a virtue: bug fixes will not propagate.**
+A defect found in binarisation here will still be present there, and nothing will tell either project
+about it. **Note fixes in both design records when they happen.** This has already been paid once — two
+dev-log defects found here exist unfixed in the sibling.
 
-**Revisit if** §11's skeleton tool lands, since that would put the two projects back on genuinely
-shared ground.
+`reference/dynamic-fog/` is a local shallow clone of Dynamic Fog, gitignored. It is someone else's
+GPLv3 code and is deliberately not committed, since vendoring it would distribute it.
 
 ---
 
-## 13. Licence — GPL-3.0-or-later
+## 12. Licence — GPL-3.0-or-later
 
-Free-tier Pages requires a public repository, so a licence has to exist before the first push.
-Matching the sibling, and chosen as the option least likely to need changing rather than on
-principle:
+Free-tier Pages requires a public repository, so a licence had to exist before the first push. Matching
+the sibling, and chosen as the option least likely to need changing rather than on principle:
 
-- **Nothing is published until the first push**, so up to that point the choice costs nothing to
-  revise.
-- **Relicensing is one-directional in practice.** The copyright holder can relicense at any time,
-  but anyone who took a copy under the old terms keeps those rights to *that copy* permanently, and
-  once outside contributors land code they hold copyright on their parts. With no contributors,
-  moving to something permissive later stays easy; the reverse direction is the one that gets stuck.
-- **The coupling that would have forced it has mostly dissolved.** What this project emits is a
-  standard item type on a standard layer, which is no closer a relationship to Dynamic Fog than
-  using the SDK is. The exception is the door work (§11), which would write into its namespace —
-  still interoperation rather than derivation, but the closest this project gets.
+- **Relicensing is one-directional in practice.** The copyright holder can relicense at any time, but
+  anyone who took a copy under the old terms keeps those rights to *that copy* permanently, and once
+  outside contributors land code they hold copyright on their parts. With no contributors, moving to
+  something permissive later stays easy; the reverse direction is the one that gets stuck.
+- **The coupling that would have forced it has mostly dissolved.** What this project emits is a standard
+  item type on a standard layer, which is no closer a relationship to Dynamic Fog than using the SDK is.
+  The exception is any eventual door work, which would write into its namespace — still interoperation
+  rather than derivation, but the closest this project gets.
+---
+
+## Appendix A: the code map
+
+One line each. **`pipeline.ts` is the spine and the only place the trace is orchestrated**; everything
+under `trace/` is pure and headless-testable.
+
+### Entry points
+
+`background.ts` (an inert logger) · `panel.ts` + `panel.html` (the popover) · `workspace.ts` +
+`workspace.html` (the full-screen surface, both modes) · `overlayProbe.ts` and `workspaceProbe.ts`
+(retired probes, kept as the record of how the platform facts were got). **Each must call
+`setDevLogLabel`.**
+
+The workspace probe stays wired to the panel: **its leak detector is the only way to re-check that a
+change has not started leaking input to Owlbear.** The overlay probe is unwired — that design is
+closed — but not deleted.
+
+### The trace
+
+| module | what it does |
+|---|---|
+| `trace/luminance.ts` | pixels to luminance |
+| `trace/binarize.ts` | Sauvola threshold and blur |
+| `trace/field.ts` | the integral images behind it |
+| `trace/polarity.ts` | which luminance class is ink |
+| `trace/inkMetrics.ts` | ink width, by erosion |
+| `trace/morphology.ts` | separable open/close, O(1) in the radius |
+| `trace/inkIslands.ts` | the island filter |
+| `trace/inkBlobs.ts` | ink component labelling (reporting only) |
+| `trace/inkPaint.ts` | the GM's two raster layers: the brush, the run-length codec, and `composePaint` — the one statement of the stacking order |
+| `trace/gaps.ts` | break **detection**; it proposes and never fills |
+| `trace/thinning.ts` | Zhang–Suen skeletonisation |
+| `trace/wallGraph.ts` | skeleton to nodes and edges (moves no point, ever), plus `eraseSpecks` and `rasterizeGraph` |
+| `trace/faces.ts` | the half-edge walk and sliver detection, and nothing else |
+| `trace/spurs.ts` | **which** dead-end wall runs a budget removes — the decision alone, no geometry and no raster |
+| `trace/simplify.ts` | Douglas–Peucker (`simplifyIndices` is the decision, `simplifyPolyline` that plus a lookup), `dropCollinear`, and `COMMAND_CAP` |
+| `trace/graphRegions.ts` | ink in, a **frozen document** out: thin, chain, de-sliver, fit, freeze, and the escalation ladder that meets the command cap. It also keeps a space labelling, for the point probe and nothing else. **Its name is stale** — it derives no regions |
+| `trace/label.ts` | region labelling |
+| `trace/frozenGraph.ts` | the stored document: freeze, encode, decode, compact, and the two track measurements |
+| `trace/frozenFaces.ts` | faces of the frozen graph with no raster: the walk, containment grouping, the bridges, Euler's check |
+| `trace/planarGraph.ts` | the crossing predicate and the planarity check |
+| `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one — and the two queries the tools aim with |
+| `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
+| `trace/probePoint.ts` | the one surviving diagnostic |
+| `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses |
+
+### Scene, emit and state
+
+`map/mapImage.ts` list, nominate, resolve and load · `map/mapChoice.ts` the unnominated-map rule, split
+out so it can be tested · `map/placement.ts`, `map/placeRegions.ts`, `map/rasterPlan.ts` raster-to-world
+placement, reused at a 1×1 raster because that *is* fraction space · `emit/fogShapes.ts` the shape items
+and the four emission constants · `emit/wallLines.ts` the wall `LINE`s · `emit/frozenEmission.ts` the
+frozen graph's faces placed in the world · `emit/emitRegions.ts` batch it into the scene ·
+`geometry/ring.ts` ring maths · `frozenGraphStore.ts` and `inkPaintStore.ts` the two metadata documents ·
+`settingsStore.ts` the settings.
+
+### Settings and shared UI
+
+`settings.ts` is **the single declaration** of limits, stages, kinds and the post-reading boundary —
+read it before touching any parameter. Then `controls.ts` (every control a GM can turn),
+`sliderScale.ts` (log sliders), `overlay/maskImage.ts` (`paintMask`), and `theme.ts`,
+`describeError.ts`, `namespace.ts`, `devlog.ts`.
+
+### The workspace
+
+`steps.ts` declares the steps and which mode each is in; `workspace/mode.ts` reads that mode off the
+URL; `workspace.ts` is the composition root only.
+
+- **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`) ·
+  `accordion.ts` · `reading.ts` (the mask request cycle, subscribed to by the layers) · `regions.ts`
+  (the lazy derive cycle) · `stage.ts` (reading and writing the stored graph)
+- **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `freezeAction.ts` (how the ink
+  mode ends: save, push, hand off) · `workspaceControl.ts` (open either mode)
+- **Controls** — `settingRows.ts` · `settingsState.ts` · `swatches.ts` · `graphScale.ts` (the sliders'
+  graph-measured tops) · `seedSimplify.ts` · `confirmDialog.ts`
+- **Tools** — `wallTools.ts` and `paintControls.ts` (the pickers) · `wallEdit.ts` and `paintTool.ts` (the
+  pointer events) · `dragGesture.ts`, `paintGesture.ts`, `breakGesture.ts`, `maskRequest.ts` (**what a
+  gesture means — pure and tested, which is where the sequencing defects were fixed**) ·
+  `paintState.ts` · `breakSearch.ts`
+- **The editor's three one-shot buttons** — `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`
+- **Layers** — `layers/ink.ts` · `layers/paint.ts` (amber and cyan, repainting only the rectangle a
+  stroke changed) · `layers/breaks.ts` (purple proposals and a ring each) · `layers/regions.ts` (the
+  partition as vector paths) · `layers/graph.ts` (the walls, with a handle only where one can be
+  grabbed) · `bitmap.ts`
+
+---
+
+## Appendix B: build and deployment
+
+**Stack:** Vite, TypeScript, vitest, `@owlbear-rodeo/sdk`, Node 24 / npm 11. **No React**, by choice
+rather than deferral.
+
+**Live at** `https://captainchocolatedessert.github.io/fog-nudger/`, Pages built **from Actions**. A
+push to `main` tests, builds and publishes.
+
+Four structural facts a developer needs:
+
+- **`.nojekyll` is deliberate.** Pages runs Jekyll by default, which silently discards files and
+  directories beginning with `_` — that would eventually eat Vite build output. It needs to be in
+  `public/` too so it survives into `dist/`.
+- **The Pages subpath is hardcoded in ten places** — Vite's `base`, four fields in *each* of
+  `manifest.json` and `manifest.dev.json`, and the dev URL handed to Owlbear. Vite rewrites its own
+  into built HTML but does **not** touch `public/`. Change one, change all. Nothing in `src/` should
+  hardcode it; build from `import.meta.env.BASE_URL`. Drift is loud rather than subtle: a stale path
+  404s and the extension fails to load outright.
+- **New HTML pages that ship must be added to `rollupOptions.input`**, or they are silently absent from
+  `dist/`.
+- **The manifest field is `popover`, not `popover_url`** — the obvious guess by analogy with
+  `background_url`, and wrong. And an **`action`** is declared in the manifest where a **`tool`** is
+  registered through the SDK; they are different things.
+
+**Two builds can be installed at once.** `public/manifest.dev.json` differs from the published one in
+exactly five fields: the name, the button title and the description carry "(dev)", and **both** icons
+point at distinguished copies. There are two icon fields and they are easy to confuse — top-level
+`icon` is the **extensions list**, `action.icon` is the **button in the room**.
+
+The two are distinguished in *different* ways, and that is not inconsistency: the action icon carries a
+filled dot in a free corner, because it is drawn at the size it was authored for; the list logo
+**inverts the whole plate**, because the list applies some mask or downscale of its own that loses a
+corner badge. `src/manifest.test.ts` asserts the 128-character description cap, subpath correctness,
+and that the two manifests differ in the five permitted fields and **nothing else**.
+
+**Dependencies: regenerate the lockfile, never accrete it.**
+
+```bash
+rm -rf node_modules package-lock.json && npm install && npm ci
+```
+
+The trailing `npm ci` is the actual check — it validates lockfile/package.json sync, which plain
+`npm install` papers over. Incremental installs resolve the optional-dependency graph for **only the
+platform that ran it**, and those packages are WASM/native shims: invisible on Windows, fatal on Linux.
+`npm audit fix` accretes the same way and is covered by the same rule.

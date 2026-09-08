@@ -102,11 +102,15 @@ export type PointKind =
   /**
    * Not ink, and carrying no face label.
    *
-   * **Was `"discarded"`, and that name described a control that no longer exists.** It meant a
-   * region below the minimum area; the smallest-room filter is gone, and every space labelling in
-   * the pipeline now runs at `minArea: 0`. What is left is the one-pixel border frame painted round
-   * the raster by `frameSkeleton`, which is skeleton without being ink — a rare probe target, but a
-   * real one, and it deserves an answer that is true.
+   * **Believed unreachable, and kept so the answer is total rather than a guess.** It was
+   * `"discarded"` and meant a region below the minimum area, which was a control that no longer
+   * exists; then it meant the one-pixel border frame, which is no longer painted. Every space
+   * labelling in the pipeline runs at `minArea: 0` and there is no frame, so every non-ink pixel
+   * gets a label.
+   *
+   * If a probe ever reports this, something has begun filtering regions — which is exactly what
+   * `probePoint.test.ts` asserts against. Reporting it honestly is the point; inventing a nearby
+   * answer instead would be the failure this whole diagnostic exists to avoid.
    */
   | "unlabelled"
   /** Not ink, and inside a face that is emitted as its own shape. */
@@ -202,8 +206,8 @@ export function readPoint(
 
     It used to short-circuit here and report `region: 0` for every ink pixel without ever consulting
     the labelling — correct when regions were the space between the strokes, and wrong the moment a
-    face boundary became the wall's centreline. The labelling is of the framed skeleton, so an ink
-    pixel is unlabelled only when it is a centreline pixel itself.
+    face boundary became the wall's centreline. The labelling is of the skeleton, so an ink pixel
+    carries no label only when it is a centreline pixel itself.
   */
   const region = labelled.labels[i] ?? 0;
   if (drawn) return { x: px, y: py, kind: "added-ink", luminance, region };

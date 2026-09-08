@@ -45,11 +45,12 @@ const JUNCTION_CLUSTER = [
  * welded to the border frame. The weld radius was deleted on 2026-08-30 — nothing here moves a
  * point any more — so neither constraint binds for the reason it was written down.
  *
- * The margin is kept anyway, and the honest statement of why is weaker: `frameSkeleton` paints a
- * one-pixel border, so a run *adjacent* to the edge would meet it as an ordinary junction and this
- * fixture would be about two things at once. The run length is now arbitrary. Left as it is rather
- * than tightened, because a fixture that still reads clearly costs nothing and re-deriving its
- * minimum would be work in service of nothing.
+ * The margin is kept anyway, and the honest statement of why is now weaker still: a border frame
+ * used to be painted round the raster, so a run *adjacent* to the edge would have met it as an
+ * ordinary junction and this fixture would have been about two things at once. Nothing paints a
+ * frame any more, so even that constraint is gone and the run length is arbitrary. Left as it is
+ * because a fixture that reads clearly costs nothing and re-deriving its minimum would be work in
+ * service of nothing.
  */
 const BROKEN_RUN = [
   "...................",
