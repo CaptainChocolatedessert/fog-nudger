@@ -31,6 +31,7 @@ import { devLog } from "../devlog";
 import { describeError, isRateLimited } from "../describeError";
 import { PathOp, type PathCommandLike } from "../geometry/ring";
 import { runTrace } from "../pipeline";
+import { freezeGraph } from "../trace/frozenGraph";
 import { readGridDpi, readMapBounds, resolveTraceMap } from "../map/mapImage";
 import type { Point } from "../map/placement";
 import { describeFrozenFaces } from "../trace/frozenFaces";
@@ -228,15 +229,24 @@ export async function pushToFog(
     if (typeof built === "string") return built;
     source = built;
   } else {
+    /*
+      No graph saved, so one is derived and **frozen on the spot** rather than emitted directly.
+
+      This branch used to emit `runTrace`'s own regions, which made it the last consumer of the
+      raster-grouped face build — and a second answer to a question the frozen traversal already
+      answers. Same walk, different grouping: the defect found from the outside on 2026-09-06, in the
+      one path nobody looks at.
+
+      Freezing first costs a traversal and removes the second answer. What reaches the scene is what
+      would have reached it had the GM pressed save, which is also what makes this branch's output
+      comparable with everything else in the log.
+    */
     const outcome = await runTrace();
     if (!outcome.ok) return outcome.message;
-    source = {
-      mapId: outcome.run.mapId,
-      regions: outcome.run.regions,
-      walls: outcome.run.walls.map((wall) => ({ edge: wall.edge, points: wall.placed })),
-      note: `emit: from the map — ${outcome.run.regions.length} regions`,
-      summary: outcome.run.summary,
-    };
+    const frozen = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
+    const built = await frozenSource(frozen.graph);
+    if (typeof built === "string") return built;
+    source = { ...built, summary: outcome.run.summary };
   }
   devLog("info", source.note);
 
