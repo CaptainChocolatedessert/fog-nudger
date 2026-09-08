@@ -44,7 +44,6 @@
  */
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
-import type { LabelledSpace } from "./label";
 import { simplifyPolyline } from "./simplify";
 import { removeEdges, type WallGraph } from "./wallGraph";
 
@@ -140,23 +139,6 @@ function departure(graph: WallGraph, half: number): number {
   return Math.atan2(to.y - from.y, to.x - from.x);
 }
 
-/**
- * The pixel on the right of a step, which is the face this half-edge bounds.
- *
- * For an orthogonal step there is one candidate; for a diagonal there are two flanks and the cross
- * product picks the right-hand one. Offsets are always to an 8-neighbour of `from`, so the sample is
- * either inside the face or on the skeleton — never inside a different face.
- */
-function rightFlank(from: Vector2, to: Vector2): Vector2 {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const candidates: Vector2[] =
-    dx === 0 || dy === 0
-      ? [{ x: -dy, y: dx }, { x: dy, y: -dx }]
-      : [{ x: dx, y: 0 }, { x: 0, y: dy }];
-  const pick = candidates.find((option) => dx * option.y - dy * option.x > 0) ?? candidates[0]!;
-  return { x: from.x + pick.x, y: from.y + pick.y };
-}
 
 /**
  * Walk the graph into faces.
@@ -205,7 +187,48 @@ function enclosesNoLatticePoint(cycle: FaceCycle): boolean {
   return cycle.doubleArea === distinct - 2;
 }
 
-export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFaces {
+/** Every closed walk of the arrangement, and the ones that hold no map. */
+export interface CycleWalk {
+  readonly cycles: readonly FaceCycle[];
+  /**
+   * Cycles enclosing no lattice point — the sub-pixel faces a junction cluster leaves.
+   *
+   * Where thinning turns a T into a small Y, two chains run between the same pair of nodes and bound
+   * a triangle of half a pixel. They are real faces of the arrangement and hold no map, so they are
+   * removed from the graph rather than emitted.
+   */
+  readonly slivers: readonly FaceCycle[];
+}
+
+/**
+ * Walk the arrangement into closed cycles.
+ *
+ * ## What this used to be, and what went with it — 2026-09-08
+ *
+ * It was `buildFaces`, and it took a **raster labelling** as well as the graph. For each cycle it
+ * sampled the pixel one step to the right of every boundary step, used that to name the face, and
+ * then checked a lattice identity — the *area check* — that the polygon it had produced enclosed
+ * exactly the pixels the flood fill had attributed to that face.
+ *
+ * All of that is gone, and the reason is that faces stopped being made of pixels. The document is a
+ * planar graph; a planar graph partitions the plane by construction, so there is nothing to check
+ * about whether every part of the map is under a face. What the check uniquely covered was the
+ * **raster-to-graph conversion** — did the chain walk claim every skeleton pixel — and that is the
+ * orphan count, which is direct, cheap, and asserted on every run.
+ *
+ * > *"It feels to me like it is a left-over diagnostic that doesn't do anything now that we treat
+ * > the graph as the base truth, not a set of faces. Why are we counting pixels?"* — user, 2026-09-08
+ *
+ * **What the check was really doing was serving as a test oracle at runtime**, and that belongs in
+ * tests with known answers rather than in production: a stub, a lollipop, a freestanding line, shapes
+ * whose faces can be written down. `faces.test.ts` carries those now.
+ *
+ * The walk itself is untouched, deliberately. Sort the half-edges at each node by heading and leave
+ * by the entry *before* the one arrived along, so the face is on the right of every half-edge and an
+ * enclosing cycle comes out positive. Same convention as the frozen traversal, which is what lets the
+ * two produce the same partition from the same graph.
+ */
+export function walkCycles(graph: WallGraph): CycleWalk {
   const halfEdgeCount = graph.edges.length * 2;
 
   // Departing half-edges at each node, sorted by heading. The walk's only geometric decision.
@@ -227,8 +250,7 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
    * Before, not after — and the difference is invisible on any fixture whose nodes have only two
    * departing half-edges, which is every plain room. It shows up first at a junction: with the
    * successor rule a stub hanging into a room is walked as part of the *band outside* the room,
-   * because taking the far side of the fan crosses to the other face. Caught by the fixture with a
-   * bridge in it, and by the handedness samples disagreeing along the cycle it produced.
+   * because taking the far side of the fan crosses to the other face.
    */
   const next = (half: number): number => {
     const back = twin(half);
@@ -236,23 +258,15 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
     return list[(slotOf[back]! + list.length - 1) % list.length]!;
   };
 
-  const areaOf = (label: number): number =>
-    labelled.regions.find((region) => region.id === label)?.area ?? 0;
-
   const seen = new Uint8Array(halfEdgeCount);
-  const byLabel = new Map<number, FaceCycle[]>();
+  const cycles: FaceCycle[] = [];
   const slivers: FaceCycle[] = [];
-  let unlabelled = 0;
-  let unexplained = 0;
-  let disagreements = 0;
 
   for (let start = 0; start < halfEdgeCount; start++) {
     if (seen[start] === 1) continue;
 
     const points: Vector2[] = [];
     const halfEdges: number[] = [];
-    /** One representative sampled pixel per label seen to the right of this cycle. */
-    const samples = new Map<number, Vector2>();
     let half = start;
 
     do {
@@ -262,15 +276,6 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
       const chain = orientedPoints(graph, half);
       // The shared node belongs to one step only, however many half-edges meet at it.
       for (let i = points.length === 0 ? 0 : 1; i < chain.length; i++) points.push(chain[i]!);
-
-      for (let i = 1; i < chain.length; i++) {
-        const flank = rightFlank(chain[i - 1]!, chain[i]!);
-        if (flank.x < 0 || flank.y < 0 || flank.x >= labelled.width || flank.y >= labelled.height) {
-          continue;
-        }
-        const found = labelled.labels[flank.y * labelled.width + flank.x]!;
-        if (found !== 0 && !samples.has(found)) samples.set(found, flank);
-      }
 
       half = next(half);
     } while (half !== start);
@@ -290,124 +295,13 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
     }
 
     const cycle: FaceCycle = { points, halfEdges, doubleArea, steps: points.length };
-
-    /*
-      A sample one step to the right is *usually* inside the face this cycle bounds — but not
-      always, and the exception is what made the area check fail on a real map. Where thinning turns
-      a T into a small Y, two chains run between the same pair of nodes and enclose a **sub-pixel
-      face**: a triangle of half a pixel with no lattice point in it at all. Every sample around it
-      lands in the neighbouring face, so the sliver was silently absorbed into its neighbour and
-      corrupted that neighbour's accounting.
-
-      So the sample is verified rather than trusted: it must lie inside the cycle when the cycle
-      encloses, and outside it when the cycle is a hole. Exact, because a sampled pixel is never on
-      the boundary — the polygon's vertices are skeleton pixels and its steps are to 8-neighbours,
-      so no other lattice point can lie on one.
-    */
-    const shouldContain = doubleArea > 0;
-    let label = 0;
-    for (const [candidate, point] of samples) {
-      if (containsPoint(points, point) !== shouldContain) continue;
-      if (label === 0) label = candidate;
-      else if (label !== candidate) disagreements += 1;
-    }
-
-    if (label === 0) unlabelled += 1;
-    if (label === 0 && !enclosesNoLatticePoint(cycle)) {
-      /*
-        An enclosing cycle with no label and no explanation.
-
-        The sliver rule below is exact and does not need the labelling, so this branch is now only a
-        cross-check: a positive cycle should be unlabelled *because* it holds no lattice point, and
-        anything else means the sampling and the arithmetic disagree. Counted rather than silently
-        skipped; the one legitimately unlabelled cycle is the unbounded face outside the border
-        frame, which runs the other way and is negative.
-      */
-      if (doubleArea > 0) unexplained += 1;
-    }
-    if (enclosesNoLatticePoint(cycle)) {
-      slivers.push(cycle);
-      continue;
-    }
-    if (label === 0) continue;
-    const list = byLabel.get(label);
-    if (list) list.push(cycle);
-    else byLabel.set(label, [cycle]);
+    cycles.push(cycle);
+    if (enclosesNoLatticePoint(cycle)) slivers.push(cycle);
   }
 
-  const faces: GraphFace[] = [];
-  let exact = 0;
-  let ambiguous = 0;
-
-  for (const [label, cycles] of byLabel) {
-    const enclosing = cycles.filter((cycle) => cycle.doubleArea > 0);
-    if (enclosing.length !== 1) ambiguous += 1;
-
-    const ordered = [...cycles].sort((left, right) => right.doubleArea - left.doubleArea);
-    const doubleArea = ordered.reduce((total, cycle) => total + cycle.doubleArea, 0);
-    const steps = ordered.reduce((total, cycle) => total + cycle.steps, 0);
-    const interior = areaOf(label);
-    const expectedDoubleArea = 2 * interior + steps + 2 * (ordered.length - 1) - 2;
-    const holds = doubleArea === expectedDoubleArea;
-    if (holds) exact += 1;
-
-    faces.push({
-      label,
-      cycles: ordered,
-      doubleArea,
-      interior,
-      expectedDoubleArea,
-      exact: holds,
-    });
-  }
-
-  faces.sort((left, right) => right.doubleArea - left.doubleArea);
-
-  return {
-    faces,
-    slivers,
-    unlabelled,
-    unexplained,
-    disagreements,
-    exact,
-    checked: faces.length,
-    ambiguous,
-  };
+  return { cycles, slivers };
 }
 
-/**
- * Whether a lattice point lies strictly inside a closed lattice polygon.
- *
- * Plain crossing number. Safe without any on-boundary handling for the one thing it is asked here:
- * the polygon's vertices are skeleton pixels and consecutive ones are 8-neighbours, so no other
- * lattice point lies on an edge, and the points tested are never skeleton.
- */
-function containsPoint(polygon: readonly Vector2[], point: Vector2): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i]!;
-    const b = polygon[j]!;
-    if (a.y > point.y === b.y > point.y) continue;
-    const crossing = ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x;
-    if (point.x < crossing) inside = !inside;
-  }
-  return inside;
-}
-
-/** One line for the log, in the same shape as the old area check's. */
-export function describeAreaCheck(result: GraphFaces): string {
-  const head =
-    result.exact === result.checked
-      ? `area check exact across ${result.checked} faces`
-      : `area check FAILED on ${result.checked - result.exact} of ${result.checked} faces`;
-  const notes: string[] = [];
-  if (result.unlabelled !== 1) notes.push(`${result.unlabelled} unlabelled cycles`);
-  if (result.disagreements > 0) notes.push(`${result.disagreements} handedness disagreements`);
-  if (result.ambiguous > 0) notes.push(`${result.ambiguous} faces with no single outer ring`);
-  return notes.length === 0 ? head : `${head} — ${notes.join(", ")}`;
-}
-
-/** A fitted polyline: one edge of the graph, simplified. */
 export interface FittedEdge {
   readonly points: readonly Vector2[];
 }
@@ -587,9 +481,12 @@ const MAX_SLIVER_ROUNDS = 8;
 export interface ResolvedFaces {
   /** The graph after its sub-pixel slivers were removed. Use this one downstream, not the input. */
   readonly graph: WallGraph;
-  readonly faces: GraphFaces;
+  /** The walk of the cleaned graph, so a caller need not repeat it. */
+  readonly walk: CycleWalk;
   readonly sliversRemoved: number;
   readonly rounds: number;
+  /** Slivers still present when the round cap was reached. Expected to be zero. */
+  readonly sliversLeft: number;
 }
 
 /**
@@ -615,15 +512,15 @@ export interface ResolvedFaces {
  *
  * Iterated, because removing one sliver's edge can expose another.
  */
-export function resolveFaces(graph: WallGraph, labelled: LabelledSpace): ResolvedFaces {
+export function resolveFaces(graph: WallGraph): ResolvedFaces {
   let current = graph;
-  let faces = buildFaces(current, labelled);
+  let walk = walkCycles(current);
   let sliversRemoved = 0;
   let rounds = 0;
 
-  for (; rounds < MAX_SLIVER_ROUNDS && faces.slivers.length > 0; rounds += 1) {
+  for (; rounds < MAX_SLIVER_ROUNDS && walk.slivers.length > 0; rounds += 1) {
     const drop = new Set<number>();
-    for (const sliver of faces.slivers) {
+    for (const sliver of walk.slivers) {
       let chosen = -1;
       let already = false;
       for (const half of sliver.halfEdges) {
@@ -645,8 +542,8 @@ export function resolveFaces(graph: WallGraph, labelled: LabelledSpace): Resolve
     if (drop.size === 0) break;
     sliversRemoved += drop.size;
     current = removeEdges(current, drop);
-    faces = buildFaces(current, labelled);
+    walk = walkCycles(current);
   }
 
-  return { graph: current, faces, sliversRemoved, rounds };
+  return { graph: current, walk, sliversRemoved, rounds, sliversLeft: walk.slivers.length };
 }

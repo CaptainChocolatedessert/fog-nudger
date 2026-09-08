@@ -80,10 +80,13 @@ import { countInk } from "./trace/binarize";
 import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
-import { describeAreaCheck, type FittedEdge } from "./trace/faces";
+import type { FittedEdge } from "./trace/faces";
+import type { Frozen } from "./trace/frozenGraph";
+import type { FrozenFaces } from "./trace/frozenFaces";
 import type { WallGraph } from "./trace/wallGraph";
+import { describeFrozenFaces } from "./trace/frozenFaces";
+import { commandCount } from "./geometry/ring";
 import {
-  coveredArea,
   deriveGraphRegions,
   describeGraphRegions,
 } from "./trace/graphRegions";
@@ -525,23 +528,18 @@ export interface TraceRun {
   readonly mapId: string;
   readonly mapName: string;
   readonly dpi: number;
-  /**
-   * The raster the region rings are expressed in, in pixels.
-   *
-   * The map's own pixels unless §5's memory cap reduced them, in which case every ring is in the
-   * reduced raster together. Stated rather than left to be inferred: anything drawing these rings
-   * over the map needs the scale, and measuring it from the rings themselves would be a guess that
-   * happens to work because the outside region covers the map.
-   */
+  /** The raster the trace ran at, which is what the preview scales its rings by. */
   readonly raster: { readonly width: number; readonly height: number };
-  readonly regions: readonly TracedRegion[];
   /**
-   * Walls emitted as lines rather than as part of a shape's boundary — the bridge criterion (§4).
+   * The document this run would freeze, and the faces of it.
    *
-   * A stub hanging into a room is the common case: the traversal walks it out and back as a slit,
-   * which is right for the area check and wrong to emit, so the ring drops it and it comes out here.
+   * **What the trace produces is a graph, not a set of regions** (2026-09-08). It used to carry
+   * `regions` and `walls` derived from a raster labelling, and every consumer of those has moved onto
+   * the frozen traversal — the workspace draws it, the push emits it, and the escalation ladder
+   * measures the command cap against it. Carrying the freeze here means it happens once.
    */
-  readonly walls: readonly TracedWall[];
+  readonly frozen: Frozen;
+  readonly faces: FrozenFaces;
   /**
    * The cleaned graph and its fitted edges — what step G freezes.
    *
@@ -1310,27 +1308,23 @@ export async function runTrace(
     mapId,
   } = mask;
 
-  // ## From ink to faces, by way of the wall graph
+  // ## From ink to a frozen wall graph
   //
-  // Step D. The regions are the **faces of the skeleton's arrangement**, not the space between the
-  // strokes, so a face boundary is the wall's centreline: half-wall reveal is true by construction
-  // and a stub wall survives instead of being deleted for separating nothing.
-  //
-  // The labelling inside is still 4-connected space against 8-connected linework — the pairing that
-  // stops two rooms leaking into each other through a one-pixel diagonal — and it still supplies the
-  // area check. What it no longer supplies is geometry.
+  // Step D, as it stands after 2026-09-08. The regions are the faces of the graph's arrangement, and
+  // they are derived by walking the **frozen document** rather than by labelling the raster — so this
+  // stage produces a graph, not a set of regions. A face boundary is a wall's centreline, so
+  // half-wall reveal is true by construction and a stub wall survives instead of being deleted for
+  // separating nothing.
   const inkWidth = reading.inkWidth ?? pxPerSquare * 0.1;
 
   /*
     The tolerance is stored as a fraction of the map and used here in raster pixels.
 
-    **That is the whole of the re-denomination** (2026-09-06). It used to be a share of the measured
-    ink width, which the editor cannot know — it has no reading — so the two modes could not have
-    expressed one tolerance between them. A fraction of the map is a unit both can speak, and the
-    conversion is this one multiplication, because the raster is a linear sampling of the map.
-
-    The ink width is still measured and still reported beside the figure, because it is what a GM
-    judges a tolerance against. It just no longer *denominates* it.
+    It used to be a share of the measured ink width, which the editor cannot know — it has no reading
+    — so the two modes could not have expressed one tolerance between them. A fraction of the map is
+    a unit both can speak, and the conversion is this one multiplication, because the raster is a
+    linear sampling of the map. The ink width is still measured and still reported beside the figure,
+    because it is what a GM judges a tolerance against; it just no longer *denominates* it.
   */
   const tolerance = settings.trace.simplifyFraction * plan.width;
 
@@ -1340,10 +1334,8 @@ export async function runTrace(
   });
   const labelled = derived.labelled;
 
-  // Held for the point probe, which needs the partition as well as the mask and therefore cannot be
-  // served by the mask cache alone. The mask is the **ink**, so "is this ink?" still answers about
-  // the linework; the labelling is the graph's, so "which region?" answers about the faces that were
-  // actually emitted.
+  // Held for the point probe, which needs the labelling as well as the mask. The mask is the **ink**,
+  // so "is this ink?" still answers about the linework; the labelling answers "which region?".
   lastRun = {
     rawField,
     mask: inkMask,
@@ -1363,6 +1355,20 @@ export async function runTrace(
       `nodes, ${derived.graph.stats.orphans} orphaned pixels); ${derived.sliversRemoved} sub-pixel ` +
       `slivers deleted in ${derived.sliverRounds} rounds, ${derived.sliversLeft} left`,
   );
+
+  /*
+    ## The orphan count is the check that survived, and it is the one that still has a subject
+
+    A skeleton pixel no chain claimed is linework that exists in the ink and not in the graph: it is
+    ink, so it is not space, and no edge represents it, so it is not a wall. It has fallen out between
+    the two representations and nothing downstream can tell you it is missing.
+
+    **The area check and the handedness check used to sit here and are gone** (2026-09-08). They
+    compared the traversal against a *raster labelling* of the faces, which is a stage that no longer
+    exists — the document is a planar graph and partitions the plane by construction. What the area
+    check uniquely covered was this conversion, and this is the direct measurement of it. What it was
+    otherwise doing was serving as a test oracle at runtime, which is what `faces.test.ts` is for.
+  */
   if (derived.graph.stats.orphans > 0) {
     devLog(
       "warn",
@@ -1370,173 +1376,106 @@ export async function runTrace(
         `stepped over them, which loses linework without saying which. Expected to be zero.`,
     );
   }
-  if (derived.droppedCycles > 0) {
-    // Latent rather than observed: it needs a cycle of one or two skeleton pixels, which sliver
-    // removal should have taken. Warned about because the failure it guards was silent in both
-    // outputs at once — the edges were marked covered by a ring that did not exist, so they were
-    // emitted neither as a shape nor as a wall line.
-    devLog(
-      "warn",
-      `trace: ${derived.droppedCycles} cycles produced no usable ring. Their edges fall through to ` +
-        `the wall lines rather than vanishing, which is the safe direction, but a cycle this small ` +
-        `should have been removed as a sliver — read the sliver counts above.`,
-    );
-  }
   if (derived.sliversLeft > 0) {
-    // Reported rather than merely counted, because it is never harmless: a surviving sub-pixel face
-    // is emitted as a shape enclosing nothing, and the area check will have failed on its
-    // neighbours. Two ways to reach it — the round cap, or a sliver with no bounding edge free of
-    // interior pixels to delete — and the log cannot tell them apart, so it names both.
     devLog(
       "warn",
       `trace: ${derived.sliversLeft} sub-pixel faces could not be removed after ` +
         `${derived.sliverRounds} rounds — either the round cap was reached or none of their ` +
-        `bounding edges was free of interior pixels. They emit as shapes enclosing nothing; read ` +
-        `the area check below, which will have failed on the faces beside them.`,
+        `bounding edges was free of interior pixels. They emit as shapes enclosing nothing.`,
     );
   }
 
-  devLog(
-    "info",
-    `trace: ${describeGraphRegions(derived)}`,
-  );
+  devLog("info", `trace: ${describeGraphRegions(derived)}`);
 
-  // ## The area check
-  //
-  // Two stages compute the same quantity by unrelated routes and must agree exactly. Under the
-  // graph it is a lattice identity — area = interior points + steps / 2 + holes - 1 — where the
-  // interior count comes from the labelling, the step count from the traversal, and the area from
-  // the polygon. **Not** plain Pick's theorem, which under-counts a face containing a bridge.
-  devLog("info", `trace: ${describeAreaCheck(derived.faces)}`);
-  if (derived.faces.exact !== derived.faces.checked) {
+  /*
+    ## Euler's identity, which is what checks the traversal now
+
+    Vertices − walls + enclosing cycles = pieces of linework, the left side from geometry and the
+    right from a union-find. It catches a missed half-edge, a cycle partition that does not partition,
+    and a successor rule tracing the wrong way round. It does **not** catch a crossing; planarity is
+    the separate check.
+  */
+  if (!derived.faces.eulerHolds) {
     devLog(
       "error",
-      `trace: ${derived.faces.checked - derived.faces.exact} faces enclose a different area than ` +
-        `the labelling says they hold. The geometry does not describe the regions it claims to, ` +
+      `trace: ${describeFrozenFaces(derived.faces)}. The traversal of the graph is not coherent, ` +
         `and nothing downstream of this is worth reading.`,
     );
   }
-  if (derived.faces.disagreements > 0) {
-    devLog(
-      "error",
-      `trace: ${derived.faces.disagreements} half-edges disagreed about which face they bound. One ` +
-        `step to the right of a half-edge is either the face or the skeleton, never another face, ` +
-        `so this means the traversal took a wrong turn at a junction.`,
-    );
-  }
-  if (derived.faces.unlabelled !== 1) {
-    devLog(
-      "warn",
-      `trace: ${derived.faces.unlabelled} cycles had no interior at all. Exactly one is expected — ` +
-        `the unbounded face outside the border frame — so anything else is a degenerate sliver.`,
-    );
-  }
 
-  // ## Bridges — walls no face boundary covers
-  //
-  // An edge with the same face on both sides. Step E emits these as lines; nothing here does, so
-  // for now they are reported rather than drawn. A map with none has no free-standing linework at
-  // all, which on a hand-drawn dungeon would itself be worth a second look.
-  const wallPoints = derived.uncoveredEdges.reduce((total, edge) => total + edge.points.length, 0);
+  const walls = derived.faces.walls.length;
   devLog(
     "info",
-    `trace: ${derived.bridges} of ${derived.graph.edges.length} edges are bridges — the same face ` +
-      `on both sides, so no ring can cover them. With everything else no ring walks, that is ` +
-      `${derived.uncoveredEdges.length} walls in ${Math.max(0, wallPoints - derived.uncoveredEdges.length)} ` +
-      `segments, emitted as LINE items the way Dynamic Fog's own wall mode builds one.`,
-  );
-
-  // ## What the trace's own faces cover — and they are NOT what goes on the map
-  //
-  // The faces tile the framed raster, so their total is very nearly the whole of it — short only by
-  // the half-pixel each boundary runs inside the wall.
-  //
-  // **Every figure on this line describes the derivation rather than the scene** (corrected
-  // 2026-09-07). Since 2026-09-06 both the preview and the push walk the *frozen* graph, so
-  // `derived.regions` is no longer emitted by anything — and this line said "emitted shapes" and
-  // "were dropped" about a set that is neither emitted nor dropped. A diagnostic asserting a removal
-  // that does not happen is precisely the trap this project keeps paying for, so the wording names
-  // whose faces these are and says plainly that nothing acts on the count.
-  //
-  // **The empty-face filter below it is retired in the same sense.** It still runs here, because the
-  // trace still builds its own region list for the dry run; what it decides reaches no scene. A face
-  // enclosing nothing is emitted in both modes now, which is a stated cost of the frozen traversal
-  // having no pixel counts to test.
-  const coveredPixels = coveredArea(derived.regions);
-  const rasterArea = plan.width * plan.height;
-  devLog(
-    "info",
-    `trace: the trace's own faces cover ${((coveredPixels / rasterArea) * 100).toFixed(1)}% of the ` +
-      `raster (against ${(chosenCoverage * 100).toFixed(1)}% ink); ${derived.discarded} of them ` +
-      `hold no map at all and ${derived.filledHoles} holes enclosed nothing. **Counted, not acted ` +
-      `on** — what reaches the scene is the frozen graph's faces, which drop neither.`,
+    `trace: ${derived.faces.bridges} of ${derived.frozen.graph.edges.length} segments are bridges ` +
+      `— the same face on both sides, so no ring can cover them. With everything else no ring ` +
+      `walks, that is ${walls} wall segments, emitted as LINE items the way Dynamic Fog's own wall ` +
+      `mode builds one.`,
   );
 
   // ## Simplification
   //
   // **Per edge, not per ring** — two faces sharing a wall are assembled from the same fitted points,
-  // so they cannot drift apart and open a sliver between rooms. Escalation is therefore global: when
-  // anything exceeds the command cap the tolerance rises for the whole map, because a region
-  // escalated on its own would stop matching its neighbours along their shared walls.
-  const totalVertices = derived.regions.reduce((total, region) => total + region.vertices, 0);
-  const totalCommands = derived.regions.reduce((total, region) => total + region.commands, 0);
-  const preserved = derived.regions.reduce((total, region) => total + region.preservedRings, 0);
-  const overCap = derived.regions.filter((region) => region.overCap);
+  // so they cannot drift apart and open a sliver between rooms. Escalation is therefore global, and
+  // it is measured against the **frozen** faces, which is what a push actually writes.
+  const totalCommands = derived.faces.faces.reduce(
+    (total, face) => total + commandCount(face.rings),
+    0,
+  );
+  const totalVertices = derived.frozen.graph.nodes.length;
 
   devLog(
     "info",
-    `trace: simplified to ${totalVertices} vertices in ${totalCommands} commands at ` +
+    `trace: simplified to ${totalVertices} points in ${totalCommands} commands at ` +
       `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyFraction.toExponential(2)} of ` +
       `the map, ${(derived.tolerance / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink ` +
-      `width, escalated ${derived.escalations} times for the whole map); ${preserved} rings kept ` +
-      `unfitted because fitting would have collapsed them`,
+      `width, escalated ${derived.escalations} times for the whole map); ` +
+      `${derived.frozen.collinear} points dropped as exactly collinear, which costs nothing; ` +
+      `${derived.frozen.duplicates} segments dropped as coincident and ` +
+      `${derived.frozen.zeroLength} as having no length`,
   );
-  /*
-    The half-ink-width warning was here and is **retired** (user, 2026-09-06).
 
-    It said a tolerance past half an ink width had left the bound the region-first pipeline could
-    prove. That bound stopped meaning anything when the graph pivot made both faces of a shared wall
-    move together — there is no sliver between rooms to open — and the user has now removed the cap
-    the warning guarded: *"it's ok to allow simplification over a half-ink-width. The user will be
-    looking at the consequences."* Which is the point: the graph is drawn, so this is visible, and a
-    warning is not a safeguard.
-  */
-
-  const heaviest = [...derived.regions].sort((a, b) => b.commands - a.commands).slice(0, 5);
-  if (heaviest.length > 0) {
+  if (derived.frozen.duplicates > 0) {
     devLog(
-      "info",
-      `trace: heaviest items — ` +
-        heaviest
-          .map((region) => `#${region.id} ${region.commands} cmds / ${region.rings.length} rings`)
-          .join(", "),
+      "warn",
+      `trace: ${derived.frozen.duplicates} segments lay exactly on one already stored and were ` +
+        `dropped. Each is a room the map has and the document does not — smoothing has fitted both ` +
+        `walls of a very thin room to the same line. Lower the simplification to keep it.`,
     );
   }
 
-  if (overCap.length > 0) {
+  if (derived.overCap > 0) {
     devLog(
       "warn",
-      `trace: ${overCap.length} regions still exceed the ${COMMAND_CAP}-command cap at ` +
-        `the ceiling tolerance and could not be emitted as they stand. Splitting them is not the ` +
-        `remedy — the join becomes a wall across a room — so this is either far noisier ink than ` +
-        `expected or a region that has merged into something enormous.`,
+      `trace: ${derived.overCap} faces still exceed the ${COMMAND_CAP}-command cap at the ceiling ` +
+        `tolerance and cannot be emitted as they stand. Splitting them is not the remedy — the join ` +
+        `becomes a wall across a room — so this is either far noisier ink than expected or a region ` +
+        `that has merged into something enormous.`,
     );
   }
 
   // ## World placement
   //
   // The last stage before anything could be seen, and the one nothing pure can fully check. The
-  // arithmetic is testable and is; that raster (0,0) is the world box's minimum corner is a claim
-  // about Owlbear's conventions, and a flip or a transpose would satisfy every number below.
-  const placed = placeRegions(derived.regions, placement);
+  // arithmetic is testable and is; that the raster's origin is the world box's minimum corner is a
+  // claim about Owlbear's conventions, and a flip or a transpose would satisfy every number below.
+  //
+  // **Placed from the FROZEN faces at a 1x1 raster**, which is what the emit path does — a frozen
+  // graph is stored in fractions of the map, so a one-by-one raster *is* fraction space and the
+  // ordinary placement puts a fraction where it belongs. Before 2026-09-08 this placed the trace's
+  // own regions, which were a second answer to the question the frozen faces already answer.
+  const worldPlacement = createPlacement(bounds, 1, 1);
+  const placed = placeRegions(
+    derived.faces.faces.map((face, index) => ({ id: index, rings: face.rings })),
+    worldPlacement,
+  );
   const filled = placedBounds(placed);
 
   if (!filled) {
-    devLog("warn", "trace: nothing to place — no region survived with any geometry");
+    devLog("warn", "trace: nothing to place — no face survived with any geometry");
   } else {
-    // A scale error is the failure this *can* catch. The outside normally runs to all four edges of
-    // the raster, so the placed geometry should fill the map's own box; a box a fraction of the
-    // map's, or larger than it, means the transform is wrong by a factor.
+    // A scale error is the failure this *can* catch. The outermost linework normally runs close to
+    // the edges of the map, so the placed geometry should very nearly fill the map's own box; a box a
+    // fraction of the map's, or larger than it, means the transform is wrong by a factor.
     const slackX = Math.max(
       Math.abs(filled.min.x - bounds.min.x),
       Math.abs(filled.max.x - bounds.max.x),
@@ -1547,17 +1486,15 @@ export async function runTrace(
     );
     devLog(
       "info",
-      `trace: placed ${placed.length} regions filling world ` +
+      `trace: placed ${placed.length} faces filling world ` +
         `(${filled.min.x.toFixed(1)}, ${filled.min.y.toFixed(1)}) to ` +
         `(${filled.max.x.toFixed(1)}, ${filled.max.y.toFixed(1)}); the map's own box is short by ` +
-        `${slackX.toFixed(1)} x ${slackY.toFixed(1)} world units, which is ` +
-        `${(slackX / placement.unitsPerPixelX).toFixed(1)} x ` +
-        `${(slackY / placement.unitsPerPixelY).toFixed(1)} raster pixels`,
+        `${slackX.toFixed(1)} x ${slackY.toFixed(1)} world units`,
     );
 
     // The one diagnostic that can catch a flip without emitting anything, because it is checkable
-    // against the map the GM is looking at. Deliberately stated as a share of the map rather than in
-    // world units — this project has already had world units read as image pixels once.
+    // against the map the GM is looking at. Stated as a share of the map rather than in world units —
+    // this project has already had world units read as image pixels once.
     const namedRegions = placed.slice(0, 5).map((region) => {
       const centre = fractionWithin(bounds, boundsCentre(region.bounds));
       const acrossSquares = (region.bounds.max.x - region.bounds.min.x) / (dpi || 1);
@@ -1570,7 +1507,7 @@ export async function runTrace(
     });
     devLog(
       "info",
-      `trace: where the largest regions landed — ${namedRegions.join("; ")}. ` +
+      `trace: where the largest faces landed — ${namedRegions.join("; ")}. ` +
         `Check these against the map by eye: a mirrored or transposed placement fills the same box ` +
         `and disagrees only about which region is where.`,
     );
@@ -1578,41 +1515,12 @@ export async function runTrace(
 
   const elapsed = Math.round(performance.now() - started);
   // The explicit statement that nothing was written. A run that worked and a run that silently
-  // failed to reach this point look identical without it. Now that geometry reaches world
-  // coordinates the wording has to be exact: it was placed, and placing is not emitting.
+  // failed to reach this point look identical without it.
   devLog(
     "info",
     `trace: complete in ${elapsed}ms — geometry placed in world coordinates, nothing written to ` +
       `the scene`,
   );
-
-  // Zipped back together by id here rather than carried through every stage. Each stage answers one
-  // question about a region and should not be threading the others' answers along beside it.
-  const squaresById = new Map(
-    labelled.regions.map((region) => [
-      region.id,
-      pxPerSquare > 0 ? region.area / pxPerSquare ** 2 : 0,
-    ]),
-  );
-  // The uncovered edges, carried into world coordinates by the same placement the regions used.
-  // One transform, applied twice, rather than two that have to agree.
-  const walls: TracedWall[] = derived.uncoveredEdges.map((edge, index) => ({
-    edge: index,
-    points: edge.points,
-    placed: edge.points.map((point) => toWorldPoint(placement, point.x, point.y)),
-  }));
-
-  const regions: TracedRegion[] = derived.regions.map((region, index) => ({
-    id: region.id,
-    placed: placed[index]!,
-    rings: region.rings,
-    squares: squaresById.get(region.id) ?? 0,
-    commands: region.commands,
-    // One tolerance for the whole map now, since fitting is per edge and two faces sharing a wall
-    // have to be fitted the same way.
-    tolerance: derived.tolerance,
-    overCap: region.overCap,
-  }));
 
   const summary =
     `"${mapName}" ${plan.width}x${plan.height}` +
@@ -1620,9 +1528,9 @@ export async function runTrace(
     `, ${reading.polarity}${reading.confident ? "" : "?"}` +
     `, ${(chosenCoverage * 100).toFixed(1)}% ink` +
     (reading.inkWidth === null ? "" : ` ~${reading.inkWidth.toFixed(1)}px wide`) +
-    `, ${derived.regions.length} regions` +
-    `, ${totalVertices} vertices in ${totalCommands} commands` +
-    (overCap.length > 0 ? ` (${overCap.length} OVER CAP)` : "") +
+    `, ${derived.faces.faces.length} faces` +
+    `, ${totalVertices} points in ${totalCommands} commands` +
+    (derived.overCap > 0 ? ` (${derived.overCap} OVER CAP)` : "") +
     `, ${elapsed}ms`;
 
   return {
@@ -1632,10 +1540,10 @@ export async function runTrace(
       mapName,
       dpi,
       raster: { width: plan.width, height: plan.height },
-      regions,
-      walls,
       graph: derived.graph,
       fittedEdges: derived.fittedEdges,
+      frozen: derived.frozen,
+      faces: derived.faces,
       summary,
     },
   };

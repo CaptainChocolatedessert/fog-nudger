@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { emptyMask, type BinaryMask } from "./binarize";
 import { deriveGraphRegions } from "./graphRegions";
+import { findCrossings } from "./planarGraph";
 
 /**
  * A randomised sweep of the whole graph derivation, and the reason it exists.
@@ -93,82 +94,82 @@ describe("the graph derivation over generated linework", () => {
           maxTolerance: 0,
         });
 
-        // The area check. If this fails nothing downstream is real, which is why it is first.
-        expect(result.faces.exact, `area check, ${where}`).toBe(result.faces.checked);
+        /*
+          **Every skeleton pixel must reach the graph**, and this is the check that survived.
 
-        // One step to the right of a half-edge is either its own face or the skeleton, never a
-        // different face. A disagreement means the traversal turned the wrong way at a junction.
-        expect(result.faces.disagreements, `handedness, ${where}`).toBe(0);
+          An orphan is a skeleton pixel no chain claimed: it is ink, so it is not space, and no edge
+          represents it, so it is not a wall. It has fallen out between the two representations and
+          nothing downstream can say it is missing. It is also the signature of a real defect — a
+          pixel with four neighbours in two contiguous runs reads as an ordinary path pixel to the
+          crossing number, so the walk passes through and strands the branch it did not take.
 
-        // Every skeleton pixel has to reach the graph. One that does not is neither inside a face
-        // nor on any boundary, and the identity comes up short by exactly it.
+          **The area check and the handedness check were here and are gone** (2026-09-08). Both
+          compared the traversal against a raster labelling of the faces, and that stage no longer
+          exists: the document is a planar graph and partitions the plane by construction. This one
+          keeps its subject exactly, because the ink mode still reads a map and chains it.
+        */
         expect(result.graph.stats.orphans, `orphans, ${where}`).toBe(0);
 
         /*
-          Exactly one cycle has no interior: the unbounded face outside the border frame.
+          Exactly one cycle encloses no lattice point... is NOT what this asserts, deliberately.
 
-          Anything else is a sliver whose every bounding edge carries interior pixels, which sliver
-          removal cannot take — lifting such an edge would strand those pixels, which is worse. The
-          record has named that state since step D and called it never observed. It *was* observed on
-          2026-09-06, by sweeping the raster spur prune, and it is unreachable again now that pruning
-          does not touch the raster. This is the assertion that would say so if that changed.
+          Sliver removal deletes those, and it is allowed to fail to: a sliver whose every bounding
+          edge carries interior pixels cannot be taken, because lifting one would strand those pixels.
+          What must hold is that it *settled* — nothing left that another round could have removed.
         */
-        expect(result.faces.unlabelled, `unlabelled cycles, ${where}`).toBe(1);
+        expect(result.sliversLeft, `slivers left, ${where}`).toBe(0);
 
         /*
-          The two sliver rules must agree, which is what makes it safe to delete the older one.
+          Euler's identity over the frozen document: V − E + enclosing cycles = pieces of linework.
 
-          Sliver detection became a **lattice** property on 2026-09-08 — a cycle enclosing no lattice
-          point, computed from integer coordinates — where it used to be "the sampling found no
-          label". `unexplained` counts positive cycles the labelling could not name that the lattice
-          rule does not call slivers, and it must be zero: a positive cycle is unlabelled precisely
-          when there is no pixel inside it to find.
+          The left side comes from geometry and the sign of each cycle's area, the right from a
+          union-find over the same edges — independent enough to catch a missed half-edge, a cycle
+          partition that does not partition, and a successor rule tracing the wrong way round. That
+          last fails as soon as there are two rooms, because tracing interiors on the left leaves
+          exactly one positive cycle however many rooms there are.
 
-          **It was not zero on the first attempt**, and that is why it is asserted rather than
-          assumed. The rule counted boundary points as *steps*, which double-counts a slit walked out
-          and back, so cycles at `doubleArea 2, steps 8, four points revisited` scored I = −2 and
-          escaped. Pick's plain form needs distinct points; the area check's bridged form needs steps.
+          It does **not** catch a crossing; planarity is the separate check below.
         */
-        expect(result.faces.unexplained, `unexplained cycles, ${where}`).toBe(0);
+        expect(result.faces.eulerHolds, `Euler, ${where}`).toBe(true);
 
         /*
-          The emitted rings must enclose exactly what the face does.
+          And the embedding a traversal has to be meaningful over.
 
-          Bridges are dropped from the rings — a slit encloses no area, so the total cannot move.
-          This is the invariant that catches a ring left *discontinuous* by that drop, which the
-          area check upstream cannot see: it runs on the traversal, before anything is dropped.
+          Euler is satisfied by two walls crossing at a point that is a node of neither, so this is
+          not implied by the assertion above. The derivation should never produce one — chains meet
+          only at nodes — which is exactly why it is worth asserting rather than assuming.
         */
-        const byLabel = new Map(result.faces.faces.map((face) => [face.label, face.doubleArea]));
-        for (const region of result.regions) {
-          let doubled = 0;
-          for (const ring of region.rings) {
-            /*
-              Unfitted, every step of an emitted ring is to an 8-neighbour — the ring is a walk along
-              the skeleton, and a walk cannot teleport.
+        expect(findCrossings(result.frozen.graph), `planarity, ${where}`).toHaveLength(0);
 
-              This is the assertion that names the symptom rather than its consequence. When taking
-              the bridges out of a cycle was done as a linear skip, a lollipop's stalk left the ring
-              jumping from the stalk's base straight to the room on the end of it: a single segment
-              across the map, and long stretches of wall missing from the outline. The area
-              assertion below caught it too, but only as a number.
-            */
-            for (let i = 0; i < ring.length; i++) {
-              const a = ring[i]!;
-              const b = ring[(i + 1) % ring.length]!;
-              const step = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-              expect(step, `ring of face ${region.id} steps ${step}, ${where}`).toBeLessThanOrEqual(1);
-            }
+        /*
+          Every face's rings close, and every ring is a real polygon.
 
-            for (let i = 0; i < ring.length; i++) {
-              const a = ring[i]!;
-              const b = ring[(i + 1) % ring.length]!;
-              doubled += a.x * b.y - b.x * a.y;
-            }
+          The cheapest statement of "the walk produced geometry rather than fragments", and the one
+          that would catch a ring left discontinuous when the bridges were removed — the lollipop
+          defect, whose symptom was a boundary jumping across the map to an unrelated vertex.
+        */
+        for (const face of result.faces.faces) {
+          for (const ring of face.rings) {
+            expect(ring.length, `ring size, ${where}`).toBeGreaterThanOrEqual(3);
           }
-          expect(doubled, `rings of face ${region.id} enclose the face, ${where}`).toBe(
-            byLabel.get(region.id),
-          );
         }
+
+        /*
+          Nothing vanishes: every segment is either covered by a ring or emitted as a wall line.
+
+          The invariant that stops linework disappearing from both outputs at once, which is the
+          failure mode a picture cannot show — the region looks right and a wall is simply absent.
+        */
+        const covered = new Set<number>();
+        for (const face of result.faces.faces) {
+          for (const cycle of face.cycles) {
+            for (const half of cycle.halfEdges) covered.add(half >> 1);
+          }
+        }
+        for (const wall of result.faces.walls) covered.add(wall);
+        expect(covered.size, `every segment accounted for, ${where}`).toBe(
+          result.frozen.graph.edges.length - result.faces.zeroLength,
+        );
       }
       });
   }

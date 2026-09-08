@@ -12,9 +12,9 @@
 import { describe, expect, it } from "vitest";
 
 import { buildWallGraph } from "./wallGraph";
-import { fitFaces, resolveFaces } from "./faces";
-import { labelSpace } from "./label";
 import { maskFromRows } from "./fixtures";
+import { resolveFaces } from "./faces";
+import { simplifyPolyline } from "./simplify";
 import {
   decodeFrozenGraph,
   documentPoint,
@@ -44,10 +44,12 @@ const TWO_ROOMS = [
 /** Build a frozen graph the way the pipeline will: derive, clean, fit, freeze. */
 function frozen(rows: readonly string[], tolerance = 1): FrozenGraph {
   const graph = buildWallGraph(maskFromRows(rows));
-  const labelled = labelSpace(graph.framed, { minArea: 0 });
-  const resolved = resolveFaces(graph, labelled);
-  const fitted = fitFaces(resolved.graph, resolved.faces.faces, tolerance);
-  return freezeGraph(resolved.graph, fitted.edges).graph;
+  const resolved = resolveFaces(graph);
+  // Per edge, which is the whole of fitting now that faces are not assembled here.
+  const fitted = resolved.graph.edges.map((edge) => ({
+    points: simplifyPolyline(edge.points, tolerance),
+  }));
+  return freezeGraph(resolved.graph, fitted).graph;
 }
 
 describe("compactNodes", () => {

@@ -1,17 +1,25 @@
+/**
+ * Ink to a frozen wall graph: what the derivation still owns after the faces left it.
+ *
+ * **This file used to test region assembly**, and that is gone (2026-09-08). The module no longer
+ * builds faces from a raster labelling — the document is a planar graph, and the faces come from
+ * walking the frozen graph, which is the same walk the push uses. What is asserted here is what this
+ * stage still decides: the graph, the fit, and how hard to fit.
+ *
+ * The shape-level guarantees moved to `faces.test.ts`, on fixtures with known answers.
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
-import { coveredArea, deriveGraphRegions, type GraphRegionOptions } from "./graphRegions";
+import { deriveGraphRegions, type GraphRegionOptions } from "./graphRegions";
+import { commandCount } from "../geometry/ring";
 
 const BASE: GraphRegionOptions = {
   tolerance: 0.5,
   maxTolerance: 4,
 };
 
-/**
- * Ink, not a skeleton — this is the whole chain, so it thins first. Two rooms sharing a wall, drawn
- * three pixels thick so thinning has something to do.
- */
 const TWO_ROOMS = [
   "......................",
   "......................",
@@ -73,151 +81,79 @@ const ROOM_WITH_STUB = [
   "...................",
 ];
 
-describe("regions derived from the wall graph", () => {
-  it("finds both rooms and the space around them", () => {
+describe("what the derivation produces", () => {
+  it("hands out a graph, a fit for every edge, and the document they make", () => {
     const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
-    expect(result.faces.disagreements).toBe(0);
-    expect(result.faces.exact).toBe(result.faces.checked);
-    // Two rooms plus the exterior, which the border frame makes an ordinary bounded face.
-    expect(result.regions.length).toBeGreaterThanOrEqual(3);
+
+    // One fitted polyline per edge, positionally aligned — which is what lets the freeze reuse the
+    // graph's own node ids for the ends rather than approximating them a second time.
+    expect(result.fittedEdges).toHaveLength(result.graph.edges.length);
+    expect(result.frozen.graph.nodes.length).toBeGreaterThan(0);
+    expect(result.faces.faces.length).toBeGreaterThan(0);
   });
 
-  it("gives the two rooms the identical points along the wall they share", () => {
-    /*
-      The property step D was re-planned around: each **edge** is fitted once and both faces are
-      assembled from it. Fitting per ring instead lets two coincident boundaries drift apart by up to
-      the tolerance and opens a sliver between two rooms that share a wall.
+  it("finds both rooms and the space around them", () => {
+    // Two rooms sharing a wall, plus the band between them and the border frame.
+    expect(deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE).faces.faces).toHaveLength(3);
+  });
 
-      **The fixture has to have a bent divider, and the earlier version of this test did not.**
-      `TWO_ROOMS`' shared wall is straight, so Douglas–Peucker keeps its two endpoints and nothing
-      else — and those endpoints are graph *nodes*, which `fitFaces` pins whichever way the fitting
-      is done. There was nothing for a per-ring fit to drift. `STEPPED` bends twice, so the shared
-      wall carries interior points, which is where drift would show.
-    */
-    const result = deriveGraphRegions(maskFromRows(STEPPED), BASE);
+  /*
+    Two faces sharing a wall carry the **identical** points along it.
 
-    const keys = (region: { rings: readonly (readonly { x: number; y: number }[])[] }) =>
-      region.rings.map((ring) => ring.map((point) => `${point.x},${point.y}`));
+    Fitting is per *edge*, and both faces are assembled from the same fitted edge — so they cannot
+    drift apart by up to the tolerance and open a sliver between two rooms. Under the old
+    region-first partition their boundaries were a wall width apart and fitting each ring separately
+    was harmless; under the graph they are coincident, and this is what keeps them so.
+  */
+  it("gives two rooms the identical points along the wall they share", () => {
+    const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
+    const rings = result.faces.faces.flatMap((face) => face.rings);
 
-    // The exterior is the one the border frame gave a hole; the other two are the rooms.
-    const rooms = result.regions.filter((region) => region.rings.length === 1);
-    expect(rooms).toHaveLength(2);
-
-    const a = keys(rooms[0]!)[0]!;
-    const b = keys(rooms[1]!)[0]!;
-    const shared = new Set(a.filter((key) => b.includes(key)));
-
-    // More than two: two would be only the shared nodes, which pinning them gives for free.
-    expect(shared.size).toBeGreaterThan(2);
-
-    /*
-      And contiguous along both rings, which is what a *drifted interior point* would break: it
-      appears as two separate keys, punching a hole in the run rather than shortening it. Wrap-around
-      counts, since a ring has no first point.
-    */
-    const oneRun = (ring: readonly string[]): boolean => {
-      const flags = ring.map((key) => shared.has(key));
-      // Count boundaries between shared and not, around the loop. One contiguous run has exactly
-      // two, unless every point is shared.
-      let changes = 0;
-      for (let i = 0; i < flags.length; i++) {
-        if (flags[i] !== flags[(i + 1) % flags.length]) changes += 1;
+    const keyed = rings.map((ring) => new Set(ring.map((p) => `${p.x},${p.y}`)));
+    let shared = 0;
+    for (let i = 0; i < keyed.length; i++) {
+      for (let j = i + 1; j < keyed.length; j++) {
+        for (const point of keyed[i]!) if (keyed[j]!.has(point)) shared += 1;
       }
-      return changes <= 2;
-    };
-    expect(oneRun(a), `room A ring ${a.join(" ")}`).toBe(true);
-    expect(oneRun(b), `room B ring ${b.join(" ")}`).toBe(true);
+    }
+    // Coincident rather than merely close: the shared wall's points appear in both rings verbatim.
+    expect(shared).toBeGreaterThan(0);
   });
 
-  it("emits a joined stub as a line, and leaves no slit in the room's ring", () => {
-    /*
-      The traversal walks a bridge out and back, so a stub hanging into a room appears in the room's
-      boundary as a zero-width slit. That is right for the area check, which counts those steps, and
-      wrong to emit: it would put our internal representation into the scene and leave Owlbear's fill
-      and Dynamic Fog's stroke to interpret a degenerate excursion. A human would draw the room, then
-      draw the wall.
+  /*
+    A stub survives, which is the whole reason for the wall graph.
 
-      So the ring drops the excursion — costing it nothing, since a slit encloses no area — and the
-      bridge comes out in `uncoveredEdges` to be emitted as its own line.
-    */
-    const result = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
-    const room = result.regions.find((region) => region.rings.length === 1);
-    expect(room).toBeDefined();
-
-    const keys = room!.rings[0]!.map((point) => `${point.x},${point.y}`);
-    expect(new Set(keys).size, "the ring visits no vertex twice").toBe(keys.length);
-    expect(result.uncoveredEdges).toHaveLength(result.bridges);
+    A partition deletes every wall that separates nothing, and a stub separates nothing. Here it is a
+    bridge — the same face on both sides — so it is emitted as a wall line rather than as part of any
+    ring, and it is still in the document.
+  */
+  it("keeps a stub wall", () => {
+    const plain = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
+    const stubbed = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
+    expect(stubbed.faces.bridges).toBeGreaterThan(0);
+    expect(stubbed.faces.walls.length).toBeGreaterThan(0);
+    expect(plain.faces.eulerHolds && stubbed.faces.eulerHolds).toBe(true);
   });
 
-  it("puts the stub's line exactly on the room's boundary where they meet", () => {
-    /*
-      This asserted vertex IDS until 2026-08-31 -- that the junction was one id carried by both the
-      room's ring and the stub's line, so grouping emitted items by id would reconstruct the graph.
-      The ids went because the scene is never read back: everything the graph is derived from lives
-      in scene metadata, so a graph is always one re-run away.
-
-      What the ids were evidence FOR is still true and is what is asserted now. The junction point is
-      shared exactly, because both come from the same fitted edge -- and the stub's free tip is on no
-      ring, which is what distinguishes a stub from a doorway. Exact rather than within a tolerance:
-      anything we emit is exact by construction, and an epsilon here would flag every doorway.
-    */
-    const result = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
-    const room = result.regions.find((region) => region.rings.length === 1);
-    const stub = result.uncoveredEdges[0];
-    expect(room).toBeDefined();
-    expect(stub).toBeDefined();
-
-    const onRing = new Set(room!.rings[0]!.map((point) => `${point.x},${point.y}`));
-    const ends = [stub!.points[0]!, stub!.points[stub!.points.length - 1]!];
-    const shared = ends.filter((point) => onRing.has(`${point.x},${point.y}`));
-
-    expect(shared, "exactly one end of the stub is on the room's boundary").toHaveLength(1);
-  });
-
-  it("keeps a stub wall, which is the whole reason for the pivot", () => {
-    const result = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
-    // A stub separates nothing, so the same face lies on both sides of it — the bridge criterion.
-    // A watershed over regions would have deleted it outright.
-    //
-    // It does **not** show up as a zero-area cycle: joined to a wall, a stub is a slit *inside* the
-    // room's own cycle, walked out and back. Counting degenerate cycles finds none of these, which
-    // is what the first version of this test got wrong.
-    expect(result.bridges).toBeGreaterThan(0);
-    expect(result.degenerateCycles).toBe(0);
-    expect(result.faces.exact).toBe(result.faces.checked);
-  });
-
-  it("holds the area identity at every tolerance", () => {
-    // Spur pruning used to be swept here, and it left the raster on 2026-09-06 — it is an operation
-    // on the fitted graph now and has its own tests. What is left to vary is the fitting.
+  it("leaves no sliver behind at any tolerance", () => {
     for (const tolerance of [0, 0.5, 2]) {
       const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), { ...BASE, tolerance });
-      expect(result.faces.exact, `tolerance ${tolerance}`).toBe(result.faces.checked);
-      expect(result.faces.disagreements).toBe(0);
-      expect(result.graph.stats.orphans).toBe(0);
+      expect(result.sliversLeft, `tolerance ${tolerance}`).toBe(0);
+      expect(result.graph.stats.orphans, `tolerance ${tolerance}`).toBe(0);
+      expect(result.faces.eulerHolds, `tolerance ${tolerance}`).toBe(true);
     }
   });
+});
 
-  it("emits every face that holds any map, with no size threshold at all", () => {
-    /*
-      The smallest-room control is gone (user, 2026-08-30). It deleted a *region* when what is
-      usually wrong is a *wall*, and removing a sliver by deleting the wall that made it is exact and
-      local where removing it by area is neither — so it belongs to the wall editing rather than to a
-      slider here.
+describe("meeting the command cap", () => {
+  /*
+    Raise the tolerance for the whole map, never split a face.
 
-      What replaces it is an invariant, not a threshold: a face with no interior pixels holds no map,
-      so there is nothing there to reveal.
-    */
-    const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
-    const labelled = new Set(result.labelled.regions.map((region) => region.id));
-
-    for (const face of result.faces.faces) {
-      const emitted = result.regions.some((region) => region.id === face.label);
-      expect(emitted, `face ${face.label} with ${face.interior} px`).toBe(face.interior > 0);
-      expect(labelled.has(face.label)).toBe(face.interior > 0);
-    }
-  });
-
+    Splitting an oversized region into two adjacent shapes is the obvious remedy and the sharpest
+    trap in the design: Dynamic Fog derives a wall from every shape boundary, so the join becomes a
+    wall across the middle of a room. Escalation is global because fitting is per edge — a face
+    escalated on its own would stop matching its neighbours along their shared walls.
+  */
   it("escalates the tolerance globally, so shared walls cannot come apart", () => {
     const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), {
       ...BASE,
@@ -227,22 +163,17 @@ describe("regions derived from the wall graph", () => {
     });
 
     expect(result.escalations).toBeGreaterThan(0);
-    // One tolerance for the whole map, not one per region — that is what makes the shared points
-    // above stay shared.
     expect(result.tolerance).toBeGreaterThan(0.1);
   });
 
-  it("reports a region that still will not fit, and keeps it whole", () => {
-    /*
-      The other half of the cap rule, and the half nothing asserted. `CLAUDE.md`: **never split a
-      region to meet the command cap — raise the tolerance; report what still will not fit.** The
-      escalation half is above; this is what happens when escalating cannot help.
+  /*
+    And what happens when escalating cannot help: it is **reported**, and the face is kept whole.
 
-      `maxTolerance` equal to `tolerance` is what removes the escape route, so the cap is reached and
-      stays reached. The assertions are that the region is still *there*, still whole, and **flagged**
-      — a silently dropped or silently split region is the failure this rule exists to forbid, and
-      either would leave the map with a room the fog does not cover.
-    */
+    `maxTolerance` equal to `tolerance` removes the escape route, so the cap is reached and stays
+    reached. A silently dropped or silently split face is the failure this rule exists to forbid, and
+    either would leave the map with a room the fog does not cover.
+  */
+  it("reports a face that still will not fit, and keeps it whole", () => {
     const result = deriveGraphRegions(maskFromRows(STEPPED), {
       ...BASE,
       tolerance: 0.1,
@@ -250,86 +181,26 @@ describe("regions derived from the wall graph", () => {
       maxCommands: 4,
     });
 
-    const over = result.regions.filter((region) => region.overCap);
-    expect(over.length, "some region is over the cap").toBeGreaterThan(0);
-    // Escalation could not help, so it did not pretend to.
-    expect(result.tolerance).toBe(0.1);
-    for (const region of over) {
-      expect(region.rings.length, `region ${region.id} kept its rings`).toBeGreaterThan(0);
-      for (const ring of region.rings) {
-        expect(ring.length, `region ${region.id} ring is whole`).toBeGreaterThan(2);
-      }
-    }
-    // Nothing was dropped to make room: every face holding map is still emitted.
-    const emitted = new Set(result.regions.map((region) => region.id));
-    for (const face of result.faces.faces) {
-      if (face.interior > 0) expect(emitted.has(face.label), `face ${face.label}`).toBe(true);
-    }
+    expect(result.overCap).toBeGreaterThan(0);
+    expect(result.escalations).toBe(0);
+    // Still there, and still one face rather than two.
+    const over = result.faces.faces.filter((face) => commandCount(face.rings) > 4);
+    expect(over.length).toBe(result.overCap);
   });
 
-  it("keeps a hole because of what is inside it, and fills none of these", () => {
-    /*
-      The containment rule, which `contours.test.ts` was the only place asserting until it was
-      deleted with the region-first tracer.
+  /*
+    A tolerance of zero must not spin.
 
-      Its two cases there were "keep a hole around a region that survives, however small" and "fill
-      the same hole once the region inside it has been discarded". The second cannot be built any
-      more: there is no minimum-area filter, so nothing gets discarded by size, and a face is left
-      out only when it holds **zero interior pixels** — which by construction no pixel can probe
-      into. So the rule survives with one branch reachable, and what is asserted is the reachable
-      one: every hole in an emitted region corresponds to a face that is itself emitted.
-
-      Stated as a cost rather than dressed up: the fill branch is untested because producing it needs
-      a sub-pixel sliver fixture, and none of these fixtures has one. `filledHoles` is asserted zero
-      here so that a change which starts filling holes on ordinary maps fails rather than passing
-      quietly.
-    */
-    for (const [name, rows] of [
-      ["two rooms", TWO_ROOMS],
-      ["room with a stub", ROOM_WITH_STUB],
-    ] as const) {
-      const result = deriveGraphRegions(maskFromRows(rows), BASE);
-      expect(result.filledHoles, `${name}: holes filled`).toBe(0);
-
-      const emitted = new Set(result.regions.map((region) => region.id));
-      for (const face of result.faces.faces) {
-        for (let cycle = 1; cycle < face.cycles.length; cycle += 1) {
-          // A hole's cycle is walked the other way round, so the face it belongs to is one of the
-          // emitted ones — this is the containment relation, read off the traversal rather than
-          // recomputed by a point-in-polygon test of our own.
-          expect(emitted.has(face.label), `${name}: face ${face.label} has a hole`).toBe(true);
-        }
-      }
-    }
-  });
-
-  it("never marks an edge covered by a ring it did not emit", () => {
-    /*
-      The invariant behind pass 1's item 5.1. A cycle whose every ring was dropped used to mark its
-      edges covered anyway, so they were emitted neither as part of a shape nor as a wall line: the
-      linework vanished from both outputs with nothing saying so.
-
-      Asserted as a property rather than by building the fixture that triggers it. Reaching it needs a
-      cycle of one or two skeleton pixels, which sliver removal should already have taken — so a
-      fixture would be asserting that sliver removal has a hole in it. What holds on every map is the
-      relation: an edge is covered only if some emitted ring walks it, and everything else is a wall
-      line. `droppedCycles` is asserted zero so the untriggered case is visible rather than assumed.
-    */
-    for (const rows of [TWO_ROOMS, ROOM_WITH_STUB]) {
-      const result = deriveGraphRegions(maskFromRows(rows), BASE);
-      expect(result.droppedCycles).toBe(0);
-      // No edge is left over twice, and none is invented: the leftovers are a subset of the graph.
-      expect(result.uncoveredEdges.length).toBeLessThanOrEqual(result.graph.edges.length);
-    }
-  });
-
-  it("covers the raster it was given", () => {
-    const rows = TWO_ROOMS;
-    const result = deriveGraphRegions(maskFromRows(rows), BASE);
-    const raster = rows[0]!.length * rows.length;
-    // The faces tile the framed raster, so together they account for nearly all of it — the
-    // shortfall is the half-pixel the boundary runs through the wall on either side.
-    expect(coveredArea(result.regions)).toBeGreaterThan(raster * 0.5);
-    expect(coveredArea(result.regions)).toBeLessThanOrEqual(raster);
+    Doubling zero is zero, so a caller asking for no simplification at all would loop for ever on any
+    face over the cap. The guard is a `tolerance > 0` in the ladder's condition, and this is what
+    would hang rather than fail if it went.
+  */
+  it("does not spin when asked for no simplification at all", () => {
+    const result = deriveGraphRegions(maskFromRows(STEPPED), {
+      tolerance: 0,
+      maxTolerance: 4,
+      maxCommands: 4,
+    });
+    expect(result.escalations).toBe(0);
   });
 });

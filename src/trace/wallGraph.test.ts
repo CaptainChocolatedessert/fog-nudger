@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
-import { buildFaces } from "./faces";
-import { labelSpace } from "./label";
+import { resolveFaces, walkCycles } from "./faces";
 import { buildWallGraph, frameSkeleton, type WallGraph } from "./wallGraph";
 
 /**
@@ -127,9 +126,26 @@ describe("the border frame", () => {
     // Without it the outer face is unbounded and has no polygon at all. With it, an empty raster is
     // one ring around one interior.
     const graph = graphOf([".....", ".....", ".....", ".....", "....."]);
-    const faces = buildFaces(graph, labelSpace(graph.framed, { minArea: 0 }));
-    expect(faces.faces).toHaveLength(1);
-    expect(faces.faces[0]!.interior).toBe(9);
+    /*
+      Cleaned first, because a raw frame is not one clean ring.
+
+      It fragments at its own corners — the pixel beside a corner touches the pixel on the adjoining
+      side diagonally, so it reads as a junction — and each cluster leaves sub-pixel cycles behind.
+      Sliver removal takes those; what is left is one cycle enclosing area and one facing outward.
+    */
+    const walk = walkCycles(resolveFaces(graph).graph);
+    const enclosing = walk.cycles.filter((cycle) => cycle.doubleArea > 0);
+    expect(enclosing).toHaveLength(1);
+    /*
+      Sixteen, doubled, and the number is worth stating carefully.
+
+      The boundary is the frame's own **centreline**, so the polygon runs through the border pixels
+      rather than around the space between them: on a 5x5 raster that is the square from (0,0) to
+      (4,4), area 16. The nine interior pixels are what a raster labelling would have counted, and
+      the two are different quantities — which is exactly the conflation the area check used to
+      reconcile and which nothing needs to reconcile now.
+    */
+    expect(enclosing[0]!.doubleArea).toBe(32);
   });
 
   it("fragments at its own corners, which is the cost of counting neighbours", () => {
