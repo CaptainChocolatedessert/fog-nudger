@@ -947,9 +947,30 @@ tool. The differences that matter:
   `DRAWING` false is what stops a staged proposal leaking the layout to players, and staging still
   sets it false. Only promotion sets it true.
 
-  **What this corrects in §3.** "Everything is hidden by default; shapes on the `FOG` layer are the
-  revealable regions" describes what a scene looks like when the shapes are cleared ones. A fog
-  shape at `visible: true` **is** the fog. Space in no shape is not fogged at all.
+  **What this does NOT correct is §3, and the claim that it did was itself wrong — withdrawn
+  2026-09-07 (user).** This note used to read: *"Everything is hidden by default; shapes on the `FOG`
+  layer are the revealable regions" describes what a scene looks like when the shapes are cleared
+  ones. A fog shape at `visible: true` is the fog. Space in no shape is not fogged at all.* The last
+  sentence is backwards, and §3 was right all along.
+
+  **The model, stated once and correctly.** Everything is fogged by default. A shape we emit **is
+  also fogged at the start** — it is not a hole — but it is the region Owlbear will let a GM
+  *reveal*. Space in no shape is fogged **and unrevealable**, permanently. So §3's "shapes on the
+  `FOG` layer are the revealable regions" is exactly right, and "space in no shape can never be
+  shown" is exactly right.
+
+  **One exception, and it belongs to Dynamic Fog rather than to Owlbear.** A light still reveals
+  unshaped space, because DF's own assumption is that everything is fogged and lights reveal. So
+  "unrevealable" means unrevealable by Owlbear's own fog tools; a DF light does not care whether we
+  emitted a shape there.
+
+  **How the error happened is worth keeping, because the shape of it recurs.** The `visible`
+  finding was real and is above: a fog item at `visible: false` comes back *cleared*, and setting it
+  true is what makes an emitted room behave as fog. From that true observation a second claim was
+  inferred — that a shape must therefore *be* the fog and bare space must not be — and never
+  measured. A conclusion outrunning its evidence, in the one place the record is most consulted. It
+  then misled a session on 2026-09-07 into telling the user that dropping the exterior shape would
+  leave the outside permanently visible, when it does the opposite.
 - **`fillRule: "evenodd"`, deliberately unlike Owlbear's `nonzero`.** Under even-odd an inner ring
   cuts a hole regardless of winding, so winding direction never has to be got right. Dynamic Fog
   maps anything that is not `"nonzero"` onto Skia's even-odd, so the two ends agree. **This retires
