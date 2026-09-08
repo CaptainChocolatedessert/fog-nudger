@@ -17,6 +17,7 @@ import {
   longestRun,
   nodeDegrees,
   pruneFrozenGraph,
+  spurEdgesToPrune,
   wallRunEdges,
   wallRuns,
   type FrozenGraph,
@@ -157,6 +158,44 @@ describe("pruneFrozenGraph", () => {
       [2, 7],
     ],
   );
+
+  /*
+    What the editor draws in red, and the rule is narrower than "the ends of the doomed walls".
+
+    A stub meets the wall it hangs off at a junction, and that junction keeps its other walls — so
+    pruning leaves it exactly where it is. Marking it would be the preview claiming more than the
+    button takes, on the one control whose whole problem is that a budget is impossible to picture.
+  */
+  it("marks the vertices that go, and not the junction that stays", () => {
+    const going = spurEdgesToPrune(wallWithBoth, 0.15);
+
+    // The spur is nodes 2-5-6 off the junction at 2. Its own two vertices go; node 2 does not.
+    expect([...going.vertices].sort((a, b) => a - b)).toEqual([5, 6]);
+    expect(going.vertices.has(2)).toBe(false);
+    expect(going.edges.size).toBe(2);
+
+    // And the operation agrees: the survivors are exactly the vertices not marked.
+    const pruned = pruneFrozenGraph(wallWithBoth, 0.15);
+    expect(pruned.graph.nodes).toHaveLength(wallWithBoth.nodes.length - going.vertices.size);
+  });
+
+  it("takes both ends of a wall that touches nothing", () => {
+    const adrift = graphOf(
+      [
+        [0.4, 0.4],
+        [0.45, 0.4],
+      ],
+      [[0, 1]],
+    );
+    const going = spurEdgesToPrune(adrift, 0.2);
+    expect([...going.vertices].sort((a, b) => a - b)).toEqual([0, 1]);
+  });
+
+  it("marks nothing when the budget is off", () => {
+    const going = spurEdgesToPrune(wallWithBoth, 0);
+    expect(going.edges.size).toBe(0);
+    expect(going.vertices.size).toBe(0);
+  });
 
   it("leaves the graph alone at a budget of zero", () => {
     const result = pruneFrozenGraph(wallWithBoth, 0);

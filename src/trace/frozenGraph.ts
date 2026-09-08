@@ -430,6 +430,16 @@ export function pruneFrozenGraph(graph: FrozenGraph, budget: number): FrozenPrun
 export interface DoomedSpurs {
   /** Indices into `graph.edges`. */
   readonly edges: ReadonlySet<number>;
+  /**
+   * Vertices that would go with them — the ones **every** wall of which is doomed.
+   *
+   * Not simply the endpoints of the doomed edges, and the difference is the whole point. A spur meets
+   * the wall it hangs off at a junction, and that junction keeps its other walls, so pruning leaves it
+   * exactly where it is. Marking it as going would be the preview lying about the one thing it is
+   * for. Pruning drops a vertex by *compaction* — no surviving edge refers to it — which is precisely
+   * this condition.
+   */
+  readonly vertices: ReadonlySet<number>;
   /** Whole wall runs those segments make up. */
   readonly runs: number;
   /** Total length, in map fractions. */
@@ -458,7 +468,13 @@ export interface DoomedSpurs {
  * the slider.
  */
 export function spurEdgesToPrune(graph: FrozenGraph, budget: number): DoomedSpurs {
-  const empty = { edges: new Set<number>(), runs: 0, length: 0, rounds: 0 };
+  const empty = {
+    edges: new Set<number>(),
+    vertices: new Set<number>(),
+    runs: 0,
+    length: 0,
+    rounds: 0,
+  };
   if (!(budget > 0)) return empty;
 
   const runs = walkRuns(graph);
@@ -474,7 +490,31 @@ export function spurEdgesToPrune(graph: FrozenGraph, budget: number): DoomedSpur
   for (const index of decision.removed) {
     for (const edge of runs[index]!.edges) edges.add(edge);
   }
-  return { edges, runs: decision.removed.size, length: decision.length, rounds: decision.rounds };
+
+  // A vertex goes when nothing that survives still names it, which is what the compaction at the end
+  // of `pruneFrozenGraph` decides. Counted from the surviving edges rather than the doomed ones, so
+  // a junction shared with a wall that stays is never marked.
+  const kept = new Set<number>();
+  for (let index = 0; index < graph.edges.length; index++) {
+    if (edges.has(index)) continue;
+    const edge = graph.edges[index]!;
+    kept.add(edge.a);
+    kept.add(edge.b);
+  }
+  const vertices = new Set<number>();
+  for (const index of edges) {
+    const edge = graph.edges[index]!;
+    if (!kept.has(edge.a)) vertices.add(edge.a);
+    if (!kept.has(edge.b)) vertices.add(edge.b);
+  }
+
+  return {
+    edges,
+    vertices,
+    runs: decision.removed.size,
+    length: decision.length,
+    rounds: decision.rounds,
+  };
 }
 
 /**

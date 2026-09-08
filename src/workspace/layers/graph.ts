@@ -34,7 +34,12 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { nodeDegrees, spurEdgesToPrune, type FrozenGraph } from "../../trace/frozenGraph";
+import {
+  nodeDegrees,
+  spurEdgesToPrune,
+  type DoomedSpurs,
+  type FrozenGraph,
+} from "../../trace/frozenGraph";
 import { addPainter, type Painter } from "../shell";
 import { inEditor } from "../mode";
 import { previewGraph } from "../regions";
@@ -137,22 +142,28 @@ function graphOnCanvas(): FrozenGraph | null {
  * waste sixty times a second. Keyed on the graph object and the budget, both of which are replaced
  * rather than mutated when they change.
  */
-let doomedFor: { graph: FrozenGraph; budget: number; edges: ReadonlySet<number> } | null = null;
+let doomedFor: { graph: FrozenGraph; budget: number; doomed: DoomedSpurs } | null = null;
 
-function doomedEdges(graph: FrozenGraph): ReadonlySet<number> {
+function doomed(graph: FrozenGraph): DoomedSpurs {
   // Only in the editor, and only for the editor's own budget. The ink mode re-derives its graph from
   // the reading with the budget already applied, so there is nothing pending there to mark.
-  if (!inEditor()) return EMPTY;
+  if (!inEditor()) return NOTHING_DOOMED;
   const budget = currentSettings().trace.spurPruneFraction;
-  if (!(budget > 0)) return EMPTY;
+  if (!(budget > 0)) return NOTHING_DOOMED;
 
-  if (doomedFor && doomedFor.graph === graph && doomedFor.budget === budget) return doomedFor.edges;
-  const edges = spurEdgesToPrune(graph, budget).edges;
-  doomedFor = { graph, budget, edges };
-  return edges;
+  if (doomedFor && doomedFor.graph === graph && doomedFor.budget === budget) return doomedFor.doomed;
+  const found = spurEdgesToPrune(graph, budget);
+  doomedFor = { graph, budget, doomed: found };
+  return found;
 }
 
-const EMPTY: ReadonlySet<number> = new Set<number>();
+const NOTHING_DOOMED: DoomedSpurs = {
+  edges: new Set<number>(),
+  vertices: new Set<number>(),
+  runs: 0,
+  length: 0,
+  rounds: 0,
+};
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const graph = graphOnCanvas();
@@ -203,10 +214,10 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     Drawn **over** the ordinary walls and under everything interactive, so a doomed wall reads as a
     wall that has been marked rather than as a different kind of thing.
   */
-  const doomed = doomedEdges(graph);
-  if (doomed.size > 0) {
+  const going = doomed(graph);
+  if (going.edges.size > 0) {
     context.beginPath();
-    for (const index of doomed) {
+    for (const index of going.edges) {
       const edge = graph.edges[index];
       const from = edge ? at(edge.a) : undefined;
       const to = edge ? at(edge.b) : undefined;
@@ -282,7 +293,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     step pans — and the record's rule is that a handle which moves nothing is a lie about what is
     present. The walls themselves are the whole of what that step has to show.
   */
-  if (inEditor()) paintHandles(context, graph, x, y, at);
+  if (inEditor()) paintHandles(context, graph, x, y, at, going.vertices);
   context.restore();
 };
 
@@ -305,6 +316,18 @@ function paintHandles(
   x: (fraction: number) => number,
   y: (fraction: number) => number,
   at: (id: number) => Vector2 | undefined,
+  /**
+   * Vertices pruning would take, drawn red like the walls they belong to.
+   *
+   * A stub is short, so a red *line* a few pixels long is easy to miss against the linework it sits
+   * on (room, 2026-09-07). Its handles are the part that reads at a glance, and they are already
+   * drawn — so marking them costs nothing and is what makes the preview legible at map zoom.
+   *
+   * **Only vertices that actually go.** The junction where a stub meets the wall it hangs off keeps
+   * its other walls and stays exactly where it is; `spurEdgesToPrune` decides that by the same rule
+   * the compaction does, so the mark cannot claim more than the button takes.
+   */
+  doomedVertices: ReadonlySet<number>,
 ): void {
   const degree = degrees(graph);
   const width = context.canvas.width;
@@ -347,7 +370,14 @@ function paintHandles(
     const py = y(node.y);
     if (!onScreen(px, py)) continue;
     const grabbable = id === hover;
-    dot(px, py, grabbable ? HOVER_RADIUS : HANDLE_RADIUS, HANDLE_FILL, HANDLE_RIM);
+    const going = doomedVertices.has(id);
+    dot(
+      px,
+      py,
+      grabbable ? HOVER_RADIUS : HANDLE_RADIUS,
+      going ? DOOMED_COLOUR : HANDLE_FILL,
+      going ? DOOMED_COLOUR : HANDLE_RIM,
+    );
   }
 
   if (dragged !== null) {
