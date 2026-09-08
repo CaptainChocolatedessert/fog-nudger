@@ -116,6 +116,22 @@ describe("the graph derivation over generated linework", () => {
         expect(result.faces.unlabelled, `unlabelled cycles, ${where}`).toBe(1);
 
         /*
+          The two sliver rules must agree, which is what makes it safe to delete the older one.
+
+          Sliver detection became a **lattice** property on 2026-09-08 — a cycle enclosing no lattice
+          point, computed from integer coordinates — where it used to be "the sampling found no
+          label". `unexplained` counts positive cycles the labelling could not name that the lattice
+          rule does not call slivers, and it must be zero: a positive cycle is unlabelled precisely
+          when there is no pixel inside it to find.
+
+          **It was not zero on the first attempt**, and that is why it is asserted rather than
+          assumed. The rule counted boundary points as *steps*, which double-counts a slit walked out
+          and back, so cycles at `doubleArea 2, steps 8, four points revisited` scored I = −2 and
+          escaped. Pick's plain form needs distinct points; the area check's bridged form needs steps.
+        */
+        expect(result.faces.unexplained, `unexplained cycles, ${where}`).toBe(0);
+
+        /*
           The emitted rings must enclose exactly what the face does.
 
           Bridges are dropped from the rings — a slit encloses no area, so the total cannot move.

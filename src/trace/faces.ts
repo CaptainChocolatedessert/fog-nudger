@@ -91,6 +91,17 @@ export interface GraphFaces {
    */
   readonly unlabelled: number;
   /**
+   * Enclosing cycles the labelling could not name that the lattice rule does not call slivers.
+   *
+   * **Expected to be zero, and it is a cross-check rather than a state with a meaning.** Sliver
+   * detection is a lattice property now — a cycle holds no lattice point, computed from integer
+   * coordinates — where it used to be "the sampling found no label". The two should agree exactly:
+   * a positive cycle is unlabelled precisely when there is no pixel inside it to find. Anything here
+   * means the sample and the arithmetic disagree, which is worth hearing before the labelling is
+   * removed altogether.
+   */
+  readonly unexplained: number;
+  /**
    * Right-hand samples along one cycle that disagreed about which face they were in.
    *
    * Must be zero. One step to the right of a half-edge is either the face or a skeleton pixel, never
@@ -154,6 +165,46 @@ function rightFlank(from: Vector2, to: Vector2): Vector2 {
  * belongs downstream, and filtering here would leave the identity comparing against a pixel count
  * that had holes punched in it.
  */
+/**
+ * Whether a cycle encloses no lattice point at all — the definition of a sub-pixel sliver.
+ *
+ * ## The rule, and why it needs no labelling
+ *
+ * A junction cluster leaves faces that are real faces of the arrangement and hold no map: where
+ * thinning turns a T into a small Y, two chains run between the same pair of nodes and bound a
+ * triangle of half a pixel. Until 2026-09-08 those were found by *asking the labelling* — a positive
+ * cycle that no sample could name — which made sliver removal depend on a flood fill of the raster.
+ *
+ * They can be found from the geometry alone. Pick's theorem, rearranged: for a lattice polygon,
+ * **I = A − B/2 + 1**. Every step of one of these cycles is to an 8-neighbour, so no lattice point
+ * lies strictly inside a step and every boundary lattice point is a vertex of the walk. In the
+ * doubled integers this walk already carries, a cycle holds no interior lattice point exactly when
+ *
+ * > **doubled area = B − 2**
+ *
+ * Exact integer arithmetic, no tolerance, no raster.
+ *
+ * ## B is DISTINCT points, and using the step count instead is wrong — measured, 2026-09-08
+ *
+ * The first version of this used `steps`, on the reasoning that each step contributes one boundary
+ * point. That is false wherever a cycle walks a **slit**: a bridge is walked out and back, so its
+ * pixels are visited twice and the step count exceeds the number of distinct boundary points. The
+ * sweep caught it immediately — cycles with `doubleArea 2, steps 8, four points revisited`, which the
+ * formula scored as I = −2 and therefore refused to call slivers, where the truth is I = 0.
+ *
+ * **This is the same correction the area check already documents**, running the other way. That
+ * identity uses the *step* count deliberately, because it is the bridged form (A = I + S/2 + h − 1)
+ * and counting a slit pixel twice is exactly what it needs. Pick's plain form needs distinct points
+ * and a simple polygon. Two identities, two boundary counts, and swapping them is silent.
+ *
+ * A negative cycle is a hole rather than a face and is never a sliver, so the sign is tested first.
+ */
+function enclosesNoLatticePoint(cycle: FaceCycle): boolean {
+  if (cycle.doubleArea <= 0) return false;
+  const distinct = new Set(cycle.points.map((point) => `${point.x},${point.y}`)).size;
+  return cycle.doubleArea === distinct - 2;
+}
+
 export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFaces {
   const halfEdgeCount = graph.edges.length * 2;
 
@@ -192,6 +243,7 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
   const byLabel = new Map<number, FaceCycle[]>();
   const slivers: FaceCycle[] = [];
   let unlabelled = 0;
+  let unexplained = 0;
   let disagreements = 0;
 
   for (let start = 0; start < halfEdgeCount; start++) {
@@ -260,15 +312,24 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
       else if (label !== candidate) disagreements += 1;
     }
 
-    if (label === 0) {
-      unlabelled += 1;
-      // An enclosing cycle that belongs to no labelled face is a sliver: a face of the arrangement
-      // holding no space on the map. Reported so the caller can remove it from the graph; the one
-      // legitimately unlabelled cycle, the unbounded face outside the border frame, runs the other
-      // way and is negative.
-      if (doubleArea > 0) slivers.push(cycle);
+    if (label === 0) unlabelled += 1;
+    if (label === 0 && !enclosesNoLatticePoint(cycle)) {
+      /*
+        An enclosing cycle with no label and no explanation.
+
+        The sliver rule below is exact and does not need the labelling, so this branch is now only a
+        cross-check: a positive cycle should be unlabelled *because* it holds no lattice point, and
+        anything else means the sampling and the arithmetic disagree. Counted rather than silently
+        skipped; the one legitimately unlabelled cycle is the unbounded face outside the border
+        frame, which runs the other way and is negative.
+      */
+      if (doubleArea > 0) unexplained += 1;
+    }
+    if (enclosesNoLatticePoint(cycle)) {
+      slivers.push(cycle);
       continue;
     }
+    if (label === 0) continue;
     const list = byLabel.get(label);
     if (list) list.push(cycle);
     else byLabel.set(label, [cycle]);
@@ -306,6 +367,7 @@ export function buildFaces(graph: WallGraph, labelled: LabelledSpace): GraphFace
     faces,
     slivers,
     unlabelled,
+    unexplained,
     disagreements,
     exact,
     checked: faces.length,
