@@ -63,7 +63,7 @@ import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { refreshHints, setControlsLive } from "./workspace/settingRows";
 import { registerWallEdit } from "./workspace/wallEdit";
 import { renderWallTools } from "./workspace/wallTools";
-import { renderFreezeAction } from "./workspace/freezeAction";
+import { renderSaveAction } from "./workspace/saveAction";
 import { onStageChange } from "./workspace/stage";
 import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
 import { inEditor } from "./workspace/mode";
@@ -227,7 +227,7 @@ registerStepContent("ink", renderSwatches);
   the registration for the other one costs a map entry nobody reads — which is cheaper than a branch
   here that has to be kept in step with `steps.ts`.
 */
-registerStepContent("walls", renderFreezeAction, "bottom");
+registerStepContent("walls", renderSaveAction, "bottom");
 // What you do with the walls, above the button that writes them.
 registerStepContent("edit", renderWallTools);
 /*

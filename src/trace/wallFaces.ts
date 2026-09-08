@@ -1,11 +1,11 @@
 /**
- * Faces of the frozen graph — the partition stage two draws and emits, derived from the document
+ * Faces of the wall graph — the partition stage two draws and emits, derived from the document
  * alone.
  *
  * Stage one derives its faces from the skeleton *and* a raster labelling of the space between the
  * strokes: sampling the pixel one step to the right of each boundary step names the face, separates
  * an outer ring from a hole, and resolves nesting, all from one lookup. Stage two has no raster —
- * the freeze is the point where the pixels stop being needed — so every one of those three jobs has
+ * building the wall graph is the point where the pixels stop being needed — so every one of those three jobs has
  * to be done from the geometry.
  *
  * The walk itself is unchanged, and deliberately so: sort the walls meeting at each vertex by
@@ -42,7 +42,7 @@
  *
  * ## The arithmetic check, and what it does not catch
  *
- * The area check does not survive the freeze — it is a lattice identity over pixel counts and step
+ * The area check does not survive the derivation — it is a lattice identity over pixel counts and step
  * counts, and fitted geometry has neither. What stage two can check is Euler's identity:
  *
  * > **V − E + (enclosing cycles) = (pieces of linework)**
@@ -65,8 +65,8 @@
  * dropped: a sliver in stage two is the GM's, possibly on purpose, and it is counted rather than
  * prevented. The stated cost is that a sliver stage one refused to emit becomes one stage two emits.
  *
- * There is no simplification either. The frozen graph *is* the fitted geometry — that is why the
- * freeze sits after fitting — so a ring is its nodes and nothing is approximated a second time.
+ * There is no simplification either. The wall graph *is* the fitted geometry — that is why the
+ * derive sits after fitting — so a ring is its nodes and nothing is approximated a second time.
  *
  * Pure: no DOM, no SDK.
  */
@@ -74,10 +74,10 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { MIN_RING_POINTS, type Ring } from "../geometry/ring";
-import type { FrozenGraph } from "./frozenGraph";
+import type { WallGraph } from "./wallGraph";
 
 /** One closed walk of half-edges. A face's outer ring is one; each of its holes is another. */
-export interface FrozenCycle {
+export interface WallCycle {
   /** Half-edge ids in walk order. Edge `e` has half-edges `2e` (a→b) and `2e+1` (b→a). */
   readonly halfEdges: readonly number[];
   /** The origin of each half-edge, closing implicitly. Map fractions. */
@@ -86,7 +86,7 @@ export interface FrozenCycle {
   readonly doubleArea: number;
 }
 
-export interface FrozenFace {
+export interface WallFace {
   /**
    * Outer ring first, then holes, with the bridges taken out.
    *
@@ -96,14 +96,14 @@ export interface FrozenFace {
    */
   readonly rings: readonly Ring[];
   /** The cycles the rings came from, outer first. Kept for the area and for hit-testing. */
-  readonly cycles: readonly FrozenCycle[];
+  readonly cycles: readonly WallCycle[];
   /** Doubled signed area, summed over the cycles. Holes are negative, so this is the net. */
   readonly doubleArea: number;
 }
 
-export interface FrozenFaces {
+export interface WallFaces {
   /** Bounded faces, largest first. The unbounded face has no polygon and is not among them. */
-  readonly faces: readonly FrozenFace[];
+  readonly faces: readonly WallFace[];
   /**
    * Edges no emitted ring covers — the walls that need a line of their own.
    *
@@ -155,13 +155,13 @@ export interface FrozenFaces {
 const twin = (half: number): number => half ^ 1;
 
 /**
- * Walk the frozen graph into faces.
+ * Walk the wall graph into faces.
  *
  * Everything here is O(E) or O(E log d) except the containment pass, which is the number of pieces
  * of linework times the number of rooms and is pre-filtered by bounding box. On a real map that is a
  * few hundred against a few dozen, which is nothing beside the traversal.
  */
-export function buildFrozenFaces(graph: FrozenGraph): FrozenFaces {
+export function buildWallFaces(graph: WallGraph): WallFaces {
   const nodes = graph.nodes;
 
   /*
@@ -242,7 +242,7 @@ export function buildFrozenFaces(graph: FrozenGraph): FrozenFaces {
     walks.push({ halfEdges, points });
   }
 
-  const cycles: FrozenCycle[] = walks.map((walk, index) => {
+  const cycles: WallCycle[] = walks.map((walk, index) => {
     let doubleArea = 0;
     for (const half of walk.halfEdges) {
       // A half-edge whose twin is in this same cycle is one side of a slit. Its term and its twin's
@@ -347,7 +347,7 @@ export function buildFrozenFaces(graph: FrozenGraph): FrozenFaces {
   const covered = new Uint8Array(edges.length);
   let droppedRings = 0;
 
-  const faces: FrozenFace[] = faceCycles.map((list) => {
+  const faces: WallFace[] = faceCycles.map((list) => {
     const rings: Ring[] = [];
     for (const index of list) {
       for (const loop of decomposeRings(cycles[index]!, bridgeEdges, originNode, targetNode)) {
@@ -405,8 +405,8 @@ export function buildFrozenFaces(graph: FrozenGraph): FrozenFaces {
  * pair of vertices is a line across the map that looks like a decision somebody made.
  */
 export function wallSegments(
-  graph: FrozenGraph,
-  faces: FrozenFaces,
+  graph: WallGraph,
+  faces: WallFaces,
 ): readonly (readonly [Vector2, Vector2])[] {
   const out: (readonly [Vector2, Vector2])[] = [];
   for (const index of faces.walls) {
@@ -435,7 +435,7 @@ export function wallSegments(
  * finds closed loops and nothing else.
  */
 function decomposeRings(
-  cycle: FrozenCycle,
+  cycle: WallCycle,
   bridgeEdges: Uint8Array,
   originNode: (half: number) => number,
   targetNode: (half: number) => number,
@@ -513,7 +513,7 @@ function containsPoint(polygon: readonly Vector2[], point: Vector2): boolean {
 }
 
 /** One line for the log, in the same shape as stage one's area check. */
-export function describeFrozenFaces(result: FrozenFaces): string {
+export function describeWallFaces(result: WallFaces): string {
   const head = result.eulerHolds
     ? `${result.faces.length} faces from ${result.edges} walls, Euler holds`
     : `${result.faces.length} faces from ${result.edges} walls — EULER FAILED ` +

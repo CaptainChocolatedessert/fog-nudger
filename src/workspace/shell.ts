@@ -112,7 +112,7 @@ let leaving = false;
  * These were one flag until the close started waiting for the push. Waiting wants the sheet to stay
  * *alive* while the write runs — repainting, resizing, showing a status line — and wants the work
  * cycles stopped. One flag could not express both: with it set, `frameLoop` returns and the canvas
- * holds its last frame, so the sheet would sit there frozen for the seconds the push takes, which is
+ * holds its last frame, so the sheet would sit there saved for the seconds the push takes, which is
  * indistinguishable from having crashed. Only `frameLoop` reads this narrower one.
  */
 let closing = false;

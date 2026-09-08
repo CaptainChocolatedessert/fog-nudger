@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { emptyMask, type BinaryMask } from "./binarize";
-import { deriveGraphRegions } from "./graphRegions";
+import { deriveWalls } from "./deriveWalls";
 import { findCrossings } from "./planarGraph";
 
 /**
@@ -72,8 +72,8 @@ describe("the graph derivation over generated linework", () => {
     back with no interior at all.
 
     Pruning then left the raster entirely, which is what that finding argued for. It is an operation
-    on the *fitted* graph now, past the freeze, where there is nothing to rasterise back and nothing
-    to rebuild — so `deriveGraphRegions` never prunes and there is no budget to sweep. The pruning
+    on the *fitted* graph now, past the derivation, where there is nothing to rasterise back and nothing
+    to rebuild — so `deriveWalls` never prunes and there is no budget to sweep. The pruning
     that survives has its own tests in `spurs.test.ts` and needs none of this apparatus, because it
     deletes a run whole and can strand nothing.
   */
@@ -90,7 +90,7 @@ describe("the graph derivation over generated linework", () => {
           hide the thing being tested. So the sweep tests the derivation, and the fitting is pinned
           by its own tests, which is the same split the area check upstream already uses.
         */
-        const result = deriveGraphRegions(randomInk(width, height, rng(seed), runs), {
+        const result = deriveWalls(randomInk(width, height, rng(seed), runs), {
           tolerance: 0,
           maxTolerance: 0,
         });
@@ -121,7 +121,7 @@ describe("the graph derivation over generated linework", () => {
         expect(result.sliversLeft, `slivers left, ${where}`).toBe(0);
 
         /*
-          Euler's identity over the frozen document: V − E + enclosing cycles = pieces of linework.
+          Euler's identity over the wall graph: V − E + enclosing cycles = pieces of linework.
 
           The left side comes from geometry and the sign of each cycle's area, the right from a
           union-find over the same edges — independent enough to catch a missed half-edge, a cycle
@@ -140,7 +140,7 @@ describe("the graph derivation over generated linework", () => {
           not implied by the assertion above. The derivation should never produce one — chains meet
           only at nodes — which is exactly why it is worth asserting rather than assuming.
         */
-        expect(findCrossings(result.frozen.graph), `planarity, ${where}`).toHaveLength(0);
+        expect(findCrossings(result.walls.graph), `planarity, ${where}`).toHaveLength(0);
 
         /*
           Every face's rings close, and every ring is a real polygon.
@@ -169,7 +169,7 @@ describe("the graph derivation over generated linework", () => {
         }
         for (const wall of result.faces.walls) covered.add(wall);
         expect(covered.size, `every segment accounted for, ${where}`).toBe(
-          result.frozen.graph.edges.length - result.faces.zeroLength,
+          result.walls.graph.edges.length - result.faces.zeroLength,
         );
       }
       });
@@ -189,7 +189,7 @@ describe("the graph derivation over generated linework", () => {
     */
     let seedsWithSlivers = 0;
     for (let seed = 1; seed <= 200; seed++) {
-      const removed = deriveGraphRegions(randomInk(40, 30, rng(seed), 22), {
+      const removed = deriveWalls(randomInk(40, 30, rng(seed), 22), {
         tolerance: 0.5,
         maxTolerance: 4,
       }).sliversRemoved;

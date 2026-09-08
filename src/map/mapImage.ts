@@ -245,7 +245,7 @@ export async function resolveTraceMap(): Promise<ImageItem | null> {
       thing this project does not do, and here it would also be unsafe: the map list is briefly empty
       while a scene loads — the picker has logged `0 map images` — so a resolver that cleared on a
       failed lookup would destroy a perfectly good choice during start-up. Treating a dangling
-      nomination as absent is the same answer the frozen graph store gives a map mismatch.
+      nomination as absent is the same answer the wall graph store gives a map mismatch.
     */
     if (warnedDanglingId !== chosenId) {
       warnedDanglingId = chosenId;
@@ -311,7 +311,7 @@ export async function readGridDpi(): Promise<number> {
  * The map's world box, without decoding a pixel of it.
  *
  * `loadMapRaster` asks for the same thing on its way to the raster, and stage two needs only this
- * half: a frozen graph is fractions of the map, so the box is the whole of the transform. Split out
+ * half: a wall graph is fractions of the map, so the box is the whole of the transform. Split out
  * rather than duplicated, because two places asking Owlbear where the map is would be two chances to
  * ask about slightly different things.
  */

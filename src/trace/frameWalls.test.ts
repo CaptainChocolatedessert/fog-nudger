@@ -9,13 +9,13 @@
 import { describe, expect, it } from "vitest";
 
 import { addFrameWalls, alreadyFramed } from "./frameWalls";
-import { buildFrozenFaces } from "./frozenFaces";
-import { documentPoint, type FrozenGraph } from "./frozenGraph";
+import { buildWallFaces } from "./wallFaces";
+import { documentPoint, type WallGraph } from "./wallGraph";
 
 function graphOf(
   points: readonly (readonly [number, number])[],
   edges: readonly (readonly [number, number])[],
-): FrozenGraph {
+): WallGraph {
   return {
     nodes: points.map(([x, y]) => documentPoint(x, y)),
     edges: edges.map(([a, b]) => ({ a, b })),
@@ -47,10 +47,10 @@ describe("addFrameWalls", () => {
     therefore revealed.
   */
   it("turns the exterior into a face that can be emitted", () => {
-    expect(buildFrozenFaces(ROOM).faces).toHaveLength(1);
+    expect(buildWallFaces(ROOM).faces).toHaveLength(1);
 
     const framed = addFrameWalls(ROOM);
-    const faces = buildFrozenFaces(framed.graph);
+    const faces = buildWallFaces(framed.graph);
     expect(faces.faces).toHaveLength(2);
 
     // The new one is the band: it carries a hole, which the room's own face does not.
@@ -100,7 +100,7 @@ describe("addFrameWalls", () => {
     );
     const framed = addFrameWalls(reaching);
     expect(framed.splits).toBeGreaterThan(0);
-    expect(buildFrozenFaces(framed.graph).eulerHolds).toBe(true);
+    expect(buildWallFaces(framed.graph).eulerHolds).toBe(true);
   });
 
   /*
@@ -158,6 +158,6 @@ describe("addFrameWalls", () => {
     const framed = addFrameWalls({ nodes: [], edges: [] });
     expect(framed.graph.edges).toHaveLength(4);
     // One face: the whole map, with nothing in it.
-    expect(buildFrozenFaces(framed.graph).faces).toHaveLength(1);
+    expect(buildWallFaces(framed.graph).faces).toHaveLength(1);
   });
 });

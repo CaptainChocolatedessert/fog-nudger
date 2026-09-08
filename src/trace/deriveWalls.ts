@@ -1,9 +1,9 @@
 /**
- * Ink to a frozen wall graph — the deriving half of step D, end to end.
+ * Ink to a wall graph — the deriving half of step D, end to end.
  *
- * The chain is thin, chain, remove the sub-pixel slivers, fit each edge, freeze. **Nothing welds** —
+ * The chain is thin, chain, remove the sub-pixel slivers, fit each edge, derive. **Nothing welds** —
  * that was the sibling's fix for junction clusters, it moves points, and it is forbidden here;
- * `wallGraph.ts` carries the measurement that killed it.
+ * `skeletonGraph.ts` carries the measurement that killed it.
  *
  * ## It used to build faces from the raster, and that is gone — 2026-09-08
  *
@@ -15,7 +15,7 @@
  * None of it survives, because **faces stopped being made of pixels**. The document is a planar
  * graph, and a planar graph partitions the plane by construction — so there is nothing to check
  * about every part of the map being under a face, and nothing to *derive* either: the faces come
- * from walking the frozen graph, which is the same walk the push uses.
+ * from walking the wall graph, which is the same walk the push uses.
  *
  * What is left here is the part that genuinely needs the raster: turning ink into a graph, and
  * choosing how hard to fit it.
@@ -32,9 +32,9 @@
  * from the same fitted points; a region escalated on its own would stop matching its neighbours. The
  * cost is stated: one enormous region can coarsen every other one.
  *
- * **And it is now measured against the frozen faces rather than against a second set derived here**,
+ * **And it is now measured against the wall graph's faces rather than against a second set derived here**,
  * which is both simpler and more honest — the cap applies to what is emitted, and what is emitted is
- * the frozen graph's faces. Anything still over the cap at the ceiling is reported rather than
+ * the wall graph's faces. Anything still over the cap at the ceiling is reported rather than
  * fixed; the emit path skips it and names it.
  *
  * Pure: no DOM, no SDK.
@@ -43,14 +43,14 @@
 import { commandCount } from "../geometry/ring";
 import type { BinaryMask } from "./binarize";
 import { resolveFaces, type FittedEdge } from "./faces";
-import { buildFrozenFaces, type FrozenFaces } from "./frozenFaces";
-import { freezeGraph, type Frozen } from "./frozenGraph";
+import { buildWallFaces, type WallFaces } from "./wallFaces";
+import { buildWallGraph, type WallGraphBuild } from "./wallGraph";
 import { labelSpace, type LabelledSpace } from "./label";
 import { COMMAND_CAP, simplifyPolyline } from "./simplify";
 import { thin } from "./thinning";
-import { buildWallGraph, type WallGraph } from "./wallGraph";
+import { buildSkeletonGraph, type SkeletonGraph } from "./skeletonGraph";
 
-export interface GraphRegionOptions {
+export interface DeriveWallsOptions {
   /** Douglas–Peucker tolerance in raster pixels. */
   readonly tolerance: number;
   /** Ceiling the tolerance may escalate to. */
@@ -59,26 +59,26 @@ export interface GraphRegionOptions {
   readonly maxCommands?: number;
 }
 
-export interface GraphRegionResult {
-  /** The cleaned graph, in raster pixels. What the freeze was built from. */
-  readonly graph: WallGraph;
+export interface WallDerivation {
+  /** The cleaned skeleton graph, in raster pixels. What the wall graph was built from. */
+  readonly graph: SkeletonGraph;
   /**
    * Every edge's fitted polyline, aligned with `graph.edges`, at the tolerance actually used.
    *
-   * The *escalated* set when the tolerance rose, which is the point: what gets frozen has to be what
+   * The *escalated* set when the tolerance rose, which is the point: what gets stored has to be what
    * would have been emitted, not a first attempt that did not fit the command cap.
    */
   readonly fittedEdges: readonly FittedEdge[];
   /**
-   * The document, frozen here rather than by each caller.
+   * The wall graph, built here rather than by each caller.
    *
-   * Escalation needs the frozen faces to count commands against, so the freeze happens inside this
+   * Escalation needs the wall graph's faces to count commands against, so the build happens inside this
    * function anyway. Handing it out means the workspace and the emit path do not each repeat it, and
    * — more to the point — cannot repeat it *differently*.
    */
-  readonly frozen: Frozen;
+  readonly walls: WallGraphBuild;
   /** The faces of that document: what a push writes, and what the preview draws. */
-  readonly faces: FrozenFaces;
+  readonly faces: WallFaces;
   /**
    * The labelling of the skeleton, kept for the point probe alone.
    *
@@ -108,29 +108,29 @@ export interface GraphRegionResult {
 }
 
 /** Fit every edge of the graph at one tolerance. Positionally aligned with `graph.edges`. */
-function fitEdges(graph: WallGraph, tolerance: number): FittedEdge[] {
+function fitEdges(graph: SkeletonGraph, tolerance: number): FittedEdge[] {
   return graph.edges.map((edge) => ({ points: simplifyPolyline(edge.points, tolerance) }));
 }
 
-/** How many faces of a frozen document would not fit the cap. */
-function overCapCount(faces: FrozenFaces, cap: number): number {
+/** How many faces of a saved document would not fit the cap. */
+function overCapCount(faces: WallFaces, cap: number): number {
   return faces.faces.filter((face) => commandCount(face.rings) > cap).length;
 }
 
-export function deriveGraphRegions(
+export function deriveWalls(
   ink: BinaryMask,
-  options: GraphRegionOptions,
-): GraphRegionResult {
+  options: DeriveWallsOptions,
+): WallDerivation {
   const thinStarted = performance.now();
   const thinned = thin(ink);
   const thinMs = performance.now() - thinStarted;
 
   const graphStarted = performance.now();
-  const built = buildWallGraph(thinned.mask);
+  const skeletonGraph = buildSkeletonGraph(thinned.mask);
   const graphMs = performance.now() - graphStarted;
 
   const sliverStarted = performance.now();
-  const resolved = resolveFaces(built);
+  const resolved = resolveFaces(skeletonGraph);
   const graph = resolved.graph;
   const sliverMs = performance.now() - sliverStarted;
 
@@ -153,8 +153,8 @@ export function deriveGraphRegions(
   let tolerance = options.tolerance;
   let escalations = 0;
   let fittedEdges = fitEdges(graph, tolerance);
-  let frozen = freezeGraph(graph, fittedEdges);
-  let faces = buildFrozenFaces(frozen.graph);
+  let walls = buildWallGraph(graph, fittedEdges);
+  let faces = buildWallFaces(walls.graph);
 
   /*
     `tolerance > 0` is not decoration: doubling zero is zero, so a caller asking for no simplification
@@ -164,15 +164,15 @@ export function deriveGraphRegions(
     tolerance = Math.min(tolerance * 2, ceiling);
     escalations += 1;
     fittedEdges = fitEdges(graph, tolerance);
-    frozen = freezeGraph(graph, fittedEdges);
-    faces = buildFrozenFaces(frozen.graph);
+    walls = buildWallGraph(graph, fittedEdges);
+    faces = buildWallFaces(walls.graph);
   }
   const fitMs = performance.now() - fitStarted;
 
   return {
     graph,
     fittedEdges,
-    frozen,
+    walls,
     faces,
     labelled,
     skeleton: thinned.mask,
@@ -188,7 +188,7 @@ export function deriveGraphRegions(
 }
 
 /** One line for the log. */
-export function describeGraphRegions(result: GraphRegionResult): string {
+export function describeWallDerivation(result: WallDerivation): string {
   const { graph, faces, timings } = result;
   return (
     `${faces.faces.length} faces from ${graph.nodes.length} nodes and ${graph.edges.length} ` +

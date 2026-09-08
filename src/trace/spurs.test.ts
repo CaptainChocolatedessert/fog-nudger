@@ -3,7 +3,7 @@
  *
  * Two levels, and they are tested separately on purpose. `spursToPrune` is the *decision* — runs in,
  * indices out, no geometry — and it is where the cascade and the closed-loop guard live.
- * `pruneFrozenGraph` is the operation that supplies it with runs and takes the edges away, and what
+ * `pruneWallGraph` is the operation that supplies it with runs and takes the edges away, and what
  * it adds is the run decomposition, the length measurement and the compaction.
  *
  * The raster version these replace had a file of text-grid skeletons. It is gone with the code: the
@@ -16,19 +16,19 @@ import {
   documentPoint,
   longestRun,
   nodeDegrees,
-  pruneFrozenGraph,
+  pruneWallGraph,
   spurEdgesToPrune,
   wallRunEdges,
   wallRuns,
-  type FrozenGraph,
-} from "./frozenGraph";
+  type WallGraph,
+} from "./wallGraph";
 import { spursToPrune, type PrunableRun } from "./spurs";
 
 /** A graph from a list of points and the pairs joining them. Coordinates are map fractions. */
 function graphOf(
   points: readonly (readonly [number, number])[],
   edges: readonly (readonly [number, number])[],
-): FrozenGraph {
+): WallGraph {
   return {
     nodes: points.map(([x, y]) => documentPoint(x, y)),
     edges: edges.map(([a, b]) => ({ a, b })),
@@ -130,7 +130,7 @@ describe("spursToPrune", () => {
   });
 });
 
-describe("pruneFrozenGraph", () => {
+describe("pruneWallGraph", () => {
   /**
    * A horizontal wall of four segments with a two-segment spur up and a longer stub down.
    *
@@ -175,7 +175,7 @@ describe("pruneFrozenGraph", () => {
     expect(going.edges.size).toBe(2);
 
     // And the operation agrees: the survivors are exactly the vertices not marked.
-    const pruned = pruneFrozenGraph(wallWithBoth, 0.15);
+    const pruned = pruneWallGraph(wallWithBoth, 0.15);
     expect(pruned.graph.nodes).toHaveLength(wallWithBoth.nodes.length - going.vertices.size);
   });
 
@@ -198,14 +198,14 @@ describe("pruneFrozenGraph", () => {
   });
 
   it("leaves the graph alone at a budget of zero", () => {
-    const result = pruneFrozenGraph(wallWithBoth, 0);
+    const result = pruneWallGraph(wallWithBoth, 0);
     expect(result.graph).toBe(wallWithBoth);
     expect(result.removed).toBe(0);
   });
 
   it("takes the short spur and keeps the stub", () => {
     // The spur is 0.1 long along itself and the stub 0.2, so a budget between them separates them.
-    const result = pruneFrozenGraph(wallWithBoth, 0.15);
+    const result = pruneWallGraph(wallWithBoth, 0.15);
     expect(result.removed).toBe(1);
     expect(result.segments).toBe(2);
     expect(result.length).toBeCloseTo(0.1, 5);
@@ -258,14 +258,14 @@ describe("pruneFrozenGraph", () => {
       ],
     );
     // Both spurs end 0.2 from the junction. The first is 0.2 along itself; the second is 0.6.
-    expect(pruneFrozenGraph(straight, 0.3).removed).toBe(1);
-    expect(pruneFrozenGraph(doubled, 0.3).removed).toBe(0);
+    expect(pruneWallGraph(straight, 0.3).removed).toBe(1);
+    expect(pruneWallGraph(doubled, 0.3).removed).toBe(0);
   });
 
   it("erodes the whole graph once the budget passes a wall's own arms", () => {
     // Deliberate over-reach, the same kind the ink filters have: every arm of a junction becomes a
     // dead end once its neighbours go. Visible, because the graph is drawn.
-    const result = pruneFrozenGraph(wallWithBoth, 1);
+    const result = pruneWallGraph(wallWithBoth, 1);
     expect(result.graph.edges).toHaveLength(0);
     expect(result.graph.nodes).toHaveLength(0);
   });
@@ -289,7 +289,7 @@ describe("pruneFrozenGraph", () => {
         [5, 4],
       ],
     );
-    const result = pruneFrozenGraph(room, 0.5);
+    const result = pruneWallGraph(room, 0.5);
     // The spur goes; the four walls of the room stay, because the loop through them presents no
     // free end at any budget.
     expect(result.removed).toBe(1);
@@ -380,7 +380,7 @@ describe("longestRun", () => {
       everything with a free end goes and what is left is only what cycles hold in place.
     */
     const budget = longestRun(chain);
-    expect(pruneFrozenGraph(chain, budget).graph.edges).toHaveLength(0);
+    expect(pruneWallGraph(chain, budget).graph.edges).toHaveLength(0);
   });
 
   it("is zero when there is nothing to measure", () => {

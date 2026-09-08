@@ -15,13 +15,13 @@
  * ## This is the decision, not the deletion
  *
  * Runs in, indices out. Nothing here knows what a graph is, which is what lets the ink mode and the
- * editor share it: `pruneFrozenGraph` supplies the runs and takes the answer away. That is the same
+ * editor share it: `pruneWallGraph` supplies the runs and takes the answer away. That is the same
  * shape `simplifyPolyline` has, and it is deliberate — the two modes hold the same document now, but
  * the point stands whatever holds it.
  *
  * **The raster version is gone** (2026-09-06). `pruneSpurs` walked the skeleton pixel by pixel from
  * each free end and deleted what it found, between thinning and chaining. Pruning moved past the
- * freeze, where there is no raster to disturb, and the pixel walk went with it — along with the
+ * derive, where there is no raster to disturb, and the pixel walk went with it — along with the
  * crossing-number subtlety that walk needed and this does not.
  *
  * Pure: no DOM, no SDK, no raster.
@@ -30,7 +30,7 @@
 /**
  * One run between two junctions, which is what pruning actually acts on.
  *
- * Deliberately not a `FrozenGraph` edge, and not a run of them. The *decision* pruning makes needs
+ * Deliberately not a `WallGraph` edge, and not a run of them. The *decision* pruning makes needs
  * two things — which nodes a run joins, and how long it is — and neither is a fact about how the
  * caller stores its geometry. The caller measures the length in the unit its own budget is in.
  *

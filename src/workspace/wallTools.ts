@@ -21,7 +21,7 @@
  */
 
 import { currentTool, setTool, type WallTool } from "./wallEdit";
-import { frozenGraph } from "./stage";
+import { wallGraph } from "./stage";
 import { invalidate } from "./shell";
 
 interface ToolChoice {
@@ -62,7 +62,7 @@ const TOOLS: readonly ToolChoice[] = [
  * is the only thing that can change it.
  */
 export function renderWallTools(body: HTMLElement): void {
-  if (!frozenGraph()) {
+  if (!wallGraph()) {
     const empty = document.createElement("p");
     empty.className = "hint";
     empty.innerHTML =

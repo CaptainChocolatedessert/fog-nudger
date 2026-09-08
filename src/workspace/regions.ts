@@ -6,7 +6,7 @@
  * It has the same shape — ask, blank, publish, drop a superseded answer — but a different rule about
  * *when*. A reading is what every stage-one step is looking at, so it runs whenever a stage-one
  * control moves. The partition is looked at in two steps — Walls, with the centrelines over it, and
- * Edit walls, with the frozen graph over it — and deriving it costs the better part of a second on
+ * Edit walls, with the wall graph over it — and deriving it costs the better part of a second on
  * top of a cached mask. So it runs
  * **lazily**: on entering one of those steps, and on a change while one is open. Anywhere else, a
  * change only marks it stale.
@@ -23,12 +23,12 @@
  *
  * ## Two inputs, ONE derivation — which it was not until 2026-09-06
  *
- * Both modes walk a frozen graph. What differs is where the graph came from: the editor reads the
- * stored one, and the ink mode freezes the trace's own and walks that. The faces themselves come
- * from `buildFrozenFaces` either way, which is the same function the push uses.
+ * Both modes walk a wall graph. What differs is where the graph came from: the editor reads the
+ * stored one, and the ink mode derives the trace's own and walks that. The faces themselves come
+ * from `buildWallFaces` either way, which is the same function the push uses.
  *
  * **It used to draw a region list the trace derived from a raster labelling, and that was a defect.**
- * A push writes faces grouped by containment off the frozen document — same walk, different
+ * A push writes faces grouped by containment off the wall graph — same walk, different
  * grouping — so the ink mode previewed one answer and emitted another. Nothing inside the code said
  * the two were meant to agree, which is why it took an outside eye to spot.
  *
@@ -51,13 +51,12 @@ import { describeError } from "../describeError";
 import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
 import type { StepId } from "../steps";
-import { buildFrozenFaces, describeFrozenFaces, wallSegments } from "../trace/frozenFaces";
+import { buildWallFaces, describeWallFaces, wallSegments } from "../trace/wallFaces";
 import {
-  freezeGraph,
-  pruneFrozenGraph,
+  pruneWallGraph,
   wallRuns,
-  type FrozenGraph,
-} from "../trace/frozenGraph";
+  type WallGraph,
+} from "../trace/wallGraph";
 import { noteGraph } from "./graphScale";
 import { inEditor } from "./mode";
 import { MaskRequests, shouldPaint } from "./maskRequest";
@@ -65,15 +64,16 @@ import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
 import { currentSettings } from "./settingsState";
 import { invalidate, isClosing, say } from "./shell";
-import { frozenGraph } from "./stage";
+import { wallGraph } from "./stage";
 
 /**
  * The least a partition painter needs, so the two stages can supply it from different shapes.
  *
- * `TracedRegion` and `TracedWall` satisfy these already; the frozen traversal's faces are converted
- * to them. Widening the accessors rather than converting the frozen faces *into* a `TracedRegion`
- * is the honest direction: a frozen face has no raster rings, no placement and no grid area, and
- * inventing those fields would be claiming it came from a trace.
+ * Deliberately the *least*: rings for a region, points for a wall, and nothing else. The trace used
+ * to hand over richer shapes carrying raster rings, world placement and a grid area, and the painter
+ * was written against those — so when faces started coming from the wall graph instead, the honest
+ * direction was to narrow what the painter asks for rather than to invent those fields on a face
+ * that has none of them. Inventing them would have been claiming it came from a trace.
  */
 export interface PreviewRegion {
   readonly rings: readonly Ring[];
@@ -92,7 +92,7 @@ let walls: readonly PreviewWall[] = [];
 /**
  * The space the rings are in, which is what the painter scales by.
  *
- * **Always 1×1 now**, in both modes, because both draw a frozen graph and a frozen graph is stored
+ * **Always 1×1 now**, in both modes, because both draw a wall graph and a wall graph is stored
  * in fractions of the map's own extent. Kept as a field rather than folded into the painter because
  * it is the painter's contract — the rings are in *some* space and this says which — and because a
  * third source would arrive needing to say so.
@@ -121,21 +121,21 @@ let unitsPerSquare = 0;
  * The graph the last derive arrived at, in the form saving would store it.
  *
  * **The ink mode's last step draws this** (user, 2026-09-05): *"the last step of the ink mode
- * displays the graph, post simplification."* Built with `freezeGraph`, the same function the save
+ * displays the graph, post simplification."* Built with `buildWallGraph`, the same function the save
  * uses, so the picture and the document are the same thing rather than two renderings of one idea —
  * which is what makes handing off to the editor a continuation rather than a surprise.
  *
  * It is also where the dropped-segment counts come from. Simplification can collapse a room thinner
- * than its tolerance into a doubled wall, and the freeze drops what is left; reporting that here
+ * than its tolerance into a doubled wall, and the derivation drops what is left; reporting that here
  * puts the warning in front of the GM while the slider that caused it is still on screen.
  *
  * `null` in the editor, where the stored graph is the document and nothing derives one.
  */
-let preview: FrozenGraph | null = null;
+let preview: WallGraph | null = null;
 let previewDropped = 0;
 
 /** The graph the ink mode's Walls step draws, or `null` when no derive has produced one. */
-export function previewGraph(): FrozenGraph | null {
+export function previewGraph(): WallGraph | null {
   return preview;
 }
 
@@ -180,12 +180,12 @@ let lastSummaryOk = true;
 /*
   `partitionCheck` was here, and it is gone with the thing that needed it.
 
-  It handed the frozen traversal's room count and Euler verdict to the freeze, because **a room found
+  It handed the wall graph traversal's room count and Euler verdict to the derivation, because **a room found
   that check reporting into a channel nobody could see** (2026-09-05): the traversal said EULER
-  FAILED on every run and the freeze's own message, written a moment later, painted over it.
+  FAILED on every run and the derivation's own message, written a moment later, painted over it.
 
   The two-mode split removes the collision rather than the guard. The traversal runs only in the
-  editor, where `deriveFrozen` below says the verdict on its own line and nothing writes over it; the
+  editor, where `derivePartition` below says the verdict on its own line and nothing writes over it; the
   save that used to overwrite it lives on the other page and never triggers a traversal. **Do not
   re-introduce a message written on the heels of a derive** — that is the shape of the fault, and it
   is what §8 is about.
@@ -199,7 +199,7 @@ let lastSummaryOk = true;
  */
 export function invalidateRegions(): void {
   stale = true;
-  // The trace is out of date, so the freeze's output is too and there is nothing left to re-prune.
+  // The trace is out of date, so the derivation's output is too and there is nothing left to re-prune.
   derivation = null;
   requests.request();
   invalidate();
@@ -240,7 +240,7 @@ export function watchRegions(step: StepId, open: boolean): void {
  * What the last trace produced, before pruning — held so a prune needs no second trace.
  *
  * Spur pruning is an operation on the *fitted* graph now (2026-09-06), which means a change to its
- * budget invalidates nothing the trace did. Keeping the freeze's output lets the slider re-apply in
+ * budget invalidates nothing the trace did. Keeping the derivation's output lets the slider re-apply in
  * a few milliseconds where a re-derive costs the better part of a second on a cached mask, which is
  * the difference between a control a GM sweeps and one they nudge and wait for.
  *
@@ -248,11 +248,11 @@ export function watchRegions(step: StepId, open: boolean): void {
  * of date and there is nothing here worth re-pruning.
  */
 let derivation: {
-  /** The freeze's own output, unpruned. Pruning always starts from this rather than from itself. */
-  readonly graph: FrozenGraph;
-  /** Segments the freeze dropped for lying on one already stored, plus any of no length. */
+  /** The derivation's own output, unpruned. Pruning always starts from this rather than from itself. */
+  readonly graph: WallGraph;
+  /** Segments the derivation dropped for lying on one already stored, plus any of no length. */
   readonly dropped: number;
-  /** Points the freeze dropped for lying exactly on the line between their neighbours. Lossless. */
+  /** Points the derivation dropped for lying exactly on the line between their neighbours. Lossless. */
   readonly collinear: number;
   /** The trace's raster width, which is what turns a pixel budget into a map fraction. */
   readonly rasterWidth: number;
@@ -263,14 +263,14 @@ let derivation: {
  * Prune, walk, and put the answer on screen.
  *
  * Shared by the trace's completion and by a prune-only change, so the two cannot disagree about what
- * the partition is. Synchronous throughout: the freeze is already done, and pruning plus a traversal
+ * the partition is. Synchronous throughout: the derivation is already done, and pruning plus a traversal
  * is a few milliseconds against the second the trace took.
  */
 function publish(from: NonNullable<typeof derivation>, generation: number): void {
   // Both the budget and the graph are in fractions of the map, so there is nothing to convert —
   // which is the point of the unit, and what lets the editor run the same operation.
   const budget = currentSettings().trace.spurPruneFraction;
-  const pruned = pruneFrozenGraph(from.graph, budget);
+  const pruned = pruneWallGraph(from.graph, budget);
 
   preview = pruned.graph;
   previewDropped = from.dropped;
@@ -283,7 +283,7 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   */
   noteGraph(from.graph);
 
-  const faces = buildFrozenFaces(pruned.graph);
+  const faces = buildWallFaces(pruned.graph);
   regions = faces.faces.map((face) => ({ rings: face.rings }));
   walls = wallSegments(pruned.graph, faces).map((points) => ({ points }));
   // Fractions of the map, exactly as in the editor, so the painter needs no branch either.
@@ -295,13 +295,13 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
     The same figures the editor says, in the same order, because they now describe the same object.
 
     The dropped count is on the line because it is a room the map has and the document will not:
-    smoothing can fit both walls of a very thin room to the same line, closing it up, and the freeze
+    smoothing can fit both walls of a very thin room to the same line, closing it up, and the derivation
     drops what that leaves. Saying so here rather than only at the save is the point — the slider
     that caused it is on screen at this moment, and afterwards it is one mode away.
 
     Euler's identity is on it for a related reason. A doubled wall is exactly what that check fails
     on, and in this mode there are no hand edits to make such a state a legal one to pass through —
-    so a failure here means the freeze produced something a traversal cannot mean anything over,
+    so a failure here means the derivation produced something a traversal cannot mean anything over,
     which is worth a red line rather than a log entry nobody reads.
   */
   const rooms = `${regions.length} region${regions.length === 1 ? "" : "s"}`;
@@ -321,7 +321,7 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
     `workspace: partition ${generation} — pruned ${pruned.removed} spurs ` +
       `(${pruned.segments} segments) in ${pruned.rounds} rounds at a budget of ` +
       `${budget.toExponential(2)} of the map; ${from.collinear} points dropped as exactly ` +
-      `collinear, which costs nothing; ${describeFrozenFaces(faces)}`,
+      `collinear, which costs nothing; ${describeWallFaces(faces)}`,
   );
   invalidate();
 }
@@ -357,17 +357,17 @@ async function derive(): Promise<void> {
   /*
     The **mode** decides where the rooms come from, not the presence of a stored graph.
 
-    That inverted when the surface became two modes (2026-09-05). It used to read "a graph is frozen,
+    That inverted when the surface became two modes (2026-09-05). It used to read "a graph is saved,
     so use it", which was right while one surface carried both stages. Now the editor's rooms are its
     document and the ink mode's rooms are its reading — and reading a stored graph in the ink mode
     would show the GM the rooms as *edited* while they moved the sliders that do not produce them.
 
-    Walking the frozen graph needs no reading and no fitting, so it happens here and now rather than
+    Walking the wall graph needs no reading and no fitting, so it happens here and now rather than
     through the async cycle below.
   */
   if (inEditor()) {
-    const graph = frozenGraph();
-    if (graph) deriveFrozen(graph);
+    const graph = wallGraph();
+    if (graph) derivePartition(graph);
     else clearPartition();
     return;
   }
@@ -405,16 +405,23 @@ async function derive(): Promise<void> {
       return;
     }
 
-    // The same call the save makes, so what is drawn and what would be stored cannot differ.
-    const stored = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
+    /*
+      The wall graph the run already built, so what is drawn and what would be stored cannot differ.
+
+      Taken off the run rather than rebuilt from `graph` and `fittedEdges`: the trace has to build it
+      anyway, because the escalation ladder measures the command cap against its faces. Rebuilding
+      here would be a second construction of a thing already in hand, and two constructions are two
+      places to change.
+    */
+    const stored = outcome.run.walls;
     /*
       And the same traversal the push makes, which is the second half of that sentence.
 
       The trace used to produce rooms of its own, grouped by a raster labelling, and they were what
-      this drew. **They were not what a push writes.** Saving stores the frozen graph and the push
-      walks *that*, grouped by containment with no raster anywhere, so the ink mode previewed one
-      face derivation and emitted another — a defect found from the outside, because nothing inside
-      the code said the two were meant to agree.
+      this drew. **They were not what a push writes.** Saving stores the wall graph and the push walks
+      *that*, grouped by containment with no raster anywhere, so the ink mode previewed one face
+      derivation and emitted another — a defect found from the outside, because nothing inside the
+      code said the two were meant to agree.
 
       One derivation now, and the trace no longer carries a region list at all. What it produces is
       the graph, the fitted edges, and the checks over them — a derivation, not a picture.
@@ -422,7 +429,7 @@ async function derive(): Promise<void> {
     /*
       A grid square as a fraction of the map, which the ink mode can answer and the editor cannot.
 
-      The trace measured it in raster pixels and the freeze divided by that raster, so the two cancel.
+      The trace measured it in raster pixels and the derivation divided by that raster, so the two cancel.
       The editor has no trace and leaves this at zero, which is the stated cost recorded above; here
       the measurement exists, so the outline setting is honoured rather than drawn at its floor.
     */
@@ -452,7 +459,7 @@ async function derive(): Promise<void> {
 }
 
 /**
- * The partition in stage two: the faces of the frozen graph, walked here and now.
+ * The partition in stage two: the faces of the wall graph, walked here and now.
  *
  * Synchronous, and it goes through the same request cycle anyway. That is not ceremony — the cycle
  * is what `regionsShowing` reads, so skipping it would leave the painter drawing whatever it held
@@ -485,9 +492,9 @@ function clearPartition(): void {
   invalidate();
 }
 
-function deriveFrozen(graph: FrozenGraph): void {
+function derivePartition(graph: WallGraph): void {
   const generation = requests.latest();
-  const result = buildFrozenFaces(graph);
+  const result = buildWallFaces(graph);
   if (!requests.fulfil(generation)) return;
 
   regions = result.faces.map((face) => ({ rings: face.rings }));
@@ -506,7 +513,7 @@ function deriveFrozen(graph: FrozenGraph): void {
     (result.eulerHolds ? "" : " · CHECK FAILED, see the log");
   lastSummaryOk = result.eulerHolds;
   say(lastSummary, result.eulerHolds ? "" : "bad");
-  devLog("info", `workspace: frozen partition — ${describeFrozenFaces(result)}`);
+  devLog("info", `workspace: saved partition — ${describeWallFaces(result)}`);
   invalidate();
 }
 

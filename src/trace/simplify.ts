@@ -32,7 +32,7 @@
  * `simplifyStats`, `describeSimplification` — with an escalation ladder that raised one region's
  * tolerance at a time. It went on 2026-08-31, unreferenced since step D. Escalation is **global**
  * now, because two faces sharing a wall are assembled from one fitted edge and a region escalated
- * alone would stop matching its neighbour; it lives in `graphRegions.ts`, which also carries the
+ * alone would stop matching its neighbour; it lives in `deriveWalls.ts`, which also carries the
  * rule that a region over the cap is never *split* — a join between two shapes becomes a wall across
  * the middle of a room.
  *
@@ -66,7 +66,7 @@ export const COMMAND_CAP = 8192;
  * keeps it. The cross product of the two differences is a product and a subtraction of integers, which
  * is exact.
  *
- * On float coordinates — the frozen document is float32 map fractions — exactness simply makes this
+ * On float coordinates — the wall graph is float32 map fractions — exactness simply makes this
  * find fewer triples. It is never wrong, only conservative, which is the right direction.
  *
  * ## Why a straight wall is not as common as it sounds

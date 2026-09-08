@@ -31,7 +31,7 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { documentPoint, type FrozenGraph } from "./frozenGraph";
+import { documentPoint, type WallGraph } from "./wallGraph";
 import { insertEdge } from "./planarOps";
 
 /** The map's four corners, in the document's own units. */
@@ -43,7 +43,7 @@ const CORNERS: readonly Vector2[] = [
 ];
 
 export interface FramingResult {
-  readonly graph: FrozenGraph;
+  readonly graph: WallGraph;
   /** Segments of existing linework cut where the frame met them. */
   readonly splits: number;
   /** Collinear overlaps found. Reported, never fixed — splitting cannot separate them. */
@@ -63,7 +63,7 @@ export interface FramingResult {
  * **Tested by counting, not by matching.** A frame contributes at least one segment lying wholly
  * along each of the four edges; anything less is ordinary linework that happens to touch the border.
  */
-export function alreadyFramed(graph: FrozenGraph): boolean {
+export function alreadyFramed(graph: WallGraph): boolean {
   const onEdge = { left: false, right: false, top: false, bottom: false };
   for (const edge of graph.edges) {
     const a = graph.nodes[edge.a];
@@ -85,7 +85,7 @@ export function alreadyFramed(graph: FrozenGraph): boolean {
  * drawing tool snaps: a wall that merely *ends* where another begins is two points agreeing until one
  * moves.
  */
-export function addFrameWalls(graph: FrozenGraph): FramingResult {
+export function addFrameWalls(graph: WallGraph): FramingResult {
   if (alreadyFramed(graph)) {
     return { graph, splits: 0, overlaps: 0, alreadyFramed: true };
   }

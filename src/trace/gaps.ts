@@ -197,7 +197,7 @@ export interface GapOptions {
    * Total flood work allowed, in pixel visits. Defaults to `FLOOD_BUDGET`.
    *
    * Overridable only so a test can reach the exhausted state on a fixture small enough to read —
-   * the same arrangement `graphRegions.ts` uses for its command cap. Nothing in the UI sets it: it is
+   * the same arrangement `deriveWalls.ts` uses for its command cap. Nothing in the UI sets it: it is
    * a guard against a pathological map, not a control.
    */
   readonly floodBudget?: number;

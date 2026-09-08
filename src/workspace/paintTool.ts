@@ -348,8 +348,8 @@ async function openPaintMode(): Promise<void> {
   /*
     There is no stage-two refusal here any more.
 
-    Painting used to be closed once a graph was frozen, because a paint layer is a **reading** input
-    and the frozen graph does not re-derive from ink — so a stroke would have looked like it worked,
+    Painting used to be closed once a graph was saved, because a paint layer is a **reading** input
+    and the wall graph does not re-derive from ink — so a stroke would have looked like it worked,
     changed nothing visible, and then taken effect on starting over. The editor is a separate page
     now and does not declare this step, so the case cannot arise: the only surface carrying a brush
     is the one whose reading is live.

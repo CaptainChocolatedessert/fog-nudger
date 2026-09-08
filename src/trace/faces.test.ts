@@ -25,22 +25,22 @@ import { describe, expect, it } from "vitest";
 
 import { resolveFaces, walkCycles } from "./faces";
 import { maskFromRows } from "./fixtures";
-import { freezeGraph } from "./frozenGraph";
-import { buildFrozenFaces } from "./frozenFaces";
-import { buildWallGraph, type WallGraph } from "./wallGraph";
+import { buildWallGraph } from "./wallGraph";
+import { buildWallFaces } from "./wallFaces";
+import { buildSkeletonGraph, type SkeletonGraph } from "./skeletonGraph";
 import { simplifyPolyline } from "./simplify";
 
-function graphOf(rows: readonly string[]): WallGraph {
-  return buildWallGraph(maskFromRows(rows));
+function graphOf(rows: readonly string[]): SkeletonGraph {
+  return buildSkeletonGraph(maskFromRows(rows));
 }
 
 /** The cleaned graph, which is what everything downstream is made of. */
-function cleaned(rows: readonly string[]): WallGraph {
+function cleaned(rows: readonly string[]): SkeletonGraph {
   return resolveFaces(graphOf(rows)).graph;
 }
 
 /**
- * The faces as they are actually emitted: frozen, then walked.
+ * The faces as they are actually emitted: built into a wall graph, then walked.
  *
  * Unfitted — a tolerance of zero — so the areas below are the shapes' own and not a fit's. That is
  * the same split the sweep uses, and for the same reason: checking the traversal and the fitting at
@@ -49,7 +49,7 @@ function cleaned(rows: readonly string[]): WallGraph {
 function facesOf(rows: readonly string[]) {
   const graph = cleaned(rows);
   const fitted = graph.edges.map((edge) => ({ points: simplifyPolyline(edge.points, 0) }));
-  return buildFrozenFaces(freezeGraph(graph, fitted).graph);
+  return buildWallFaces(buildWallGraph(graph, fitted).graph);
 }
 
 /** Areas as a share of the map, largest first, rounded so a fixture can state them. */

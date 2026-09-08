@@ -3,7 +3,7 @@
  *
  * **The first things in this project that change the GM's own work rather than a setting.** Every
  * control before them turns a number and re-derives; these change the graph, and it stays changed
- * because stage two never re-derives. That is what the freeze is for.
+ * because stage two never re-derives. That is what the derivation is for.
  *
  * What each gesture *means* is in `dragGesture.ts` and is tested there. This file is the pointer
  * events, the tool in hand, the state line and the scene write.
@@ -31,7 +31,7 @@
  *
  * ## What a failed write does
  *
- * `updateFrozen` stores the graph before it changes what is in hand, so a failed write leaves the GM
+ * `saveEditedWalls` stores the graph before it changes what is in hand, so a failed write leaves the GM
  * with the graph they had rather than one the scene does not agree with. The edit is lost and the
  * state line says so — losing one gesture is the safe direction against editing for an hour against
  * something that is not being saved.
@@ -41,7 +41,7 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { compactNodes } from "../trace/frozenGraph";
+import { compactNodes } from "../trace/wallGraph";
 import { nearestEdge, removeEdge, type EditResult } from "../trace/planarOps";
 import {
   applyDraw,
@@ -57,7 +57,7 @@ import {
   type Grab,
 } from "./dragGesture";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
-import { frozenGraph, updateFrozen } from "./stage";
+import { wallGraph, saveEditedWalls } from "./stage";
 
 /** Which verb a press means. */
 export type WallTool = "move" | "draw" | "erase";
@@ -196,7 +196,7 @@ function clearGesture(): void {
 
 function start(point: MapPoint): boolean {
   if (busy) return false;
-  const graph = frozenGraph();
+  const graph = wallGraph();
   if (!graph) return false;
 
   pressedAt = { u: point.u, v: point.v };
@@ -238,7 +238,7 @@ function start(point: MapPoint): boolean {
 }
 
 function move(point: MapPoint): void {
-  const graph = frozenGraph();
+  const graph = wallGraph();
   if (!graph) return;
   lastPerPixel = point.perPixel;
   lastPointer = { u: point.u, v: point.v };
@@ -289,7 +289,7 @@ function escape(): boolean {
 }
 
 function end(): void {
-  const graph = frozenGraph();
+  const graph = wallGraph();
   if (!graph) {
     clearGesture();
     return;
@@ -371,7 +371,7 @@ function commit(result: EditResult, message: string): void {
   const graph = compactNodes(result.graph);
   busy = true;
   say("saving…", "working");
-  void updateFrozen(graph)
+  void saveEditedWalls(graph)
     .then(() => {
       say(message);
     })
@@ -392,7 +392,7 @@ function commit(result: EditResult, message: string): void {
 }
 
 function hover(point: MapPoint | null): void {
-  const graph = frozenGraph();
+  const graph = wallGraph();
   if (!point || !graph) {
     if (hovered === null && hoveredEdge === null) return;
     hovered = null;

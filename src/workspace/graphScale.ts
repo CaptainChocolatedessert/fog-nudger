@@ -45,7 +45,7 @@
  */
 
 import type { SettingName } from "../settings";
-import { largestBend, longestRun, type FrozenGraph } from "../trace/frozenGraph";
+import { largestBend, longestRun, type WallGraph } from "../trace/wallGraph";
 
 interface Tops {
   /**
@@ -67,14 +67,14 @@ let tops: Tops | null = null;
  * once rather than waiting for a derive that is not going to happen.
  *
  * Held separately from `tops` because the two have different lifetimes: this follows the partition,
- * and the measurement is deliberately frozen for the life of an opening.
+ * and the measurement is deliberately saved for the life of an opening.
  */
-let latest: FrozenGraph | null = null;
+let latest: WallGraph | null = null;
 
 let listeners: (() => void)[] = [];
 
 /** Whatever draws the graph tells this, every time the partition changes. */
-export function noteGraph(graph: FrozenGraph | null): void {
+export function noteGraph(graph: WallGraph | null): void {
   latest = graph;
   if (tops !== null || graph === null) return;
   tops = measure(graph);
@@ -124,7 +124,7 @@ export function graphScaleTop(name: SettingName): number | null {
   return top > 0 ? top : null;
 }
 
-function measure(graph: FrozenGraph): Tops {
+function measure(graph: WallGraph): Tops {
   return { spur: roundUp(longestRun(graph)), bend: roundUp(largestBend(graph)) };
 }
 

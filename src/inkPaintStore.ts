@@ -1,5 +1,5 @@
 /**
- * Where the GM's two pixel layers live: scene metadata, beside the settings and the frozen graph.
+ * Where the GM's two pixel layers live: scene metadata, beside the settings and the wall graph.
  *
  * Same reasoning as those. The extension runs in a third-party iframe, so Firefox partitions
  * `localStorage` per top-level site and a local copy can simply vanish; and paint made by looking at
@@ -9,7 +9,7 @@
  *
  * Suppression and added ink are separate layers of the stack and are edited one at a time, so a key
  * each means finishing with one tool rewrites only what that tool changed — and two writes can never
- * race for the same key. It is the reasoning `frozenGraphStore.ts` gives for keeping the graph out of
+ * race for the same key. It is the reasoning `wallGraphStore.ts` gives for keeping the graph out of
  * the settings, one level down.
  *
  * ## Each records which map it is for

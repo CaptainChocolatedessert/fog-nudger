@@ -3,7 +3,7 @@
  *
  * **This is the invariant stage two has instead of the area check.** Stage one's check is a lattice
  * identity comparing two independent computations of the same number, and it does not survive the
- * freeze — fitted geometry has no steps and no interior pixel counts. Planarity is the right
+ * derive — fitted geometry has no steps and no interior pixel counts. Planarity is the right
  * replacement, because the whole of face derivation is a half-edge traversal, and a traversal over a
  * non-planar embedding is not wrong so much as **meaningless**: two walls crossing at a point that is
  * a node of neither means the faces either side of the crossing are not faces.
@@ -44,7 +44,7 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { documentPoint, type FrozenGraph } from "./frozenGraph";
+import { documentPoint, type WallGraph } from "./wallGraph";
 
 /**
  * How close to a segment's end a crossing has to be before it counts as being *at* the end.
@@ -146,7 +146,7 @@ export interface Crossing {
  * too slow to run casually; if that is ever wanted, sweep by bounding box first. Nothing here depends
  * on the order it reports in.
  */
-export function findCrossings(graph: FrozenGraph): Crossing[] {
+export function findCrossings(graph: WallGraph): Crossing[] {
   const found: Crossing[] = [];
   for (let a = 0; a < graph.edges.length; a++) {
     const ea = graph.edges[a]!;

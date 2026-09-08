@@ -3,7 +3,7 @@
  *
  * ## Why a button here and a slider there
  *
- * `pruneFrozenGraph` deletes dead-end walls, and the two modes want it on opposite terms.
+ * `pruneWallGraph` deletes dead-end walls, and the two modes want it on opposite terms.
  *
  * In the ink mode the graph is a **derivation**: it is rebuilt from the reading every time anything
  * moves, so a budget is a setting that gets re-applied on every derive and turning it back down puts
@@ -29,12 +29,12 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { readParameter } from "../settings";
-import { pruneFrozenGraph, wallRuns } from "../trace/frozenGraph";
+import { pruneWallGraph, wallRuns } from "../trace/wallGraph";
 import { confirmAction } from "./confirmDialog";
 import { currentSettings } from "./settingsState";
 import { controlsLive } from "./settingRows";
 import { say } from "./shell";
-import { frozenGraph, updateFrozen } from "./stage";
+import { wallGraph, saveEditedWalls } from "./stage";
 
 export function renderPruneAction(body: HTMLElement): void {
   const actions = document.createElement("div");
@@ -63,7 +63,7 @@ export function renderPruneAction(body: HTMLElement): void {
 }
 
 async function run(button: HTMLButtonElement): Promise<void> {
-  const graph = frozenGraph();
+  const graph = wallGraph();
   if (!graph) {
     say("no walls saved for this map yet", "bad");
     return;
@@ -83,7 +83,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
     was drawn. Running it first and asking second is what makes the confirmation say something —
     and it costs nothing, because the result is thrown away if the answer is no.
   */
-  const pruned = pruneFrozenGraph(graph, budget);
+  const pruned = pruneWallGraph(graph, budget);
   if (pruned.removed === 0) {
     say("nothing to prune — no dead end is that short");
     return;
@@ -108,7 +108,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   say("pruning…", "working");
   try {
-    await updateFrozen(pruned.graph);
+    await saveEditedWalls(pruned.graph);
     devLog(
       "info",
       `workspace: pruned ${pruned.removed} walls (${pruned.segments} segments) in ` +

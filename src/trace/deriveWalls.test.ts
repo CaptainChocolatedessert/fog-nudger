@@ -1,9 +1,9 @@
 /**
- * Ink to a frozen wall graph: what the derivation still owns after the faces left it.
+ * Ink to a wall graph: what deriving still owns after the faces left it.
  *
  * **This file used to test region assembly**, and that is gone (2026-09-08). The module no longer
  * builds faces from a raster labelling — the document is a planar graph, and the faces come from
- * walking the frozen graph, which is the same walk the push uses. What is asserted here is what this
+ * walking the wall graph, which is the same walk the push uses. What is asserted here is what this
  * stage still decides: the graph, the fit, and how hard to fit.
  *
  * The shape-level guarantees moved to `faces.test.ts`, on fixtures with known answers.
@@ -12,10 +12,10 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
-import { deriveGraphRegions, type GraphRegionOptions } from "./graphRegions";
+import { deriveWalls, type DeriveWallsOptions } from "./deriveWalls";
 import { commandCount } from "../geometry/ring";
 
-const BASE: GraphRegionOptions = {
+const BASE: DeriveWallsOptions = {
   tolerance: 0.5,
   maxTolerance: 4,
 };
@@ -81,21 +81,21 @@ const ROOM_WITH_STUB = [
   "...................",
 ];
 
-describe("what the derivation produces", () => {
+describe("what deriving produces", () => {
   it("hands out a graph, a fit for every edge, and the document they make", () => {
-    const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
+    const result = deriveWalls(maskFromRows(TWO_ROOMS), BASE);
 
-    // One fitted polyline per edge, positionally aligned — which is what lets the freeze reuse the
+    // One fitted polyline per edge, positionally aligned — which is what lets the build reuse the
     // graph's own node ids for the ends rather than approximating them a second time.
     expect(result.fittedEdges).toHaveLength(result.graph.edges.length);
-    expect(result.frozen.graph.nodes.length).toBeGreaterThan(0);
+    expect(result.walls.graph.nodes.length).toBeGreaterThan(0);
     expect(result.faces.faces.length).toBeGreaterThan(0);
   });
 
   it("finds both rooms, and nothing for the space around them", () => {
     // Two rooms sharing a wall. The outside is the arrangement's unbounded face: no polygon, not
     // emitted, and therefore fogged and unrevealable — which is what a map's exterior should be.
-    expect(deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE).faces.faces).toHaveLength(2);
+    expect(deriveWalls(maskFromRows(TWO_ROOMS), BASE).faces.faces).toHaveLength(2);
   });
 
   /*
@@ -107,7 +107,7 @@ describe("what the derivation produces", () => {
     was harmless; under the graph they are coincident, and this is what keeps them so.
   */
   it("gives two rooms the identical points along the wall they share", () => {
-    const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
+    const result = deriveWalls(maskFromRows(TWO_ROOMS), BASE);
     const rings = result.faces.faces.flatMap((face) => face.rings);
 
     const keyed = rings.map((ring) => new Set(ring.map((p) => `${p.x},${p.y}`)));
@@ -129,8 +129,8 @@ describe("what the derivation produces", () => {
     ring, and it is still in the document.
   */
   it("keeps a stub wall", () => {
-    const plain = deriveGraphRegions(maskFromRows(TWO_ROOMS), BASE);
-    const stubbed = deriveGraphRegions(maskFromRows(ROOM_WITH_STUB), BASE);
+    const plain = deriveWalls(maskFromRows(TWO_ROOMS), BASE);
+    const stubbed = deriveWalls(maskFromRows(ROOM_WITH_STUB), BASE);
     expect(stubbed.faces.bridges).toBeGreaterThan(0);
     expect(stubbed.faces.walls.length).toBeGreaterThan(0);
     expect(plain.faces.eulerHolds && stubbed.faces.eulerHolds).toBe(true);
@@ -138,7 +138,7 @@ describe("what the derivation produces", () => {
 
   it("leaves no sliver behind at any tolerance", () => {
     for (const tolerance of [0, 0.5, 2]) {
-      const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), { ...BASE, tolerance });
+      const result = deriveWalls(maskFromRows(TWO_ROOMS), { ...BASE, tolerance });
       expect(result.sliversLeft, `tolerance ${tolerance}`).toBe(0);
       expect(result.graph.stats.orphans, `tolerance ${tolerance}`).toBe(0);
       expect(result.faces.eulerHolds, `tolerance ${tolerance}`).toBe(true);
@@ -163,7 +163,7 @@ describe("meeting the command cap", () => {
       the band around everything — carrying far more commands than either room, and it was what
       tripped the cap first.
     */
-    const result = deriveGraphRegions(maskFromRows(TWO_ROOMS), {
+    const result = deriveWalls(maskFromRows(TWO_ROOMS), {
       ...BASE,
       tolerance: 0.1,
       maxTolerance: 16,
@@ -182,7 +182,7 @@ describe("meeting the command cap", () => {
     either would leave the map with a room the fog does not cover.
   */
   it("reports a face that still will not fit, and keeps it whole", () => {
-    const result = deriveGraphRegions(maskFromRows(STEPPED), {
+    const result = deriveWalls(maskFromRows(STEPPED), {
       ...BASE,
       tolerance: 0.1,
       maxTolerance: 0.1,
@@ -204,7 +204,7 @@ describe("meeting the command cap", () => {
     would hang rather than fail if it went.
   */
   it("does not spin when asked for no simplification at all", () => {
-    const result = deriveGraphRegions(maskFromRows(STEPPED), {
+    const result = deriveWalls(maskFromRows(STEPPED), {
       tolerance: 0,
       maxTolerance: 4,
       maxCommands: 4,

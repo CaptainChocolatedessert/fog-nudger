@@ -1,14 +1,14 @@
 /**
- * What stage two puts on the map: the frozen graph's faces, placed in the world.
+ * What stage two puts on the map: the wall graph's faces, placed in the world.
  *
- * Stage one emits what the trace made of the map. After the freeze the map is no longer what the
+ * Stage one emits what the trace made of the map. Once a graph is saved, the map is no longer what the
  * rooms are made of — the GM's graph is — so the emit path needs a second *source*. This is it, and
  * it is deliberately only a source: the shapes, the wall lines, the deletion, the batching and the
  * provenance are all the existing ones, because those are where the hard-won behaviour lives.
  *
  * ## Placement reuses the raster's own path, at a raster of one by one
  *
- * A frozen graph is stored in fractions of the map's extent, and `createPlacement` maps a raster
+ * A wall graph is stored in fractions of the map's extent, and `createPlacement` maps a raster
  * linearly onto the map's world bounds — so a **1×1 raster is exactly fraction space**, and the
  * ordinary placement puts a fraction where it belongs with no second implementation to keep in step.
  * That matters more than the lines it saves: this project's placement carries per-axis scaling and a
@@ -20,8 +20,8 @@
  * Stage one meets the command cap by simplifying harder and refitting everything. **Stage two must
  * not**: the vertices are the GM's, and moving them to fit a limit would edit their work to make it
  * transmissible. So an oversized face is skipped and named, which is the same answer stage one gives
- * once its ladder runs out. It should not arise — the freeze stores the *escalated* fitted set, so
- * what was within the cap at the freeze is within it now, and editing adds points a handful at a
+ * once its ladder runs out. It should not arise — the trace stores the *escalated* fitted set, so
+ * what was within the cap when it was built is within it now, and editing adds points a handful at a
  * time — but "should not arise" is not "cannot", and a silent truncation would be worse than a
  * missing room.
  *
@@ -37,8 +37,8 @@ import {
 } from "../map/placement";
 import { placeRegions } from "../map/placeRegions";
 import { COMMAND_CAP } from "../trace/simplify";
-import { buildFrozenFaces, wallSegments, type FrozenFaces } from "../trace/frozenFaces";
-import type { FrozenGraph } from "../trace/frozenGraph";
+import { buildWallFaces, wallSegments, type WallFaces } from "../trace/wallFaces";
+import type { WallGraph } from "../trace/wallGraph";
 import type { StageableRegion } from "./fogShapes";
 
 /** A wall the rings do not cover, in world units, as `stageWallLines` wants it. */
@@ -47,26 +47,26 @@ export interface PlacedWall {
   readonly points: readonly Point[];
 }
 
-export interface FrozenEmission {
+export interface WallEmission {
   readonly regions: readonly StageableRegion[];
   readonly walls: readonly PlacedWall[];
   /** The traversal behind it, so the caller can log the check rather than re-deriving to find it. */
-  readonly faces: FrozenFaces;
+  readonly faces: WallFaces;
 }
 
 /**
- * Place the frozen graph's faces and uncovered walls into the world.
+ * Place the wall graph's faces and uncovered walls into the world.
  *
  * `dpi` is world units per grid square, and it only decides the size written into an item's **name**
  * and provenance. Nothing about the geometry depends on the grid, which is the standing rule — a GM
  * who never set a grid gets a wrong-looking number in a label rather than fog in the wrong place.
  */
-export function frozenEmission(
-  graph: FrozenGraph,
+export function wallEmission(
+  graph: WallGraph,
   bounds: WorldBounds,
   dpi: number,
-): FrozenEmission {
-  const faces = buildFrozenFaces(graph);
+): WallEmission {
+  const faces = buildWallFaces(graph);
   // One by one, because the rings are already fractions of the map. See the note above.
   const placement = createPlacement(bounds, 1, 1);
 

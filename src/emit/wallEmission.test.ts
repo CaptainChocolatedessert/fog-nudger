@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { documentPoint, type FrozenGraph } from "../trace/frozenGraph";
-import { frozenEmission } from "./frozenEmission";
+import { documentPoint, type WallGraph } from "../trace/wallGraph";
+import { wallEmission } from "./wallEmission";
 
-function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): FrozenGraph {
+function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): WallGraph {
   return {
     nodes: points.map(([x, y]) => documentPoint(x, y)),
     edges: edges.map(([a, b]) => ({ a, b })),
@@ -35,9 +35,9 @@ const BOUNDS = { min: { x: 1000, y: -200 }, max: { x: 1800, y: 200 } };
 /** World units per grid square. */
 const DPI = 100;
 
-describe("placing the frozen graph", () => {
+describe("placing the wall graph", () => {
   it("puts a fraction of the map where the map actually is, per axis", () => {
-    const { regions } = frozenEmission(ROOM, BOUNDS, DPI);
+    const { regions } = wallEmission(ROOM, BOUNDS, DPI);
 
     expect(regions).toHaveLength(1);
     const placed = regions[0]!.placed;
@@ -49,7 +49,7 @@ describe("placing the frozen graph", () => {
   });
 
   it("anchors the item at the middle of what it covers, with its rings relative to that", () => {
-    const { regions } = frozenEmission(ROOM, BOUNDS, DPI);
+    const { regions } = wallEmission(ROOM, BOUNDS, DPI);
     const placed = regions[0]!.placed;
 
     expect(placed.position.x).toBeCloseTo(1400, 6);
@@ -61,14 +61,14 @@ describe("placing the frozen graph", () => {
   });
 
   it("reports the area in grid squares, which is a world measure and not a fraction", () => {
-    const { regions } = frozenEmission(ROOM, BOUNDS, DPI);
+    const { regions } = wallEmission(ROOM, BOUNDS, DPI);
 
     // 400 by 200 world units is 80,000, and a square is 100 x 100.
     expect(regions[0]!.squares).toBeCloseTo(8, 6);
   });
 
   it("survives a scene with no grid rather than reporting an infinity", () => {
-    const { regions } = frozenEmission(ROOM, BOUNDS, 0);
+    const { regions } = wallEmission(ROOM, BOUNDS, 0);
 
     // Nothing about the geometry depends on the grid; only the label does, and it says zero.
     expect(regions[0]!.squares).toBe(0);
@@ -87,7 +87,7 @@ describe("placing the frozen graph", () => {
       ],
       [...loop([0, 1, 2, 3]), [0, 4]],
     );
-    const { walls, regions } = frozenEmission(withStub, BOUNDS, DPI);
+    const { walls, regions } = wallEmission(withStub, BOUNDS, DPI);
 
     expect(regions).toHaveLength(1);
     expect(walls).toHaveLength(1);
@@ -112,7 +112,7 @@ describe("placing the frozen graph", () => {
       ],
       [...loop([0, 1, 2, 3]), ...loop([4, 5, 6, 7])],
     );
-    const { regions } = frozenEmission(nested, BOUNDS, DPI);
+    const { regions } = wallEmission(nested, BOUNDS, DPI);
 
     expect(regions).toHaveLength(2);
     const [outer, inner] = regions;
@@ -139,14 +139,14 @@ describe("placing the frozen graph", () => {
     }
     const huge = graphOf(points, loop(points.map((_, i) => i)));
 
-    const { regions } = frozenEmission(huge, BOUNDS, DPI);
+    const { regions } = wallEmission(huge, BOUNDS, DPI);
 
     expect(regions).toHaveLength(1);
     expect(regions[0]!.overCap).toBe(true);
   });
 
   it("leaves nothing over the command cap, and says so per region", () => {
-    const { regions } = frozenEmission(ROOM, BOUNDS, DPI);
+    const { regions } = wallEmission(ROOM, BOUNDS, DPI);
 
     // A four-point room is nowhere near it. The flag exists for a graph edited past the limit, which
     // stage two cannot simplify its way out of because the vertices are the GM's.

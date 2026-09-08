@@ -30,7 +30,7 @@ import { describeError } from "../describeError";
 import { addFrameWalls } from "../trace/frameWalls";
 import { controlsLive } from "./settingRows";
 import { say } from "./shell";
-import { frozenGraph, updateFrozen } from "./stage";
+import { wallGraph, saveEditedWalls } from "./stage";
 
 export function renderFrameAction(body: HTMLElement): void {
   const actions = document.createElement("div");
@@ -59,7 +59,7 @@ export function renderFrameAction(body: HTMLElement): void {
 }
 
 async function run(button: HTMLButtonElement): Promise<void> {
-  const graph = frozenGraph();
+  const graph = wallGraph();
   if (!graph) {
     say("no walls saved for this map yet", "bad");
     return;
@@ -76,7 +76,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   say("walling the edge…", "working");
   try {
-    await updateFrozen(framed.graph);
+    await saveEditedWalls(framed.graph);
     devLog(
       "info",
       `workspace: walled the map's edge — ${framed.splits} existing segments split where they met ` +

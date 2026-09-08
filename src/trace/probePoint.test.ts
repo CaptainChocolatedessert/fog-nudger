@@ -64,7 +64,7 @@ const SKELETON = [
 const wall = {
   ink: maskFromRows(INK),
   /*
-    The skeleton as `buildWallGraph` labels it — unframed since 2026-09-08.
+    The skeleton as `buildSkeletonGraph` labels it — unframed since 2026-09-08.
 
     The border frame used to be painted in here too, so the outside was a bounded face and the frame
     itself was skeleton-without-being-ink. With it gone, the space outside the room is an ordinary

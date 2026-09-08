@@ -10,7 +10,7 @@
  * A dialog is a bad way to make a boundary visible — it appears *after* the GM has committed to the
  * gesture, and one that appears often trains them to dismiss it. So the boundary is shown first by
  * disabling what would cross it and saying why; this is the second half, for the deliberate action
- * they went looking for. Two uses, both irreversible: freezing the graph, and discarding it.
+ * they went looking for. Two uses, both irreversible: deriving the graph, and discarding it.
  *
  * ## Escape and the way out
  *

@@ -12,10 +12,10 @@ import { describe, expect, it } from "vitest";
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { documentPoint, freezeGraph } from "./frozenGraph";
+import { documentPoint, buildWallGraph } from "./wallGraph";
 import { dropCollinear } from "./simplify";
 import type { FittedEdge } from "./faces";
-import type { WallGraph } from "./wallGraph";
+import type { SkeletonGraph } from "./skeletonGraph";
 
 const at = (x: number, y: number): Vector2 => ({ x, y });
 
@@ -81,52 +81,52 @@ describe("dropCollinear", () => {
   });
 });
 
-describe("the freeze applies it", () => {
+describe("buildWallGraph applies it", () => {
   /**
    * One edge running straight across a 100x100 raster in ten steps.
    *
    * Ten fitted points, eight of them interior and every one on the same line — so the document
    * should hold a single segment between the edge's two nodes, and say it dropped eight points.
    */
-  function straightRun(): { graph: WallGraph; fitted: FittedEdge[] } {
+  function straightRun(): { graph: SkeletonGraph; fitted: FittedEdge[] } {
     const points = Array.from({ length: 10 }, (_, i) => at(10 + i * 5, 50));
     const graph = {
       width: 100,
       height: 100,
       nodes: [at(10, 50), at(55, 50)],
       edges: [{ a: 0, b: 1, points }],
-    } as unknown as WallGraph;
+    } as unknown as SkeletonGraph;
     return { graph, fitted: [{ points }] };
   }
 
   it("stores one segment for a straight run and reports what it dropped", () => {
     const { graph, fitted } = straightRun();
-    const frozen = freezeGraph(graph, fitted);
+    const built = buildWallGraph(graph, fitted);
 
-    expect(frozen.collinear).toBe(8);
-    expect(frozen.graph.edges).toHaveLength(1);
-    // The two ends are the derived graph's own nodes, reused by id — the point of freezing this way.
-    expect(frozen.graph.nodes).toEqual([documentPoint(0.1, 0.5), documentPoint(0.55, 0.5)]);
+    expect(built.collinear).toBe(8);
+    expect(built.graph.edges).toHaveLength(1);
+    // The two ends are the derived graph's own nodes, reused by id — the point of deriving this way.
+    expect(built.graph.nodes).toEqual([documentPoint(0.1, 0.5), documentPoint(0.55, 0.5)]);
   });
 
   /*
-    A staircase through the freeze keeps every step, which is the same refusal one level up.
+    A staircase through the wall graph build keeps every step, which is the same refusal one level up.
 
-    Worth its own case rather than trusting the unit test above: the freeze divides by the raster
+    Worth its own case rather than trusting the unit test above: the build divides by the raster
     before storing, and division is where an exact test could stop being exact. It does not here,
     because the pass runs on the raster coordinates *before* the division.
   */
-  it("keeps every step of a staircase through the freeze", () => {
+  it("keeps every step of a staircase through the build", () => {
     const points = [at(10, 10), at(11, 10), at(12, 11), at(13, 11), at(14, 12)];
     const graph = {
       width: 100,
       height: 100,
       nodes: [at(10, 10), at(14, 12)],
       edges: [{ a: 0, b: 1, points }],
-    } as unknown as WallGraph;
+    } as unknown as SkeletonGraph;
 
-    const frozen = freezeGraph(graph, [{ points }]);
-    expect(frozen.collinear).toBe(0);
-    expect(frozen.graph.edges).toHaveLength(4);
+    const built = buildWallGraph(graph, [{ points }]);
+    expect(built.collinear).toBe(0);
+    expect(built.graph.edges).toHaveLength(4);
   });
 });

@@ -16,7 +16,7 @@
  *
  * ## A raster, not a list of strokes
  *
- * The first design stored strokes as polylines in fractions of the map, by analogy with the frozen
+ * The first design stored strokes as polylines in fractions of the map, by analogy with the saved
  * graph. **That was the wrong analogy** (user, 2026-09-05): the rule the graph is obeying is that a
  * document belongs in the space of the thing it produces, and the graph produces geometry where
  * this produces *ink pixels*.
@@ -426,7 +426,7 @@ class ByteReader {
       admits is well under 2^28 — which four groups of seven bits already covers. **So the fifth
       group is unreachable from a payload this decoder accepts**, and a mutation shortening the loop
       to four is not caught by anything. Stated rather than left looking covered, and kept at five to
-      match `frozenGraph.ts` so the two readers are not subtly different.
+      match `wallGraph.ts` so the two readers are not subtly different.
     */
     for (let i = 0; i < 5; i++) {
       const byte = this.byte();
@@ -509,7 +509,7 @@ export function encodePaint(layer: PaintLayer): string {
 /**
  * Decode the layer, or `null` if it is not one this version wrote and can vouch for.
  *
- * All or nothing, like the frozen graph and unlike the settings. A settings field can take its
+ * All or nothing, like the wall graph and unlike the settings. A settings field can take its
  * default while the others survive; a layer with some of its runs dropped is every mark after the
  * fault in the wrong place, which is a corrupt document presented as a valid one.
  *

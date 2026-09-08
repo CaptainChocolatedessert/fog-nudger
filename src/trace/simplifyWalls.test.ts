@@ -10,13 +10,13 @@ import { describe, expect, it } from "vitest";
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { documentPoint, nodeDegrees, wallRuns, type FrozenGraph } from "./frozenGraph";
+import { documentPoint, nodeDegrees, wallRuns, type WallGraph } from "./wallGraph";
 import { simplifyWalls } from "./planarOps";
 
 function graphOf(
   points: readonly (readonly [number, number])[],
   edges: readonly (readonly [number, number])[],
-): FrozenGraph {
+): WallGraph {
   return {
     nodes: points.map(([x, y]) => documentPoint(x, y)),
     edges: edges.map(([a, b]) => ({ a, b })),

@@ -27,7 +27,7 @@ Owlbear-shaped is surprising, look there before theorising.
 2. [The platform: Owlbear and Dynamic Fog](#2-the-platform-owlbear-and-dynamic-fog)
 3. [Architecture: the wall graph is the document](#3-architecture-the-wall-graph-is-the-document)
 4. [Reading the map into a graph](#4-reading-the-map-into-a-graph)
-5. [The frozen document](#5-the-frozen-document)
+5. [The wall graph](#5-the-wall-graph--stored-walked-and-edited)
 6. [Emitting](#6-emitting)
 7. [The surfaces](#7-the-surfaces)
 8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
@@ -50,6 +50,8 @@ Several of these words drifted in conversation and mean one thing each here. **S
 machinery is the first time it comes up** — none of these is self-explanatory, and an algorithm's
 name is not an explanation.
 
+Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGraph`, `WallFace`.
+
 ### The things
 
 | term | means |
@@ -57,12 +59,12 @@ name is not an explanation.
 | **ink** | the linework, as a binary mask. Whatever the reading decided is a mark rather than ground. |
 | **the reading** | binarise + polarity + ink width — the expensive first half of the pipeline, cached on its own. |
 | **skeleton** | the ink thinned to one-pixel centrelines. A raster, not a graph. |
-| **wall graph** | the skeleton chained into nodes and edges. Still in raster pixels, still derived. |
-| **the document** / **frozen graph** | the fitted wall graph, stored in scene metadata in fractions of the map. **The GM's own work.** Nothing re-derives it. |
+| **skeleton graph** (`SkeletonGraph`) | the skeleton chained into nodes and edges, still in raster pixels, edges still carrying their pixel chains. An intermediate, thrown away once the walls are fitted. |
+| **wall graph** (`WallGraph`) | the fitted graph, stored in scene metadata in fractions of the map. **The GM's own work**, and the project's document. Nothing re-derives it. |
 | **face** | a cycle of the graph traversal — the abstract thing. |
 | **region** / **room** | a face we emit as a fog shape. The GM-facing word. |
 | **wall** | a *run* of segments chained through degree-2 nodes — what a GM thinks they are editing. |
-| **segment** / **edge** | one straight piece between two nodes. **Every vertex is a node**, so these are the same thing in the frozen document. |
+| **segment** / **edge** | one straight piece between two nodes. **Every vertex is a node**, so these are the same thing in the wall graph. |
 | **bridge** | an edge with the same face on both sides. A stub wall is one. Bridges emit as lines. |
 | **spur** | a wall run with a free end. What pruning removes. |
 | **sliver** | a cycle enclosing no lattice point — sub-pixel, an artefact of junction clusters. |
@@ -71,7 +73,7 @@ name is not an explanation.
 ### The stages, and the two words for them
 
 **"Stage one" and "the ink mode" are the same thing**, and so are "stage two" and "the wall editor".
-The first pair is the *architecture* word — where the freeze falls — and the second is the *surface*
+The first pair is the *architecture* word — which side of the handover you are on — and the second is the *surface*
 word, which is what a GM sees. Both are used; they are not two concepts.
 
 **Do not confuse either with the three cascade stages** (`read` / `derive` / `adjust`), which are
@@ -79,7 +81,7 @@ about what a settings change **destroys**. Those are a property of a parameter, 
 
 | | stage one — the ink mode | stage two — the wall editor |
 |---|---|---|
-| works on | the map image | the frozen document |
+| works on | the map image | the wall graph |
 | re-derives? | yes, on every change | **never** |
 | what a save does | writes the document, then pushes | pushes |
 
@@ -341,7 +343,7 @@ nobody ships.
 it.**
 
 ```
-ink mask  →  wall graph  →  frozen document  →  { fog shapes for the faces, lines for the rest }
+ink mask  →  skeleton graph  →  wall graph  →  { fog shapes for the faces, lines for the rest }
               (derived)      (the GM's own)
 ```
 
@@ -525,7 +527,7 @@ polyline continuity between line segments, so editing our output there would hav
 
 **Nothing is ever read back out of the scene.** Everything the surfaces derive is a pure function of
 durable inputs — the settings, the nominated map and the paint layers, all in scene metadata, plus
-the frozen graph. Scene metadata belongs to the scene rather than to the extension or the browser
+the wall graph. Scene metadata belongs to the scene rather than to the extension or the browser
 session, so it survives closing the workspace, reloading the room, and disabling and re-enabling the
 extension. There is no `localStorage` use at all.
 
@@ -568,7 +570,7 @@ This is stage one: everything that turns pixels into the document. It is orchest
 
 ```
 load  →  binarise  →  compose the GM's paint  →  filter ink
-      →  thin  →  chain into a graph  →  remove slivers  →  fit  →  freeze
+      →  thin  →  chain into a graph  →  remove slivers  →  fit  →  build the wall graph
 ```
 
 ### Resolution is native
@@ -711,7 +713,7 @@ the break repair sat between its terms, which is why the repair becoming a tool 
 than it looked.
 
 **A raster, not a list of strokes.** The rule is that a document belongs in the space of the thing it
-produces: the frozen graph produces geometry, this produces ink pixels. What it buys is that the
+produces: the wall graph produces geometry, this produces ink pixels. What it buys is that the
 preview and the effect stop being two computations — the array the GM is shown **is** the array that
 composes — and that erasing needs no definition, it writes zero.
 
@@ -925,7 +927,7 @@ ring (the crossing number).** Making these consistent reintroduces a defect eith
 **The cost of counting neighbours, stated:** three mutually-touching pixels become a half-pixel
 sliver, so sliver removal has real work on every map rather than occasionally.
 
-### Fitting, and the freeze
+### Fitting, and building the wall graph
 
 **Each edge is fitted once, and both faces sharing it are assembled from that one fitted edge.**
 Under a partition, two adjacent rooms' boundaries were a wall width apart, so simplifying each ring
@@ -941,14 +943,14 @@ enormous region can coarsen every other one.**
 is still a lattice point and every later comparison stays exact. `simplifyIndices` is the decision and
 `simplifyPolyline` is that plus a lookup — one Douglas–Peucker, not two.
 
-**A collinear pass runs at the freeze**, dropping any point lying exactly on the line between its
+**A collinear pass runs as the wall graph is built**, dropping any point lying exactly on the line between its
 neighbours. It is the only simplification that **moves nothing** — every remaining point is where it
 was and the enclosed area is identical.
 
 - **The test is an exact cross product, and it has to be.** Asking the fitter's distance function
   whether a point is zero from the chord fails: it divides by a squared length and multiplies back,
   so a collinear lattice point comes out at ~1e-30 and a `> 0` test keeps it.
-- **It runs at the freeze, not in the fitter.** The randomised sweep runs the derivation at a
+- **It runs at the build, not in the fitter.** The randomised sweep runs the derivation at a
   tolerance of zero precisely to get *unfitted* rings, and asserts every step of one is to an
   8-neighbour. Collapsing a straight run inside the fitter would break that assertion for a reason
   unrelated to what it guards.
@@ -989,14 +991,21 @@ Both fingerprints are deliberately over-broad on the map side — identity, geom
 a wrong reuse would report stale regions as current. Which halves ran is logged every time.
 ---
 
-## 5. The frozen document
+## 5. The wall graph — stored, walked and edited
 
-**Stage one is the map; stage two is the graph.** The freeze is where the pixels stop being needed:
-everything before it derives from the image, and nothing after it ever re-derives.
+**Stage one is the map; stage two is the graph.** Building the wall graph is where the pixels stop
+being needed: everything before it derives from the image, and nothing after it re-derives.
 
 That is what makes editing possible at all. Re-deriving renumbers everything, so stored edits would
-point at vertices that no longer exist. Stage two never re-derives, so **a moved vertex is just a
+point at vertices that no longer exist. The editor never re-derives, so **a moved vertex is just a
 stored coordinate** rather than a thing that has to be found again.
+
+**Nothing is "frozen", and there is no door.** An earlier design made this a one-way crossing, and
+the vocabulary outlived it — if you meet the words *freeze* or *frozen* anywhere, they mean this
+build and nothing more. Reopening the ink mode is harmless: it derives a graph and shows it, and only
+the two save buttons at the foot of it replace what is stored. What is true is narrower and is the
+whole of it: **a re-derive produces a new graph rather than updating the old one**, so saving over
+edits discards them, which is why saving is a deliberate button rather than something closing does.
 
 **No edit list, deliberately.** Replaying GM actions would have to happen twice — on the raster and
 again on the graph — and grows more error-prone with every tool added. Accepting the information loss
@@ -1036,17 +1045,17 @@ fall out. **Node ids are the only identity the document has.**
   could disagree.
 - **It has its own metadata key**, or a slider release would rewrite tens of kilobytes and two writes
   could race.
-- **`writeFrozenGraph` throws where `readSettings` swallows.** A failed read falls back to defaults
+- **`writeWallGraph` throws where `readSettings` swallows.** A failed read falls back to defaults
   and carries on; a failed write means the GM keeps editing something that is not being saved.
 
-**`decodeFrozenGraph` refuses all-or-nothing**, unlike the settings normaliser which degrades field by
+**`decodeWallGraph` refuses all-or-nothing**, unlike the settings normaliser which degrades field by
 field. Settings are independent — a bad blur can take its default while the others survive. A graph is
 not: an edge referencing a node that does not exist has no sensible fallback, and **a graph with an
 edge quietly dropped is a corrupt document presented as a valid one.** So it is a complete graph or
 `null`, and it distinguishes "nothing stored" from "stored and unreadable" — both yield no graph, but
 the second has cost the GM their editing and must not read as "you have not started".
 
-### The freeze itself
+### The build itself
 
 Fitted edges are positionally aligned with the derived graph's edges, and fitting keeps both ends, so
 the shared points *are* the derived graph's nodes with their indices intact; each edge's interior
@@ -1090,7 +1099,7 @@ doubling a line in order to drag the copy elsewhere is a legal intermediate stat
 Worth putting in any such warning's wording: **a sliver is not small in its effect**, because Dynamic
 Fog strokes a boundary to derive walls, so a few pixels of shape still block line of sight.
 
-**No fitting happens here, which is the freeze point paying off.** The frozen graph *is* the fitted
+**No fitting happens here, which is the handover paying off.** The wall graph *is* the fitted
 geometry, so a ring is its own nodes and nothing is approximated twice.
 
 ### Editing the graph
@@ -1197,7 +1206,7 @@ still on — the dragged one, or the one it was folded into.
 ### The one-shot operations
 
 Three buttons at the foot of the editor, each an operation on the graph as it stands. **They replay
-nothing**, which is why they are coherent despite the freeze: the GM's edits are already inside the
+nothing**, which is why they are coherent: the GM's edits are already inside the
 thing being transformed.
 
 - **Straighten the walls** (`simplifyWalls`) — Douglas–Peucker **per wall run**, which is what makes
@@ -1207,12 +1216,12 @@ thing being transformed.
   between its ends, while a closed loop fits to a single point and the room disappears. Its crossing
   sweep is **total and quadratic**, because this touches everything and the "only what moved" argument
   offers no saving.
-- **Prune the dead ends** (`pruneFrozenGraph`) — deletes wall runs with a free end shorter than a
+- **Prune the dead ends** (`pruneWallGraph`) — deletes wall runs with a free end shorter than a
   budget, cascading, since every arm of a junction becomes a dead end once its neighbours go. **The
   doomed runs are drawn in red while the slider moves**, in the same red the erase tool uses, because
   deleting cannot be undone and a budget is not a number anybody can picture on their own map — the
   same setting takes four hairs off one map and a third of the walls off another. **`spurEdgesToPrune`
-  is the question and `pruneFrozenGraph` is written in terms of it**, so the picture cannot lie about
+  is the question and `pruneWallGraph` is written in terms of it**, so the picture cannot lie about
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
   vertices that actually go, since the junction where a stub meets its wall keeps its other walls and
   stays put.
@@ -1362,7 +1371,7 @@ button that requests a stop. **Three things about it are deliberate.**
 - **The label is the caller's.** "Exit anyway" is right when leaving is what happens next and a lie
   when it is not, so a button-driven push says **Stop writing**.
 - **A stopped push does not hand off.** Pressing stop during *Edit the walls* stays put and says the
-  map is partly written. The graph is saved either way, because the freeze runs before the push.
+  map is partly written. The graph is saved either way, because it is built before the push.
 
 **The stop is cooperative and lands between batches**, leaving the partial set rather than rolling
 back — which is safe precisely because the next push deletes all of ours before writing.
@@ -1485,7 +1494,7 @@ an edge mark.
   keeps the sliders above usable without holding Ctrl.
 - **Walls** — spur pruning and edge smoothing, drawing the **fitted graph** over the partition over the
   ink. The last thing the ink mode shows and the first thing the editor shows are one picture, because
-  both come from the same freeze.
+  both come from the same build.
 - **Edit walls** — the tool picker, the three one-shot buttons, and the graph over the partition. With
   no saved graph it says where walls come from rather than offering three buttons that would do
   nothing.
@@ -1573,7 +1582,7 @@ A reading marks the partition stale; rebuilding is visible in one step, so **ent
 pays**. A slider release consults `PARAMETER_STAGE` to decide which cycle it triggers — the cascade, not
 a third list.
 
-**The prune budget has a fast path.** The freeze's output is kept, so a budget change is a run walk and
+**The prune budget has a fast path.** The built graph is kept, so a budget change is a run walk and
 a traversal — single-digit milliseconds — rather than a full re-derive.
 
 **The partition's source is the MODE, not the presence of a stored graph.** Reading a stored graph in
@@ -1725,7 +1734,7 @@ at its own question.
   represents it, so it is not a wall. Linework that fell out between the two representations.
   **Its limit, stated:** it says every pixel was *claimed*, not that it was claimed **correctly**. A
   walk that routed a pixel into the wrong chain claims it just the same.
-- **Euler's identity**, on the frozen document — *vertices − walls + enclosing cycles = pieces of
+- **Euler's identity**, on the wall graph — *vertices − walls + enclosing cycles = pieces of
   linework*, the left side from geometry and the right from a union-find. It catches a missed
   half-edge, a cycle partition that does not partition, and a successor rule tracing the wrong way
   round — that last as soon as there are two rooms.
@@ -1766,7 +1775,7 @@ Two things from it that still bind:
 ### The randomised sweep
 
 `graphSweep.test.ts` generates **700 skeletons across three sizes** and asserts the invariants: orphans
-zero, sliver removal settled, Euler and planarity over the frozen document, every ring a real polygon,
+zero, sliver removal settled, Euler and planarity over the wall graph, every ring a real polygon,
 and every segment either covered by a ring or emitted as a wall line.
 
 **It pins invariants, never values**, so changing the generator does not force a rewrite. Both of the
@@ -1902,7 +1911,7 @@ Named in advance so they are recognised rather than discovered.
   room" is out by more than a factor of two.
 - **Hole containment is checked one step across, not transitively.** A discarded face that itself
   contains a surviving one leaves its hole filled. Nothing on the test map produces that shape.
-- **A room thinner than the smoothing tolerance is lost at the freeze**, because both its walls fit to
+- **A room thinner than the smoothing tolerance is lost when the wall graph is built**, because both its walls fit to
   the same line and one of the pair is dropped. Counted and reported, never silent.
 
 ### Things an optimisation pass would take, and must not
@@ -2112,10 +2121,10 @@ closed — but not deleted.
 | `trace/faces.ts` | the half-edge walk and sliver detection, and nothing else |
 | `trace/spurs.ts` | **which** dead-end wall runs a budget removes — the decision alone, no geometry and no raster |
 | `trace/simplify.ts` | Douglas–Peucker (`simplifyIndices` is the decision, `simplifyPolyline` that plus a lookup), `dropCollinear`, and `COMMAND_CAP` |
-| `trace/graphRegions.ts` | ink in, a **frozen document** out: thin, chain, de-sliver, fit, freeze, and the escalation ladder that meets the command cap. It also keeps a space labelling, for the point probe and nothing else. **Its name is stale** — it derives no regions |
+| `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, and the escalation ladder that meets the command cap. It also keeps a space labelling, for the point probe and nothing else |
 | `trace/label.ts` | region labelling |
-| `trace/frozenGraph.ts` | the stored document: freeze, encode, decode, compact, and the two track measurements |
-| `trace/frozenFaces.ts` | faces of the frozen graph with no raster: the walk, containment grouping, the bridges, Euler's check |
+| `trace/wallGraph.ts` | the document: build, encode, decode, compact, prune, and the two track measurements |
+| `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one — and the two queries the tools aim with |
 | `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
@@ -2127,9 +2136,9 @@ closed — but not deleted.
 `map/mapImage.ts` list, nominate, resolve and load · `map/mapChoice.ts` the unnominated-map rule, split
 out so it can be tested · `map/placement.ts`, `map/placeRegions.ts`, `map/rasterPlan.ts` raster-to-world
 placement, reused at a 1×1 raster because that *is* fraction space · `emit/fogShapes.ts` the shape items
-and the four emission constants · `emit/wallLines.ts` the wall `LINE`s · `emit/frozenEmission.ts` the
-frozen graph's faces placed in the world · `emit/emitRegions.ts` batch it into the scene ·
-`geometry/ring.ts` ring maths · `frozenGraphStore.ts` and `inkPaintStore.ts` the two metadata documents ·
+and the four emission constants · `emit/wallLines.ts` the wall `LINE`s · `emit/wallEmission.ts` the
+wall graph's faces placed in the world · `emit/emitRegions.ts` batch it into the scene ·
+`geometry/ring.ts` ring maths · `wallGraphStore.ts` and `inkPaintStore.ts` the two metadata documents ·
 `settingsStore.ts` the settings.
 
 ### Settings and shared UI
@@ -2147,7 +2156,7 @@ URL; `workspace.ts` is the composition root only.
 - **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`) ·
   `accordion.ts` · `reading.ts` (the mask request cycle, subscribed to by the layers) · `regions.ts`
   (the lazy derive cycle) · `stage.ts` (reading and writing the stored graph)
-- **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `freezeAction.ts` (how the ink
+- **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `saveAction.ts` (how the ink
   mode ends: save, push, hand off) · `workspaceControl.ts` (open either mode)
 - **Controls** — `settingRows.ts` · `settingsState.ts` · `swatches.ts` · `graphScale.ts` (the sliders'
   graph-measured tops) · `seedSimplify.ts` · `confirmDialog.ts`

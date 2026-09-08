@@ -20,8 +20,9 @@
  *
  * The ordering is forced rather than advisory: `read` destroys `derive`'s work every time it runs.
  * The answer to that has never been to engineer around it but to make the sequence visible — which
- * is what the workspace's steps do, and what the two-stage editing model settled for good (see
- * `DESIGN.md` under step G: pixel edits, then a frozen graph, with a one-way door between them).
+ * is what the workspace's steps do, and what the two modes settled for good: the ink mode derives a
+ * wall graph from the map, and the editor edits the one that was derived. Re-deriving replaces it,
+ * which is why saving is a deliberate button rather than something closing does.
  *
  * ## Everything is validated, because nothing here is trusted
  *
@@ -538,12 +539,21 @@ export type ParameterKind = "pipeline" | "display" | "tool";
   made every gap parameter feed the mask. The note that replaced it said to revisit *if the repair
   became a tool, at which point there would be four*. It did, and there are.
 
-  **`tool` is not a synonym for `display`, and that is the whole test it had to pass.** Both
-  recompute nothing, so neither reaches the mask fingerprint. What separates them is the freeze: a
-  display control stays live in stage two because recolouring while editing walls is ordinary, and a
-  tool control belongs to a tool the freeze has closed — so leaving one live is a slider that moves
-  under a step whose tools say they are shut. That was already untidy for the two brush widths and
-  would have been four.
+  **`tool` is not a synonym for `display`, and that is the whole test it had to pass.** Neither
+  reaches the mask fingerprint, because neither recomputes a mask. What separates them is who has to
+  be told: a `display` change only repaints, while a `tool` change is handed to the tool, which may
+  be holding work the new number has just invalidated.
+
+  The break search is the case that makes it real. It holds a set of marks found at a particular
+  width, and moving that slider stops those marks describing anything — **marks on screen that no
+  longer match the settings beside them are the stale-diagnostic failure in miniature**, so the
+  search re-runs. A brush width has no one to tell, since the next stroke simply reads it; the kind
+  is shared because the *question* is the same one, not because both answers are interesting.
+
+  **The original justification here was different and is gone**: `tool` controls used to be dimmed
+  once a graph was saved, and `display` ones stayed live. Nothing dims any more — the two modes made
+  the boundary a page rather than a disabled slider — so the distinction had to stand on behaviour or
+  be deleted. It stands on `recomputeFor`.
 */
 export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   sauvolaK: "pipeline",

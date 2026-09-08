@@ -62,7 +62,6 @@ import {
   fractionWithin,
   placeRegions,
   placedBounds,
-  type PlacedRegion,
 } from "./map/placeRegions";
 import {
   describeHistogram,
@@ -73,7 +72,7 @@ import {
 import { blur, luminanceField, type ScalarField } from "./trace/field";
 import type { BinaryMask } from "./trace/binarize";
 import type { LabelledSpace } from "./trace/label";
-import type { Point, RasterPlacement, WorldBounds } from "./map/placement";
+import type { RasterPlacement, WorldBounds } from "./map/placement";
 import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
@@ -81,18 +80,15 @@ import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import type { FittedEdge } from "./trace/faces";
-import type { Frozen } from "./trace/frozenGraph";
-import type { FrozenFaces } from "./trace/frozenFaces";
-import type { WallGraph } from "./trace/wallGraph";
-import { describeFrozenFaces } from "./trace/frozenFaces";
+import type { WallGraphBuild } from "./trace/wallGraph";
+import type { WallFaces } from "./trace/wallFaces";
+import type { SkeletonGraph } from "./trace/skeletonGraph";
+import { describeWallFaces } from "./trace/wallFaces";
 import { commandCount } from "./geometry/ring";
 import {
-  deriveGraphRegions,
-  describeGraphRegions,
-} from "./trace/graphRegions";
-import type { Vector2 } from "@owlbear-rodeo/sdk";
-
-import type { Ring } from "./geometry/ring";
+  deriveWalls,
+  describeWallDerivation,
+} from "./trace/deriveWalls";
 import { COMMAND_CAP } from "./trace/simplify";
 
 /**
@@ -487,43 +483,6 @@ export function lastRasterWidth(): number | null {
   return width !== null && width > 0 ? width : null;
 }
 
-/** One region, carrying everything the emit path needs and nothing it does not. */
-export interface TracedRegion {
-  readonly id: number;
-  readonly placed: PlacedRegion;
-  /**
-   * The same rings before placement, in **raster pixels**.
-   *
-   * Carried so the workspace can draw the partition over the map it was read from without a second
-   * chain to produce it, and without undoing the world transform to get back to where it started.
-   * The placed rings are what an emitted item needs; these are what a picture of the map needs, and
-   * they are the same geometry either way — which is the point of returning both from one run
-   * rather than tracing twice.
-   */
-  readonly rings: readonly Ring[];
-  /** The region's true area in grid squares — its pixel count, not its bounding box. */
-  readonly squares: number;
-  readonly commands: number;
-  readonly tolerance: number;
-  /** Over the command cap even at the ceiling tolerance, so it cannot be emitted as it stands. */
-  readonly overCap: boolean;
-}
-
-/**
- * A wall no emitted fog shape's boundary covers, ready to emit as lines.
- *
- * Both coordinate systems, for the same reason `TracedRegion` carries both: the world points are
- * what an item needs, the raster points are what a picture of the map needs, and deriving one from
- * the other twice is how the two end up disagreeing.
- */
-export interface TracedWall {
-  /** The graph edge this came from. */
-  readonly edge: number;
-  readonly placed: readonly Point[];
-  readonly points: readonly Vector2[];
-  /** A vertex id per point. Shared with any region ring that meets this wall at a node. */
-}
-
 export interface TraceRun {
   readonly mapId: string;
   readonly mapName: string;
@@ -531,27 +490,27 @@ export interface TraceRun {
   /** The raster the trace ran at, which is what the preview scales its rings by. */
   readonly raster: { readonly width: number; readonly height: number };
   /**
-   * The document this run would freeze, and the faces of it.
+   * The document this run would derive, and the faces of it.
    *
    * **What the trace produces is a graph, not a set of regions** (2026-09-08). It used to carry
    * `regions` and `walls` derived from a raster labelling, and every consumer of those has moved onto
-   * the frozen traversal — the workspace draws it, the push emits it, and the escalation ladder
-   * measures the command cap against it. Carrying the freeze here means it happens once.
+   * the wall graph traversal — the workspace draws it, the push emits it, and the escalation ladder
+   * measures the command cap against it. Carrying it here means it is built once.
    */
-  readonly frozen: Frozen;
-  readonly faces: FrozenFaces;
+  readonly walls: WallGraphBuild;
+  readonly faces: WallFaces;
   /**
-   * The cleaned graph and its fitted edges — what step G freezes.
+   * The cleaned graph and its fitted edges — what step G derives.
    *
    * The **cleaned** one, after sliver removal, because that is what the faces are made of and what
    * the Walls step draws: a GM must edit what they can see. The raw graph has an order of magnitude
    * more nodes, almost all of them artefacts of junction clusters.
    *
-   * Carried on the run rather than re-derived by the freeze, so what gets stored is provably the
+   * Carried on the run rather than rebuilt by the save, so what gets stored is provably the
    * same geometry this run would have emitted. Fitting keeps both ends of every edge, so the fitted
    * endpoints *are* these nodes, which is what lets the stored document share them by reference.
    */
-  readonly graph: WallGraph;
+  readonly graph: SkeletonGraph;
   readonly fittedEdges: readonly FittedEdge[];
   /** One line for the panel. Detail is already in the dev log by the time this is returned. */
   readonly summary: string;
@@ -1099,7 +1058,7 @@ export interface MaskForOverlay {
   readonly composed: BinaryMask;
   readonly bounds: WorldBounds;
   readonly mapName: string;
-  /** The resolved map's id, so the frozen graph can record which map it describes. */
+  /** The resolved map's id, so the wall graph can record which map it describes. */
   readonly mapId: string;
   /**
    * The map image's URL, from the same resolution the mask was read through.
@@ -1308,10 +1267,10 @@ export async function runTrace(
     mapId,
   } = mask;
 
-  // ## From ink to a frozen wall graph
+  // ## From ink to a wall graph
   //
   // Step D, as it stands after 2026-09-08. The regions are the faces of the graph's arrangement, and
-  // they are derived by walking the **frozen document** rather than by labelling the raster — so this
+  // they are derived by walking the **wall graph** rather than by labelling the raster — so this
   // stage produces a graph, not a set of regions. A face boundary is a wall's centreline, so
   // half-wall reveal is true by construction and a stub wall survives instead of being deleted for
   // separating nothing.
@@ -1328,7 +1287,7 @@ export async function runTrace(
   */
   const tolerance = settings.trace.simplifyFraction * plan.width;
 
-  const derived = deriveGraphRegions(inkMask, {
+  const derived = deriveWalls(inkMask, {
     tolerance,
     maxTolerance: MAX_SIMPLIFY_FRACTION * plan.width,
   });
@@ -1385,7 +1344,7 @@ export async function runTrace(
     );
   }
 
-  devLog("info", `trace: ${describeGraphRegions(derived)}`);
+  devLog("info", `trace: ${describeWallDerivation(derived)}`);
 
   /*
     ## Euler's identity, which is what checks the traversal now
@@ -1398,7 +1357,7 @@ export async function runTrace(
   if (!derived.faces.eulerHolds) {
     devLog(
       "error",
-      `trace: ${describeFrozenFaces(derived.faces)}. The traversal of the graph is not coherent, ` +
+      `trace: ${describeWallFaces(derived.faces)}. The traversal of the graph is not coherent, ` +
         `and nothing downstream of this is worth reading.`,
     );
   }
@@ -1406,7 +1365,7 @@ export async function runTrace(
   const walls = derived.faces.walls.length;
   devLog(
     "info",
-    `trace: ${derived.faces.bridges} of ${derived.frozen.graph.edges.length} segments are bridges ` +
+    `trace: ${derived.faces.bridges} of ${derived.walls.graph.edges.length} segments are bridges ` +
       `— the same face on both sides, so no ring can cover them. With everything else no ring ` +
       `walks, that is ${walls} wall segments, emitted as LINE items the way Dynamic Fog's own wall ` +
       `mode builds one.`,
@@ -1416,12 +1375,12 @@ export async function runTrace(
   //
   // **Per edge, not per ring** — two faces sharing a wall are assembled from the same fitted points,
   // so they cannot drift apart and open a sliver between rooms. Escalation is therefore global, and
-  // it is measured against the **frozen** faces, which is what a push actually writes.
+  // it is measured against the **wall graph's** faces, which is what a push actually writes.
   const totalCommands = derived.faces.faces.reduce(
     (total, face) => total + commandCount(face.rings),
     0,
   );
-  const totalVertices = derived.frozen.graph.nodes.length;
+  const totalVertices = derived.walls.graph.nodes.length;
 
   devLog(
     "info",
@@ -1429,15 +1388,15 @@ export async function runTrace(
       `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyFraction.toExponential(2)} of ` +
       `the map, ${(derived.tolerance / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink ` +
       `width, escalated ${derived.escalations} times for the whole map); ` +
-      `${derived.frozen.collinear} points dropped as exactly collinear, which costs nothing; ` +
-      `${derived.frozen.duplicates} segments dropped as coincident and ` +
-      `${derived.frozen.zeroLength} as having no length`,
+      `${derived.walls.collinear} points dropped as exactly collinear, which costs nothing; ` +
+      `${derived.walls.duplicates} segments dropped as coincident and ` +
+      `${derived.walls.zeroLength} as having no length`,
   );
 
-  if (derived.frozen.duplicates > 0) {
+  if (derived.walls.duplicates > 0) {
     devLog(
       "warn",
-      `trace: ${derived.frozen.duplicates} segments lay exactly on one already stored and were ` +
+      `trace: ${derived.walls.duplicates} segments lay exactly on one already stored and were ` +
         `dropped. Each is a room the map has and the document does not — smoothing has fitted both ` +
         `walls of a very thin room to the same line. Lower the simplification to keep it.`,
     );
@@ -1459,10 +1418,10 @@ export async function runTrace(
   // arithmetic is testable and is; that the raster's origin is the world box's minimum corner is a
   // claim about Owlbear's conventions, and a flip or a transpose would satisfy every number below.
   //
-  // **Placed from the FROZEN faces at a 1x1 raster**, which is what the emit path does — a frozen
+  // **Placed from the wall graph's faces at a 1x1 raster**, which is what the emit path does — a saved
   // graph is stored in fractions of the map, so a one-by-one raster *is* fraction space and the
   // ordinary placement puts a fraction where it belongs. Before 2026-09-08 this placed the trace's
-  // own regions, which were a second answer to the question the frozen faces already answer.
+  // own regions, which were a second answer to the question the wall graph's faces already answer.
   const worldPlacement = createPlacement(bounds, 1, 1);
   const placed = placeRegions(
     derived.faces.faces.map((face, index) => ({ id: index, rings: face.rings })),
@@ -1542,7 +1501,7 @@ export async function runTrace(
       raster: { width: plan.width, height: plan.height },
       graph: derived.graph,
       fittedEdges: derived.fittedEdges,
-      frozen: derived.frozen,
+      walls: derived.walls,
       faces: derived.faces,
       summary,
     },

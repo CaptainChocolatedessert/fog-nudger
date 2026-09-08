@@ -29,14 +29,14 @@ import {
   compactNodes,
   documentPoint,
   wallRuns,
-  type FrozenEdge,
-  type FrozenGraph,
-} from "./frozenGraph";
+  type WallEdge,
+  type WallGraph,
+} from "./wallGraph";
 import { simplifyIndices } from "./simplify";
 import { segmentMeeting } from "./planarGraph";
 
 export interface EditResult {
-  readonly graph: FrozenGraph;
+  readonly graph: WallGraph;
   /** How many segments that already existed were cut. */
   readonly splits: number;
   /** Collinear overlaps found. Reported, never fixed — splitting cannot separate them. */
@@ -73,7 +73,7 @@ interface Pending {
 function resolveCrossings(
   nodes: Vector2[],
   pending: readonly Pending[],
-  originals: readonly FrozenEdge[],
+  originals: readonly WallEdge[],
 ): EditResult {
   const cuts = new Map<number, { at: number; id: number }[]>();
   let overlaps = 0;
@@ -132,7 +132,7 @@ function resolveCrossings(
     }
   }
 
-  const edges: FrozenEdge[] = [];
+  const edges: WallEdge[] = [];
   let splits = 0;
   for (let i = 0; i < pending.length; i++) {
     const segment = pending[i]!;
@@ -189,7 +189,7 @@ function idsFor(points: readonly Vector2[], nodes: Vector2[]): number[] {
  * Rebuilt rather than mutated: the caller holds the old graph until this returns, which is what lets
  * a failed edit leave the GM exactly where they were.
  */
-export function insertEdge(graph: FrozenGraph, points: readonly Vector2[]): EditResult {
+export function insertEdge(graph: WallGraph, points: readonly Vector2[]): EditResult {
   const fresh: Vector2[] = [];
   for (const point of points) {
     const at = documentPoint(point.x, point.y);
@@ -228,7 +228,7 @@ export function insertEdge(graph: FrozenGraph, points: readonly Vector2[]): Edit
  * **Snapping onto another vertex is not this operation.** That is a merge, and `mergeNodes` is where
  * it lives — the tool decides which of the two the GM meant.
  */
-export function moveNode(graph: FrozenGraph, id: number, to: Vector2): EditResult {
+export function moveNode(graph: WallGraph, id: number, to: Vector2): EditResult {
   if (id < 0 || id >= graph.nodes.length) return { graph, splits: 0, overlaps: 0 };
   const at = documentPoint(to.x, to.y);
   const current = graph.nodes[id]!;
@@ -262,7 +262,7 @@ export function moveNode(graph: FrozenGraph, id: number, to: Vector2): EditResul
  * invalidate every id the caller is holding — including, mid-gesture, the one being dragged — and ids
  * are the only stable identity this document has. An unreferenced node costs eight bytes.
  */
-export function mergeNodes(graph: FrozenGraph, from: number, into: number): EditResult {
+export function mergeNodes(graph: WallGraph, from: number, into: number): EditResult {
   if (from === into) return { graph, splits: 0, overlaps: 0 };
   if (from < 0 || from >= graph.nodes.length) return { graph, splits: 0, overlaps: 0 };
   if (into < 0 || into >= graph.nodes.length) return { graph, splits: 0, overlaps: 0 };
@@ -271,7 +271,7 @@ export function mergeNodes(graph: FrozenGraph, from: number, into: number): Edit
   const rename = (id: number): number => (id === from ? into : id);
 
   const pending: Pending[] = [];
-  const originals: FrozenEdge[] = [];
+  const originals: WallEdge[] = [];
   for (const edge of graph.edges) {
     const a = rename(edge.a);
     const b = rename(edge.b);
@@ -299,7 +299,7 @@ export function mergeNodes(graph: FrozenGraph, from: number, into: number): Edit
  * Out of range is a no-op rather than a throw, like every other edit here: an edit that cannot be
  * made must leave the GM exactly where they were.
  */
-export function removeEdge(graph: FrozenGraph, index: number): EditResult {
+export function removeEdge(graph: WallGraph, index: number): EditResult {
   if (index < 0 || index >= graph.edges.length) return { graph, splits: 0, overlaps: 0 };
   return {
     graph: {
@@ -322,7 +322,7 @@ export function removeEdge(graph: FrozenGraph, index: number): EditResult {
  * are indistinguishable to the GM, and an arbitrary-but-repeatable answer beats one that changes
  * between frames while they hold still.
  */
-export function nearestEdge(graph: FrozenGraph, point: Vector2, radius: number): number | null {
+export function nearestEdge(graph: WallGraph, point: Vector2, radius: number): number | null {
   let best: number | null = null;
   let bestDistance = radius * radius;
 
@@ -363,7 +363,7 @@ export function nearestEdge(graph: FrozenGraph, point: Vector2, radius: number):
  * frames while they hold still.
  */
 export function nearestNode(
-  graph: FrozenGraph,
+  graph: WallGraph,
   point: Vector2,
   radius: number,
   /** Left out of the search — the vertex being dragged must not snap to itself. */
@@ -442,13 +442,13 @@ export interface WallSimplification extends EditResult {
  *
  * Pure: no DOM, no SDK.
  */
-export function simplifyWalls(graph: FrozenGraph, tolerance: number): WallSimplification {
+export function simplifyWalls(graph: WallGraph, tolerance: number): WallSimplification {
   if (!(tolerance > 0)) {
     return { graph, splits: 0, overlaps: 0, removed: 0, preserved: 0 };
   }
 
   const nodes = [...graph.nodes];
-  const kept: FrozenEdge[] = [];
+  const kept: WallEdge[] = [];
   let removed = 0;
   let preserved = 0;
 

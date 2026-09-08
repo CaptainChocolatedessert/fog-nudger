@@ -14,12 +14,12 @@ import { describe, expect, it } from "vitest";
 
 import { findCrossings } from "./planarGraph";
 import { insertEdge, mergeNodes, moveNode, nearestNode } from "./planarOps";
-import { documentPoint, nodeDegrees, wallRuns, type FrozenGraph } from "./frozenGraph";
+import { documentPoint, nodeDegrees, wallRuns, type WallGraph } from "./wallGraph";
 
 const at = (x: number, y: number) => documentPoint(x, y);
 
 /** A square room: four corners, four walls, meeting only at the corners. */
-const ROOM: FrozenGraph = {
+const ROOM: WallGraph = {
   nodes: [at(0.1, 0.1), at(0.9, 0.1), at(0.9, 0.9), at(0.1, 0.9)],
   edges: [
     { a: 0, b: 1 },
@@ -30,7 +30,7 @@ const ROOM: FrozenGraph = {
 };
 
 /** A room with a stub hanging off the middle of its top wall. */
-const WITH_STUB: FrozenGraph = {
+const WITH_STUB: WallGraph = {
   nodes: [at(0.1, 0.1), at(0.5, 0.1), at(0.9, 0.1), at(0.9, 0.9), at(0.1, 0.9), at(0.5, 0.4)],
   edges: [
     { a: 0, b: 1 },
@@ -177,7 +177,7 @@ describe("nearestNode", () => {
   });
 
   it("takes the nearest rather than the first inside the radius", () => {
-    const two: FrozenGraph = {
+    const two: WallGraph = {
       nodes: [at(0.4, 0.5), at(0.6, 0.5)],
       edges: [{ a: 0, b: 1 }],
     };
@@ -195,7 +195,7 @@ describe("nearestNode", () => {
   it("breaks a tie on the lower id, repeatably", () => {
     // Two vertices equidistant are indistinguishable to the GM; what matters is that the answer does
     // not flicker between frames while they hold the cursor still.
-    const pair: FrozenGraph = {
+    const pair: WallGraph = {
       nodes: [at(0.4, 0.5), at(0.6, 0.5)],
       edges: [{ a: 0, b: 1 }],
     };

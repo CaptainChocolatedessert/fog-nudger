@@ -45,7 +45,7 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { simplifyPolyline } from "./simplify";
-import { removeEdges, type WallGraph } from "./wallGraph";
+import { removeEdges, type SkeletonGraph } from "./skeletonGraph";
 
 export interface FaceCycle {
   /** Lattice points, closing implicitly: the last steps back to the first. */
@@ -117,22 +117,22 @@ export interface GraphFaces {
 const twin = (half: number): number => half ^ 1;
 
 /** Points of a half-edge, oriented so the walk runs from its origin node to its target node. */
-function orientedPoints(graph: WallGraph, half: number): readonly Vector2[] {
+function orientedPoints(graph: SkeletonGraph, half: number): readonly Vector2[] {
   const edge = graph.edges[half >> 1]!;
   return (half & 1) === 0 ? edge.points : [...edge.points].reverse();
 }
 
-function originNode(graph: WallGraph, half: number): number {
+function originNode(graph: SkeletonGraph, half: number): number {
   const edge = graph.edges[half >> 1]!;
   return (half & 1) === 0 ? edge.a : edge.b;
 }
 
-function targetNode(graph: WallGraph, half: number): number {
+function targetNode(graph: SkeletonGraph, half: number): number {
   return originNode(graph, twin(half));
 }
 
 /** Heading of a half-edge as it leaves its origin. */
-function departure(graph: WallGraph, half: number): number {
+function departure(graph: SkeletonGraph, half: number): number {
   const points = orientedPoints(graph, half);
   const from = points[0]!;
   const to = points[1]!;
@@ -225,10 +225,10 @@ export interface CycleWalk {
  *
  * The walk itself is untouched, deliberately. Sort the half-edges at each node by heading and leave
  * by the entry *before* the one arrived along, so the face is on the right of every half-edge and an
- * enclosing cycle comes out positive. Same convention as the frozen traversal, which is what lets the
+ * enclosing cycle comes out positive. Same convention as the wall graph traversal, which is what lets the
  * two produce the same partition from the same graph.
  */
-export function walkCycles(graph: WallGraph): CycleWalk {
+export function walkCycles(graph: SkeletonGraph): CycleWalk {
   const halfEdgeCount = graph.edges.length * 2;
 
   // Departing half-edges at each node, sorted by heading. The walk's only geometric decision.
@@ -372,7 +372,7 @@ export interface FittedFaces {
  * Dropping it costs the ring nothing: a slit encloses no area.
  */
 export function fitFaces(
-  graph: WallGraph,
+  graph: SkeletonGraph,
   faces: readonly GraphFace[],
   tolerance: number,
   /** Edges to leave out of the rings — the bridges. Their geometry is emitted separately. */
@@ -480,7 +480,7 @@ const MAX_SLIVER_ROUNDS = 8;
 
 export interface ResolvedFaces {
   /** The graph after its sub-pixel slivers were removed. Use this one downstream, not the input. */
-  readonly graph: WallGraph;
+  readonly graph: SkeletonGraph;
   /** The walk of the cleaned graph, so a caller need not repeat it. */
   readonly walk: CycleWalk;
   readonly sliversRemoved: number;
@@ -512,7 +512,7 @@ export interface ResolvedFaces {
  *
  * Iterated, because removing one sliver's edge can expose another.
  */
-export function resolveFaces(graph: WallGraph): ResolvedFaces {
+export function resolveFaces(graph: SkeletonGraph): ResolvedFaces {
   let current = graph;
   let walk = walkCycles(current);
   let sliversRemoved = 0;

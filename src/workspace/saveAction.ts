@@ -29,20 +29,20 @@
  *
  * The reading controls used to dim themselves in stage two, because §8 wants a boundary visible
  * *before* it is crossed and a slider that throws a dialog when you nudge it is a trap. There is no
- * boundary to show any more: in this mode nothing is frozen and every control is live. What is left
+ * boundary to show any more: in this mode nothing is saved and every control is live. What is left
  * is one deliberate, irreversible act — replacing a graph somebody has edited — and a confirmation
  * on a button the GM went looking for is exactly where a confirmation is not a trap.
  */
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { wallRuns } from "../trace/frozenGraph";
+import { wallRuns } from "../trace/wallGraph";
 import { confirmAction } from "./confirmDialog";
 import { controlsLive } from "./settingRows";
 import { currentRegions, currentWalls, previewGraph } from "./regions";
 import { pushCurrent } from "./pushAction";
 import { say, closeWorkspace } from "./shell";
-import { freezeTo, frozenGraph } from "./stage";
+import { saveDerivedWalls, wallGraph } from "./stage";
 import { openWorkspace } from "./workspaceControl";
 
 /**
@@ -60,7 +60,7 @@ async function saveAndPush(): Promise<boolean> {
     return false;
   }
 
-  await freezeTo(graph);
+  await saveDerivedWalls(graph);
   const walls = wallRuns(graph).length;
   devLog("info", `workspace: saved ${walls} walls and ${graph.nodes.length} points`);
   /*
@@ -68,7 +68,7 @@ async function saveAndPush(): Promise<boolean> {
 
     Since 2026-09-07 a GM can stop a slow write from here, and pressing that button most plainly
     means "let me out of this" rather than "carry on to the next thing". So a stopped push stays put
-    and says so. **The graph is saved either way** — `freezeTo` ran first, deliberately — so nothing
+    and says so. **The graph is saved either way** — `saveDerivedWalls` ran first, deliberately — so nothing
     is lost by staying, and the editor is one button away whenever they want it.
   */
   return await pushCurrent();
@@ -126,7 +126,7 @@ async function mayBeTooLarge(): Promise<boolean> {
  * whatever was done to it in the editor, which this cannot see and cannot get back.
  */
 async function mayReplace(): Promise<boolean> {
-  const stored = frozenGraph();
+  const stored = wallGraph();
   if (!stored) return true;
   return confirmAction({
     title: "Replace the saved walls?",
@@ -152,7 +152,7 @@ async function mayReplace(): Promise<boolean> {
  * is invisible from this surface; the cost of the split, stated when it was designed, is that the
  * sequence stops being legible from one accordion. This is what pays it.
  */
-export function renderFreezeAction(body: HTMLElement): void {
+export function renderSaveAction(body: HTMLElement): void {
   const actions = document.createElement("div");
   actions.className = "step-actions";
 

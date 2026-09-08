@@ -1,5 +1,5 @@
 /**
- * The saved wall graph: reading it for a map, and writing it.
+ * The wall graph: reading it for a map, and writing it.
  *
  * ## It stopped being a "stage" when the surface became two modes — 2026-09-05
  *
@@ -15,7 +15,7 @@
  * ## The stored graph's presence is still what says whether there is anything to edit
  *
  * There is no flag, deliberately. A flag is a second statement of the same fact and can disagree
- * with the first; a graph either is in the scene or is not. `frozenGraphStore.ts` says the same
+ * with the first; a graph either is in the scene or is not. `wallGraphStore.ts` says the same
  * thing from the other end.
  *
  * ## Nothing here discards it
@@ -29,21 +29,21 @@
  */
 
 import { devLog } from "../devlog";
-import { readFrozenGraph, writeFrozenGraph } from "../frozenGraphStore";
-import type { FrozenGraph } from "../trace/frozenGraph";
+import { readWallGraph, writeWallGraph } from "../wallGraphStore";
+import type { WallGraph } from "../trace/wallGraph";
 
-let frozen: FrozenGraph | null = null;
+let saved: WallGraph | null = null;
 const listeners: (() => void)[] = [];
 
 /**
- * The frozen graph, or `null` in stage one.
+ * The wall graph, or `null` in stage one.
  *
  * Also `null` before the scene has been asked, which is indistinguishable here and deliberately so:
  * every caller's response to "no graph" is the same, and the start-up sequence loads it before any
  * of them run.
  */
-export function frozenGraph(): FrozenGraph | null {
-  return frozen;
+export function wallGraph(): WallGraph | null {
+  return saved;
 }
 
 export function onStageChange(listener: () => void): void {
@@ -65,14 +65,14 @@ let mapId: string | null = null;
 /**
  * Read the scene's graph for a map. Reports whether something stored could not be read.
  *
- * Called again when the GM nominates a different image, because a graph frozen against one map does
+ * Called again when the GM nominates a different image, because a graph saved against one map does
  * not describe another — the store treats a mismatch as "no graph here", which puts them back in
  * stage one for the new map without touching the old map's work.
  */
 export async function loadStage(forMap: string | null): Promise<{ readonly corrupt: boolean }> {
   mapId = forMap;
-  const { graph, corrupt } = await readFrozenGraph(forMap);
-  frozen = graph;
+  const { graph, corrupt } = await readWallGraph(forMap);
+  saved = graph;
   announce();
   return { corrupt };
 }
@@ -83,19 +83,19 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
  * Written before the local state changes, so a failed write leaves the GM in stage one with their
  * controls live rather than in a stage two the scene does not agree with.
  */
-export async function freezeTo(graph: FrozenGraph): Promise<void> {
-  if (!mapId) throw new Error("no map is nominated, so there is nothing to freeze a graph against");
-  await writeFrozenGraph(mapId, graph);
-  frozen = graph;
+export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
+  if (!mapId) throw new Error("no map is nominated, so there is nothing to derive a graph against");
+  await writeWallGraph(mapId, graph);
+  saved = graph;
   announce();
-  devLog("info", `stage: frozen — ${graph.nodes.length} nodes, ${graph.edges.length} segments`);
+  devLog("info", `stage: saved — ${graph.nodes.length} nodes, ${graph.edges.length} segments`);
 }
 
 /** Save an edited graph over the stored one. Stage two stays stage two. */
-export async function updateFrozen(graph: FrozenGraph): Promise<void> {
+export async function saveEditedWalls(graph: WallGraph): Promise<void> {
   if (!mapId) throw new Error("no map is nominated, so there is nothing to save the graph against");
-  await writeFrozenGraph(mapId, graph);
-  frozen = graph;
+  await writeWallGraph(mapId, graph);
+  saved = graph;
   announce();
 }
 

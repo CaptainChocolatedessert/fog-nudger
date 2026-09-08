@@ -29,13 +29,13 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { readParameter } from "../settings";
-import { wallRuns } from "../trace/frozenGraph";
+import { wallRuns } from "../trace/wallGraph";
 import { simplifyWalls } from "../trace/planarOps";
 import { confirmAction } from "./confirmDialog";
 import { currentSettings } from "./settingsState";
 import { controlsLive } from "./settingRows";
 import { say } from "./shell";
-import { frozenGraph, updateFrozen } from "./stage";
+import { wallGraph, saveEditedWalls } from "./stage";
 
 /**
  * Segment count past which the crossing sweep is worth warning about.
@@ -77,7 +77,7 @@ export function renderSimplifyAction(body: HTMLElement): void {
 }
 
 async function run(button: HTMLButtonElement): Promise<void> {
-  const graph = frozenGraph();
+  const graph = wallGraph();
   if (!graph) {
     say("no walls saved for this map yet", "bad");
     return;
@@ -125,7 +125,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
       return;
     }
 
-    await updateFrozen(result.graph);
+    await saveEditedWalls(result.graph);
     devLog(
       elapsed >= SLOW_SWEEP_MS ? "warn" : "info",
       `workspace: straightened ${before} walls at ${tolerance.toExponential(2)} of the map in ` +

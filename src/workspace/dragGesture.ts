@@ -24,7 +24,7 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { documentPoint, type FrozenGraph } from "../trace/frozenGraph";
+import { documentPoint, type WallGraph } from "../trace/wallGraph";
 import {
   insertEdge,
   mergeNodes,
@@ -60,7 +60,7 @@ export interface DragState {
  * Returning `null` is how a drag on empty map stays a pan: the tool asks, and the absence of an
  * answer is what leaves the gesture alone.
  */
-export function grabAt(graph: FrozenGraph, u: number, v: number, radius: number): Grab | null {
+export function grabAt(graph: WallGraph, u: number, v: number, radius: number): Grab | null {
   const id = nearestNode(graph, { x: u, y: v }, radius);
   if (id === null) return null;
   const node = graph.nodes[id]!;
@@ -80,7 +80,7 @@ export function grabAt(graph: FrozenGraph, u: number, v: number, radius: number)
  * change beside it, and it costs nothing: nothing is written until the release either way.
  */
 export function dragTo(
-  graph: FrozenGraph,
+  graph: WallGraph,
   grab: Grab,
   u: number,
   v: number,
@@ -104,7 +104,7 @@ export function dragTo(
  * `null` for a press and release that went nowhere. Writing an unchanged graph to the scene would be
  * a scene write, a rebuild and a log line for a gesture in which nothing happened.
  */
-export function applyDrag(graph: FrozenGraph, grab: Grab, state: DragState): EditResult | null {
+export function applyDrag(graph: WallGraph, grab: Grab, state: DragState): EditResult | null {
   if (state.snapTo !== null) return mergeNodes(graph, grab.id, state.snapTo);
   const from = graph.nodes[grab.id];
   // Exact, because both sides came through `documentPoint`: identity here is not approximate, and
@@ -160,7 +160,7 @@ export interface DrawPoint {
  * shown it happening.
  */
 export function drawPoint(
-  graph: FrozenGraph,
+  graph: WallGraph,
   u: number,
   v: number,
   snapRadius: number,
@@ -183,10 +183,10 @@ export function drawPoint(
  * `null` also covers the two degenerate cases, **with one test rather than three**: two ends on one
  * spot and two ends snapped to the same existing vertex are the same thing, because snapping reports
  * the target's own coordinate. A zero-length segment has no direction, so nothing could sort it into
- * a rotation and the face traversal could not use it; the freeze drops them for the same reason.
+ * a rotation and the face traversal could not use it; the derivation drops them for the same reason.
  */
 export function applyDraw(
-  graph: FrozenGraph,
+  graph: WallGraph,
   from: DrawPoint,
   to: DrawPoint,
   minLength = 0,

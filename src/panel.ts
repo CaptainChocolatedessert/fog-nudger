@@ -48,7 +48,7 @@ import { inspectFogShapes } from "./probe/fogProbe";
 import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
 import { dryRun } from "./pipeline";
 import { openWorkspace } from "./workspace/workspaceControl";
-import { clearFrozenGraph } from "./frozenGraphStore";
+import { clearWallGraph } from "./wallGraphStore";
 import {
   removeOurs,
 } from "./emit/emitRegions";
@@ -143,7 +143,7 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
  */
 async function removeEverythingOfOurs(): Promise<string> {
   const message = await removeOurs();
-  await clearFrozenGraph();
+  await clearWallGraph();
   return `${message} The saved wall editing for this scene was cleared too.`;
 }
 

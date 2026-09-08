@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildFrozenFaces, describeFrozenFaces, wallSegments } from "./frozenFaces";
-import { documentPoint, type FrozenGraph } from "./frozenGraph";
+import { buildWallFaces, describeWallFaces, wallSegments } from "./wallFaces";
+import { documentPoint, type WallGraph } from "./wallGraph";
 
 /** A graph from plain coordinates, quantised the way the document holds them. */
-function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): FrozenGraph {
+function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): WallGraph {
   return {
     nodes: points.map(([x, y]) => documentPoint(x, y)),
     edges: edges.map(([a, b]) => ({ a, b })),
@@ -131,9 +131,9 @@ const LOLLIPOP = graphOf(
   ],
 );
 
-describe("faces of the frozen graph", () => {
+describe("faces of the wall graph", () => {
   it("finds one room in a square, and covers every wall with its ring", () => {
-    const result = buildFrozenFaces(ROOM);
+    const result = buildWallFaces(ROOM);
 
     expect(result.faces).toHaveLength(1);
     expect(result.faces[0]!.rings).toHaveLength(1);
@@ -145,7 +145,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("puts the face on the right of every wall, so a room encloses and the outside does not", () => {
-    const result = buildFrozenFaces(ROOM);
+    const result = buildWallFaces(ROOM);
 
     // Doubled area of a 0.4 square, and positive because the walk keeps the room on its right.
     expect(result.faces[0]!.doubleArea).toBeCloseTo(2 * 0.4 * 0.4, PLACES);
@@ -154,7 +154,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("finds both rooms of a domino, and gives them the shared wall's own two points", () => {
-    const result = buildFrozenFaces(DOMINO);
+    const result = buildWallFaces(DOMINO);
 
     expect(result.faces).toHaveLength(2);
     for (const face of result.faces) {
@@ -172,7 +172,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("walks a stub as a slit, emits it as a wall, and leaves it out of the room's ring", () => {
-    const result = buildFrozenFaces(STUB);
+    const result = buildWallFaces(STUB);
 
     expect(result.faces).toHaveLength(1);
     expect(result.bridges).toBe(1);
@@ -187,7 +187,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("makes a nested room a hole of the one around it, and a face in its own right", () => {
-    const result = buildFrozenFaces(NESTED);
+    const result = buildWallFaces(NESTED);
 
     expect(result.faces).toHaveLength(2);
     const [outer, inner] = result.faces;
@@ -201,7 +201,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("attaches a hole to the smallest ring containing it, not to any ring containing it", () => {
-    const result = buildFrozenFaces(ONION);
+    const result = buildWallFaces(ONION);
 
     expect(result.faces).toHaveLength(3);
     const [outer, middle, inner] = result.faces;
@@ -220,7 +220,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("hangs free-floating linework off the face that contains it, without giving it area", () => {
-    const result = buildFrozenFaces(FLOATING);
+    const result = buildWallFaces(FLOATING);
 
     expect(result.faces).toHaveLength(1);
     expect(result.components).toBe(2);
@@ -232,7 +232,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("gives free-floating linework an area of exactly nothing, not nearly nothing", () => {
-    const result = buildFrozenFaces(LOOSE_CHAIN);
+    const result = buildWallFaces(LOOSE_CHAIN);
 
     // Exactly, with no tolerance: a positive residue would make this loose chain a room.
     expect(result.faces).toHaveLength(1);
@@ -243,7 +243,7 @@ describe("faces of the frozen graph", () => {
   });
 
   it("splits a boundary that a stalk disconnects, rather than cutting across the gap", () => {
-    const result = buildFrozenFaces(LOLLIPOP);
+    const result = buildWallFaces(LOLLIPOP);
 
     expect(result.faces).toHaveLength(3);
     expect(result.bridges).toBe(1);
@@ -262,7 +262,7 @@ describe("faces of the frozen graph", () => {
 });
 
 describe("the arithmetic check", () => {
-  const fixtures: [string, FrozenGraph][] = [
+  const fixtures: [string, WallGraph][] = [
     ["one room", ROOM],
     ["a domino", DOMINO],
     ["a stub", STUB],
@@ -274,17 +274,17 @@ describe("the arithmetic check", () => {
   ];
 
   it.each(fixtures)("holds on %s", (_name, graph) => {
-    const result = buildFrozenFaces(graph);
+    const result = buildWallFaces(graph);
 
     expect(result.eulerHolds).toBe(true);
     expect(result.vertices - result.edges + result.enclosing).toBe(result.components);
     // Exactly one outward-facing cycle per piece of linework, which is what makes grouping total.
     expect(result.outward).toBe(result.components);
-    expect(describeFrozenFaces(result)).toContain("Euler holds");
+    expect(describeWallFaces(result)).toContain("Euler holds");
   });
 
   it.each(fixtures)("accounts for every wall exactly once on %s", (_name, graph) => {
-    const result = buildFrozenFaces(graph);
+    const result = buildWallFaces(graph);
 
     const covered = new Set<number>();
     for (const face of result.faces) {
@@ -314,7 +314,7 @@ describe("the arithmetic check", () => {
         [0, 1],
       ],
     );
-    const result = buildFrozenFaces(doubled);
+    const result = buildWallFaces(doubled);
 
     expect(result.faces).toEqual([]);
     expect(result.eulerHolds).toBe(false);
@@ -323,14 +323,14 @@ describe("the arithmetic check", () => {
     expect(result.walls).toEqual([0, 1]);
     expect(result.outward).toBe(2);
     expect(result.components).toBe(1);
-    expect(describeFrozenFaces(result)).toContain("EULER FAILED");
-    expect(describeFrozenFaces(result)).toContain("outward cycles 2 against 1");
+    expect(describeWallFaces(result)).toContain("EULER FAILED");
+    expect(describeWallFaces(result)).toContain("outward cycles 2 against 1");
   });
 });
 
 describe("the uncovered walls as geometry", () => {
   it("gives each one the two points of its own wall", () => {
-    const segments = wallSegments(STUB, buildFrozenFaces(STUB));
+    const segments = wallSegments(STUB, buildWallFaces(STUB));
 
     // The stub runs from the room's corner to its free tip, and is the only wall no ring covers.
     expect(segments).toEqual([[STUB.nodes[0], STUB.nodes[4]]]);
@@ -339,7 +339,7 @@ describe("the uncovered walls as geometry", () => {
   it("takes the ends from the edge it names, not from the position it sits at", () => {
     // The lollipop's stalk is edge 12 of thirteen, so an index used as a position would name the
     // first wall of the frame instead and draw a line nothing on the map has.
-    const segments = wallSegments(LOLLIPOP, buildFrozenFaces(LOLLIPOP));
+    const segments = wallSegments(LOLLIPOP, buildWallFaces(LOLLIPOP));
 
     expect(segments).toEqual([[LOLLIPOP.nodes[5], LOLLIPOP.nodes[8]]]);
   });
@@ -357,7 +357,7 @@ describe("slivers and other degenerate shapes", () => {
       ],
       loop([0, 1, 2]),
     );
-    const result = buildFrozenFaces(sliver);
+    const result = buildWallFaces(sliver);
 
     expect(result.faces).toHaveLength(1);
     expect(result.faces[0]!.rings[0]).toHaveLength(3);
@@ -366,11 +366,11 @@ describe("slivers and other degenerate shapes", () => {
   });
 
   it("leaves an unreferenced vertex out of the count, since merging makes them", () => {
-    const merged: FrozenGraph = {
+    const merged: WallGraph = {
       ...ROOM,
       nodes: [...ROOM.nodes, documentPoint(0.9, 0.9)],
     };
-    const result = buildFrozenFaces(merged);
+    const result = buildWallFaces(merged);
 
     expect(result.vertices).toBe(4);
     expect(result.eulerHolds).toBe(true);
@@ -381,7 +381,7 @@ describe("slivers and other degenerate shapes", () => {
       [...square(0.2, 0.2, 0.4), [0.5, 0.5]],
       [...loop([0, 1, 2, 3]), [4, 4]],
     );
-    const result = buildFrozenFaces(collapsed);
+    const result = buildWallFaces(collapsed);
 
     expect(result.zeroLength).toBe(1);
     expect(result.faces).toHaveLength(1);

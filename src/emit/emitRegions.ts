@@ -31,12 +31,11 @@ import { devLog } from "../devlog";
 import { describeError, isRateLimited } from "../describeError";
 import { PathOp, type PathCommandLike } from "../geometry/ring";
 import { runTrace } from "../pipeline";
-import { freezeGraph } from "../trace/frozenGraph";
 import { readGridDpi, readMapBounds, resolveTraceMap } from "../map/mapImage";
 import type { Point } from "../map/placement";
-import { describeFrozenFaces } from "../trace/frozenFaces";
-import type { FrozenGraph } from "../trace/frozenGraph";
-import { frozenEmission } from "./frozenEmission";
+import { describeWallFaces } from "../trace/wallFaces";
+import type { WallGraph } from "../trace/wallGraph";
+import { wallEmission } from "./wallEmission";
 import {
   ACCEPTED_FILL_OPACITY,
   ACCEPTED_STROKE_WIDTH,
@@ -168,7 +167,7 @@ export function requestPushStop(): void {
 /**
  * What a push is made of, from whichever of the two sources produced it.
  *
- * **Stage two has to emit the GM's graph, not the map** — the whole point of the freeze is that the
+ * **Stage two has to emit the GM's graph, not the map** — the whole point of saving a graph is that the
  * map stops being what the rooms are made of. So the *source* varies and nothing downstream does:
  * the deletion order, the batching, the provenance, the rate limiting and the stop are the same
  * apparatus either way, and they are where this file's hard-won behaviour lives.
@@ -187,23 +186,23 @@ interface PushSource {
   readonly summary: string;
 }
 
-async function frozenSource(graph: FrozenGraph): Promise<PushSource | string> {
+async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
   const map = await resolveTraceMap();
   if (!map) return "No map is nominated — nothing to put on the map.";
   const [bounds, dpi] = await Promise.all([readMapBounds(map), readGridDpi()]);
-  const emission = frozenEmission(graph, bounds, dpi);
+  const emission = wallEmission(graph, bounds, dpi);
 
   const check = emission.faces.eulerHolds
     ? "check holds"
     : "CHECK FAILED — the graph is not a valid embedding, see the lines above";
-  if (!emission.faces.eulerHolds) devLog("warn", `emit: ${describeFrozenFaces(emission.faces)}`);
+  if (!emission.faces.eulerHolds) devLog("warn", `emit: ${describeWallFaces(emission.faces)}`);
 
   return {
     mapId: map.id,
     regions: emission.regions,
     walls: emission.walls,
     note:
-      `emit: from the frozen graph — ${emission.regions.length} rooms, ` +
+      `emit: from the wall graph — ${emission.regions.length} rooms, ` +
       `${emission.walls.length} wall lines, ${check}`,
     // Says *which* of the two sources this came from, because in stage two a GM has every reason
     // to want it confirmed that what went out was their editing rather than a fresh read.
@@ -216,7 +215,7 @@ async function frozenSource(graph: FrozenGraph): Promise<PushSource | string> {
 export async function pushToFog(
   fingerprint?: string,
   /** The GM's edited graph. Present in stage two, and it replaces the trace as the source. */
-  frozen?: FrozenGraph,
+  saved?: WallGraph,
 ): Promise<string> {
   // Cleared here rather than by the caller: a stop belongs to one push, and a request that arrived
   // while nothing was running must not silently abort the next one.
@@ -224,27 +223,26 @@ export async function pushToFog(
   if (!(await OBR.scene.isReady())) return "No scene open — nothing to trace.";
 
   let source: PushSource;
-  if (frozen) {
-    const built = await frozenSource(frozen);
+  if (saved) {
+    const built = await wallGraphSource(saved);
     if (typeof built === "string") return built;
     source = built;
   } else {
     /*
-      No graph saved, so one is derived and **frozen on the spot** rather than emitted directly.
+      Nothing saved for this map, so the trace's own wall graph is what gets emitted.
 
-      This branch used to emit `runTrace`'s own regions, which made it the last consumer of the
-      raster-grouped face build — and a second answer to a question the frozen traversal already
-      answers. Same walk, different grouping: the defect found from the outside on 2026-09-06, in the
-      one path nobody looks at.
+      This branch used to emit a region list the trace derived from a raster labelling, which made it
+      the last consumer of that face build — and a second answer to a question the wall graph
+      traversal already answers. Same walk, different grouping.
 
-      Freezing first costs a traversal and removes the second answer. What reaches the scene is what
-      would have reached it had the GM pressed save, which is also what makes this branch's output
-      comparable with everything else in the log.
+      **The graph is taken off the run rather than rebuilt here.** `runTrace` has to build it anyway,
+      because the escalation ladder measures the command cap against the faces of it, so rebuilding
+      would be a second construction of a thing already in hand — and the one way two constructions
+      can ever disagree is if somebody changes one of them.
     */
     const outcome = await runTrace();
     if (!outcome.ok) return outcome.message;
-    const frozen = freezeGraph(outcome.run.graph, outcome.run.fittedEdges);
-    const built = await frozenSource(frozen.graph);
+    const built = await wallGraphSource(outcome.run.walls.graph);
     if (typeof built === "string") return built;
     source = { ...built, summary: outcome.run.summary };
   }

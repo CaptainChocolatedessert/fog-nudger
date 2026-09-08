@@ -34,7 +34,7 @@
  *
  * **The push traced unconditionally until 2026-09-05, which made stage two unusable end to end**: a
  * GM could edit their walls all evening and the scene would receive the rooms as read from the map.
- * The frozen graph is handed to `pushToFog` from here, because the emit path has no business knowing
+ * The wall graph is handed to `pushToFog` from here, because the emit path has no business knowing
  * what stage a workspace is in — and a push driven from the panel could not answer that anyway.
  *
  * **The fingerprint has to know about it too**, and that was the second half of the same defect: it
@@ -53,9 +53,9 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { pushToFog, pushWouldChange, requestPushStop } from "../emit/emitRegions";
 import { readNominatedMapId } from "../map/mapImage";
-import { encodeFrozenGraph } from "../trace/frozenGraph";
+import { encodeWallGraph } from "../trace/wallGraph";
 import { paintRevision } from "../trace/inkPaint";
-import { frozenGraph } from "./stage";
+import { wallGraph } from "./stage";
 import { inEditor } from "./mode";
 import { controlsLive } from "./settingRows";
 import { currentPaint } from "./paintState";
@@ -71,10 +71,10 @@ import { say, withEscapeHatch } from "./shell";
  */
 async function fingerprint(): Promise<string> {
   const map = await readNominatedMapId();
-  const graph = frozenGraph();
+  const graph = wallGraph();
   // In stage two the settings no longer decide the geometry, so on their own they would report an
   // evening of editing as "nothing changed".
-  const edits = graph ? encodeFrozenGraph(graph) : "";
+  const edits = graph ? encodeWallGraph(graph) : "";
   /*
     The paint layers are here for the same reason the graph is.
 
@@ -92,7 +92,7 @@ async function fingerprint(): Promise<string> {
  *
  * The shell keeps the sheet up until this resolves, so the seconds a large map takes are seconds a
  * GM is looking at an opaque surface. Hence the status line: it has to be evidently working rather
- * than frozen.
+ * than saved.
  *
  * **The status is said after the fingerprint check, not before**, and that ordering is the whole of
  * requirement 4. Opening the workspace to glance at something and closing it is the common case, and
@@ -122,7 +122,7 @@ export async function pushOnClose(): Promise<void> {
   say("putting it on the map…", "working");
   try {
     await persistSettings();
-    const message = await pushToFog(mark, frozenGraph() ?? undefined);
+    const message = await pushToFog(mark, wallGraph() ?? undefined);
     devLog("info", `workspace: pushed on close — ${message}`);
   } catch (error) {
     // Never rethrow: the way out of an opaque full-screen sheet cannot depend on a scene write. The
@@ -162,7 +162,7 @@ export async function pushCurrent(): Promise<boolean> {
     rather than leaving, so "Exit anyway" would be a lie about what the button does.
   */
   let message = "";
-  const pushing = pushToFog(mark, frozenGraph() ?? undefined).then((said) => {
+  const pushing = pushToFog(mark, wallGraph() ?? undefined).then((said) => {
     message = said;
   });
 

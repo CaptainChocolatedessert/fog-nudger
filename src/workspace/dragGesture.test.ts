@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { documentPoint, nodeDegrees, type FrozenGraph } from "../trace/frozenGraph";
+import { documentPoint, nodeDegrees, type WallGraph } from "../trace/wallGraph";
 import {
   applyDraw,
   applyDrag,
@@ -13,7 +13,7 @@ import {
 } from "./dragGesture";
 import { nearestEdge, nearestNode, removeEdge } from "../trace/planarOps";
 
-function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): FrozenGraph {
+function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): WallGraph {
   return {
     nodes: points.map(([x, y]) => documentPoint(x, y)),
     edges: edges.map(([a, b]) => ({ a, b })),

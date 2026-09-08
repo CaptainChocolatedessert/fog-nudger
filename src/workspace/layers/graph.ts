@@ -14,7 +14,7 @@
  *
  * ## Map fractions, so there is no raster to agree with
  *
- * The frozen graph is stored in fractions of the map's own extent, which is exactly the space the
+ * The wall graph is stored in fractions of the map's own extent, which is exactly the space the
  * shell hands a painter — the map's draw rectangle. So a point multiplies by the draw width and
  * lands where it belongs, with no scale factor to derive and no raster to be consistent with. The
  * other layers all carry one; this one cannot get it wrong because it has none.
@@ -38,12 +38,12 @@ import {
   nodeDegrees,
   spurEdgesToPrune,
   type DoomedSpurs,
-  type FrozenGraph,
-} from "../../trace/frozenGraph";
+  type WallGraph,
+} from "../../trace/wallGraph";
 import { addPainter, type Painter } from "../shell";
 import { inEditor } from "../mode";
 import { previewGraph } from "../regions";
-import { frozenGraph } from "../stage";
+import { wallGraph } from "../stage";
 import { currentSettings } from "../settingsState";
 import type { DrawPoint } from "../dragGesture";
 import {
@@ -114,9 +114,9 @@ const MAX_HANDLES = 2000;
 
 /** Degrees are derived per graph rather than per frame; the graph only changes on an edit. */
 let degreesOf: number[] = [];
-let degreesFor: FrozenGraph | null = null;
+let degreesFor: WallGraph | null = null;
 
-function degrees(graph: FrozenGraph): number[] {
+function degrees(graph: WallGraph): number[] {
   if (degreesFor !== graph) {
     degreesOf = nodeDegrees(graph);
     degreesFor = graph;
@@ -130,8 +130,8 @@ function degrees(graph: FrozenGraph): number[] {
  * Asked once per frame rather than held, so nothing has to be told when a derive lands or a gesture
  * writes. Both sources are already module state that changes wholesale.
  */
-function graphOnCanvas(): FrozenGraph | null {
-  return inEditor() ? frozenGraph() : previewGraph();
+function graphOnCanvas(): WallGraph | null {
+  return inEditor() ? wallGraph() : previewGraph();
 }
 
 /**
@@ -142,9 +142,9 @@ function graphOnCanvas(): FrozenGraph | null {
  * waste sixty times a second. Keyed on the graph object and the budget, both of which are replaced
  * rather than mutated when they change.
  */
-let doomedFor: { graph: FrozenGraph; budget: number; doomed: DoomedSpurs } | null = null;
+let doomedFor: { graph: WallGraph; budget: number; doomed: DoomedSpurs } | null = null;
 
-function doomed(graph: FrozenGraph): DoomedSpurs {
+function doomed(graph: WallGraph): DoomedSpurs {
   // Only in the editor, and only for the editor's own budget. The ink mode re-derives its graph from
   // the reading with the budget already applied, so there is nothing pending there to mark.
   if (!inEditor()) return NOTHING_DOOMED;
@@ -312,7 +312,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
  */
 function paintHandles(
   context: CanvasRenderingContext2D,
-  graph: FrozenGraph,
+  graph: WallGraph,
   x: (fraction: number) => number,
   y: (fraction: number) => number,
   at: (id: number) => Vector2 | undefined,

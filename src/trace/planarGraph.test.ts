@@ -14,12 +14,12 @@ import { describe, expect, it } from "vitest";
 
 import { findCrossings, segmentMeeting } from "./planarGraph";
 import { insertEdge } from "./planarOps";
-import { documentPoint, nodeDegrees, type FrozenGraph } from "./frozenGraph";
+import { documentPoint, nodeDegrees, type WallGraph } from "./wallGraph";
 
 const at = (x: number, y: number) => documentPoint(x, y);
 
 /** A square room: four corners, four walls, meeting only at the corners. */
-const ROOM: FrozenGraph = {
+const ROOM: WallGraph = {
   nodes: [at(0.1, 0.1), at(0.9, 0.1), at(0.9, 0.9), at(0.1, 0.9)],
   edges: [
     { a: 0, b: 1 },
@@ -29,7 +29,7 @@ const ROOM: FrozenGraph = {
   ],
 };
 
-const nodeAt = (graph: FrozenGraph, x: number, y: number): number => {
+const nodeAt = (graph: WallGraph, x: number, y: number): number => {
   const want = at(x, y);
   return graph.nodes.findIndex((n) => n.x === want.x && n.y === want.y);
 };
@@ -91,7 +91,7 @@ describe("findCrossings", () => {
   });
 
   it("finds a wall laid straight across a room", () => {
-    const crossed: FrozenGraph = {
+    const crossed: WallGraph = {
       nodes: [...ROOM.nodes, at(0.5, 0), at(0.5, 1)],
       edges: [...ROOM.edges, { a: 4, b: 5 }],
     };
@@ -152,7 +152,7 @@ describe("insertEdge", () => {
     // vertex: nothing crosses a segment's interior, so the intersection sweep finds nothing to cut.
     // With segments there is nothing to cut — the vertex is already a node — and the degree simply
     // becomes three. The defect is gone rather than repaired.
-    const bent: FrozenGraph = {
+    const bent: WallGraph = {
       nodes: [at(0, 0.5), at(0.5, 0.5), at(1, 0.5)],
       edges: [
         { a: 0, b: 1 },

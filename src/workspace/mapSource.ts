@@ -76,10 +76,10 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   /*
     The stage is re-read for *this* map, and that is what makes switching maps safe.
 
-    A frozen graph's coordinates are fractions of a map and say nothing about which, so the store
+    A wall graph's coordinates are fractions of a map and say nothing about which, so the store
     records the map's id beside them and a mismatch reads as "no graph here". Nominating a second
     image therefore drops the GM back into stage one for it, without touching the first map's work —
-    and switching back restores it. **One graph is stored at a time**, so freezing on the second map
+    and switching back restores it. **One graph is stored at a time**, so deriving on the second map
     does replace the first map's; per-map keys are the fix if that ever matters.
   */
   const stage = await loadStage(result.mapId);
@@ -107,7 +107,7 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   /*
     Where a GM lands, which the stage decides.
 
-    Ink is where stage one starts, and it is the wrong place to open a scene that is already frozen:
+    Ink is where stage one starts, and it is the wrong place to open a scene that is already saved:
     every control there is disabled, so the surface opens on a wall of dimmed sliders explaining
     what the GM cannot do (reported from a room, 2026-09-05). In stage two the step that matters is
     the one holding the graph.
@@ -120,7 +120,7 @@ export async function loadNominatedMap(opening = false): Promise<void> {
     only step open to them.
 
     **The stage no longer decides this**, because the mode does. The editor is a page of its own now,
-    so a frozen scene does not have to be recognised and redirected to — the GM chose which surface
+    so a saved scene does not have to be recognised and redirected to — the GM chose which surface
     to open before this ran.
   */
   // Only the ink mode has anywhere to move on to. The editor opens on its one step already, and

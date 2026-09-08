@@ -161,7 +161,7 @@ export function recomputeFor(names: readonly SettingName[]): void {
 
     `GRAPH_ONLY` has exactly one member, the spur budget. It used to mean "skip the 690ms re-read but
     re-derive everything", because pruning happened between thinning and chaining. **Pruning moved
-    past the freeze on 2026-09-06**, so it changes nothing the trace did — the graph is already
+    past the derivation on 2026-09-06**, so it changes nothing the trace did — the graph is already
     fitted and stored, and re-pruning it is a run walk and a face traversal, single-digit
     milliseconds against the better part of a second.
 
@@ -353,15 +353,15 @@ export function settingRow(control: Control): HTMLElement {
   });
 
   /*
-    **No frozen state here any more**, and its removal is what the two modes bought.
+    **No saved state here any more**, and its removal is what the two modes bought.
 
-    Every `pipeline` and `tool` control used to dim itself once a graph was frozen, with a line
+    Every `pipeline` and `tool` control used to dim itself once a graph was saved, with a line
     saying where to reopen the reading. The reason was sound while one accordion carried both stages:
     moving a reading slider would have re-derived the very graph the GM had been editing, and §8
     wants a boundary visible *before* it is crossed rather than confirmed after.
 
     Split into two modes, that boundary is the page. The editor does not declare the steps these
-    controls live in, so there is nothing to disable there; and in the ink mode nothing is frozen --
+    controls live in, so there is nothing to disable there; and in the ink mode nothing is saved --
     the graph is a derivation until the GM saves, and the save is the one place the replacement is
     named and confirmed. A control that is live in the only mode that draws it needs no notice.
   */
