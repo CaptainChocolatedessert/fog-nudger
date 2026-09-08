@@ -4657,8 +4657,13 @@ landing in one day leaves a long list of things nobody has looked at.
 
 1. **Simplify and prune in the editor**, with the ink width frozen into the document. Smallest,
    self-contained, no UI restructure — and it is the piece that dissolves the freeze's tension.
-   **NOT BUILT.** It was asked for as a UI change and it is a feature, so it was left; nothing in the
-   three below depends on it.
+   **BUILT 2026-09-06 and 2026-09-07**, as two one-shot buttons on the frozen document, with the
+   walls a prune would delete drawn in red first.
+
+   **Its prerequisite was removed rather than met.** Freezing the ink width into the document — a
+   format version bump — was how both modes were to speak one unit. They speak fractions of the map
+   instead, on a track whose top end is measured off the graph itself, which both modes have and
+   neither has to store.
 2. **Dissolve Regions**: the partition draws wherever the graph draws; simplification moves to Walls.
    **BUILT**, one commit. Preview fill and outline went to the persistent View group rather than to
    either step that draws the partition — the plan did not say where, and two steps drawing one layer
