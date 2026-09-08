@@ -11,11 +11,10 @@ private and gitignored.
 **It describes the present.** Where a past mistake explains why something is the way it is, the
 lesson is stated as part of the design rather than as history. Git holds the history.
 
-**Sibling project.** `../W - cartographers-fog` is a working Owlbear extension by the same author,
-public at [CaptainChocolatedessert/cartographers-fog](https://github.com/CaptainChocolatedessert/cartographers-fog).
-It is readable from here and it is this project's most valuable asset: a year of Owlbear SDK facts
-that were expensive to learn, and a testing culture worth copying wholesale. When something
-Owlbear-shaped is surprising, look there before theorising.
+**Sibling project.** `../W - cartographers-fog` is a working Owlbear extension by the same author
+([repository](https://github.com/CaptainChocolatedessert/cartographers-fog)), readable from here. A
+few hundred lines of pure functions were **copied** from it rather than shared, which carries a
+standing obligation — see §11. Everything else it taught this project is written down here.
 
 ---
 
@@ -33,7 +32,7 @@ Owlbear-shaped is surprising, look there before theorising.
 8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
 9. [Constraints and pitfalls](#9-constraints-and-pitfalls)
 10. [Open questions and what is next](#10-open-questions-and-what-is-next)
-11. [Code sharing with the sibling](#11-code-sharing-with-the-sibling)
+11. [Copied code, and what it obliges](#11-copied-code-and-what-it-obliges)
 12. [Licence](#12-licence--gpl-30-or-later)
 
 - [Appendix A: the code map](#appendix-a-the-code-map)
@@ -1672,10 +1671,12 @@ because when it works it beats any fixed palette.
 
 ## 8. Testing and diagnostic practice
 
-The sibling's culture is the reason it works, and it costs almost nothing to adopt. **766 tests across
-52 files**, all pure — everything that needs a DOM or a scene is not tested, which is why the gesture
-*decisions* were pulled out into pure functions after three defects in a row came from sequencing left
-in the event handlers.
+**766 tests across 52 files**, all pure — everything that needs a DOM or a scene is not tested, which
+is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
+from sequencing left in the event handlers.
+
+The practice below is the reason this project works at all, on a problem where most failures are
+invisible. It costs almost nothing to keep.
 
 ### The rules
 
@@ -1844,9 +1845,10 @@ distance of where a human would have put it, but whether regions *merge*.
 
 ## 9. Constraints and pitfalls
 
-### Inherited from the sibling — verified, not guessed
+### Platform constraints — measured in a room, not guessed
 
-Every item here was measured in a real room. **Do not re-derive them.**
+**Do not re-derive these.** Each was established by observation in a real Owlbear scene, several of
+them expensively; where the cost is instructive it is named.
 
 - **The SDK cannot be imported into a headless test.** Its index calls `getDetails()` at module load,
   which reads `window.location.search`, so any node-environment test importing it dies with
@@ -2060,23 +2062,25 @@ it is recorded rather than assumed understood.**
 
 ---
 
-## 11. Code sharing with the sibling
+## 11. Copied code, and what it obliges
 
-The genuinely shared surface is **image loading, binarisation, the geometry helpers, thinning and
-chain chopping**. That middle section came back onto the critical path when the wall graph made a
-skeleton necessary.
+**Image loading, binarisation, the geometry helpers, thinning and chain chopping** were copied from
+the sibling rather than shared as a package. The overlap is small enough that a package would be
+mostly ceremony — versioning, a release step, a second lockfile and CI for both, to share a few
+hundred lines of pure functions.
 
-**Still copying rather than extracting a package.** The overlap is small enough that a shared package
-would be mostly ceremony: versioning, a release step, a second lockfile and CI for both is real cost,
-and it would buy sharing for a few hundred lines of well-tested pure functions.
+**The cost is real and should not be dressed up as a virtue: bug fixes will not propagate.** A defect
+found in binarisation here stays present there, and nothing tells either project. **Note fixes in
+both design records when they happen.** Already paid once: two dev-log defects found here exist
+unfixed in the sibling.
 
-**The cost of copying is real and should not be dressed up as a virtue: bug fixes will not propagate.**
-A defect found in binarisation here will still be present there, and nothing will tell either project
-about it. **Note fixes in both design records when they happen.** This has already been paid once — two
-dev-log defects found here exist unfixed in the sibling.
+That is the whole of the live relationship. The Owlbear and Dynamic Fog facts the sibling supplied
+are in §2 and §9, and several have since been superseded by measurements taken in this project's own
+rooms — so where the two records disagree, **this one is current**.
 
-`reference/dynamic-fog/` is a local shallow clone of Dynamic Fog, gitignored. It is someone else's
-GPLv3 code and is deliberately not committed, since vendoring it would distribute it.
+`reference/dynamic-fog/` is a separate thing: a local shallow clone of Dynamic Fog itself,
+gitignored. Someone else's GPLv3 code, deliberately not committed, since vendoring it would
+distribute it.
 
 ---
 
