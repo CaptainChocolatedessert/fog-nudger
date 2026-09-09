@@ -41,6 +41,7 @@ import { bitmapFrom, type Bitmap } from "../bitmap";
 import { brushRadius } from "../paintGesture";
 import { onPaintChange, paintLayerFor } from "../paintState";
 import { currentSettings } from "../settingsState";
+import { PALETTE } from "../palette";
 import { addPainter, invalidate, say, type Frame, type Painter } from "../shell";
 
 /**
@@ -50,8 +51,8 @@ import { addPainter, invalidate, say, type Frame, type Painter } from "../shell"
  * fills, green skeleton, blue graph handles, and the six cycling region colours. They are also the
  * two that read as opposites, which is what the pair means.
  */
-export const SUPPRESS_COLOUR = "#f59e0b";
-export const ADD_COLOUR = "#22d3ee";
+export const SUPPRESS_COLOUR = PALETTE.subtractive;
+export const ADD_COLOUR = PALETTE.additive;
 
 /**
  * The brush ring's stroke, in screen pixels.

@@ -10,6 +10,7 @@
  * number, so it sits outside the parameter machinery entirely and needs its own row of buttons.
  */
 
+import { PALETTE } from "./palette";
 import { DEFAULT_SETTINGS, normaliseColour } from "../settings";
 import { recolourInk } from "./layers/ink";
 import { controlsLive } from "./settingRows";
@@ -24,10 +25,18 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
  * map in one click, with the picker there for the rest. The count is the argument, so it has to
  * match the list: this said six while declaring seven, and the paragraph appeared twice.
  */
+/*
+  Violet leads, because it is the default and the first thing a GM sees on the map.
+
+  Cyan and amber are **not** offered, which is the change worth knowing about: they mean *added ink*
+  and *suppressed ink* everywhere else on this canvas, and a mask wearing one of them would make the
+  GM's own corrections indistinguishable from what the trace read. Red is gone for the same reason —
+  it is reserved for what an action would remove.
+*/
 const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[] = [
-  { value: "#ff2020", name: "Red" },
+  { value: PALETTE.ink, name: "Violet" },
   { value: "#ff20d0", name: "Magenta" },
-  { value: "#00c8ff", name: "Cyan" },
+  { value: "#2b6bff", name: "Blue" },
   { value: "#ffd000", name: "Yellow" },
   { value: "#00e070", name: "Green" },
   { value: "#ffffff", name: "White" },

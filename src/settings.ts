@@ -339,7 +339,17 @@ export const DEFAULT_SETTINGS: Settings = {
     strokeSquares: 0.08,
   },
   overlay: {
-    inkColour: "#ff2020",
+    /*
+      Violet, and it was red.
+
+      Two reasons, and the second is the stronger. Red reads as an error for something that is only a
+      *reading* of the map. And ink is the largest area on screen, worn for the whole session at
+      partial opacity, so it should be the calmest mark there rather than the loudest — red is now
+      reserved for what an action would remove, which earns its alarm by being rare.
+
+      A stored setting is untouched: this is the default a scene gets when it has never chosen one.
+    */
+    inkColour: "#9333ea",
     inkOpacity: 1,
     // Wide enough to cover an area rather than trace a line, which is what suppression is mostly
     // for and is also the shape of paint that costs almost nothing to store. Fine work is a matter

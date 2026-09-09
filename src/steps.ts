@@ -177,7 +177,7 @@ export const TOOLS: readonly ToolChoice[] = [
     band: "walls",
     drag: "edit",
     hint:
-      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>green</b> where " +
+      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>cyan</b> where " +
       "it would attach to an existing point, which is how you close a gap — hold <b>Shift</b> to " +
       "leave it loose. <b>Ctrl</b>-drag pans. Escape or right-click abandons a wall part-drawn.",
   },
@@ -368,7 +368,7 @@ export const STEPS: readonly Step[] = [
         blurb:
           "A wall with a section missing merges two rooms, which is the worst this can get wrong " +
           "&mdash; and a crack four pixels wide is not something anyone finds by scanning a map. " +
-          "This searches for them and rings each one in <b class='gap-key'>purple</b>. <b>Click " +
+          "This searches for them and rings each one in <b class='gap-key'>cyan rings</b>. <b>Click " +
           "inside a ring</b> to close that gap, or close them all with the button below. " +
           "<b>Nothing is added until you accept it</b>, and what you accept becomes ordinary added " +
           "ink. A <b>dashed</b> ring is a channel the search could not finish examining and will " +

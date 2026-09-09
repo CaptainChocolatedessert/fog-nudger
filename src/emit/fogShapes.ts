@@ -70,13 +70,25 @@ export const REGION_KEY = key("region");
  * not build, and the stroke separates them anyway; regions are numbered by descending area, which
  * bears no relation to position, so neighbours scatter across the palette in practice.
  */
+/*
+  Generated rather than chosen: six hues evenly spaced at one fixed low chroma and lightness.
+
+  **The rule that matters is that no room fill is ever more salient than any mark.** These were
+  hand-picked at full saturation, which broke it twice over — a fill could outshine the wall drawn on
+  top of it, and two of them sat on the hues that mean *added ink* and *suppressed ink* everywhere
+  else on the canvas. Evenly spaced at a fixed chroma, none can be louder than another and none can
+  be mistaken for a mark.
+
+  The colour carries no meaning beyond "this room is not that room", which is why it is the one thing
+  on the canvas with no picker: there is nothing here for a GM to mean.
+*/
 export const PROPOSAL_COLOURS = [
-  "#ff00ff",
-  "#00e5ff",
-  "#7cff2a",
-  "#ff8a1e",
-  "#b58bff",
-  "#ffe600",
+  "#c58b77",
+  "#b1c577",
+  "#77c58b",
+  "#77b1c5",
+  "#8b77c5",
+  "#c577b1",
 ] as const;
 
 /**

@@ -194,7 +194,7 @@ export const CONTROLS: readonly Control[] = [
   {
     name: "gapFillPx",
     label: "Largest gap to look for",
-    hint: "How wide a gap the search will find, in pixels; <b>zero finds none</b>. Each one is ringed and shown in <b class='gap-key'>purple</b> &mdash; <b>nothing is added until you accept it</b>. Past a doorway's width it starts proposing doorways, and no measurement can tell those apart.",
+    hint: "How wide a gap the search will find, in pixels; <b>zero finds none</b>. Each one is ringed and shown in <b class='gap-key'>cyan</b> &mdash; <b>nothing is added until you accept it</b>. Past a doorway's width it starts proposing doorways, and no measurement can tell those apart.",
     derive: (value, { pxPerSquare }) => {
       if (value <= 0) return "off";
       if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;

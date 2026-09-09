@@ -41,6 +41,7 @@ import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
 import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
+import { applyPalette } from "./workspace/palette";
 import { registerToolPalette } from "./workspace/toolPalette";
 import { registerUndoAction } from "./workspace/undoAction";
 import { registerGapsLayer } from "./workspace/layers/gaps";
@@ -197,6 +198,9 @@ onStepOpen("edit", (open) => watchRegions("edit", open));
   under it. Tying the copies to the brush is also what they always meant.
 */
 
+// Published before anything is drawn, so the stylesheet's colour words and the canvas's marks come
+// from one declaration rather than two that have to be kept in step by hand.
+applyPalette();
 // The tool strip, which owns what a press means and is why the rail below it need not be exclusive.
 registerToolPalette();
 // Undo, in the bar rather than in a group: it takes back a change to the document, not to whatever

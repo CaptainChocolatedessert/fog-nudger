@@ -79,9 +79,20 @@
       #canvas.grab-target.dragging {
         cursor: crosshair;
       }
-      /* Named for what it marks on the canvas, so the prose and the picture agree. */
-      .join-key {
-        color: #00e06a;
+      /*
+        Named for what each marks on the canvas, so the prose and the picture agree.
+
+        The values come from `palette.ts` at start-up rather than being written here. They used to be
+        hardcoded hexes beside comments asking whoever changed one to change the other, which is a
+        promise nobody can keep across three layer modules and a stylesheet.
+      */
+      .join-key,
+      .gap-key,
+      .addink-key {
+        color: var(--additive);
+      }
+      .suppress-key {
+        color: var(--subtractive);
       }
 
       /* ----------------------------------------------------------------------------------------
@@ -171,28 +182,6 @@
       .row .hint b {
         color: #c9cdea;
       }
-      /*
-        Named in the colour it is drawn in, so the word and the rings on the map identify each
-        other. Kept in step with GAP_COLOUR by hand — the panel is static markup and the canvas is
-        not.
-      */
-      .gap-key {
-        color: #a855f7;
-      }
-      /*
-        The GM's two hand-made layers, kept in step with SUPPRESS_COLOUR and ADD_COLOUR by hand.
-
-        Amber for ink taken away and cyan for ink put in, which is the pair that reads as opposites —
-        and neither is a colour the ink swatches offer, so a named colour in a blurb cannot come to
-        mean the mask instead.
-      */
-      .suppress-key {
-        color: #f59e0b;
-      }
-      .addink-key {
-        color: #22d3ee;
-      }
-
       .swatches {
         display: flex;
         flex-wrap: wrap;

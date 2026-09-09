@@ -1680,9 +1680,10 @@ because when it works it beats any fixed palette.
 and the storage are untouched; this is a rework of the surface only.
 
 **Built:** the tool strip, the non-exclusive rail, the pinned rail head, the hand-edit count and the
-warning it prices, the merge to one page with one panel button, undo, and the derive indicators.
+warning it prices, the merge to one page with one panel button, undo, the derive indicators, and the markup palette.
 
-**Not built:** the markup palette and the layer toggles. The layer *rules*
+**Not built:** the layer toggles, and the per-category colour pickers — the palette's values are
+declared but not yet adjustable. The layer *rules*
 landed with the merge, because it forced them — handles follow the wall tools.
 
 ### Why: the mode boundary runs across the grain of the task

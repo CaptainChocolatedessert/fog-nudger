@@ -26,6 +26,7 @@ import type { GapMark } from "../../trace/gaps";
 import { bitmapFrom, type Bitmap } from "../bitmap";
 import { RING_MIN_RADIUS, RING_PADDING } from "../gapGesture";
 import { gapMarks, gapRaster } from "../gapSearch";
+import { PALETTE } from "../palette";
 import { addPainter, invalidate, say, type Painter } from "../shell";
 
 /**
@@ -42,7 +43,16 @@ import { addPainter, invalidate, say, type Painter } from "../shell";
  *
  * Kept in step with the `.gap-key` colour in the page stylesheet by hand.
  */
-const GAP_COLOUR = "#a855f7";
+/*
+  Cyan, and the same cyan the added-ink layer uses, because a gap proposal *is* the additive category
+  in its proposed state — accepting one writes into that very layer. It was purple, which made it look
+  like a third kind of thing.
+
+  What separates proposed from committed is the treatment rather than the hue: a ring rather than a
+  fill. That is also what stops the failure this layer has already had, where an unexamined gap was
+  drawn solid and became indistinguishable from ink the repair had really invented.
+*/
+const GAP_COLOUR = PALETTE.additive;
 
 let painted: Bitmap | null = null;
 /** The marks the bitmap was built from, so it is rebuilt only when the search finds something new. */

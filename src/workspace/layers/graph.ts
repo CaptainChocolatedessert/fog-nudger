@@ -40,6 +40,7 @@ import {
   type DoomedSpurs,
   type WallGraph,
 } from "../../trace/wallGraph";
+import { PALETTE } from "../palette";
 import { addPainter, type Painter } from "../shell";
 import { showingSaved, previewGraph } from "../regions";
 import { currentTool } from "../toolPalette";
@@ -59,7 +60,7 @@ import {
 } from "../wallEdit";
 
 /** Kept distinct from the wall lines' red and from the six proposal colours. */
-const WALL_COLOUR = "#2b6bff";
+const WALL_COLOUR = PALETTE.structure;
 /**
  * What pruning would take, in the colour this canvas already uses for "about to go".
  *
@@ -68,13 +69,13 @@ const WALL_COLOUR = "#2b6bff";
  * is drawn at the wall's own width rather than the erase highlight's, because there can be hundreds
  * of them and a thickened red would swamp the picture it is meant to be read against.
  */
-const DOOMED_COLOUR = "#ff2020";
-const WALL_CASING = "#ffffff";
+const DOOMED_COLOUR = PALETTE.destructive;
+const WALL_CASING = PALETTE.casing;
 /** Screen pixels. A hairline over busy map art is not a wall anybody can judge or aim at. */
 const WALL_WIDTH_PX = 2;
 
-const HANDLE_FILL = "#ffffff";
-const HANDLE_RIM = "#2b6bff";
+const HANDLE_FILL = PALETTE.casing;
+const HANDLE_RIM = PALETTE.structure;
 const HANDLE_RADIUS = 3;
 
 /**
@@ -88,7 +89,7 @@ const HANDLE_RADIUS = 3;
  */
 const HOVER_RADIUS = 5;
 const ACTIVE_FILL = "#ffcc00";
-const MERGE_FILL = "#00e06a";
+const MERGE_FILL = PALETTE.additive;
 const ACTIVE_RIM = "#20242c";
 const MERGE_RADIUS = 6;
 
@@ -100,9 +101,9 @@ const MERGE_RADIUS = 6;
  * Red for the one that removes and green for the one that adds, which is the only pair of meanings
  * on this canvas that a colour can carry without being learned.
  */
-const ERASE_COLOUR = "#ff3b30";
+const ERASE_COLOUR = PALETTE.destructive;
 const ERASE_WIDTH_PX = 5;
-const DRAW_COLOUR = "#00e06a";
+const DRAW_COLOUR = PALETTE.additive;
 
 /**
  * Past this many handles *on screen*, none are drawn.
