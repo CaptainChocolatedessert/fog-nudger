@@ -31,9 +31,9 @@ import {
 } from "../sliderScale";
 import { graphScaleTop, onGraphScale } from "./graphScale";
 import { refreshGapSearch } from "./paintTool";
-import { requestReread } from "./reading";
+import { onReading, requestReread } from "./reading";
 import { invalidateRegions, repruneRegions } from "./regions";
-import { currentSettings, persistSettings, setSettings } from "./settingsState";
+import { appliedSettings, currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 import { confirmAction } from "./confirmDialog";
 import { handEdits } from "./stage";
@@ -442,6 +442,40 @@ export function settingRow(control: Control): HTMLElement {
   */
   input.disabled = !live;
 
-  row.append(top, input, hint);
+  /*
+    The track wraps the input so the ghost can be positioned against it.
+
+    A wrapper rather than marking the input itself, because a range input's own track is not
+    addressable from CSS in a way that works across browsers — and the mark has to sit at a
+    *fraction* of the track, which needs a positioned box the same width.
+  */
+  const track = document.createElement("div");
+  track.className = "track";
+  const ghost = document.createElement("div");
+  ghost.className = "ghost";
+  ghost.hidden = true;
+  track.append(input, ghost);
+
+  /**
+   * Show where the picture actually is, when that is not where the handle is.
+   *
+   * Hidden whenever they agree, which is the ordinary case — a permanent mark is one nobody reads.
+   * Positioned as a fraction of the track rather than in pixels, so it stays right when the rail is
+   * resized.
+   */
+  const showGhost = (): void => {
+    const shown = readParameter(appliedSettings(), control.name);
+    const at = toSlider(shown, limits, scale);
+    const behind = at !== Number(input.value);
+    ghost.hidden = !behind;
+    if (behind) ghost.style.left = `${(at / SLIDER_STEPS) * 100}%`;
+  };
+
+  input.addEventListener("input", showGhost);
+  onReading(showGhost);
+  onGraphScale(showGhost);
+  showGhost();
+
+  row.append(top, track, hint);
   return row;
 }

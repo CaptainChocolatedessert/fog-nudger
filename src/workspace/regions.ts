@@ -61,8 +61,8 @@ import { noteGraph } from "./graphScale";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
-import { currentSettings } from "./settingsState";
-import { invalidate, isClosing, say } from "./shell";
+import { currentSettings, markApplied } from "./settingsState";
+import { invalidate, isClosing, say, whileWorking } from "./shell";
 import { handEdits, wallGraph } from "./stage";
 
 /**
@@ -413,7 +413,7 @@ async function derive(): Promise<void> {
   */
   const wanted = { settings: currentSettings(), paint: currentPaint() };
   try {
-    const outcome = await runTrace(wanted);
+    const outcome = await whileWorking(() => runTrace(wanted));
     if (isClosing()) return;
 
     if (!outcome.ok) {
@@ -463,6 +463,9 @@ async function derive(): Promise<void> {
       rasterWidth,
       pxPerSquare,
     };
+    // The picture now shows these deriving-stage settings, so any row that was marked ahead of it
+    // stops being.
+    markApplied("derive");
     publish(derivation, generation);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
   } catch (error) {

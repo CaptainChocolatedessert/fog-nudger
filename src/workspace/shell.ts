@@ -460,6 +460,43 @@ function activeDragHandler(): MapDragHandler | null {
  * arbitrary CSS: what a tool knows is that it has a target under the pointer, and what that looks
  * like is the surface's business.
  */
+/**
+ * Say that a computation is in flight, and mean the same thing before and after it stops blocking.
+ *
+ * Two signals, both peripheral: `cursor: progress`, and a thin indeterminate strip along the top
+ * edge of the canvas. **Deliberately not a dimmed panel** — dimming reads as *"you cannot touch
+ * this"*, which is true while the derive holds the main thread and will be false the moment it moves
+ * to a worker, and a signal that changes meaning when the implementation changes is one that has to
+ * be unlearned. The cursor already carries whether interaction is going anywhere.
+ *
+ * **The yield is not optional.** A synchronous derive holds the thread for the better part of a
+ * second, so a class set immediately before it never paints at all: the browser needs a frame and
+ * the computation took it. Every caller must go through `whileWorking`.
+ */
+function setWorking(on: boolean): void {
+  document.body.classList.toggle("working", on);
+}
+
+/**
+ * Run something slow with the working signal actually on screen for it.
+ *
+ * The double `requestAnimationFrame` is what buys a painted frame rather than a scheduled one: the
+ * first callback runs before the paint that follows the style change, the second after it. With a
+ * single frame the class is applied and the work starts in the same tick, which is the case that
+ * shows nothing.
+ */
+export async function whileWorking<T>(run: () => Promise<T> | T): Promise<T> {
+  setWorking(true);
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+  try {
+    return await run();
+  } finally {
+    setWorking(false);
+  }
+}
+
 export function setGrabTarget(on: boolean): void {
   canvas?.classList.toggle("grab-target", on);
 }

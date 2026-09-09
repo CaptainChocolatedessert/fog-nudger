@@ -20,7 +20,15 @@
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { DEFAULT_SETTINGS, type Settings } from "../settings";
+import {
+  DEFAULT_SETTINGS,
+  PARAMETER_STAGE,
+  readParameter,
+  writeParameter,
+  type SettingName,
+  type Settings,
+  type Stage,
+} from "../settings";
 import { readSettings, writeSettings } from "../settingsStore";
 
 /**
@@ -36,6 +44,43 @@ export function currentSettings(): Settings {
   return settings;
 }
 
+/**
+ * The settings the picture on screen was actually computed from.
+ *
+ * **What a slider is ahead of.** A release re-reads or re-derives, and until that lands the canvas
+ * shows the last answer the GM *applied* — which is deliberate, because blanking it would mean
+ * adjusting blind. The cost is that the surface then disagrees with its own controls, and the
+ * existing signal for it is a line of small text in a corner while the GM is looking at the slider
+ * they just moved. Keeping the applied value lets the row mark its own track instead.
+ *
+ * Per **stage**, because the two land at different moments: a reading answers first and the
+ * partition follows, so a single snapshot taken on either would call the other's parameters applied
+ * while they are still pending.
+ */
+let applied: Settings = DEFAULT_SETTINGS;
+
+export function appliedSettings(): Settings {
+  return applied;
+}
+
+/**
+ * Record that everything belonging to a stage is now what the picture shows.
+ *
+ * Copies only that stage's parameters, so a reading landing does not claim a derive-stage change has
+ * arrived. `adjust` never appears here: those recompute nothing, so they are applied the instant
+ * they are set and can never be ahead.
+ */
+export function markApplied(stage: Stage): void {
+  // Through the accessors, so this does not need to know which group a parameter lives in — that
+  // grouping is storage shape and `settings.ts` owns it.
+  let next = applied;
+  for (const name of Object.keys(PARAMETER_STAGE) as SettingName[]) {
+    if (PARAMETER_STAGE[name] !== stage) continue;
+    next = writeParameter(next, name, readParameter(settings, name));
+  }
+  applied = next;
+}
+
 /** Apply a new settings object in memory. Persisting is a separate, explicit step. */
 export function setSettings(next: Settings): void {
   settings = next;
@@ -44,6 +89,9 @@ export function setSettings(next: Settings): void {
 /** Read the stored settings and adopt them. */
 export async function loadSettings(): Promise<Settings> {
   settings = await readSettings();
+  // Nothing is pending against a set that has only just arrived, so the picture and the controls
+  // start in agreement rather than with every row marked ahead.
+  applied = settings;
   return settings;
 }
 

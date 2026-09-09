@@ -24,9 +24,9 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { maskForOverlay, type MaskForOverlay, type MaskOutcome } from "../pipeline";
 import { currentPaint } from "./paintState";
-import { currentSettings } from "./settingsState";
+import { currentSettings, markApplied } from "./settingsState";
 import { MaskRequests, shouldPaint } from "./maskRequest";
-import { invalidate, isClosing, say, sayIfSettled } from "./shell";
+import { invalidate, isClosing, say, sayIfSettled, whileWorking } from "./shell";
 
 /**
  * A step taking a reading.
@@ -184,7 +184,7 @@ async function refreshMask(): Promise<void> {
   // `overlay` would have stayed shared references.
   const wanted = { settings: currentSettings(), paint: currentPaint() };
   try {
-    const outcome = await maskForOverlay(wanted);
+    const outcome = await whileWorking(() => maskForOverlay(wanted));
     if (isClosing()) return;
 
     if (!outcome.ok) {
@@ -200,6 +200,8 @@ async function refreshMask(): Promise<void> {
       return;
     }
 
+    // The mask on screen is now for these reading-stage settings.
+    markApplied("read");
     if (!publish(result, generation)) return;
 
     devLog(
