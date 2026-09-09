@@ -42,6 +42,7 @@ import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
 import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
 import { registerToolPalette } from "./workspace/toolPalette";
+import { registerUndoAction } from "./workspace/undoAction";
 import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
@@ -198,6 +199,9 @@ onStepOpen("edit", (open) => watchRegions("edit", open));
 
 // The tool strip, which owns what a press means and is why the rail below it need not be exclusive.
 registerToolPalette();
+// Undo, in the bar rather than in a group: it takes back a change to the document, not to whatever
+// section happens to be expanded.
+registerUndoAction();
 
 // The one step whose body is not built from parameters: choosing a map is a list of what the scene
 // holds, not a number to turn.

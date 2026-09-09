@@ -108,7 +108,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   say("pruning…", "working");
   try {
-    await saveEditedWalls(pruned.graph);
+    await saveEditedWalls(pruned.graph, "pruning the dead ends");
     devLog(
       "info",
       `workspace: pruned ${pruned.removed} walls (${pruned.segments} segments) in ` +

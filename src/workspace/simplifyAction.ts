@@ -125,7 +125,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
       return;
     }
 
-    await saveEditedWalls(result.graph);
+    await saveEditedWalls(result.graph, "straightening the walls");
     devLog(
       elapsed >= SLOW_SWEEP_MS ? "warn" : "info",
       `workspace: straightened ${before} walls at ${tolerance.toExponential(2)} of the map in ` +

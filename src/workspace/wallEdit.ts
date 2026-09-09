@@ -312,7 +312,7 @@ function end(): void {
     if (!held || !landed) return;
     const result = applyDrag(graph, held, landed);
     if (!result) return;
-    commit(result, describeEdit(landed.snapTo !== null, result.splits, result.overlaps));
+    commit(result, describeEdit(landed.snapTo !== null, result.splits, result.overlaps), "moving a point");
     return;
   }
 
@@ -321,7 +321,7 @@ function end(): void {
     clearGesture();
     invalidate();
     if (target === null) return;
-    commit(removeEdge(graph, target), "erased a wall");
+    commit(removeEdge(graph, target), "erased a wall", "erasing a wall");
     hoveredEdge = null;
     return;
   }
@@ -348,7 +348,7 @@ function end(): void {
     say("too short to be a wall, so nothing was added");
     return;
   }
-  commit(result, describeDraw(result.splits, result.overlaps));
+  commit(result, describeDraw(result.splits, result.overlaps), "drawing a wall");
 }
 
 /**
@@ -358,7 +358,7 @@ function end(): void {
  * differ between them: the graph is stored before what is in hand changes, so a failed write leaves
  * the GM with what they had.
  */
-function commit(result: EditResult, message: string): void {
+function commit(result: EditResult, message: string, undoLabel: string): void {
   /*
     Compacted here and nowhere else, which is what makes renumbering safe.
 
@@ -371,7 +371,7 @@ function commit(result: EditResult, message: string): void {
   const graph = compactNodes(result.graph);
   busy = true;
   say("saving…", "working");
-  void saveEditedWalls(graph)
+  void saveEditedWalls(graph, undoLabel)
     .then(() => {
       say(message);
     })

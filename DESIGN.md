@@ -1680,10 +1680,10 @@ because when it works it beats any fixed palette.
 and the storage are untouched; this is a rework of the surface only.
 
 **Built:** the tool strip, the non-exclusive rail, the pinned rail head, the hand-edit count and the
-warning it prices, and the merge to one page with one panel button.
+warning it prices, the merge to one page with one panel button, and undo.
 
-**Not built:** undo, the derive indicators, the markup palette, and the layer toggles. The layer
-*rules* landed with the merge, because it forced them — handles follow the wall tools.
+**Not built:** the derive indicators, the markup palette, and the layer toggles. The layer *rules*
+landed with the merge, because it forced them — handles follow the wall tools.
 
 ### Why: the mode boundary runs across the grain of the task
 
@@ -1753,14 +1753,33 @@ A soft boundary is easier to wander across than a hard one. Today a GM cannot ac
 wall edits because the door is in the way; under this they can, and the count plus the warning are the
 only guard.
 
-**So undo ships with this, not after it.** The compensations that exist — red previews, confirmations
-naming what goes, counts before committing — all work by helping the GM *predict*, and do nothing for
-a judgement that looked right and was not. Pruning at a budget that seemed fine and taking a wall you
-wanted currently has no route back except regenerating and losing every edit.
+**So undo shipped with it.** The compensations that exist — red previews, confirmations naming what
+goes, counts before committing — all work by helping the GM *predict*, and do nothing for a judgement
+that looked right and was not.
 
-It is cheap: the graph is tens of kilobytes, every mutation already funnels through a small set of
-operations, and `compactNodes` already runs at exactly one safe moment. A 20-deep in-memory snapshot
-stack is well under a megabyte and needs no scene writes.
+**Snapshots, not inverse operations.** Every edit already replaces the graph wholesale and a graph is
+tens of kilobytes, so keeping the old one costs almost nothing and cannot disagree with what an
+inverse would have reconstructed. Twenty deep, oldest dropped first.
+
+**Each entry carries what it would undo**, so the button names it — *"Undo pruning the dead ends"* —
+because the whole reason it is needed is that a GM has just done something whose effect they
+misjudged, and a bare "Undo" asks them to remember what that was.
+
+**The count comes back down with it.** Undoing every edit returns it to zero, at which point
+re-deriving is free again and stops asking. That is true, and it is what counting buys over latching
+a flag.
+
+**What it does not cover, stated.** The graph only. Settings are not destructive — turning a slider
+back puts the walls back, because a derivation is not spent by being redone — and the paint layers are
+a raster document with their own Discard and Clear. A stroke-level undo for those is a different
+mechanism against a different document.
+
+**The staleness rule is the part worth pinning, and it is where the tests are.** A snapshot describes
+the document as it was, and two events make it describe something else: a **derive** replaces the
+graph with a fresh function of the ink, and **loading another map** replaces it entirely. Restoring
+across either would put back walls belonging to a graph the GM is no longer looking at — and since a
+graph is stored in fractions of *a* map with nothing saying which, that would not look wrong until it
+reached the scene.
 
 ### What draws, now that no step decides
 

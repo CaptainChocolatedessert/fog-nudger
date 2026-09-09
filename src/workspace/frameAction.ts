@@ -76,7 +76,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   say("walling the edge…", "working");
   try {
-    await saveEditedWalls(framed.graph);
+    await saveEditedWalls(framed.graph, "walling the map's edge");
     devLog(
       "info",
       `workspace: walled the map's edge — ${framed.splits} existing segments split where they met ` +

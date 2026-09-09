@@ -451,6 +451,14 @@
       button.chip:hover {
         background: #2c2250;
       }
+      /*
+        Disabled rather than hidden, so the surface says undo exists before there is anything to
+        undo. A control that appears only once it is usable teaches nothing about what is possible.
+      */
+      button.chip:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
       button.chip[aria-pressed="true"] {
         background: #bb99ff;
         color: #14162a;
@@ -615,6 +623,7 @@
       <div id="tools"></div>
 
       <div id="bar">
+        <button class="chip" id="undo" disabled title="Nothing to undo">Undo</button>
         <button class="chip" id="fit" title="Fit the whole map">Fit</button>
         <button class="chip" id="toggle-panel" title="Hide the controls" aria-pressed="true">Controls</button>
         <button class="chip" id="close">Close (Esc)</button>
