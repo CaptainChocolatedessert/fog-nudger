@@ -35,6 +35,8 @@ import { requestReread } from "./reading";
 import { invalidateRegions, repruneRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
+import { confirmAction } from "./confirmDialog";
+import { handEdits } from "./stage";
 
 /**
  * The track a control's slider runs over.
@@ -134,6 +136,53 @@ export function controlsLive(): boolean {
 
 export function setControlsLive(next: boolean): void {
   live = next;
+}
+
+/**
+ * Ask before a reading change throws away hand edits, and put the handle back if the answer is no.
+ *
+ * Asked *after* the release rather than before, because a slider has already moved by the time it
+ * fires — so declining has to restore both the input and the position this row compares against, or
+ * the next release would think nothing had changed and write the discarded value silently.
+ *
+ * It names the count, which is the whole point of keeping one: "re-reading the map discards 14 wall
+ * edits" is a price, where "you are leaving stage two" was only a boundary.
+ */
+async function confirmDiscard(
+  control: Control,
+  input: HTMLInputElement,
+  /** Puts the row's own idea of where the handle sits back, which the closure alone can do. */
+  restore: (position: number) => void,
+  previous: number,
+  position: number,
+  limits: Parameters<typeof fromSlider>[1],
+  scale: Parameters<typeof fromSlider>[2],
+): Promise<void> {
+  const count = handEdits();
+  const ok = await confirmAction({
+    title: `Re-read the map, discarding ${count} wall ${count === 1 ? "edit" : "edits"}?`,
+    body: [
+      `${control.label} decides what counts as ink, so changing it derives the walls again from the ` +
+        "map. The graph that replaces them is a fresh reading, and anything you moved, drew or " +
+        "erased by hand is not in it.",
+      "The ink you painted is safe: suppression and added ink are inputs to the reading, so they " +
+        "survive it. Only changes made to the walls themselves go.",
+    ],
+    confirmLabel: "Re-read and discard",
+    destructive: true,
+  });
+
+  if (!ok) {
+    input.value = String(previous);
+    restore(previous);
+    say("kept your wall edits — the setting is unchanged");
+    return;
+  }
+
+  const current = fromSlider(position, limits, scale);
+  setSettings(writeParameter(currentSettings(), control.name, current));
+  recomputeFor([control.name]);
+  void persistSettings();
 }
 
 /**
@@ -343,7 +392,33 @@ export function settingRow(control: Control): HTMLElement {
       say("");
       return;
     }
+    /*
+      The one place the irreversibility is priced, and it is priced only when it costs something.
+
+      A `read` change re-derives the graph, which replaces whatever the GM edited into it by hand.
+      That used to be prevented by the modes: the ink controls simply were not on the same page as
+      the editing tools. With one surface they are, so the guard has to be the *count* — and at zero,
+      which is most of the time, nothing interrupts.
+    */
+    const previous = placed;
     placed = position;
+    const destroys = PARAMETER_STAGE[control.name] === "read" && handEdits() > 0;
+    if (destroys) {
+      setPendingEdit(false);
+      void confirmDiscard(
+        control,
+        input,
+        (back) => {
+          placed = back;
+        },
+        previous,
+        position,
+        limits,
+        scale,
+      );
+      return;
+    }
+
     const current = fromSlider(position, limits, scale);
     setSettings(writeParameter(currentSettings(), control.name, current));
     setPendingEdit(false);

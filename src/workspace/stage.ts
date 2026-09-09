@@ -36,6 +36,30 @@ let saved: WallGraph | null = null;
 const listeners: (() => void)[] = [];
 
 /**
+ * How many hand edits the graph in hand carries since it was last derived.
+ *
+ * **The irreversibility of this project, as a number rather than as a place.** Re-deriving destroys
+ * hand edits — that is real and not fixable — but it only *costs* anything when there are some. The
+ * old surface priced it as a boundary between two modes and charged the ceremony whether or not
+ * anything was at stake; this is the same fact stated so it can be checked.
+ *
+ * The two save paths already distinguish the cases exactly: a derive replaces the graph wholesale
+ * and resets this, an edit adds to it. Nothing else needs to know.
+ *
+ * **In memory only, and the cost is stated.** A graph loaded from the scene starts at zero, because
+ * nothing stored says whether it was edited — so within a session the count is exact, and across one
+ * the guard is the save confirmation, which names what it would replace. Storing it would be a
+ * second fact beside the graph that can disagree with it, and the format has no room for one without
+ * a version bump.
+ */
+let edits = 0;
+
+/** How many hand edits the graph carries. Zero means re-deriving costs nothing. */
+export function handEdits(): number {
+  return edits;
+}
+
+/**
  * The wall graph, or `null` in stage one.
  *
  * Also `null` before the scene has been asked, which is indistinguishable here and deliberately so:
@@ -73,6 +97,7 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
   mapId = forMap;
   const { graph, corrupt } = await readWallGraph(forMap);
   saved = graph;
+  edits = 0;
   announce();
   return { corrupt };
 }
@@ -87,15 +112,25 @@ export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
   if (!mapId) throw new Error("no map is nominated, so there is nothing to derive a graph against");
   await writeWallGraph(mapId, graph);
   saved = graph;
+  // A derive replaces the graph wholesale, so whatever was edited into the last one is gone and the
+  // new one is a pure function of the ink again.
+  edits = 0;
   announce();
   devLog("info", `stage: saved — ${graph.nodes.length} nodes, ${graph.edges.length} segments`);
 }
 
-/** Save an edited graph over the stored one. Stage two stays stage two. */
+/**
+ * Save a graph the GM has changed by hand.
+ *
+ * The one place `edits` grows, which is why every editing tool and every one-shot operation goes
+ * through here rather than writing the store directly. One call is one act the GM performed, which
+ * is what makes the count something to show them.
+ */
 export async function saveEditedWalls(graph: WallGraph): Promise<void> {
   if (!mapId) throw new Error("no map is nominated, so there is nothing to save the graph against");
   await writeWallGraph(mapId, graph);
   saved = graph;
+  edits += 1;
   announce();
 }
 

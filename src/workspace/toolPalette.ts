@@ -37,7 +37,7 @@ import { requestPaintMode, setPaintTool } from "./paintTool";
 import { workspaceMode } from "./mode";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
-import { onStageChange, wallGraph } from "./stage";
+import { handEdits, onStageChange, wallGraph } from "./stage";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
 
@@ -175,6 +175,17 @@ export function render(): void {
       button.addEventListener("click", () => setTool(choice.id as Tool));
       strip.append(button);
     }
+  }
+
+  /*
+    Drawn here because this already redraws on a stage change and owns the head's other dynamic
+    line. It is not a property of the tool — it belongs to the document — and when the two modes
+    merge into one page it should move to whatever owns that.
+  */
+  const count = document.getElementById("edit-count");
+  if (count) {
+    const n = handEdits();
+    count.textContent = n === 0 ? "" : `${n} hand ${n === 1 ? "edit" : "edits"} — re-reading the map discards ${n === 1 ? "it" : "them"}`;
   }
 
   const hint = document.getElementById("tool-hint");

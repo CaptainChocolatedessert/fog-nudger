@@ -299,6 +299,25 @@
         display: none;
       }
 
+      /*
+        How much a re-read would cost, in the head so it does not depend on what is expanded.
+
+        Amber rather than red: hand edits are not a problem, they are work. What the line is for is
+        that changing the reading throws them away, and a GM cannot weigh that without knowing there
+        is something to weigh. Absent at zero, which is most of the time.
+      */
+      #edit-count {
+        margin: 0 0 0.9rem;
+        padding: 0.35rem 0.6rem;
+        border-left: 2px solid #f59e0b;
+        background: rgba(245, 158, 11, 0.1);
+        font-size: 0.78rem;
+        color: #f0b357;
+      }
+      #edit-count:empty {
+        display: none;
+      }
+
       /* ----------------------------------------------------------------------------------------
          The groups, as a rail rather than an exclusive accordion.
 
@@ -585,6 +604,7 @@
           <h1 id="mode-name">Reading the map</h1>
           <p class="sub" id="map-name">Loading…</p>
           <p id="tool-hint"></p>
+          <p id="edit-count"></p>
         </div>
 
         <!--
