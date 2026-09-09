@@ -29,6 +29,7 @@ standing obligation — see §11. Everything else it taught this project is writ
 5. [The wall graph](#5-the-wall-graph--stored-walked-and-edited)
 6. [Emitting](#6-emitting)
 7. [The surfaces](#7-the-surfaces)
+   - [7a. The surface redesign — agreed, not built](#7a-the-surface-redesign--agreed-not-built)
 8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
 9. [Constraints and pitfalls](#9-constraints-and-pitfalls)
 10. [Open questions and what is next](#10-open-questions-and-what-is-next)
@@ -1398,6 +1399,9 @@ zero. That is the gap the warning stands in for.
 
 ## 7. The surfaces
 
+> **This section describes what exists. A redesign of it is agreed and not yet built — see
+> [§7a](#7a-the-surface-redesign--agreed-not-built). Read that before changing anything here.**
+
 **One page, two modes**, chosen by `?mode=` on the URL and by which of two panel buttons opened it.
 The shell, the accordion, the map loading, the transform and every layer are shared; `steps.ts` gives
 every step a `modes` field.
@@ -1667,6 +1671,226 @@ control ourselves** — the map picker is a list of radio rows, the ink colour i
 — and each also happens to be better for its job, since choosing a map is a *comparison* and a dropdown
 hides what you compare on. The native `<input type="color">` is still offered beside the swatches,
 because when it works it beats any fixed palette.
+---
+
+## 7a. The surface redesign — agreed, not built
+
+**Everything in §7 above describes what exists. This describes what replaces it.** The pipeline, the
+emit path and the storage are untouched; this is a rework of the surface only.
+
+### Why: the mode boundary runs across the grain of the task
+
+The real work loop is *look at the rooms → spot a merged one → realise it is an ink problem → fix the
+ink → look again*. That crosses the ink-mode/editor boundary twice per iteration, so the boundary sits
+across the grain of the job. Two panel buttons are a symptom rather than the disease: the modes are
+separate **pages**, so entry needs two doors.
+
+**And the thing the boundary protects is real but modelled as a place.** Re-deriving destroys hand
+wall edits — true, and not fixable. But that cost exists only *if there are hand edits*, and today the
+ceremony fires on crossing the boundary whether or not anything is at stake.
+
+> The irreversibility is not "you are in stage two now". It is **"this graph contains work that is not
+> in the ink"** — a property of the document, and exactly computable: has any editing operation been
+> applied since the last derive?
+
+**The accordion is straining because it does two jobs.** It is a *navigator* (which controls am I
+reading) and a *mode selector* (what does my drag mean). Navigation wants to be cheap and
+non-exclusive; mode wants to be exactly one thing. Where they fail to coincide, escapes had to be
+added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
+
+### The one structural move
+
+**Separate what a drag does from what controls you are reading.**
+
+- **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
+  probe), ink (suppress, add, gaps), walls (move, draw, erase). One click to switch, and switching a
+  tool does not move the controls.
+- **The controls rail** — the same groups in the same cascade order, still numbered so the order still
+  teaches itself, but **all present at once and reached by scrolling**. Collapsing a group stays
+  available and becomes *tidying* rather than *navigating*.
+
+Switching what you are doing and switching what you are reading stop being the same gesture, which is
+the whole of the complaint.
+
+**One workspace, one panel button.** Where you land is state restoration, not a mode choice.
+
+**The commit action moves into the persistent bar**, beside the way out. It is the surface's whole
+purpose and should not be a step's footer — today it sits at the foot of the third accordion section
+and closing commits nothing, so a GM can tune for twenty minutes, press Escape and get nothing.
+
+**The graph is simply always derived and drawn.** There is no "generate" act to perform.
+
+**The warning becomes rare and specific.** Touch a wall tool and the graph acquires hand edits; the
+count is shown in the Walls group, where the risk lives. Change an ink setting while it is non-zero
+and the question names the price — *"re-reading discards 14 wall edits"*. At zero, nothing interrupts.
+
+### Undo becomes load-bearing
+
+A soft boundary is easier to wander across than a hard one. Today a GM cannot accidentally destroy
+wall edits because the door is in the way; under this they can, and the count plus the warning are the
+only guard.
+
+**So undo ships with this, not after it.** The compensations that exist — red previews, confirmations
+naming what goes, counts before committing — all work by helping the GM *predict*, and do nothing for
+a judgement that looked right and was not. Pruning at a budget that seemed fine and taking a wall you
+wanted currently has no route back except regenerating and losing every edit.
+
+It is cheap: the graph is tens of kilobytes, every mutation already funnels through a small set of
+operations, and `compactNodes` already runs at exactly one safe moment. A 20-deep in-memory snapshot
+stack is well under a megabyte and needs no scene writes.
+
+### What draws, now that no step decides
+
+**Affordances belong to the tool, not to the layer.** A handle at every point is not the graph — it is
+the *grab target*, and with a brush selected it is a dot you cannot use, several hundred times over.
+So **wall lines always draw; handles appear only for wall tools, and gap rings only for the gap tool.**
+The dense picture stops being the resting state and becomes what you get while doing the thing that
+needs it.
+
+**A tool may turn a layer on. It may never turn one off.** Picking a wall tool brings the graph up if
+it was down — you cannot edit what you cannot see — but nothing you switched on disappears because you
+changed tools. Monotone in the safe direction, and it does not re-create the coupling being removed:
+the tool nudges, the GM's toggles are final. Things therefore accumulate, so the toggles must be cheap
+and visible rather than buried.
+
+**One subject, everything else reference.** Most of the crowding is a *strength* problem rather than a
+presence problem — the ink mask, the paint layers, the gap marks and the wall centrelines all want the
+same few pixels of a wall stroke. Two controls for it already exist (ink opacity, preview fill and
+outline). Deliberately **not** automated: which layer is the subject is a judgement, and guessing it
+wrongly is more annoying than leaving it.
+
+*Reassurance on scale: the densest state today is already four layers together in the Walls step, and
+that has been through a room. Everything-on is five.*
+
+### The derive, with no step to hang it on
+
+**The trigger question only exists while the edit count is zero.** Once the graph has hand edits it is
+never re-derived, so the expensive case and the consequential case are disjoint.
+
+**The old trigger was "you opened the Walls step"**, which was a proxy for *"you are now looking at
+this"*. There is no such moment any more, and the resting state above draws wall lines always — so
+"derive when visible" would degenerate into "derive always".
+
+**Pay it anyway.** A derive is ~700ms on a cached mask against a ~690ms reading, so chaining them
+roughly doubles the cost of a slider release. The argument for spending it is the strongest one here:
+**the merge failure is visible in the partition, not in the mask.** Two rooms leaking into one is hard
+to see in a threshold change and obvious the moment the region fills merge. A live partition shows the
+failure this project cares most about at the moment it is caused, instead of after the GM goes to look.
+
+**Cropping to the viewport does not help**, unlike for the mask. Faces are topological, so a graph
+cropped to the visible region gives wrong faces at every cut edge — and wrong rooms near the edge of
+the screen is a worse failure than slowness. The derive cannot be made cheaper by looking at less of
+the map; it has to be made *not block*.
+
+**So: a worker is the real answer, and a debounce is what ships first.** Derive when the ink settles
+rather than when a step opened. Same behaviour on a slow drag through a range; it freezes at the end
+instead of never until you look.
+
+#### Two indicators, and they are different states
+
+- **Working** — a computation is in flight, bounded. `cursor: progress`, plus a thin indeterminate
+  strip along the top edge of the canvas. Peripheral, covers nothing.
+- **Behind** — what is drawn was computed from older settings. **A ghost mark on the slider's own
+  track, at the value the picture was actually computed from.** The handle sits at 0.38, the ghost at
+  0.34; when the derive lands the ghost slides up and vanishes.
+
+**Put staleness on the control that caused it.** The existing signal is a line of small monospace text
+in the bottom-right corner, while the GM's attention is on the slider they just moved or on the map.
+The information is not missing — it is nowhere near where anyone is looking, which is why it has been
+reported as awkward. A per-control marker is also legible when several controls are ahead, which one
+status line can never be.
+
+**Do not dim the panel to show work in progress.** It reads as *"you cannot touch this"*, which is
+true while the derive blocks and **false** once it moves to a worker — and a signal that changes
+meaning when the implementation changes is one that has to be unlearned. The cursor and the strip mean
+the same thing in both worlds.
+
+> **Implementation trap: while the derive blocks, nothing animates.** A 700ms synchronous computation
+> holds the main thread, so a spinner will not spin — and worse, a cursor change or a class applied
+> immediately before the computation **never paints at all**, because the browser needs a frame and the
+> computation took it. Any working indicator must set its state, **yield one frame**, then compute.
+
+### The markup palette
+
+Two rules come before any hue.
+
+**Visibility is structural, not chromatic.** We do not control the map, so no hue is reliably legible
+on it. What is controllable is the mark's construction: a light casing under a saturated core, which
+is already how wall centrelines are drawn and why they read on dark linework and pale paper alike.
+**Generalise it to every mark that must be seen** — then hue carries meaning and casing carries
+visibility, and the two stop competing.
+
+**Avoid the map's own territory.** Map artwork lives in warm, low-chroma pigment: tans, browns,
+ochres, muted greens and blues. Saturated **cyan, magenta and violet essentially never occur in it**,
+which makes them the safest families.
+
+#### Two axes, not one list
+
+- **Hue** says what kind of thing it is.
+- **Treatment** says how real it is: **solid is committed, hollow or dashed is proposed.**
+
+That removes "information" as a category. The gap finder is not a third kind of thing — it is the
+**additive** category in its *proposed* state, which is literally what it does. It also makes
+structural a distinction that has already caused a defect, when an unexamined gap was painted solid
+and became indistinguishable from ink the repair had really invented. Proposals are not solid, so it
+cannot recur.
+
+| category | hue | covers |
+|---|---|---|
+| **Ink** | violet | what the trace read |
+| **Structure** | blue | the wall graph, cased |
+| **Additive** | cyan | your added ink, gap proposals, a snap target |
+| **Subtractive** | amber | your suppression |
+| **Destructive** | red | **reserved** — erase target, doomed spurs, nothing else |
+| **Rooms** | a generated cycle | not semantic |
+
+**Red earns its alarm value by being rare.** Today it does three jobs — default ink, emitted wall
+lines in the preview, and destructive previews — and the first two move to violet and blue.
+
+**Ink stops being red for a second reason beyond "it reads as an error": it is the largest area on
+screen**, worn for the whole session, and it should be the calmest thing there rather than the
+loudest.
+
+**Rooms are not a picker.** The colour carries no meaning beyond *"this room is not that room"*, so it
+wants a rotation at fixed low chroma and lightness, generated rather than chosen. The rule that
+matters is that **no room fill is ever more salient than any mark**, which a hand-picked cycle cannot
+promise.
+
+**Colour vision: attach is cyan, not green.** An earlier draft used green for *will attach* against
+red for *will remove* — the classic unreadable pair. Folding attach into the additive family fixes it
+and is more correct anyway, since a snap target *is* an addition.
+
+**Five pickers, grouped by category rather than by layer**, so adjusting for an unusually tinted map
+moves one control and everything additive follows. They adjust the **core** hue only; the casing stays
+light, because that is the part doing the visibility work.
+
+### Two measured fixes to carry over
+
+- **Locked group headers fail their own purpose.** They are dimmed to teach the order of what is
+  coming, and at 40% opacity over the panel that is **2.17:1** — below even the 3:1 floor for non-text
+  UI. Around 55–60% lands near 3.5:1: still unmistakably inactive, and legible.
+- **The type is too small where it carries the most meaning.** Base is 13px, but control hints are
+  **9.9px** and the state line **9.8px** — and the hints are where every control's explanation lives.
+  A 14px base with an 11px floor costs nothing; the rail scrolls already.
+
+### What does not change
+
+Worth stating, because it is most of the project:
+
+- **The whole of `trace/`** — about 12,900 lines across 24 modules. The reading, the paint
+  composition, the gap search, thinning, the graph, the faces, the planar edits.
+- **The emit path** — about 1,550 lines.
+- **Storage** — settings, paint layers and the wall graph in scene metadata, unchanged apart from the
+  colour parameters.
+- **The gesture deciders** — `dragGesture`, `paintGesture`, `gapGesture`, `maskRequest`, about 630
+  lines of pure, tested logic about what a gesture *means*. They survive because they were already
+  split from the pointer plumbing.
+
+**The cost, stated: this lands almost entirely in the untested half.** The surface touches the SDK, so
+it cannot be imported into a node test, and the ~6,800 lines of workspace code it reworks have no
+coverage. The 766 tests stay green throughout and will not be evidence about any of it. **A room is
+the only instrument here**, which is an argument for building it in stages that can each be looked at
+rather than as one landing.
 ---
 
 ## 8. Testing and diagnostic practice
@@ -1961,10 +2185,21 @@ centre.
 
 **What is unproven is the thing the project exists to get right: whether the partition it finds is the
 one a GM wants.** It is now cheap to judge — the workspace draws it without touching the scene — and
-nobody has yet gone room by room and said whether these are the rooms they would have drawn. **That is
-the most useful next thing: a real session of map correction end to end, rather than another feature.**
+nobody has yet gone room by room and said whether these are the rooms they would have drawn. **A real
+session of map correction end to end is still the most informative thing that can happen to this
+project**, and it does not depend on anything below.
 
-### Two things genuinely unimplemented, and both need a conversation before code
+### The largest piece of planned work is the surface redesign
+
+**§7a**, agreed and not built: one workspace instead of two modes, a tool palette separated from a
+non-exclusive controls rail, the irreversibility carried as a hand-edit count rather than a boundary,
+undo, and the markup palette. It reworks about 6,800 lines of surface code and touches none of the
+pipeline.
+
+It came out of using the thing: the accordion makes switching tasks expensive, and the two doors into
+the workspace read as artificial. Both turned out to have one cause.
+
+### Two features unimplemented, and one still needs a conversation before code
 
 **1. The small-area-face tool.** Wanted eventually, and **not designed**: *it's not obvious how it
 should work.*
