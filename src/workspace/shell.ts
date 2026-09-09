@@ -38,7 +38,6 @@ import {
   type View,
 } from "../probe/viewTransform";
 import type { Drag, LayerId } from "../steps";
-import { workspaceMode } from "./mode";
 import { workspaceModalId } from "./workspaceControl";
 
 /**
@@ -859,7 +858,7 @@ async function close(): Promise<void> {
   closing = true;
   // Its own id, which is per mode: the two surfaces are one page and two modals, so a page that
   // closed "the workspace" would sometimes be closing the other one.
-  await OBR.modal.close(workspaceModalId(workspaceMode())).catch((error: unknown) => {
+  await OBR.modal.close(workspaceModalId()).catch((error: unknown) => {
     devLog("error", "workspace: could not close itself", describeError(error));
   });
 }

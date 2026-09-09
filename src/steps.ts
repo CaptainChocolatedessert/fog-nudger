@@ -132,7 +132,6 @@ export interface ToolChoice {
   readonly label: string;
   /** The band it sits in, which is the same order the rail is numbered by. */
   readonly band: "navigate" | "ink" | "walls";
-  readonly modes: readonly WorkspaceMode[];
   /**
    * What a plain left-drag does while this tool is in hand.
    *
@@ -155,20 +154,18 @@ export const TOOLS: readonly ToolChoice[] = [
     id: "pan",
     label: "Pan",
     band: "navigate",
-    modes: ["ink", "edit"],
     drag: "pan",
     hint:
       "Drag to move the map, and nothing here changes it. Click once without dragging to ask what " +
       "the trace made of that pixel.",
   },
-  { id: "suppress", label: "Suppress", band: "ink", modes: ["ink"], drag: "brush", hint: "" },
-  { id: "ink", label: "Add ink", band: "ink", modes: ["ink"], drag: "brush", hint: "" },
-  { id: "gaps", label: "Gaps", band: "ink", modes: ["ink"], drag: "brush", hint: "" },
+  { id: "suppress", label: "Suppress", band: "ink", drag: "brush", hint: "" },
+  { id: "ink", label: "Add ink", band: "ink", drag: "brush", hint: "" },
+  { id: "gaps", label: "Gaps", band: "ink", drag: "brush", hint: "" },
   {
     id: "move",
     label: "Move",
     band: "walls",
-    modes: ["edit"],
     drag: "edit",
     hint:
       "Drag a point to move it. Drop it on another to join them — hold <b>Shift</b> to keep them " +
@@ -178,7 +175,6 @@ export const TOOLS: readonly ToolChoice[] = [
     id: "draw",
     label: "Draw",
     band: "walls",
-    modes: ["edit"],
     drag: "edit",
     hint:
       "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>green</b> where " +
@@ -189,7 +185,6 @@ export const TOOLS: readonly ToolChoice[] = [
     id: "erase",
     label: "Erase",
     band: "walls",
-    modes: ["edit"],
     drag: "edit",
     hint:
       "Click a wall to remove it. <b>One segment at a time</b>, so a long wall drawn as many " +
@@ -197,24 +192,19 @@ export const TOOLS: readonly ToolChoice[] = [
   },
 ];
 
-/** The tools this mode offers, in declaration order. */
-export function toolsOf(mode: WorkspaceMode): readonly ToolChoice[] {
-  return TOOLS.filter((tool) => tool.modes.includes(mode));
-}
 
-/**
- * Which of the two workspaces a step belongs to.
- *
- * **The whole of the two-mode split, as far as this file is concerned** (user, 2026-09-05). Stage
- * one and the wall editor are separate processes that each begin by looking at the scene and end by
- * putting something on it; what makes them separate in the code is one field on a step, because the
- * surface has been a shell plus a list of steps since A.1.
- *
- * `view` is in both, which is what a persistent group is for. Nothing else is: a step that appeared
- * in both would be a place a GM could be in either mode, and neither mode's blurbs could then say
- * where they were.
- */
-export type WorkspaceMode = "ink" | "edit";
+
+/*
+  `WorkspaceMode` was here, and the two modes went with it (2026-09-08).
+
+  Stage one and the wall editor were separate pages, and a step declared which it belonged to. The
+  split was across the grain of the job: the work loop is look at the rooms, spot a merged one, go
+  back to the ink, look again, and that crossed the boundary twice per iteration.
+
+  What the boundary was protecting is real — re-deriving destroys hand edits — but it is a property
+  of the document rather than a place, and `stage.ts` counts it now. One page, one list of groups,
+  and the price is named when there is a price to name.
+*/
 
 /** A sub-heading within a step, for a handful of controls that want their own explanation. */
 export interface StepGroup {
@@ -245,15 +235,6 @@ export interface Step {
   readonly blurb: string;
   /** What the canvas shows while this step is open. */
   readonly layers: readonly LayerId[];
-  /**
-   * Which workspaces this step appears in.
-   *
-   * Required rather than defaulted, so a new step has to say. A default would put every future step
-   * into whichever mode the default named, which is exactly the kind of silent membership the two
-   * modes exist to prevent — the editor's whole point is that it does not carry stage one's
-   * controls.
-   */
-  readonly modes: readonly WorkspaceMode[];
   /** Sub-headings, for controls that need their own explanation inside a step. */
   readonly groups?: readonly StepGroup[];
   /**
@@ -289,7 +270,6 @@ export const STEPS: readonly Step[] = [
   {
     id: "map",
     title: "Map",
-    modes: ["ink"],
     blurb:
       "Which image the trace reads. Everything below is about this one picture, and stays closed " +
       "until one is chosen.",
@@ -306,7 +286,6 @@ export const STEPS: readonly Step[] = [
   {
     id: "ink",
     title: "Ink",
-    modes: ["ink"],
     blurb:
       "What the trace calls a mark, which marks it keeps, and the tools for correcting that by hand. " +
       "The sliders decide what counts as ink everywhere at once; below them are three tools that " +
@@ -401,7 +380,6 @@ export const STEPS: readonly Step[] = [
   {
     id: "walls",
     title: "Walls",
-    modes: ["ink"],
     blurb:
       "The <b>graph</b> the reading arrives at, over the rooms it encloses: every wall a line, every " +
       "corner a point. <b>A face boundary is a wall's centreline</b>, so both controls here change " +
@@ -445,7 +423,6 @@ export const STEPS: readonly Step[] = [
   {
     id: "edit",
     title: "Edit walls",
-    modes: ["edit"],
     blurb:
       "The walls as they were saved, and yours to move. Every wall is a line and every corner a " +
       "point; joining two points makes them one for ever, so the rooms either side of a wall follow " +
@@ -504,7 +481,6 @@ export const STEPS: readonly Step[] = [
       group that is never entered is the one place a control can sit and be reachable from both
       without either mode claiming it.
     */
-    modes: ["ink", "edit"],
     blurb:
       "How the rooms are drawn, wherever they are drawn \u2014 which is <b>Walls</b> and <b>Edit " +
       "walls</b>. Neither of these changes what goes on the map: an emitted room is fully opaque " +
@@ -553,19 +529,19 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
   // Both of the controls that shape the graph, together. Pruning decides which walls survive and
   // smoothing decides what shape they are, and the step draws the result of both.
   /*
-    Pruning is in **two** steps, one per mode, and it is the only control that is.
+    One budget, one handle, in the group that says how the walls come out.
 
-    The operation is the same one either way — the same budget, the same units, the same code — and
-    the two modes want it on opposite terms. In the ink mode the graph is a derivation, so the budget
-    is re-applied on every derive and turning it back down puts the walls back. In the editor the
-    graph is the document, so applying it deletes walls that do not return, and the slider sets a
-    number that a **button** applies once.
+    It was declared in **both** wall groups while they were separate pages, on the argument that a GM
+    should not have to find a budget twice — and that was safe precisely because only one mode was on
+    screen at a time. On one page it would be two sliders writing one setting, which disagree the
+    moment either moves.
 
-    Repeating the control rather than giving the editor one of its own is what keeps a GM from having
-    to find a budget that suits their map twice. Only one mode is on screen at a time, so nothing is
-    ever drawn twice.
+    So it lives with the other derive-time control. Turning it up re-prunes on the next derive and
+    turning it back down puts the walls back, because a derivation is not destroyed by being redone.
+    The **button** in Edit walls spends the same number destructively, which is what you need once
+    there are hand edits and re-deriving is no longer free.
   */
-  spurPruneFraction: ["walls", "edit"],
+  spurPruneFraction: "walls",
   simplifyFraction: "walls",
   // The editor's own, and a second key rather than a second home for the one above: the two need
   // different defaults, which is what says they are different settings. `settings.ts` carries why.
@@ -629,8 +605,8 @@ export function resetStep(settings: Settings, id: StepId): Settings {
  * all. A step could in principle be persistent in one mode and absent from the other; nothing is
  * today, and the two are kept separate so that stays possible.
  */
-export function workspaceSteps(mode: WorkspaceMode): readonly Step[] {
-  return STEPS.filter((step) => !step.persistent && step.modes.includes(mode));
+export function workspaceSteps(): readonly Step[] {
+  return STEPS.filter((step) => !step.persistent);
 }
 
 /**

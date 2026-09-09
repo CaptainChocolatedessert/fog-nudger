@@ -28,7 +28,6 @@
 
 import { devLog } from "../devlog";
 import { advanceTo, renderPanel } from "./accordion";
-import { inEditor } from "./mode";
 import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
 import { loadStage } from "./stage";
@@ -125,7 +124,7 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   */
   // Only the ink mode has anywhere to move on to. The editor opens on its one step already, and
   // sending it to a step it does not declare would leave the accordion with nothing open.
-  if (opening && !inEditor()) advanceTo("ink");
+  if (opening) advanceTo("ink");
   // The gate has just opened, so every step below Map becomes reachable.
   renderPanel();
 

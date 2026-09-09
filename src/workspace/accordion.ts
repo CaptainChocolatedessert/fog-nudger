@@ -54,7 +54,6 @@ import { forgetGraphScale } from "./graphScale";
 import { recomputeFor, resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
-import { workspaceMode } from "./mode";
 import { invalidate, say, setActiveLayers } from "./shell";
 
 /**
@@ -74,7 +73,7 @@ import { invalidate, say, setActiveLayers } from "./shell";
  */
 const open = new Set<StepId>();
 {
-  const first = workspaceSteps(workspaceMode())[0]?.id;
+  const first = workspaceSteps()[0]?.id;
   if (first) open.add(first);
 }
 
@@ -90,11 +89,12 @@ const open = new Set<StepId>();
  * is the same choice the accordion makes everywhere: the order is the cascade, and a cascade with
  * its later half missing does not teach it.
  *
- * The editor has no gate. Its own step says when there is no graph to edit, which is a different
- * sentence from "choose a map" and belongs where the graph would have been.
+ * **Edit walls is behind the gate too, since the merge.** It used to be on a page with no gate at
+ * all, and its own body still says when there is no *graph* — a different sentence from "choose a
+ * map", and the one that belongs once there is a picture to edit against.
  */
 function locked(step: Step): boolean {
-  return workspaceMode() === "ink" && step.id !== "map" && !mapChosen();
+  return step.id !== "map" && !mapChosen();
 }
 
 /**
@@ -278,7 +278,7 @@ export function onStepChange(listener: (step: StepId | null) => void): void {
  * map, and nothing of ours on top of it.
  */
 function applyOpenStep(): void {
-  const steps = workspaceSteps(workspaceMode()).filter((step) => open.has(step.id));
+  const steps = workspaceSteps().filter((step) => open.has(step.id));
   const layers = [...new Set(steps.flatMap((step) => step.layers))];
   setActiveLayers(layers);
   for (const listener of openListeners) listener.changed(open.has(listener.id));
@@ -316,11 +316,11 @@ export function renderPanel(): void {
       step that has just become unreachable would show its layers over nothing and leave its header
       unable to close it.
     */
-    for (const step of workspaceSteps(workspaceMode())) {
+    for (const step of workspaceSteps()) {
       if (locked(step)) open.delete(step.id);
     }
 
-    for (const step of workspaceSteps(workspaceMode())) {
+    for (const step of workspaceSteps()) {
       const shut = locked(step);
       const section = document.createElement("section");
       section.className = "step";

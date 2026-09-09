@@ -32,9 +32,9 @@
  * giving it a button costs one row and removes a piece of folklore.
  */
 
-import { STEPS, toolsOf, type Drag, type ToolChoice } from "../steps";
+import { STEPS, TOOLS, type Drag, type ToolChoice } from "../steps";
 import { requestPaintMode, setPaintTool } from "./paintTool";
-import { workspaceMode } from "./mode";
+import { mapChosen } from "./mapSource";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { handEdits, onStageChange, wallGraph } from "./stage";
@@ -87,7 +87,7 @@ export function onToolChange(listener: (tool: Tool) => void): void {
  * falls through to a pan. Giving it `pan` here would mean a click inside a ring never reached it.
  */
 function dragFor(tool: Tool): Drag {
-  return toolsOf(workspaceMode()).find((choice) => choice.id === tool)?.drag ?? "pan";
+  return TOOLS.find((choice) => choice.id === tool)?.drag ?? "pan";
 }
 
 /**
@@ -101,19 +101,36 @@ function dragFor(tool: Tool): Drag {
  */
 function apply(next: Tool): void {
   tool = next;
-  if (workspaceMode() === "edit") {
-    /*
-      `wallEdit` has no idle state, so pan leaves whatever was there. That is harmless *because the
-      drag binding decides*: with `pan` bound, the wall handler is never offered the press, so which
-      verb it would have used cannot matter. What must not happen is the strip reading its answer
-      back — see `currentTool`.
-    */
-    if (next !== "pan") setWallTool(next as WallTool);
+  const band = TOOLS.find((choice) => choice.id === next)?.band;
+  if (band === "walls") {
+    setWallTool(next as WallTool);
+    // The paint tool is put down whenever a wall tool is picked up, or a brush would still be armed
+    // underneath and the press would reach whichever handler the drag binding names first.
+    setPaintTool("none");
   } else {
+    /*
+      `wallEdit` keeps whatever verb it had. That is harmless *because the drag binding decides*:
+      with `pan` or `brush` bound the wall handler is never offered the press, so which verb it would
+      have used cannot matter. What must not happen is the strip reading its answer back — see
+      `currentTool`.
+    */
     setPaintTool(next === "pan" ? "none" : (next as "suppress" | "ink" | "gaps"));
   }
   setDrag(dragFor(next));
   requestPaintMode(next === "suppress" || next === "ink" || next === "gaps");
+}
+
+/**
+ * Whether a tool can do anything yet.
+ *
+ * Per tool rather than per surface, now that all of them are on one strip. Pan always works; the ink
+ * tools need a map to paint onto; the wall tools need walls to change. A tool offered in a state
+ * where its presses do nothing is a button that lies.
+ */
+function usable(choice: ToolChoice): boolean {
+  if (choice.band === "navigate") return true;
+  if (choice.band === "walls") return wallGraph() !== null;
+  return mapChosen();
 }
 
 export function setTool(next: Tool): void {
@@ -140,17 +157,17 @@ export function render(): void {
   const strip = document.getElementById("tools");
   if (strip) {
     strip.replaceChildren();
-    const usable = workspaceMode() === "edit" ? wallGraph() !== null : true;
     /*
       A tool that has become unavailable cannot stay in hand. Removing the walls from the panel is
-      the way there, and leaving Erase selected over a map with no graph would show a pressed button
-      whose presses do nothing.
+      one way there and nominating a different map is another, and leaving Erase selected over a map
+      with no graph would show a pressed button whose presses do nothing.
     */
-    if (!usable && tool !== "pan") apply("pan");
+    const inHand = TOOLS.find((choice) => choice.id === tool);
+    if (inHand && !usable(inHand)) apply("pan");
     const active = currentTool();
     let band: ToolChoice["band"] | null = null;
 
-    for (const choice of toolsOf(workspaceMode())) {
+    for (const choice of TOOLS) {
       if (band !== null && choice.band !== band) {
         const rule = document.createElement("div");
         rule.className = "tool-rule";
@@ -171,7 +188,7 @@ export function render(): void {
       // `aria-pressed` carries the selected look and the meaning together, rather than a class
       // saying the same thing beside it.
       button.setAttribute("aria-pressed", String(choice.id === active));
-      button.disabled = !usable && choice.id !== "pan";
+      button.disabled = !usable(choice);
       button.addEventListener("click", () => setTool(choice.id as Tool));
       strip.append(button);
     }
@@ -190,7 +207,7 @@ export function render(): void {
 
   const hint = document.getElementById("tool-hint");
   if (hint) {
-    const chosen = toolsOf(workspaceMode()).find((choice) => choice.id === currentTool());
+    const chosen = TOOLS.find((choice) => choice.id === currentTool());
     hint.innerHTML = chosen ? hintFor(chosen) : "";
   }
 }

@@ -90,26 +90,25 @@
     <p id="status" data-state="pending">Connecting&hellip;</p>
 
     <!--
-      Two workspaces, in the order a map goes through them. Each is a complete process that starts by
-      looking at the scene and ends by putting something on it, which is why they are separate
-      surfaces rather than two halves of one long list.
+      One workspace, and one button that opens it. It reads the scene's map, turns the linework into
+      walls, and lets those walls be corrected by hand — all on one surface, because the work loop
+      crosses between them constantly.
     -->
     <div class="actions">
-      <button id="open-workspace" disabled>Read the map</button>
-      <button id="open-editor" disabled>Edit the walls</button>
+      <button id="open-workspace" disabled>Open the workspace</button>
     </div>
     <p class="note">
-      <em>Read the map</em> is where the picture becomes walls: choose the image, decide what counts
-      as ink, correct it by hand, and save the result. It has to be its own surface because the
-      answers are per-pixel verdicts, which only a picture can carry.
+      The workspace is where the picture becomes walls: choose the image, decide what counts as ink,
+      correct it by hand, and save the result. It is a full-screen surface because the answers are
+      per-pixel verdicts, which only a picture can carry.
     </p>
     <p class="note">
-      <em>Edit the walls</em> opens what was saved and lets you move, draw and erase them by hand.
-      Going back to reading the map is not destructive &mdash; only saving from there replaces the
-      walls, and it says so first.
+      The same surface moves, draws and erases walls once they exist. Changing a reading setting
+      afterwards derives them again, which discards those hand edits &mdash; so it counts them and
+      says what it would cost before doing it.
     </p>
     <p class="note">
-      Both put the result straight on the fog layer, replacing whatever we put there before.
+      Saving puts the result straight on the fog layer, replacing whatever we put there before.
       <strong>There is no staging step.</strong> So a hand edit to one of our fog items does not
       survive the next write &mdash; edit it in one of these instead.
     </p>

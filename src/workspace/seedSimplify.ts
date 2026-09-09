@@ -42,7 +42,6 @@ import {
   writeParameter,
 } from "../settings";
 import { renderPanel } from "./accordion";
-import { inEditor } from "./mode";
 import { onReading } from "./reading";
 import { invalidateRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
@@ -57,7 +56,6 @@ export function registerSimplifySeed(): void {
 }
 
 function seed(): void {
-  if (inEditor()) return;
 
   const settings = currentSettings();
   if (settings.trace.simplifyFraction !== DEFAULT_SETTINGS.trace.simplifyFraction) return;

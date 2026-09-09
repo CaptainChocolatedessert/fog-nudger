@@ -182,14 +182,14 @@ OBR.onReady(async () => {
   const buttons = [
     wireButton("dry-run", dryRun),
     /*
-      Two buttons for two workspaces, which is the whole of the split from out here.
+      One button, because there is one workspace.
 
-      They open one page with a different mode in its URL, so this is a pair of arguments rather than
-      a pair of applications. Both are always offered: the editor with no saved graph says so in its
-      own step, which is a better sentence than a disabled button with nothing to explain it.
+      There were two — read the map, edit the walls — while those were separate pages. Merging them
+      leaves nothing for a second button to mean: the reading controls and the wall tools are on the
+      same surface, and which of them a GM reaches for is not a decision to make out here before
+      seeing the map.
     */
-    wireButton("open-workspace", () => openWorkspace("ink")),
-    wireButton("open-editor", () => openWorkspace("edit")),
+    wireButton("open-workspace", openWorkspace),
     wireButton("remove", removeEverythingOfOurs),
     wireButton("inspect", inspectFogShapes),
     wireButton("workspace-probe-bare", () => openWorkspaceProbe("bare")),

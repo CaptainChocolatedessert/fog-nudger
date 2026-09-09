@@ -56,7 +56,6 @@ import { readNominatedMapId } from "../map/mapImage";
 import { encodeWallGraph } from "../trace/wallGraph";
 import { paintRevision } from "../trace/inkPaint";
 import { wallGraph } from "./stage";
-import { inEditor } from "./mode";
 import { controlsLive } from "./settingRows";
 import { currentPaint } from "./paintState";
 import { currentSettings, persistSettings } from "./settingsState";
@@ -102,15 +101,15 @@ async function fingerprint(): Promise<string> {
 export async function pushOnClose(): Promise<void> {
   if (!controlsLive()) return;
   /*
-    The ink mode writes nothing on the way out.
+    A derivation writes nothing on the way out; a saved graph is what closing can push.
 
-    Its product is a *derivation* — one re-run away from the settings and paint that are already
-    stored — so leaving loses nothing, and pushing it would commit a graph the GM did not ask to
-    commit over one they may have spent an evening editing. Saving is the deliberate act, and it has
-    two buttons of its own at the foot of Walls.
+    An underived graph is one re-run away from the settings and paint that are already stored, so
+    leaving loses nothing — and pushing it would commit walls the GM never asked to commit, possibly
+    over ones they spent an evening editing. Saving is the deliberate act, and it has its own buttons
+    at the foot of Walls.
   */
-  if (!inEditor()) {
-    devLog("info", "workspace: closing the ink mode, which commits nothing on its own");
+  if (!wallGraph()) {
+    devLog("info", "workspace: closing with no saved graph, which commits nothing on its own");
     return;
   }
   const mark = await fingerprint();

@@ -41,9 +41,12 @@ import {
   type WallGraph,
 } from "../../trace/wallGraph";
 import { addPainter, type Painter } from "../shell";
-import { inEditor } from "../mode";
-import { previewGraph } from "../regions";
+import { showingSaved, previewGraph } from "../regions";
+import { currentTool } from "../toolPalette";
 import { wallGraph } from "../stage";
+
+/** The tools a handle is for. Anything else in hand and a dot at every vertex is decoration. */
+const WALL_TOOLS = new Set(["move", "draw", "erase"]);
 import { currentSettings } from "../settingsState";
 import type { DrawPoint } from "../dragGesture";
 import {
@@ -131,7 +134,7 @@ function degrees(graph: WallGraph): number[] {
  * writes. Both sources are already module state that changes wholesale.
  */
 function graphOnCanvas(): WallGraph | null {
-  return inEditor() ? wallGraph() : previewGraph();
+  return showingSaved() ? wallGraph() : previewGraph();
 }
 
 /**
@@ -145,9 +148,14 @@ function graphOnCanvas(): WallGraph | null {
 let doomedFor: { graph: WallGraph; budget: number; doomed: DoomedSpurs } | null = null;
 
 function doomed(graph: WallGraph): DoomedSpurs {
-  // Only in the editor, and only for the editor's own budget. The ink mode re-derives its graph from
-  // the reading with the budget already applied, so there is nothing pending there to mark.
-  if (!inEditor()) return NOTHING_DOOMED;
+  /*
+    Only against the **saved** graph, because only there is the budget pending.
+
+    A fresh derivation already has it applied — the trace prunes as it builds — so marking anything
+    red would be claiming the button would remove walls that are not in the picture. The saved graph
+    is the one the button acts on, and the one that can have drifted from the budget by being edited.
+  */
+  if (!showingSaved()) return NOTHING_DOOMED;
   const budget = currentSettings().trace.spurPruneFraction;
   if (!(budget > 0)) return NOTHING_DOOMED;
 
@@ -293,7 +301,15 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     step pans — and the record's rule is that a handle which moves nothing is a lie about what is
     present. The walls themselves are the whole of what that step has to show.
   */
-  if (inEditor()) paintHandles(context, graph, x, y, at, going.vertices);
+  /*
+    Handles follow the **tool**, not a mode.
+
+    A handle is the grab target rather than part of the graph: with a brush or a pan in hand it is a
+    dot that cannot be used, several hundred times over. Drawing them only for the tools that can act
+    on them is what stops the resting state being the dense one — and it is the same rule the gap
+    rings follow.
+  */
+  if (WALL_TOOLS.has(currentTool())) paintHandles(context, graph, x, y, at, going.vertices);
   context.restore();
 };
 

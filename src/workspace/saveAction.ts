@@ -41,9 +41,8 @@ import { confirmAction } from "./confirmDialog";
 import { controlsLive } from "./settingRows";
 import { currentRegions, currentWalls, previewGraph } from "./regions";
 import { pushCurrent } from "./pushAction";
-import { say, closeWorkspace } from "./shell";
+import { say } from "./shell";
 import { saveDerivedWalls, wallGraph } from "./stage";
-import { openWorkspace } from "./workspaceControl";
 
 /**
  * Save the derived graph, then put it on the map.
@@ -148,9 +147,10 @@ async function mayReplace(): Promise<boolean> {
  * follow-up prompt, because the choice is made *before* the work rather than after it — a GM who
  * knows they are going to hand-edit should not have to wait for a push and then answer a question.
  *
- * **The hand-off is part of the feature rather than a nicety.** Split across two modes, the editor
- * is invisible from this surface; the cost of the split, stated when it was designed, is that the
- * sequence stops being legible from one accordion. This is what pays it.
+ * **The hand-off is gone with the modes** (2026-09-08). There were two buttons — save, and save then
+ * open the editor — because the editing tools were on another page and invisible from here. They are
+ * on this one now, so there is nowhere to hand off to: saving puts the walls in the scene, and the
+ * tools that change them are already in the strip.
  */
 export function renderSaveAction(body: HTMLElement): void {
   const actions = document.createElement("div");
@@ -161,42 +161,23 @@ export function renderSaveAction(body: HTMLElement): void {
   save.className = "chip";
   save.textContent = "Put the walls on the map";
 
-  const handOff = document.createElement("button");
-  handOff.type = "button";
-  handOff.className = "chip";
-  handOff.textContent = "Edit the walls";
-
   const note = document.createElement("p");
   note.className = "sub";
   note.innerHTML =
-    "Both of these save the graph above and replace what we put in the scene before. <b>Closing " +
-    "without pressing one saves nothing</b> &mdash; your settings and ink edits are kept whatever " +
-    "you do, so coming back here is always cheap. <b>Edit the walls</b> saves and then opens the " +
-    "editor, which is where a wall is moved, drawn or erased by hand.";
+    "Saves the graph above and replaces what we put in the scene before. <b>Closing without " +
+    "pressing it saves nothing</b> &mdash; your settings and ink edits are kept whatever you do, so " +
+    "coming back here is always cheap. Once saved, the wall tools in the strip change it by hand.";
 
-  const run = async (thenEdit: boolean): Promise<void> => {
+  const run = async (): Promise<void> => {
     // Size first, because it is the question that might change what the GM does with the sliders —
     // and asking about replacement, then about size, then being told no, would be two dialogs to
     // reach the same nothing.
     if (!(await mayBeTooLarge())) return;
     if (!(await mayReplace())) return;
     save.disabled = true;
-    handOff.disabled = true;
-    say(thenEdit ? "saving, then opening the editor…" : "saving and putting it on the map…", "working");
+    say("saving and putting it on the map…", "working");
     try {
-      if (!(await saveAndPush())) return;
-      if (!thenEdit) return;
-      /*
-        The editor is opened **before** this page closes, which is why the two modes have separate
-        modal ids.
-
-        Closing first would mean making the second call from a page that is being torn down, and the
-        record already carries one assumption of that shape that turned out to be untested. Opening
-        first costs an instant where both modals exist, and the editor is full-screen, so what the GM
-        sees is the surface they asked for arriving.
-      */
-      await openWorkspace("edit");
-      await closeWorkspace();
+      await saveAndPush();
     } catch (error) {
       const detail = describeError(error);
       say(`could not save the walls: ${detail}`, "bad");
@@ -204,16 +185,13 @@ export function renderSaveAction(body: HTMLElement): void {
       console.error("Fog Nudger — saving the graph failed", error);
     } finally {
       save.disabled = !controlsLive();
-      handOff.disabled = !controlsLive();
     }
   };
 
-  save.addEventListener("click", () => void run(false));
-  handOff.addEventListener("click", () => void run(true));
+  save.addEventListener("click", () => void run());
 
   save.disabled = !controlsLive();
-  handOff.disabled = !controlsLive();
 
-  actions.append(save, handOff);
+  actions.append(save);
   body.append(actions, note);
 }

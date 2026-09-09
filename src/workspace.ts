@@ -67,7 +67,6 @@ import { renderWallTools } from "./workspace/wallTools";
 import { renderSaveAction } from "./workspace/saveAction";
 import { onStageChange } from "./workspace/stage";
 import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
-import { inEditor } from "./workspace/mode";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 
 installDevLog("workspace");
@@ -324,7 +323,7 @@ onMapClick((u, v) => {
 */
 onStageChange(() => {
   renderPanel();
-  if (inEditor()) invalidateRegions();
+  invalidateRegions();
 });
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after
@@ -334,17 +333,13 @@ onReading(() => {
 });
 
 /*
-  Which of the two workspaces this page is, said on the page itself.
+  The heading is the markup's own now.
 
-  Set here rather than left to the markup, because the markup is shared: one page serves both modes
-  and the query string is what distinguishes them. A surface whose heading did not match the button
-  that opened it would be the worst possible outcome of sharing a page, since the two look otherwise
-  identical and only one of them is destructive to save from.
+  It was set from here because the markup was shared between two modes and the query string was what
+  distinguished them — a surface whose heading disagreed with the button that opened it would have
+  been the worst outcome of sharing a page, since both looked identical and only one was destructive
+  to save from. One page, one name, and nothing to keep in step.
 */
-const modeName = inEditor() ? "Editing the walls" : "Reading the map";
-document.title = `Fog Nudger — ${modeName.toLowerCase()}`;
-const heading = document.getElementById("mode-name");
-if (heading) heading.textContent = modeName;
 
 start();
 // Drawn now, disabled, from the defaults — see `controlsLive`.

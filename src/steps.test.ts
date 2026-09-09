@@ -55,7 +55,6 @@ import {
 import type { SettingName } from "./settings";
 
 const ALL_NAMES = Object.keys(SETTING_LIMITS) as SettingName[];
-const MODES = ["ink", "edit"] as const;
 const DECLARED = new Set<StepId>(STEPS.map((step) => step.id));
 
 /** A value for a parameter that is guaranteed to differ from its default. */
@@ -87,16 +86,15 @@ describe("the step declaration", () => {
     drawn twice in one accordion would be two handles on one setting, which is a different thing
     entirely and is a mistake.
   */
-  it("covers every parameter, and repeats one only across the two modes", () => {
+  it("covers every parameter exactly once", () => {
+    /*
+      Once, not merely at least once. `PARAMETER_STEP` still admits a list, and the spur budget used
+      it while the wall groups were separate pages — safe then, because only one was ever on screen.
+      On one page a repeat is two sliders writing one setting, which disagree the moment either moves.
+    */
     const collected = STEPS.flatMap((step) => stepParameters(step.id));
     expect([...new Set(collected)].sort()).toEqual([...ALL_NAMES].sort());
-
-    for (const mode of ["ink", "edit"] as const) {
-      const here = STEPS.filter((step) => step.modes.includes(mode)).flatMap((step) =>
-        stepParameters(step.id),
-      );
-      expect(new Set(here).size, mode).toBe(here.length);
-    }
+    expect(new Set(collected).size).toBe(collected.length);
   });
 
   it("allows a step with no parameters, because a step is a mode rather than a group of sliders", () => {
@@ -131,43 +129,17 @@ describe("the step declaration", () => {
     expect(STEPS.filter((step) => step.persistent).length).toBe(1);
   });
 
-  it("makes every step but the persistent one a mode on the workspace", () => {
+  it("puts every step but the persistent one in the rail", () => {
     // Replaces a test of the deleted `pending` flag, whose loop body never executed because no step
     // ever carried it — it passed vacuously and would have kept passing with the flag inverted.
-    for (const mode of MODES) {
-      expect(workspaceSteps(mode).every((step) => !step.persistent), mode).toBe(true);
-    }
-    const across = MODES.flatMap((mode) => workspaceSteps(mode));
-    expect(across).toHaveLength(STEPS.length - 1);
+    expect(workspaceSteps().every((step) => !step.persistent)).toBe(true);
+    expect(workspaceSteps()).toHaveLength(STEPS.length - 1);
   });
 
-  it("puts every step in at least one mode, and every mode-less step nowhere", () => {
-    // A step in no mode is declared, tested, and drawn on no surface — which is a control a GM
-    // cannot reach with nothing to say it is missing, the same failure as a parameter with no step.
-    for (const step of STEPS) {
-      expect(step.modes.length, step.id).toBeGreaterThan(0);
-      for (const mode of step.modes) expect(MODES).toContain(mode);
-    }
-  });
-
-  it("gives each mode a first step to open on", () => {
-    // The accordion opens on `workspaceSteps(mode)[0]`. A mode with none would open on nothing and
+  it("gives the rail a first group to expand on", () => {
+    // The rail expands `workspaceSteps()[0]` at start-up. With none it would open on nothing and
     // leave the surface with no way in beyond the persistent group.
-    for (const mode of MODES) {
-      expect(workspaceSteps(mode).length, mode).toBeGreaterThan(0);
-    }
-  });
-
-  it("puts every non-persistent step in exactly one mode", () => {
-    /*
-      A step in both would be a place a GM could be in either workspace, and neither mode's blurbs
-      could then say where they were — which is the whole of what the split buys. The persistent
-      group is the deliberate exception: it is never entered, so it names no place.
-    */
-    for (const step of STEPS) {
-      if (step.persistent) continue;
-      expect(step.modes, step.id).toHaveLength(1);
-    }
+    expect(workspaceSteps().length).toBeGreaterThan(0);
   });
 
   it("shows every layer in at least one step", () => {
@@ -255,15 +227,18 @@ describe("a step's groups", () => {
     }
   });
 
-  it("puts every tool in the modes its controls are declared in", () => {
-    // A tool offered where its controls are not is a button that reveals nothing.
-    for (const tool of TOOLS) {
-      const owning = STEPS.filter((step) => toolGroups(step).some((g) => g.tool === tool.id));
-      for (const step of owning) {
-        for (const mode of tool.modes) {
-          expect(step.modes, `${tool.id} in ${mode}`).toContain(mode);
-        }
-      }
+  it("gives every band a tool and every tool a band the rail also has", () => {
+    /*
+      Replaces a per-mode membership check, which had no subject once there was one page.
+
+      What survives is the ordering claim the bands make: reading down the strip and reading down
+      the rail meet the same subjects in the same sequence, so a band naming nothing — or naming
+      something the rail has no group for — is a strip that teaches an order the rail does not have.
+    */
+    const bands = new Set(TOOLS.map((tool) => tool.band));
+    expect([...bands]).toEqual(["navigate", "ink", "walls"]);
+    for (const band of ["ink", "walls"] as const) {
+      expect(DECLARED, band).toContain(band === "walls" ? "walls" : "ink");
     }
   });
 

@@ -58,13 +58,12 @@ import {
   type WallGraph,
 } from "../trace/wallGraph";
 import { noteGraph } from "./graphScale";
-import { inEditor } from "./mode";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
 import { currentSettings } from "./settingsState";
 import { invalidate, isClosing, say } from "./shell";
-import { wallGraph } from "./stage";
+import { handEdits, wallGraph } from "./stage";
 
 /**
  * The least a partition painter needs, so the two stages can supply it from different shapes.
@@ -134,9 +133,29 @@ let unitsPerSquare = 0;
 let preview: WallGraph | null = null;
 let previewDropped = 0;
 
-/** The graph the ink mode's Walls step draws, or `null` when no derive has produced one. */
+/** The graph the last derive arrived at, or `null` when none has run. */
 export function previewGraph(): WallGraph | null {
   return preview;
+}
+
+/**
+ * Whether what is on screen is the **saved** graph rather than a fresh derivation.
+ *
+ * The one predicate, read by the partition here and by the layer that draws the walls, because the
+ * two disagreeing is a defect this project has already paid for: the ink mode once previewed one
+ * face derivation and emitted another, and nothing inside the code said they were meant to match.
+ *
+ * Two ways to be looking at the saved one. **It carries hand edits**, in which case a derivation is
+ * not what the GM has — re-deriving would replace their work and is what the reading controls now
+ * ask about. Or **nothing has been derived yet**, which is how the surface opens on a map that has
+ * been through it before: show the walls that are there rather than a blank canvas or an unrequested
+ * trace.
+ *
+ * Otherwise the derivation wins, which is what keeps tuning the ink meaningful — the rooms change as
+ * the threshold moves, which is where a merge is actually visible.
+ */
+export function showingSaved(): boolean {
+  return wallGraph() !== null && (handEdits() > 0 || !derivation);
 }
 
 /**
@@ -334,7 +353,9 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
  * the workspace — so the caller never has to know which of the two it is asking for.
  */
 export function repruneRegions(): void {
-  if (inEditor()) return;
+  // Nothing to re-prune against: what is on screen is the stored document, and the budget reaches it
+  // through the button in Edit walls rather than by re-deriving.
+  if (showingSaved()) return;
   if (!derivation || inFlight) {
     invalidateRegions();
     return;
@@ -365,7 +386,7 @@ async function derive(): Promise<void> {
     Walking the wall graph needs no reading and no fitting, so it happens here and now rather than
     through the async cycle below.
   */
-  if (inEditor()) {
+  if (showingSaved()) {
     const graph = wallGraph();
     if (graph) derivePartition(graph);
     else clearPartition();

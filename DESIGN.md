@@ -29,7 +29,7 @@ standing obligation — see §11. Everything else it taught this project is writ
 5. [The wall graph](#5-the-wall-graph--stored-walked-and-edited)
 6. [Emitting](#6-emitting)
 7. [The surfaces](#7-the-surfaces)
-   - [7a. The surface redesign — agreed, not built](#7a-the-surface-redesign--agreed-not-built)
+   - [7a. The surface redesign — partly built](#7a-the-surface-redesign--partly-built)
 8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
 9. [Constraints and pitfalls](#9-constraints-and-pitfalls)
 10. [Open questions and what is next](#10-open-questions-and-what-is-next)
@@ -1399,8 +1399,9 @@ zero. That is the gap the warning stands in for.
 
 ## 7. The surfaces
 
-> **This section describes what exists. A redesign of it is agreed and not yet built — see
-> [§7a](#7a-the-surface-redesign--agreed-not-built). Read that before changing anything here.**
+> **This section describes the surface before the redesign, and parts of it are already superseded —
+> see
+> [§7a](#7a-the-surface-redesign--partly-built). Read that before changing anything here.**
 
 **One page, two modes**, chosen by `?mode=` on the URL and by which of two panel buttons opened it.
 The shell, the accordion, the map loading, the transform and every layer are shared; `steps.ts` gives
@@ -1673,10 +1674,16 @@ hides what you compare on. The native `<input type="color">` is still offered be
 because when it works it beats any fixed palette.
 ---
 
-## 7a. The surface redesign — agreed, not built
+## 7a. The surface redesign — partly built
 
-**Everything in §7 above describes what exists. This describes what replaces it.** The pipeline, the
-emit path and the storage are untouched; this is a rework of the surface only.
+**Everything in §7 above describes the surface as it was before this.** The pipeline, the emit path
+and the storage are untouched; this is a rework of the surface only.
+
+**Built:** the tool strip, the non-exclusive rail, the pinned rail head, the hand-edit count and the
+warning it prices, and the merge to one page with one panel button.
+
+**Not built:** undo, the derive indicators, the markup palette, and the layer toggles. The layer
+*rules* landed with the merge, because it forced them — handles follow the wall tools.
 
 ### Why: the mode boundary runs across the grain of the task
 
@@ -1712,7 +1719,10 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 Switching what you are doing and switching what you are reading stop being the same gesture, which is
 the whole of the complaint.
 
-**One workspace, one panel button.** Where you land is state restoration, not a mode choice.
+**One workspace, one panel button.** Where you land is state restoration, not a mode choice. The
+hand-off went with the split: saving used to offer to open the editor, because the editing tools were
+on another page and invisible from the reading controls. They are on this one now, so there is
+nowhere to hand off to.
 
 **The commit action moves into the persistent bar**, beside the way out. It is the surface's whole
 purpose and should not be a step's footer — today it sits at the foot of the third accordion section
@@ -1720,9 +1730,22 @@ and closing commits nothing, so a GM can tune for twenty minutes, press Escape a
 
 **The graph is simply always derived and drawn.** There is no "generate" act to perform.
 
-**The warning becomes rare and specific.** Touch a wall tool and the graph acquires hand edits; the
-count is shown in the Walls group, where the risk lives. Change an ink setting while it is non-zero
-and the question names the price — *"re-reading discards 14 wall edits"*. At zero, nothing interrupts.
+**The warning is rare and specific.** Editing a wall bumps a count on the document; changing a
+reading setting while it is non-zero asks, and names the price. At zero — most of the time — nothing
+interrupts.
+
+**Which graph is on screen follows from the same count**, through one predicate both the partition and
+the wall layer read, because those two disagreeing is a defect this project has already paid for. The
+saved graph wins when it carries hand edits, or when nothing has been derived yet — which is how the
+surface opens on a map that has been through it before. Otherwise the derivation wins, which is what
+keeps tuning the ink meaningful: **the rooms change as the threshold moves, and that is where a merge
+is actually visible.**
+
+**One handle per setting.** The spur budget was declared in both wall groups while they were separate
+pages, so a GM would not have to find a budget twice — safe only because one page was on screen at a
+time. On one page it would be two sliders writing one setting. It lives with the other derive-time
+control now; the button in Edit walls spends the same number destructively, which is what you need
+once re-deriving is no longer free.
 
 ### Undo becomes load-bearing
 
@@ -2191,13 +2214,17 @@ project**, and it does not depend on anything below.
 
 ### The largest piece of planned work is the surface redesign
 
-**§7a**, agreed and not built: one workspace instead of two modes, a tool palette separated from a
-non-exclusive controls rail, the irreversibility carried as a hand-edit count rather than a boundary,
-undo, and the markup palette. It reworks about 6,800 lines of surface code and touches none of the
-pipeline.
+**§7a**, and it is now partly built. The structural half has landed: one workspace instead of two
+modes, a tool palette separated from a non-exclusive rail, and the irreversibility carried as a
+hand-edit count rather than a boundary. **What remains is undo, the derive indicators, the markup
+palette and the layer toggles.**
 
-It came out of using the thing: the accordion makes switching tasks expensive, and the two doors into
+It came out of using the thing: the accordion made switching tasks expensive, and the two doors into
 the workspace read as artificial. Both turned out to have one cause.
+
+**Undo is the one to take next**, and it is no longer optional. The old mode boundary made destroying
+wall edits impossible by construction; the count and its warning are now the only guard, and they
+work by helping a GM *predict*. Nothing helps with a judgement that looked right and was not.
 
 ### Two features unimplemented, and one still needs a conversation before code
 

@@ -2,12 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!--
-      One page, two modes: `?mode=ink` reads the map and `?mode=edit` edits the walls it saved. The
-      heading and this title are set from the mode at start-up, so what is here is the ink mode's,
-      which is what an unrecognised query falls back to.
-    -->
-    <title>Fog Nudger — reading the map</title>
+    <title>Fog Nudger</title>
     <style>
       /*
         Opaque, and that is the whole point of this surface rather than an incidental style choice.
@@ -599,9 +594,7 @@
           exactly when a GM was deep in a group and least able to remember which tool was in hand.
         -->
         <div id="panel-head">
-          <!-- Replaced at start-up with the mode's own name. This is the ink mode's, which is the
-               fallback for an unrecognised query. -->
-          <h1 id="mode-name">Reading the map</h1>
+          <h1 id="mode-name">Fog Nudger</h1>
           <p class="sub" id="map-name">Loading…</p>
           <p id="tool-hint"></p>
           <p id="edit-count"></p>
