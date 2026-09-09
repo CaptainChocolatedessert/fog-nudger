@@ -42,6 +42,7 @@ import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
 import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
 import { applyPalette } from "./workspace/palette";
+import { registerLayerRow } from "./workspace/layerRow";
 import { registerToolPalette } from "./workspace/toolPalette";
 import { registerUndoAction } from "./workspace/undoAction";
 import { registerGapsLayer } from "./workspace/layers/gaps";
@@ -203,6 +204,9 @@ onStepOpen("edit", (open) => watchRegions("edit", open));
 applyPalette();
 // The tool strip, which owns what a press means and is why the rail below it need not be exclusive.
 registerToolPalette();
+// The layer switches, and the one subscription that keeps the canvas and the row agreeing about what
+// is drawn.
+registerLayerRow();
 // Undo, in the bar rather than in a group: it takes back a change to the document, not to whatever
 // section happens to be expanded.
 registerUndoAction();

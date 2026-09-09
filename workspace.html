@@ -360,6 +360,41 @@
         that changing the reading throws them away, and a GM cannot weigh that without knowing there
         is something to weigh. Absent at zero, which is most of the time.
       */
+      /*
+        Whether a layer is drawn at all, beside the hint that says what a press does.
+
+        Grows with what is happening rather than listing all five always: a switch appears for a
+        layer something is actually asking for, so the row is empty when nothing is, and a layer the
+        GM has hidden keeps its switch because that is how it comes back.
+      */
+      #layer-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin: 0 0 0.9rem;
+      }
+      #layer-row:empty {
+        display: none;
+      }
+      button.layer {
+        padding: 0.2rem 0.45rem;
+        border-radius: 0.3rem;
+        border: 1px solid rgba(187, 153, 255, 0.3);
+        background: transparent;
+        color: #7f86ad;
+        font: inherit;
+        font-size: 0.72rem;
+        cursor: pointer;
+      }
+      button.layer:hover {
+        color: #e8e9f5;
+      }
+      button.layer[aria-pressed="true"] {
+        background: rgba(187, 153, 255, 0.18);
+        border-color: rgba(187, 153, 255, 0.55);
+        color: #e8e9f5;
+      }
+
       #edit-count {
         margin: 0 0 0.9rem;
         padding: 0.35rem 0.6rem;
@@ -664,6 +699,7 @@
           <h1 id="mode-name">Fog Nudger</h1>
           <p class="sub" id="map-name">Loading…</p>
           <p id="tool-hint"></p>
+          <div id="layer-row"></div>
           <p id="edit-count"></p>
         </div>
 

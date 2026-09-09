@@ -54,7 +54,8 @@ import { forgetGraphScale } from "./graphScale";
 import { recomputeFor, resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
-import { invalidate, say, setActiveLayers } from "./shell";
+import { invalidate, say } from "./shell";
+import { proposeLayers } from "./layerToggles";
 
 /**
  * Which groups are expanded. Several may be, and none is a legitimate state.
@@ -279,8 +280,8 @@ export function onStepChange(listener: (step: StepId | null) => void): void {
  */
 function applyOpenStep(): void {
   const steps = workspaceSteps().filter((step) => open.has(step.id));
-  const layers = [...new Set(steps.flatMap((step) => step.layers))];
-  setActiveLayers(layers);
+  // Proposed rather than set: the GM's own toggles subtract from this, and a tool may add to it.
+  proposeLayers([...new Set(steps.flatMap((step) => step.layers))]);
   for (const listener of openListeners) listener.changed(open.has(listener.id));
   for (const listener of stepListeners) listener(steps[steps.length - 1]?.id ?? null);
   invalidate();

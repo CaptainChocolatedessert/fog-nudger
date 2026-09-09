@@ -37,6 +37,7 @@ import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
+import { requireLayer } from "./layerToggles";
 import { handEdits, onStageChange, wallGraph } from "./stage";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
@@ -118,6 +119,16 @@ function apply(next: Tool): void {
   }
   setDrag(dragFor(next));
   requestPaintMode(next === "suppress" || next === "ink" || next === "gaps");
+  /*
+    A tool brings its own layer up, and never takes one down.
+
+    You cannot edit what you cannot see, so picking a wall tool has to guarantee the graph is drawn.
+    Adding only is what keeps this from re-creating the coupling the strip was built to remove: the
+    tool nudges, and whatever the GM switched on stays on.
+  */
+  if (band === "walls") requireLayer("graph");
+  if (next === "suppress" || next === "ink") requireLayer("paint");
+  if (next === "gaps") requireLayer("gaps");
 }
 
 /**

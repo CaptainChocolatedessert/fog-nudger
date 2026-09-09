@@ -1680,10 +1680,11 @@ because when it works it beats any fixed palette.
 and the storage are untouched; this is a rework of the surface only.
 
 **Built:** the tool strip, the non-exclusive rail, the pinned rail head, the hand-edit count and the
-warning it prices, the merge to one page with one panel button, undo, the derive indicators, and the markup palette.
+warning it prices, the merge to one page with one panel button, undo, the derive indicators, the markup palette and the layer toggles.
 
-**Not built:** the layer toggles, and the per-category colour pickers — the palette's values are
-declared but not yet adjustable. The layer *rules*
+**Not built:** the per-category colour pickers. The palette's values are declared in one place and
+published as custom properties, but not yet adjustable — which is what a map with an unusual tint
+would want. The layer *rules*
 landed with the merge, because it forced them — handles follow the wall tools.
 
 ### Why: the mode boundary runs across the grain of the task
@@ -1793,8 +1794,16 @@ needs it.
 **A tool may turn a layer on. It may never turn one off.** Picking a wall tool brings the graph up if
 it was down — you cannot edit what you cannot see — but nothing you switched on disappears because you
 changed tools. Monotone in the safe direction, and it does not re-create the coupling being removed:
-the tool nudges, the GM's toggles are final. Things therefore accumulate, so the toggles must be cheap
-and visible rather than buried.
+the tool nudges, the GM's toggles are final. Things therefore accumulate, so the toggles are a visible
+row rather than something buried.
+
+**The state kept is what the GM switched *off*, not what is on**, and that is what makes the two rules
+compose: groups and tools add to a proposal freely, and one small set subtracts from it. Holding the
+positive set instead would mean every proposal deciding whether it was allowed to add.
+
+**A switch appears only for a layer something is asking for.** Listing all five always would offer to
+hide things that are not on screen. A layer the GM has hidden stays proposed, so its switch stays —
+which is the whole of how it comes back.
 
 **One subject, everything else reference.** Most of the crowding is a *strength* problem rather than a
 presence problem — the ink mask, the paint layers, the gap marks and the wall centrelines all want the

@@ -168,6 +168,12 @@ export function addPainter(layer: LayerId, paint: Painter): void {
 }
 
 /** Show exactly these layers, which is what opening a step does. */
+/**
+ * Adopt what `layerToggles` has decided is visible.
+ *
+ * Pushed here rather than pulled per frame, because the painter list is walked on every repaint and
+ * this changes only when a group is expanded, a tool is picked, or a toggle is clicked.
+ */
 export function setActiveLayers(layers: readonly LayerId[]): void {
   activeLayers = layers;
   dirty = true;
