@@ -208,11 +208,11 @@ describe("openMask", () => {
 });
 
 /**
- * The closing — used only to *find* narrow breaks, never yet to seal one.
+ * The closing — used only to *find* narrow gaps, never yet to seal one.
  *
  * The properties tested here are the opening's read backwards, and the one that matters is the
  * last: a closing must not move a wall. Everything the gap detector reports is the difference
- * between this and its input, so ink that drifted by a pixel would be reported as a break.
+ * between this and its input, so ink that drifted by a pixel would be reported as a gap.
  */
 describe("closeMask", () => {
   it("leaves the mask exactly as it was at radius zero", () => {
@@ -220,7 +220,7 @@ describe("closeMask", () => {
     expect(rows(closeMask(mask, 0))).toEqual(rows(mask));
   });
 
-  it("fills a break narrower than twice the radius", () => {
+  it("fills a gap narrower than twice the radius", () => {
     const mask = maskFromRows([
       ".......",
       ".......",
@@ -237,7 +237,7 @@ describe("closeMask", () => {
     ]);
   });
 
-  it("leaves a break wider than twice the radius open", () => {
+  it("leaves a gap wider than twice the radius open", () => {
     // The doorway case. A closing whose radius exceeds a doorway seals it, and a sealed doorway
     // looks like perfectly good wall — which is why the marks come before any control that does it.
     const mask = maskFromRows([
@@ -261,7 +261,7 @@ describe("closeMask", () => {
 
   it("does not thicken a wall standing clear of anything", () => {
     // The property the gap marks rest on. Ink that grew would come back as ground-turned-ink and
-    // be reported as a break, which is a detector inventing its own findings.
+    // be reported as a gap, which is a detector inventing its own findings.
     const mask = maskFromRows([
       ".........",
       ".........",

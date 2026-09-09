@@ -101,7 +101,7 @@ let hoveredEdge: number | null = null;
  * **The snap indication belongs on the canvas rather than in the cursor** (user, 2026-09-05). Draw
  * marked nothing until after the first click, so whether a line would *attach* to the vertex under
  * the pointer was invisible at the moment it was being decided — and attaching is the whole
- * difference between closing a break and drawing a line that merely ends near one. The mark is the
+ * difference between closing a gap and drawing a line that merely ends near one. The mark is the
  * same green the drag's merge target uses, which is the channel that already carries "this will
  * join" on this surface.
  */

@@ -300,7 +300,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
 /**
  * A handle at every point of the graph — in **screen** space, so it stays grabbable at any zoom.
  *
- * The same argument as the break rings: a point is a single position with a whole map on the canvas,
+ * The same argument as the gap rings: a point is a single position with a whole map on the canvas,
  * and a mark that scales with the zoom disappears at exactly the moment it is wanted. A handle has a
  * second reason on top of that one — it is what the drag gesture aims at, and a target that changes
  * size under the cursor as the GM zooms is a target they have to re-learn.
@@ -394,14 +394,14 @@ function paintHandles(
   /*
     Either end of a wall being drawn, marked green where it would **attach**.
 
-    Attaching is the whole difference between a wall that closes a break and one that merely ends
+    Attaching is the whole difference between a wall that closes a gap and one that merely ends
     near it — a shared vertex is joined for ever, two coincident points agree until one moves. So the
     two states are drawn differently rather than left for the GM to infer from the position.
   */
   /*
     A mark where a drawn end would **attach**, and nowhere else.
 
-    Attaching is the whole difference between closing a break and drawing a line that merely ends
+    Attaching is the whole difference between closing a gap and drawing a line that merely ends
     near one, and it is decided before the press — so it has to be visible then, which the cursor
     cannot say. A crosshair means "the tool acts here", not "and it will join that".
 

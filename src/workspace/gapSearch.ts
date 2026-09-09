@@ -1,5 +1,5 @@
 /**
- * The break search as a tool: run it when asked, hold what it found, write what the GM accepts.
+ * The gap search as a tool: run it when asked, hold what it found, write what the GM accepts.
  *
  * ## What changed, and why this file exists at all
  *
@@ -9,14 +9,14 @@
  * chosen to keep: consenting once is not the same as consenting to every future recomposition of a
  * map that has changed underneath.
  *
- * Here it proposes. The GM accepts one break or all of them, and what is accepted is written into
+ * Here it proposes. The GM accepts one gap or all of them, and what is accepted is written into
  * the **added-ink layer** — so from that moment it is paint like any other, with no separate term in
  * the composition and nothing that can re-invent itself. That is what makes stage one exactly three
  * independent layers.
  *
  * ## It searches the composite, which is the thing the pipeline would trace
  *
- * Not the base ink: a break the GM has already brushed closed is not a break, and one their
+ * Not the base ink: a gap the GM has already brushed closed is not a gap, and one their
  * suppression opened is. So this composes the same stack the pipeline does, through the same
  * `composePaint` — the one statement of that order — against the paint **as it is in hand**,
  * including a mode's unsaved working copy.
@@ -36,7 +36,7 @@ import { devLog } from "../devlog";
 import { composePaint, paintPixels, type StrokeBounds } from "../trace/inkPaint";
 import { findGaps, type GapMark } from "../trace/gaps";
 import type { BinaryMask } from "../trace/binarize";
-import type { MarkRaster } from "./breakGesture";
+import type { MarkRaster } from "./gapGesture";
 import { currentPaint, workingLayer } from "./paintState";
 import { currentSettings } from "./settingsState";
 
@@ -55,11 +55,11 @@ let raster: MarkRaster | null = null;
 /** What the last search cost, for the log. */
 let lastMillis = 0;
 
-export function breakMarks(): readonly GapMark[] {
+export function gapMarks(): readonly GapMark[] {
   return marks;
 }
 
-export function breakRaster(): MarkRaster | null {
+export function gapRaster(): MarkRaster | null {
   return raster;
 }
 
@@ -76,14 +76,14 @@ export function fillableCount(): number {
  * already. There is no way to know they are still where they were without searching again, so they
  * go and the GM re-runs.
  */
-export function noteReadingForBreaks(mask: BinaryMask): void {
+export function noteReadingForGaps(mask: BinaryMask): void {
   base = mask;
   marks = [];
   raster = null;
 }
 
 /** Forget everything, which is what leaving the tool or the step does. */
-export function clearBreakSearch(): void {
+export function clearGapSearch(): void {
   marks = [];
   raster = null;
 }
@@ -92,9 +92,9 @@ export function clearBreakSearch(): void {
  * Run the search against the ink as it now stands.
  *
  * Returns whether it could run at all: before a reading there is no base to compose from, and the
- * caller says so rather than showing an empty result that looks like "no breaks".
+ * caller says so rather than showing an empty result that looks like "no gaps".
  */
-export function runBreakSearch(): boolean {
+export function runGapSearch(): boolean {
   if (!base) return false;
 
   const started = performance.now();
@@ -111,7 +111,7 @@ export function runBreakSearch(): boolean {
 
   devLog(
     "info",
-    `breaks: searched in ${Math.round(lastMillis)}ms at radius ${found.searchRadius}px — ` +
+    `gaps: searched in ${Math.round(lastMillis)}ms at radius ${found.searchRadius}px — ` +
       `${found.channels} narrow channels, ${found.through} passing through; ${found.marks.length} ` +
       `have banks more than ${gapTravelPx}px apart along the ink. ${found.fillable} can be ` +
       `accepted, adding ${found.candidateArea} px; ${found.budgetHits} are guesses the flood could ` +
@@ -120,7 +120,7 @@ export function runBreakSearch(): boolean {
   if (found.budgetHits > 0) {
     devLog(
       "warn",
-      `breaks: ${found.budgetHits} channels were marked because the search ran out of budget rather ` +
+      `gaps: ${found.budgetHits} channels were marked because the search ran out of budget rather ` +
         `than because the ink was broken. They are ringed and cannot be accepted. Lower the ` +
         `same-wall distance.`,
     );
@@ -174,7 +174,7 @@ function accept(chosen: readonly GapMark[]): AcceptResult {
   }
 
   // Re-run before returning, so the caller never draws the marks the accept invalidated.
-  runBreakSearch();
+  runGapSearch();
 
   return {
     accepted: chosen.length,
@@ -184,7 +184,7 @@ function accept(chosen: readonly GapMark[]): AcceptResult {
 }
 
 /** Accept the one mark at `index`, which a click identified. */
-export function acceptBreak(index: number): AcceptResult {
+export function acceptGap(index: number): AcceptResult {
   const mark = marks[index];
   // Guarded rather than trusted: the index comes from a query against the marks *at the time of the
   // press*, and an accept can land after a re-run has replaced them.
@@ -193,6 +193,6 @@ export function acceptBreak(index: number): AcceptResult {
 }
 
 /** Accept everything currently shown that can be accepted. */
-export function acceptAllBreaks(): AcceptResult {
+export function acceptAllGaps(): AcceptResult {
   return accept(marks.filter((mark) => mark.fillable));
 }

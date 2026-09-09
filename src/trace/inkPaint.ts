@@ -4,15 +4,18 @@
  * Stage one is three layers stacked, not one filtered reading (user, 2026-09-05):
  *
  * ```
- * base ink  −  suppression  +  break repair  +  added ink
+ * base ink  −  suppression  +  added ink
  * ```
  *
  * The base is what processing the map image produces and is decided by parameters. The other two
- * hand-made layers are *this* — a raster each, edited with a brush. They are independent inputs, so
- * any of the three can be revisited without disturbing the other two and the order they are edited
- * in does not matter. The break repair is the one term in the stack that is derived rather than
- * made, and it is expected to become a tool inside the added-ink layer, at which point the stack is
- * exactly three things.
+ * hand-made layers are *this* — a raster each, edited with a brush. All three are independent
+ * inputs, so any can be revisited without disturbing the others and the order they are edited in
+ * does not matter.
+ *
+ * **There was a fourth, derived term between them — the gap repair — and the asterisk it put on
+ * "order does not matter" is gone.** It became a tool: what the GM accepts is stamped into the
+ * added-ink layer, so nothing here re-invents itself on a later recompose. That is also what let
+ * the composition come out of the pipeline into `composePaint`, where a headless test can pin it.
  *
  * ## A raster, not a list of strokes
  *
@@ -287,13 +290,13 @@ export interface PaintPair {
  * lived inline in `composeInk`, which sits behind the SDK boundary where no headless test can reach
  * it. The pieces were each tested and their *order* was checked by reading.
  *
- * It could be pulled out because the break repair stopped being a term in the middle. While it was
+ * It could be pulled out because the gap repair stopped being a term in the middle. While it was
  * derived it had to run between the two, so the composition was not one expression; as a tool that
  * writes into the added-ink layer, it is not part of this at all. That was the user's argument for
  * the three-layer stack, and this is where it pays.
  *
- * The two callers are the pipeline, which composes what becomes walls, and the break tool, which
- * needs the same composite to search for breaks in. Two implementations of that would be the
+ * The two callers are the pipeline, which composes what becomes walls, and the gap tool, which
+ * needs the same composite to search for gaps in. Two implementations of that would be the
  * harness-versus-room failure this project has already paid for once.
  */
 export function composePaint(base: BinaryMask, paint: PaintPair): BinaryMask {
@@ -303,7 +306,7 @@ export function composePaint(base: BinaryMask, paint: PaintPair): BinaryMask {
 /**
  * Lay a set of raster indices into a layer, and say how many changed.
  *
- * What accepting a break does: the search hands over exactly the pixels of one channel, and they
+ * What accepting a gap does: the search hands over exactly the pixels of one channel, and they
  * become added ink indistinguishable from a brush stroke over the same ground. Indices rather than a
  * mask, because a channel is a few hundred pixels scattered in an eight-million-pixel raster and
  * walking the raster to find them would cost more than the accept.
@@ -312,8 +315,8 @@ export function composePaint(base: BinaryMask, paint: PaintPair): BinaryMask {
  * this layer's own raster, and silently writing past the end of a typed array is a no-op that would
  * make a real mismatch look like it worked.
  *
- * Reports the same `StrokeResult` a brush stroke does, so the surface repaints an accepted break the
- * way it repaints a stroke — which is what "an accepted break is added ink like any other" has to
+ * Reports the same `StrokeResult` a brush stroke does, so the surface repaints an accepted gap the
+ * way it repaints a stroke — which is what "an accepted gap is added ink like any other" has to
  * mean in the code as well as in the prose.
  */
 export function paintPixels(layer: PaintLayer, indices: ArrayLike<number>): StrokeResult {

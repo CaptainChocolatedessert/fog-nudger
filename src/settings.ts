@@ -109,15 +109,15 @@ export interface TraceSettings {
    */
   readonly minIslandPx: number;
   /**
-   * The widest break in the linework the search will **look for**, in raster pixels. Zero finds none.
+   * The widest gap in the linework the search will **look for**, in raster pixels. Zero finds none.
    *
-   * Finds walls thinned or severed upstream, so two rooms do not merge across a break the map has not
+   * Finds walls thinned or severed upstream, so two rooms do not merge across a gap the map has not
    * actually got. Morphologically a closing — the exact inverse of the minimum stroke width — over
    * only the channels the detector marks, never as a blanket operation.
    *
-   * **It proposes; it does not write** (2026-09-05). Every break found is ringed and shown, and the
+   * **It proposes; it does not write** (2026-09-05). Every gap found is ringed and shown, and the
    * GM accepts one or all of them; what is accepted goes into the added-ink layer. The old invariant
-   * — *every pixel the fill invents belongs to a break with a ring on it* — is now true by a stronger
+   * — *every pixel the fill invents belongs to a gap with a ring on it* — is now true by a stronger
    * route, since nothing is invented at all until a click asks for it.
    *
    * **That restriction was the safety property, and it still is.** A blanket closing also seals
@@ -137,9 +137,9 @@ export interface TraceSettings {
    * attention and then sweep the repair against it. **It was abandoned on evidence from a room**
    * (user, 2026-08-23): the premise was false.
    *
-   * Breaks are not discrete items that appear one at a time as the width rises. Where two uneven
+   * Gaps are not discrete items that appear one at a time as the width rises. Where two uneven
    * lines run close together, a closing carves the space between them into several channels at the
-   * pinch points, and those channels **merge into one** as the radius grows. A break therefore has
+   * pinch points, and those channels **merge into one** as the radius grows. A gap therefore has
    * no stable identity across radii — and because a channel was only repaired when *all* of it fell
    * inside the fill radius, raising the highlight could **prevent** a repair that a lower one
    * allowed. Non-monotonic, and unexplainable to anyone turning the knob.
@@ -155,11 +155,11 @@ export interface TraceSettings {
    */
   readonly gapFillPx: number;
   /**
-   * How far apart two banks of a break may be **along the ink** and still count as one piece of
+   * How far apart two banks of a gap may be **along the ink** and still count as one piece of
    * wall, in raster pixels.
    *
    * The whole discriminator between a crack and a ragged edge, and the reason a doorway beside a
-   * corner is not sealed. Zero is meaningful rather than off: it repairs every break that passes
+   * corner is not sealed. Zero is meaningful rather than off: it repairs every gap that passes
    * through, which is the most eager the detector gets.
    */
   readonly gapTravelPx: number;
@@ -256,7 +256,7 @@ export interface OverlaySettings {
    * recipe for making them again. So it is filed as `display`: not because it is about appearance,
    * but because `PARAMETER_KIND` asks what a change recomputes and the answer here is nothing.
    *
-   * In raster pixels, matching the two break controls and for the same reason: stage one stays close
+   * In raster pixels, matching the two gap controls and for the same reason: stage one stays close
    * to the raster, and a brush lands in exactly the space the layer is stored in, so what the readout
    * says is what the stroke covers. Screen pixels were the alternative — a brush of constant size
    * under the cursor, which is what most painting tools do — and were rejected because the same
@@ -293,7 +293,7 @@ export const DEFAULT_SETTINGS: Settings = {
       GM has asked. That is no longer what it does: the search proposes, and only an accept writes. So
       the thing the default was protecting against cannot happen at whatever value this holds.
 
-      What zero would cost is now a real cost rather than a safe one — a GM opening the Breaks tool
+      What zero would cost is now a real cost rather than a safe one — a GM opening the Gaps tool
       would be shown nothing, with no way to tell "this map has none" from "the slider is at zero".
       A tool that has to be switched on before it does anything is one nobody finds.
 
@@ -390,7 +390,7 @@ export const SETTING_LIMITS = {
   inkOpacity: { min: 0, max: 1, step: 0.02 },
   // Runs past a doorway on purpose, like the two filters above it: at the top end whole doorways
   // get sealed, which is what makes the middle of the track feel like a choice. No measurement can
-  // separate a doorway from a severed wall — both are a break of some width — so where that line
+  // separate a doorway from a severed wall — both are a gap of some width — so where that line
   // falls is the GM's to decide, and the control has to reach far enough for them to decide it.
   // Stepped in twos because the value is halved and rounded to a closing radius, so consecutive
   // odd and even settings produce the identical repair. A step of one would give 81 stops for 41
@@ -398,7 +398,7 @@ export const SETTING_LIMITS = {
   // anything visible — an unresponsive slider on the one control whose whole use is being swept.
   gapFillPx: { min: 0, max: 80, step: 2 },
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
-  // the repair; the bottom end repairs every break that passes through, doorways included.
+  // the repair; the bottom end repairs every gap that passes through, doorways included.
   gapTravelPx: { min: 0, max: 300, step: 5 },
   /*
     Both graph-derived controls carry a `floor` and a static `max` they will normally never reach.
@@ -417,7 +417,7 @@ export const SETTING_LIMITS = {
     must not be the *observed* minimum: both tools delete from the bottom, so prune at budget B and
     the shortest surviving spur is B — a tracking bottom would chase the slider upward and make the
     same percentage mean a larger bite every pass, which is the non-monotonicity that collapsed the
-    two-slider break design. And `min` stays 0 because the normaliser clamps into `[min, max]`, so a
+    two-slider gap design. And `min` stays 0 because the normaliser clamps into `[min, max]`, so a
     positive `min` would silently raise a stored zero to the floor on every read.
   */
   spurPruneFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
@@ -519,12 +519,12 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
  *
  * ## There was briefly a third value, and it is worth knowing why it went
  *
- * When the gap marks only *highlighted* breaks, they were neither kind: derived from the mask so
+ * When the gap marks only *highlighted* gaps, they were neither kind: derived from the mask so
  * not pipeline, but costly enough that treating them as free would have run half a second of
  * morphology on every frame of a drag. A `gaps` value carried that for one commit.
  *
  * It stopped being right the moment the fill became real. A gap parameter now decides which pixels
- * of invented ink reach the regions — and because the fill repairs only breaks the detector has
+ * of invented ink reach the regions — and because the fill repairs only gaps the detector has
  * *marked*, the highlighting parameters feed the mask too. All three are pipeline, the third value
  * had no members left, and a kind with no members is a filter that silently matches nothing. The
  * cost it was avoiding is answered instead by caching the reading separately from what is composed
@@ -544,7 +544,7 @@ export type ParameterKind = "pipeline" | "display" | "tool";
   be told: a `display` change only repaints, while a `tool` change is handed to the tool, which may
   be holding work the new number has just invalidated.
 
-  The break search is the case that makes it real. It holds a set of marks found at a particular
+  The gap search is the case that makes it real. It holds a set of marks found at a particular
   width, and moving that slider stops those marks describing anything — **marks on screen that no
   longer match the settings beside them are the stale-diagnostic failure in miniature**, so the
   search re-runs. A brush width has no one to tell, since the next stroke simply reads it; the kind
@@ -562,7 +562,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   minStrokeInkWidths: "pipeline",
   minIslandPx: "pipeline",
   inkOpacity: "display",
-  // The break search proposes and the GM accepts; nothing is recomputed until the tool is run, and
+  // The gap search proposes and the GM accepts; nothing is recomputed until the tool is run, and
   // what it writes goes into the added-ink layer rather than into a term of the composition.
   gapFillPx: "tool",
   gapTravelPx: "tool",
@@ -855,7 +855,7 @@ export function describeSettings(settings: Settings): string {
       : "") +
     `; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
-    `breaks ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
+    `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
   );
 }

@@ -20,7 +20,7 @@
  * the shell's brush branch was written for, and it is why the record's standing debt to a trackpad
  * user — no unmodified drag left for panning — comes due here and is paid by Ctrl.
  *
- * **With no tool chosen, and with the break tool, a press falls through to a pan.** The first is what
+ * **With no tool chosen, and with the gap tool, a press falls through to a pan.** The first is what
  * makes the sliders above usable without a modifier; the second is because a map with forty rings on
  * it is one a GM spends most of their time moving around, so a tool that swallowed every drag would
  * put panning behind Ctrl for the whole of it.
@@ -36,17 +36,17 @@ import { devLog } from "../devlog";
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
 import { paintStroke, paintedCount } from "../trace/inkPaint";
 import { refreshPaintRegion, setBrushPosition } from "./layers/paint";
-import { describeAccepted, describeSearch, markAt } from "./breakGesture";
+import { describeAccepted, describeSearch, markAt } from "./gapGesture";
 import {
-  acceptAllBreaks,
-  acceptBreak,
-  breakMarks,
-  breakRaster,
-  clearBreakSearch,
+  acceptAllGaps,
+  acceptGap,
+  gapMarks,
+  gapRaster,
+  clearGapSearch,
   fillableCount,
-  runBreakSearch,
-} from "./breakSearch";
-import { breaksChanged } from "./layers/breaks";
+  runGapSearch,
+} from "./gapSearch";
+import { gapsChanged } from "./layers/gaps";
 import {
   brushKind,
   brushRadius,
@@ -112,7 +112,7 @@ export function setVerb(kind: PaintKind, next: PaintVerb): void {
 }
 
 /**
- * Switch tools, and run the search when the one arrived at is the break tool.
+ * Switch tools, and run the search when the one arrived at is the gap tool.
  *
  * Running on arrival rather than making the GM press a button first: the tool has exactly one thing
  * to show and no reason to withhold it, and a step that opened on an empty canvas with a "search"
@@ -121,28 +121,28 @@ export function setVerb(kind: PaintKind, next: PaintVerb): void {
  */
 export function setPaintTool(next: PaintTool): void {
   tool = next;
-  if (next === "breaks") {
-    if (runBreakSearch()) {
-      say(describeSearch(breakMarks().length, fillableCount()));
+  if (next === "gaps") {
+    if (runGapSearch()) {
+      say(describeSearch(gapMarks().length, fillableCount()));
     } else {
       say("nothing has been read from the map yet, so there is nothing to search");
     }
   } else {
-    clearBreakSearch();
+    clearGapSearch();
   }
   // The ring belongs to whichever brush is now in hand, and to no tool at all otherwise. Cleared
   // here because no pointer event fires on a click in the panel.
   setBrushPosition(null);
   setGrabTarget(false);
-  breaksChanged();
+  gapsChanged();
   invalidate();
 }
 
-/** Search again, because a gap setting moved. Silent when the break tool is not the one in hand. */
-export function refreshBreakSearch(): void {
-  if (tool !== "breaks") return;
-  if (runBreakSearch()) say(describeSearch(breakMarks().length, fillableCount()));
-  breaksChanged();
+/** Search again, because a gap setting moved. Silent when the gap tool is not the one in hand. */
+export function refreshGapSearch(): void {
+  if (tool !== "gaps") return;
+  if (runGapSearch()) say(describeSearch(gapMarks().length, fillableCount()));
+  gapsChanged();
 }
 
 /** The brush width for one layer, in raster pixels. */
@@ -181,14 +181,14 @@ function start(point: MapPoint): boolean {
   if (busy || !paintModeOpen()) return false;
 
   /*
-    The break tool decides by looking, where the brushes take every press.
+    The gap tool decides by looking, where the brushes take every press.
 
     It is the wall tools' rule rather than the brush's, and for the wall tools' reason: this is a
     tool spent mostly *looking* at what the search proposed, so one that swallowed every drag would
     make the looking part cost a modifier. A press inside a ring accepts that break; a press anywhere
     else is a pan.
   */
-  if (tool === "breaks") return acceptAt(point);
+  if (tool === "gaps") return acceptAt(point);
 
   const kind = brushKind(tool);
   // No brush in hand — either no tool is chosen, or the layer could not be made because the map has
@@ -204,48 +204,48 @@ function start(point: MapPoint): boolean {
 }
 
 /**
- * Accept the break whose ring this press landed in, or decline so the press pans.
+ * Accept the gap whose ring this press landed in, or decline so the press pans.
  *
  * **Declining is what keeps the tool usable**, not a fallback: a map with forty rings on it is one a
  * GM will spend most of their time moving around, and one that took every drag would put panning
  * behind Ctrl for the whole of it.
  */
 function acceptAt(point: MapPoint): boolean {
-  const raster = breakRaster();
+  const raster = gapRaster();
   if (!raster) return false;
 
-  const index = markAt(breakMarks(), raster, point.u, point.v, point.perPixel);
+  const index = markAt(gapMarks(), raster, point.u, point.v, point.perPixel);
   if (index === null) return false;
 
-  const result = acceptBreak(index);
+  const result = acceptGap(index);
   if (result.bounds) refreshPaintRegion(result.bounds);
-  breaksChanged();
+  gapsChanged();
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
   return true;
 }
 
 /**
- * Accept every break currently on offer.
+ * Accept every gap currently on offer.
  *
  * The reason the automatic search still earns its place (user, 2026-09-05): on a map with a lot of
  * little gaps, closing each by hand is the cost the search exists to remove. One click, one re-run,
  * and what is left is whatever the newly-closed ink turned into.
  */
-export function acceptAllShownBreaks(): void {
-  if (tool !== "breaks") return;
-  const result = acceptAllBreaks();
+export function acceptAllShownGaps(): void {
+  if (tool !== "gaps") return;
+  const result = acceptAllGaps();
   if (result.accepted === 0) {
     say("nothing here can be accepted — the rings left are guesses the search could not finish");
     return;
   }
   if (result.bounds) refreshPaintRegion(result.bounds);
-  breaksChanged();
+  gapsChanged();
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
 }
 
 function move(point: MapPoint): void {
   // An accept is finished at the press. Nothing follows the pointer, so a drag that began on a ring
-  // is over — and treating it as a brush stroke would paint a line out of a break the GM only clicked.
+  // is over — and treating it as a brush stroke would paint a line out of a gap the GM only clicked.
   const kind = brushKind(tool);
   if (!kind) return;
   const layer = workingLayer(kind);
@@ -293,7 +293,7 @@ function hover(point: MapPoint | null): void {
 
     The rule was settled for the wall tools: a crosshair means the tool acts at this point, a hand
     means the surface moves. Under a brush, panning is the secondary action and is behind Ctrl. In
-    the break tool the surface really does move on a drag, so the hand is right *except* over a ring,
+    the gap tool the surface really does move on a drag, so the hand is right *except* over a ring,
     which is the one place a press does something.
   */
   if (!point) {
@@ -304,11 +304,11 @@ function hover(point: MapPoint | null): void {
     setGrabTarget(workingLayer(kind) !== null);
     return;
   }
-  const raster = breakRaster();
+  const raster = gapRaster();
   const overRing =
-    tool === "breaks" &&
+    tool === "gaps" &&
     raster !== null &&
-    markAt(breakMarks(), raster, point.u, point.v, point.perPixel) !== null;
+    markAt(gapMarks(), raster, point.u, point.v, point.perPixel) !== null;
   setGrabTarget(overRing);
 }
 
@@ -342,8 +342,8 @@ async function openPaintMode(): Promise<void> {
   await Promise.resolve();
 
   tool = "none";
-  clearBreakSearch();
-  breaksChanged();
+  clearGapSearch();
+  gapsChanged();
 
   /*
     There is no stage-two refusal here any more.
@@ -367,15 +367,15 @@ async function openPaintMode(): Promise<void> {
  *
  * Closing **finishes** rather than warning: everything else on this surface is safe to leave at any
  * moment because everything durable is in scene metadata, and unsaved paint would be the first thing
- * to break that claim. Keeping it true is better than teaching a GM to dismiss a dialog.
+ * to gap that claim. Keeping it true is better than teaching a GM to dismiss a dialog.
  */
 async function closePaintMode(): Promise<void> {
   await finishPaint("leaving");
-  clearBreakSearch();
+  clearGapSearch();
   tool = "none";
   setBrushPosition(null);
   setGrabTarget(false);
-  breaksChanged();
+  gapsChanged();
   invalidate();
 }
 

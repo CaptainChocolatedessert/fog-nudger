@@ -41,7 +41,7 @@ import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
 import { onStepChange, onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
-import { registerBreaksLayer } from "./workspace/layers/breaks";
+import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
@@ -53,7 +53,7 @@ import { renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
-import { noteReadingForBreaks } from "./workspace/breakSearch";
+import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderInkTools } from "./workspace/paintControls";
 import { finishPaint, registerPaintTool, requestPaintMode } from "./workspace/paintTool";
@@ -94,14 +94,14 @@ onPaintWriteFailure((message) => {
 onReading((result) => {
   noteRaster(result.mask.width, result.mask.height);
   /*
-    And the break search takes its base ink from the same reading, dropping whatever it had found.
+    And the gap search takes its base ink from the same reading, dropping whatever it had found.
 
     **Dropping rather than keeping** is the part that matters: the marks describe ink that has just
     been replaced, and there is no way to know they are still where they were without searching
     again. A ring left over a map whose reading has moved is exactly the failure this project has
     already paid for once — a diagnostic that looked clean and was answering about something else.
   */
-  noteReadingForBreaks(result.mask);
+  noteReadingForGaps(result.mask);
 });
 
 /*
@@ -133,21 +133,21 @@ registerSimplifySeed();
 /*
   The canvas stack, in draw order.
 
-  Ink first, breaks over it: invented pixels sit on top of read ones rather than under them. Which of
+  Ink first, gaps over it: invented pixels sit on top of read ones rather than under them. Which of
   them is on screen at any moment is the open step's call, declared in `steps.ts` — this only says
   what exists and in what order.
 */
 registerInkLayer();
 /*
-  Over the ink and under the breaks, which is the order the three compose in.
+  Over the ink and under the gaps, which is the order the three compose in.
 
   A pixel the GM suppressed and the repair then filled **is** ink downstream — suppression runs
-  before the break search — so the purple has to sit over the amber or the picture would claim a
+  before the gap search — so the purple has to sit over the amber or the picture would claim a
   removal the mask did not make. Added ink is drawn by the same painter and wins over suppression
   within it, matching its place at the end of the composition.
 */
 registerPaintLayer();
-registerBreaksLayer();
+registerGapsLayer();
 /*
   The partition, under the graph in both modes.
 

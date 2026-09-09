@@ -212,7 +212,7 @@ describe("describePoint", () => {
     expect(line).toContain("Add ink");
     // Every one of the ink message's clauses points at the wrong control here.
     expect(line).not.toContain("binariser is wrong");
-    expect(line).not.toContain("break repair");
+    expect(line).not.toContain("gap repair");
   });
 
   it("sends a GM to the erase brush rather than the threshold for ink they suppressed", () => {

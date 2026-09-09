@@ -67,7 +67,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **bridge** | an edge with the same face on both sides. A stub wall is one. Bridges emit as lines. |
 | **spur** | a wall run with a free end. What pruning removes. |
 | **sliver** | a cycle enclosing no lattice point — sub-pixel, an artefact of junction clusters. |
-| **break** / **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink*. What merges two rooms. |
+| **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink* — a place the drawing failed to close a wall. What merges two rooms. **Not a doorway**, which is a real opening and the tool's known false positive. |
 
 ### The stages, and the two words for them
 
@@ -633,7 +633,7 @@ the grid *silently*.
 | Detail window | px | a filter kernel size, tuned beside the blur |
 | Minimum stroke width | ink widths | genuinely a statement about stroke thickness |
 | Smallest ink island | px | a size on the image, and ink width is not trusted here |
-| Largest break to repair | px | a threshold that moved with a measurement would change what is repaired invisibly |
+| Largest gap to repair | px | a threshold that moved with a measurement would change what is repaired invisibly |
 | Same-wall distance | px | a distance travelled across the image |
 | Brush widths | px | what the GM is aiming with, on screen |
 | Edge simplification | fraction of the map | must be expressible in both modes |
@@ -708,7 +708,7 @@ brush. **Position in the composition is load-bearing**: suppression composes fir
 second-guesses what the GM drew deliberately.
 
 `composePaint` is the one statement of that order, pure and tested. It could not be extracted while
-the break repair sat between its terms, which is why the repair becoming a tool (below) mattered more
+the gap repair sat between its terms, which is why the repair becoming a tool (below) mattered more
 than it looked.
 
 **A raster, not a list of strokes.** The rule is that a document belongs in the space of the thing it
@@ -732,18 +732,18 @@ letting an obscure metadata failure land at the moment the GM finishes.
 **An empty layer is deleted rather than stored.** "No paint for this map" and "paint, and it is
 blank" are one fact told two ways, and the second can disagree with the first.
 
-### Repairing breaks in the linework
+### Repairing gaps in the linework
 
-**A break merges two rooms, which is this project's worst outcome**, and it is too small to spot by
+**A gap merges two rooms, which is this project's worst outcome**, and it is too small to spot by
 eye on a whole map.
 
 **The definition, after two wrong ones:** *a gap is a narrow channel of ground whose banks of ink are
 far apart when measured **along the ink**.* Both rejects are worth remembering:
 
-- *"a break that separates space when sealed"* — tests the space when the question is the integrity
+- *"a gap that separates space when sealed"* — tests the space when the question is the integrity
   of the **ink**. A freestanding wall in the middle of a room separates nothing, so a crack in it
   would never be reported.
-- *"a break between two different ink blobs"* — fails on a crack in a **ring**, where both banks are
+- *"a gap between two different ink blobs"* — fails on a crack in a **ring**, where both banks are
   one blob by the long way round.
 
 **Three steps, and only the first costs anything.** A morphological closing gives the candidate
@@ -752,7 +752,7 @@ something that passes through — that step alone kills the ragged-edge confetti
 produces, and it is free. Then a bounded flood through the ink from one whole bank group decides
 whether the banks are the same piece of wall locally.
 
-**It is a tool, not a filter.** Selecting it runs the search and rings every break; clicking inside a
+**It is a tool, not a filter.** Selecting it runs the search and rings every gap; clicking inside a
 ring accepts that one; a button accepts every ring shown. **What is accepted goes into the added-ink
 layer**, so from that moment it is paint like any other, with no separate term in the composition and
 nothing that can re-invent itself.
@@ -762,10 +762,10 @@ re-invented ink on *every* recompose thereafter, whatever else moved underneath.
 writing is an act**.
 
 - **A dead end is never repaired**, since it connects nothing.
-- **A guessed break** — one whose flood ran out of budget — is ringed but never filled. Marking on a
+- **A guessed gap** — one whose flood ran out of budget — is ringed but never filled. Marking on a
   guess is a warning; inventing ink on a guess is not.
-- **The search runs against the composite**, not the base: a break already brushed closed is not a
-  break, and one the suppression opened is.
+- **The search runs against the composite**, not the base: a gap already brushed closed is not a
+  gap, and one the suppression opened is.
 - **Accepting re-runs the search**, so the caller can never draw marks the accept invalidated. The
   rings visibly reshuffle, which is expected — channels merge and split as the ink changes.
 
@@ -775,7 +775,7 @@ accept-all exists rather than click-one-at-a-time alone.
 
 **One control, after two were tried.** Finding and repairing were briefly separate — a width to
 highlight candidates and a share of it to select which got repaired. That failed on a fact about
-maps: **breaks are not discrete items** that appear one at a time as the width rises. Where two
+maps: **gaps are not discrete items** that appear one at a time as the width rises. Where two
 uneven lines run close together, a closing carves the space between them into several channels at the
 pinch points, and those channels **merge into one** as the radius grows. So there was no stable
 reference set to hold still, and **raising the highlight could prevent a repair a lower setting
@@ -788,7 +788,7 @@ whose two strokes meet only at the ends of a run, so every one would get filled 
 run, not a shower.
 
 **A stated cost: an accepted fill goes stale where the search used to self-correct.** Change the
-threshold now and a break that closed on its own stops being filled; an accepted one does not. The
+threshold now and a gap that closed on its own stops being filled; an accepted one does not. The
 direction that matters is a fill left across what has since become an open **doorway**, which Dynamic
 Fog would derive a wall across. Accepted because it is visible in the added-ink layer's own colour,
 and hand-painted ink already fails the same way.
@@ -1253,7 +1253,7 @@ measure the top of the slider's track off the graph itself.**
 - **The floor is PINNED, not the observed minimum**, and the reason is sharp: **both tools delete from
   the bottom**, so the minimum is the most mobile quantity there is. Prune at budget B and the shortest
   surviving run is B. A tracking bottom would chase the slider upward every time, and "30%" would mean
-  a larger bite on each pass — the same non-monotonicity that collapsed the two-slider break design.
+  a larger bite on each pass — the same non-monotonicity that collapsed the two-slider gap design.
 - **The far left is a literal zero**, so the tools are exactly off rather than doing a little work at
   the floor. **Keyed on the POSITION, not the value**: keying on the value makes the floor a sentinel
   meaning two things, and since the scale snaps to three significant figures, whether a low position
@@ -1482,7 +1482,7 @@ an edge mark.
   **Map shows no layers on purpose**: its question is which image, and a mask on top would answer the
   next question over it.
 - **Ink** — colour and opacity, then what counts as ink, then a **Linework** sub-heading for the two
-  ink filters, then a tool picker: **Suppress**, **Add ink**, **Breaks**. The picker names the *layer*,
+  ink filters, then a tool picker: **Suppress**, **Add ink**, **Gaps**. The picker names the *layer*,
   and paint-versus-erase is a pair inside whichever brush is chosen.
 
   **Both paint layers are open at once.** Entering Ink takes a working copy of each, either brush
@@ -1800,7 +1800,7 @@ may not be offered as the reason a risky control is acceptable.
 > **A new control that can be wrong needs a visual channel before it ships.**
 
 The two ink filters are the model: a global width filter is defensible because the damage appears under
-the GM's cursor as they drag. The break repair draws every proposal in its own colour. The prune
+the GM's cursor as they drag. The gap repair draws every proposal in its own colour. The prune
 preview draws the doomed walls in red. Each of those is the licence.
 
 ### When a GM reports a gap, probe it — do not reason about it
@@ -1831,8 +1831,8 @@ A map whose walls the GM has already drawn looks like ground truth, and the appe
 would turn "does this look about right" into a number. It does not survive contact with what a wall is.
 
 - **Where a wall goes along a stroke of ink is a judgement.** Inner edge, centre and outer edge are all
-  defensible, and whether a gap is a doorway or a break is a *reading* of the map rather than a fact
-  about it. A diff would score the extractor down for disagreeing with an arbitrary choice, driving
+  defensible, and whether an opening in the linework is a doorway or a gap the drawing failed to
+  close is a *reading* of the map rather than a fact about it. A diff would score the extractor down for disagreeing with an arbitrary choice, driving
   tuning toward reproducing one GM's habits.
 - **One map cannot generalise.** The sibling has already paid for this in a different costume: its wall
   margin's safety turned out to be *a property of the test map*.
@@ -1989,19 +1989,24 @@ The questions to start from, offered as a starting point and not as an agenda:
   nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or a
   different action has not been asked.
 
-**2. A graph-side break repair**, and the question to settle first is **whether it is wanted at all.**
+**2. A graph-side gap tool — wanted, and not yet built.**
 
 The idea: pair free endpoints by graph distance, which is exact where a pixel closing is a guess, and
-turns the bounded flood into a shortest path. But there are already **four** ways to close a break — a
-brush stroke, an accepted proposal from the search, drawing a wall in the editor, and walling the map's
-edge — and a graph repair can only see breaks the graph already has.
+turns the bounded flood into a shortest path.
 
-**The pixel repair stays regardless, and this is the thing most likely to be got wrong.** A **scanner
+**It does not replace the pixel tool, and this is the thing most likely to be got wrong.** A **scanner
 artefact** — a thin light line across a scanned map — severs linework in *pixel* space, before any
-skeleton exists. The graph then has no break to pair up; it has two pieces whose ends may be nowhere
+skeleton exists. The graph then has no gap to pair up; it has two pieces whose ends may be nowhere
 near each other. **Only a pixel tool can see that fault.** Repairing before thinning is also different
 in kind, not merely earlier: ink mended first becomes one stroke with one centreline, where the same
-mend on the graph leaves two edges that happen to meet.
+mend on the graph leaves two edges that happen to meet. Two tools, two faults.
+
+**One property to design in from the start: the two differ in durability.** The pixel tool writes what
+the GM accepts into the added-ink layer, which is an *input* and survives a re-derive. A graph tool
+adds an **edge**, which lives in the wall graph and does not — so mending a gap on the graph flips the
+document from purely-derived to edited, and should count toward the hand-edit total like any other
+wall edit. Same conceptual tool, opposite durability, and the GM has no way to know that unless the
+interface says so.
 
 ### Carried open questions
 
@@ -2029,7 +2034,7 @@ mend on the graph leaves two edges that happen to meet.
 
 - **The handle cap has never been exercised.** It suppresses handles above 2,000 *on screen*, and the
   test map has 410 points in total, so no amount of zooming out reaches it.
-- **The break tool has never been in a room.** Whether a ring is easy to hit, whether the reshuffle
+- **The gap tool has never been in a room.** Whether a ring is easy to hit, whether the reshuffle
   after an accept reads as working or as flickering, and whether accept-all does what it is for on a
   map with many gaps are all open.
 - **What Owlbear does with a zero-area path at zero stroke width is unmeasured.** Retiring the
@@ -2039,7 +2044,7 @@ mend on the graph leaves two edges that happen to meet.
 - **Switching maps.** The picker's *listing* is exercised; the reload path is not.
 - **A large map, with the dev log running.** A 52.9-megapixel map is the only one that can answer three
   things: why closing it was slow (the decoded-source-versus-budget note in `rasterPlan.ts` is the
-  first candidate and is explicitly unproven), whether break rings land correctly at a reduction factor
+  first candidate and is explicitly unproven), whether gap rings land correctly at a reduction factor
   of 2, and three log lines a receiver missed. **None is closable from a desk, none is urgent**, and
   the map is the expensive part of the setup — so do all three in one sitting whenever it is loaded for
   some other reason.
@@ -2128,7 +2133,7 @@ closed — but not deleted.
 | `trace/inkIslands.ts` | the island filter |
 | `trace/inkBlobs.ts` | ink component labelling (reporting only) |
 | `trace/inkPaint.ts` | the GM's two raster layers: the brush, the run-length codec, and `composePaint` — the one statement of the stacking order |
-| `trace/gaps.ts` | break **detection**; it proposes and never fills |
+| `trace/gaps.ts` | gap **detection**; it proposes and never fills |
 | `trace/thinning.ts` | Zhang–Suen skeletonisation |
 | `trace/wallGraph.ts` | skeleton to nodes and edges (moves no point, ever), plus `eraseSpecks` and `rasterizeGraph` |
 | `trace/faces.ts` | the half-edge walk and sliver detection, and nothing else |
@@ -2174,12 +2179,12 @@ URL; `workspace.ts` is the composition root only.
 - **Controls** — `settingRows.ts` · `settingsState.ts` · `swatches.ts` · `graphScale.ts` (the sliders'
   graph-measured tops) · `seedSimplify.ts` · `confirmDialog.ts`
 - **Tools** — `wallTools.ts` and `paintControls.ts` (the pickers) · `wallEdit.ts` and `paintTool.ts` (the
-  pointer events) · `dragGesture.ts`, `paintGesture.ts`, `breakGesture.ts`, `maskRequest.ts` (**what a
+  pointer events) · `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a
   gesture means — pure and tested, which is where the sequencing defects were fixed**) ·
-  `paintState.ts` · `breakSearch.ts`
+  `paintState.ts` · `gapSearch.ts`
 - **The editor's three one-shot buttons** — `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`
 - **Layers** — `layers/ink.ts` · `layers/paint.ts` (amber and cyan, repainting only the rectangle a
-  stroke changed) · `layers/breaks.ts` (purple proposals and a ring each) · `layers/regions.ts` (the
+  stroke changed) · `layers/gaps.ts` (purple proposals and a ring each) · `layers/regions.ts` (the
   partition as vector paths) · `layers/graph.ts` (the walls, with a handle only where one can be
   grabbed) · `bitmap.ts`
 

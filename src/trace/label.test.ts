@@ -49,7 +49,7 @@ describe("labelSpace", () => {
   });
 
   it("joins two rooms through a gap in the wall", () => {
-    // The doorway case, and the one the whole project is arranged around: a break in the ink means
+    // The doorway case, and the one the whole project is arranged around: a gap in the ink means
     // revealing one room reveals the other.
     const labelled = labelSpace(
       maskFromRows([

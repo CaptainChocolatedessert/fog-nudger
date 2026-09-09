@@ -1,10 +1,10 @@
 /**
- * Finding breaks in the linework, and repairing the ones the GM says to repair.
+ * Finding gaps in the linework, and repairing the ones the GM says to repair.
  *
  * A wall with a section missing merges two rooms, and a merged region is this project's worst
  * outcome: the fog opens on a room nobody has entered. A GM cannot be asked to scan a whole map for
  * a four-pixel crack, and `DESIGN.md` §8 forbids answering that with a warning in a log nobody
- * reads. So the breaks are found, repaired, and **drawn** — every invented pixel in its own colour
+ * reads. So the gaps are found, repaired, and **drawn** — every invented pixel in its own colour
  * with a ring round it, because ink this stage made up must never look like ink the map contains.
  *
  * ## What counts as a gap, and the two definitions this replaced
@@ -14,11 +14,11 @@
  *
  * Two earlier definitions were tried against real cases and both failed:
  *
- * - **"A break that separates the space when sealed."** Exact-sounding, and wrong: it tests the
+ * - **"A gap that separates the space when sealed."** Exact-sounding, and wrong: it tests the
  *   *space* when the question is about the integrity of the *ink*. A freestanding wall standing in
  *   the middle of a room separates nothing, so a crack in it would never be reported — yet it is
  *   just as broken, and a map may have a great many meaningful walls inside one area of space.
- * - **"A break between two different ink blobs."** Fails on a crack in a ring, where both banks
+ * - **"A gap between two different ink blobs."** Fails on a crack in a ring, where both banks
  *   belong to the same blob by way of the long trip round the other side.
  *
  * Both are fixed by asking the question locally. Two ink pixels three pixels apart across a crack,
@@ -40,7 +40,7 @@
  * 3. **The travel test.** Flood outwards through the ink from one whole bank group, no further than
  *    the travel distance. If every other bank is reached, the ink is locally one piece and the
  *    channel is not a gap. If any bank is left unreached, the banks are locally different pieces
- *    and this is a break.
+ *    and this is a gap.
  *
  * Travel is measured through the ink rather than inside a cropped window on purpose: a wall that
  * bulges out of a window and back is still one wall, and travel says so where a crop would not.
@@ -52,9 +52,9 @@
  * attention and then sweep the repair against it. **That was abandoned on evidence from a room**
  * (user, 2026-08-23), because its premise turned out to be false.
  *
- * Breaks are not discrete items discovered one at a time as the width rises. Where two uneven lines
+ * Gaps are not discrete items discovered one at a time as the width rises. Where two uneven lines
  * run close together, a closing carves the space between them into several channels at the pinch
- * points, and those channels **merge into one** as the radius grows. So a break has no stable
+ * points, and those channels **merge into one** as the radius grows. So a gap has no stable
  * identity across radii — and because a channel was only repaired when *all* of it fell inside the
  * fill radius, raising the highlight could **prevent** a repair that a lower one allowed.
  * Non-monotonic, and unexplainable to anyone turning the knob.
@@ -68,7 +68,7 @@
  * of budget was never *proved* broken. Marking on a guess is a warning; inventing ink on a guess is
  * not. Those carry a mark and no fill.
  *
- * > **Every pixel the fill invents belongs to a break that has a mark on it.**
+ * > **Every pixel the fill invents belongs to a gap that has a mark on it.**
  *
  * ## Why the fill is not simply a closing
  *
@@ -80,18 +80,18 @@
  * visible absence. Dynamic Fog would then derive a wall across an open door and block line of sight
  * through it, silently.
  *
- * So the fill adds the pixels of **marked breaks** and nothing else. A dead end is never filled,
+ * So the fill adds the pixels of **marked gaps** and nothing else. A dead end is never filled,
  * which costs nothing: a dead end connects nothing to anything, so sealing it could not have helped.
  *
  * **The claim above is per CHANNEL, and that is weaker than it first reads.** The verdict is one per
  * channel and applies to all of its pixels, and channels *merge* as the radius rises. So a doorway
  * narrow enough for the closing to reach — which is a channel like any other — can merge with a
- * nearby genuine break into a single channel, fail the travel test because of the break, and be
+ * nearby genuine gap into a single channel, fail the travel test because of the gap, and be
  * filled along with it. The very outcome this section argues the design prevents is reachable that
  * way, and a future session reading the argument alone would not know to look for it.
  *
  * What keeps it honest is that it is **not silent**: the merged channel carries a ring and its
- * invented pixels are painted purple at full alpha, so a GM on the Breaks step sees purple lying
+ * invented pixels are painted purple at full alpha, so a GM on the Gaps step sees purple lying
  * across their doorway. That is the visual channel §8 demands, and it is the reason the fill is drawn
  * at full alpha rather than tinted down with the ink.
  *
@@ -137,7 +137,7 @@ import { closeMask, radiusForWidth } from "./morphology";
   They were a full-raster array with a value per pixel: the pipeline read it to decide which pixels
   to add to the ink, and the surface drew it. **Neither reader exists now.** The repair became a tool
   that writes into the added-ink layer, and what a mark proposes is carried on the mark itself,
-  because accepting is one break at a time and a shared raster cannot say which pixels belong to
+  because accepting is one gap at a time and a shared raster cannot say which pixels belong to
   which mark.
 
   Deleted rather than kept for the tests, which were its only remaining callers. It is an allocation
@@ -146,7 +146,7 @@ import { closeMask, radiusForWidth } from "./morphology";
   the map this feature exists for.
 */
 
-/** One break, as the surface needs to draw it. */
+/** One gap, as the surface needs to draw it. */
 export interface GapMark {
   /** Centre of the channel's bounding box — the same box `span` measures — in raster pixels. */
   readonly x: number;
@@ -160,13 +160,13 @@ export interface GapMark {
    *
    * **Was `filled`, and the rename is the meaning changing rather than tidying.** Nothing is filled
    * at detection time any more: the search proposes and the GM accepts, so what this says is that
-   * the break was *proved* broken and may be closed. A guess is ringed and never offered.
+   * the gap was *proved* broken and may be closed. A guess is ringed and never offered.
    */
   readonly fillable: boolean;
   /**
    * Every ground pixel of this channel, as raster indices.
    *
-   * Carried per mark because accepting is **one break at a time**. There was a full-raster label
+   * Carried per mark because accepting is **one gap at a time**. There was a full-raster label
    * array until 2026-09-05 with a state per pixel, and it could not say which pixels belonged to
    * which mark — re-deriving one channel from it would have meant flood-filling it, a second
    * implementation of the channel identity this module already computed, free to drift from it.
@@ -179,7 +179,7 @@ export interface GapMark {
 
 export interface GapOptions {
   /**
-   * The widest break to find and repair, in raster pixels. Zero is off.
+   * The widest gap to find and repair, in raster pixels. Zero is off.
    *
    * Named to match the setting, `gapFillPx`. That setting was renamed from `gapWidthPx` because
    * "width" meant *highlight only* under the two-control design, and a scene storing the old key
@@ -189,7 +189,7 @@ export interface GapOptions {
   /**
    * How far two banks may be apart along the ink and still count as one piece, in raster pixels.
    *
-   * Zero is meaningful rather than off: it repairs every break that passes through, which is the
+   * Zero is meaningful rather than off: it repairs every gap that passes through, which is the
    * most eager the detector gets.
    */
   readonly travelPx: number;
@@ -345,12 +345,12 @@ export function findGaps(mask: BinaryMask, options: GapOptions): GapFinding {
   ever, whatever else moved underneath it — which is only *nearly* the rule the default-off setting
   was chosen to keep.
 
-  What replaces it is a tool. The search proposes, the GM accepts one break or all of them, and what
+  What replaces it is a tool. The search proposes, the GM accepts one gap or all of them, and what
   is accepted is written into the **added-ink layer** — so from then on it is paint like any other,
   with no separate term in the composition and nothing that can re-invent itself.
 
   The cost is stated rather than argued away: an accepted fill goes stale where this self-corrected.
-  Change the threshold now and a break that closed on its own stops being filled; an accepted one
+  Change the threshold now and a gap that closed on its own stops being filled; an accepted one
   does not, and the direction that matters is a fill left across what has since become an open
   doorway. It is a stale mark of added ink, visible in that layer's colour, and hand-painted ink
   already fails the same way — but it is a trade.
@@ -420,7 +420,7 @@ interface BankGroups {
  *
  * Grouped by adjacency **within the bank set**, which is what makes the count mean "does this
  * channel pass through". Around a dead end the banks wrap continuously and come out as one; across
- * a break the two faces are separated at both ends by the ground the break opens into.
+ * a gap the two faces are separated at both ends by the ground the gap opens into.
  *
  * The first group is returned whole rather than as a single pixel, and that matters: the flood is
  * seeded from all of it at once, so a bank running the length of a long channel cannot be judged
@@ -477,7 +477,7 @@ interface FloodResult {
  * Breadth-first over 8-connected ink, seeded with the whole of the first bank group at depth zero
  * and stopped at the travel distance. Reaching every other bank means the banks are one piece of
  * linework that happens to be pinched here; failing to means they are different pieces, which is a
- * break.
+ * gap.
  */
 function floodFromFirstGroup(
   mask: BinaryMask,
@@ -528,7 +528,7 @@ function floodFromFirstGroup(
     frontier = next;
   }
 
-  // An exhausted flood has not proved the ink intact, so it is reported as a break — loud is the
+  // An exhausted flood has not proved the ink intact, so it is reported as a gap — loud is the
   // safe direction for a warning, and `budgetHits` says how many marks came from here.
   let allReached = !exhausted;
   if (allReached) {

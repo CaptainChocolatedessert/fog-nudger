@@ -262,7 +262,7 @@ describe("the whole stack, composed", () => {
       an overlap distinguishes them.
 
       This is what could not be tested until 2026-09-05. The order lived inline in `composeInk`,
-      behind the SDK boundary, with the break repair sitting between the two terms so it could not be
+      behind the SDK boundary, with the gap repair sitting between the two terms so it could not be
       pulled out. The repair became a tool, the middle term went, and the order became one function.
     */
     const mask = maskFromRows([".##.", ".##."]);
@@ -290,7 +290,7 @@ describe("laying a set of pixels down", () => {
     expect(rows(layer)).toEqual(["......", "..##..", "..#...", "......"]);
   });
 
-  it("counts only what it changed, so accepting the same break twice adds nothing", () => {
+  it("counts only what it changed, so accepting the same gap twice adds nothing", () => {
     const layer = emptyPaint(6, 4);
     paintPixels(layer, [8, 9]);
     const again = paintPixels(layer, [8, 9]);

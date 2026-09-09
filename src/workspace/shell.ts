@@ -534,7 +534,7 @@ if (canvas instanceof HTMLCanvasElement) {
         edge one.** It used to be reachable only by a painting step opened before the map had been
         read, where there is no raster to paint at. Merging the three ink steps into one made it the
         main path: the Ink step declares `brush` all the time, and its tool picker starts with
-        nothing chosen and offers a break tool that acts only inside a ring. So a drag there pans
+        nothing chosen and offers a gap tool that acts only inside a ring. So a drag there pans
         unless a brush is actually in hand, which is what keeps the sliders in that step usable
         without holding Ctrl.
       */

@@ -94,16 +94,16 @@ export type PaintVerb = "paint" | "erase";
  * sliders in, where a plain drag pans. It is also where the step starts, because a step that took
  * every press the moment it opened would make the sliders above unusable without a modifier.
  *
- * `"breaks"` is not a brush at all — it takes a click on a ring rather than a drag — which is why
+ * `"gaps"` is not a brush at all — it takes a click on a ring rather than a drag — which is why
  * the brush code asks for a kind and gets one only when the tool is a brush.
  */
-export type PaintTool = "none" | "suppress" | "ink" | "breaks";
+export type PaintTool = "none" | "suppress" | "ink" | "gaps";
 
 /**
  * The layer a tool paints into, or `null` when the tool is not a brush.
  *
  * Narrowing in one place, so no caller has to remember which members of the union are brushes. A
- * press handed `null` is declined, which is what lets a drag pan in the break tool and with no tool
+ * press handed `null` is declined, which is what lets a drag pan in the gap tool and with no tool
  * chosen — nothing is painted by dragging in either.
  *
  * The two brush members are spelled out rather than imported as `PaintKind`, because that type lives

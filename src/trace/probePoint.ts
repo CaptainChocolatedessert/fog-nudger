@@ -38,8 +38,8 @@
  * is the diagnostic they reach for when something looks wrong — so the old answer was expensive.
  *
  * The fix is to look the label up **even when the point is ink**. The labelling handed in is of the
- * *framed skeleton*, so an ink pixel carries a face label unless it is one of the thinned centreline
- * pixels themselves, which are the boundary rather than the interior of either neighbour.
+ * skeleton, so an ink pixel carries a face label unless it is one of the thinned centreline pixels
+ * themselves, which are the boundary rather than the interior of either neighbour.
  *
  * Pure: no DOM, no SDK.
  */
@@ -58,17 +58,17 @@ export type PointKind =
    */
   | "ink"
   /**
-   * Ink **this run invented** — the break repair filled it, and the map has no ink there.
+   * Ink **this run invented** — the gap repair filled it, and the map has no ink there.
    *
    * Worth its own kind rather than a clause on `"ink"`, because every word of the ink message is
    * misdirection here: the luminance is light *because there is nothing there*, the local threshold
    * did not call it ink, and the binariser is not wrong. The old answer sent a GM to tune the
-   * threshold when the control that did this is the break repair.
+   * threshold when the control that did this is the gap repair.
    */
   /*
     `invented-ink` was here, and it is gone rather than merely unused (2026-09-05).
 
-    It meant ink the break repair filled in, which the map does not have — and every clause of the
+    It meant ink the gap repair filled in, which the map does not have — and every clause of the
     plain ink answer was misdirection for it, which is why it earned a kind. That case cannot arise
     any more: the repair became a tool, and what it fills is written into the **added-ink layer**, so
     a pixel that was once "invented" now reports as ink the GM drew. Which is true — they accepted
@@ -173,7 +173,7 @@ export function readPoint(
 
     That is worth stating because a mutation pass found the first version saying it twice, on both
     flags. Suppression also tested `!ink`, which is what the chain already guarantees: suppression
-    composes before the break repair, so the only way a suppressed pixel is ink at the end is that
+    composes before the gap repair, so the only way a suppressed pixel is ink at the end is that
     the repair or the GM's own brush put it back — and both are answered above it. Added ink also
     tested `ink`, which cannot be false where it covers: it composes **last of everything**, so every
     pixel it covers is ink by construction. Two statements of one rule is one that can be changed

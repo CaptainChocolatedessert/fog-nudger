@@ -30,7 +30,7 @@ import {
   type ScaleLimits,
 } from "../sliderScale";
 import { graphScaleTop, onGraphScale } from "./graphScale";
-import { refreshBreakSearch } from "./paintTool";
+import { refreshGapSearch } from "./paintTool";
 import { requestReread } from "./reading";
 import { invalidateRegions, repruneRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
@@ -92,7 +92,7 @@ function measured(): Measured {
  * One repaint function per row, so every derived readout can be refreshed when a reading lands.
  *
  * Several readouts report a setting against a **measurement** — the minimum stroke width against the
- * measured ink width, the break widths against pixels per square — and before a first trace those
+ * measured ink width, the gap widths against pixels per square — and before a first trace those
  * say "trace once for a figure". Without this they would go on saying it until the row's own slider
  * was touched, which is a readout being quietly wrong about what it knows.
  *
@@ -148,12 +148,12 @@ export function recomputeFor(names: readonly SettingName[]): void {
     A `tool` parameter recomputes nothing and tells its tool instead.
 
     That is the whole of the third kind's behaviour on this side. A brush width has no one to tell —
-    the next stroke simply reads it — but the break search is holding a set of marks that the numbers
+    the next stroke simply reads it — but the gap search is holding a set of marks that the numbers
     it was run with have just stopped describing, and marks on screen that no longer match the
     settings beside them are the stale-diagnostic failure in miniature. Re-running is cheap by
     comparison with a re-read and is what the GM is asking for by moving the slider at all.
   */
-  if (names.some((name) => PARAMETER_KIND[name] === "tool")) refreshBreakSearch();
+  if (names.some((name) => PARAMETER_KIND[name] === "tool")) refreshGapSearch();
 
   const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
   /*
@@ -310,7 +310,7 @@ export function settingRow(control: Control): HTMLElement {
         in red, and a budget is not a number anybody can picture on their own map, so seeing it follow
         the drag is the difference between choosing one and guessing.
 
-        What a tool *recomputes* still waits for the release. The break search re-runs from
+        What a tool *recomputes* still waits for the release. The gap search re-runs from
         `recomputeFor`, because that costs a composite and a closing rather than a repaint.
 
         **`pipeline` must never join them.** Its re-read is 690ms and synchronous, which is 690ms the

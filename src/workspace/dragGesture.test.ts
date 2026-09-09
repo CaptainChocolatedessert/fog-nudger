@@ -222,7 +222,7 @@ describe("drawing a wall", () => {
     expect(suppressed.at).toEqual(documentPoint(0.505, 0.205));
   });
 
-  it("joins two existing vertices into one piece of linework, which is how a break closes", () => {
+  it("joins two existing vertices into one piece of linework, which is how a gap closes", () => {
     // Two separate walls whose loose ends face each other across a gap.
     const broken = graphOf(
       [

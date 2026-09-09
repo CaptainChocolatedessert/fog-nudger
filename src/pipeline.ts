@@ -225,27 +225,27 @@ interface MaskStage extends ReadingStage {
   /**
    * The ink everything downstream derives regions from: the whole stack, composed.
    *
-   * ## Three hand-made layers and one derived term
+   * ## Three hand-made layers, and nothing derived
    *
    * Stage one is a stack rather than a single filtered mask (user, 2026-09-05):
    *
    * ```
-   * base ink  −  suppression  +  break repair  +  added ink
+   * base ink  −  suppression  +  added ink
    * ```
    *
    * The base is what processing the map image produces and is decided by parameters; suppression and
-   * added ink are rasters the GM paints. Those three are **independent inputs** — any can be
-   * revisited without disturbing the others, and the order they are edited in does not matter.
+   * added ink are rasters the GM paints. All three are **independent inputs** — any can be revisited
+   * without disturbing the others, and the order they are edited in does not matter.
    *
-   * The order they *compose* in is not free, and each position is load-bearing. Suppression comes
-   * before the break search so a repair works on ink the GM has already corrected. Added ink comes
-   * last, which is what makes it immune to the stroke-width opening and the island filter — the GM
-   * drew it deliberately and no automatic filter may second-guess it.
+   * The order they *compose* in is not free. Added ink comes last, which is what makes it immune to
+   * the stroke-width opening and the island filter — the GM drew it deliberately and no automatic
+   * filter may second-guess it.
    *
-   * The break repair is the one term here that is derived rather than made, which is why editing
-   * suppression changes what it finds. It is expected to become a tool inside the added-ink layer,
-   * stamping what the GM accepts; at that point the stack is exactly three things and nothing in it
-   * depends on anything else.
+   * **A fourth, derived term used to sit between them: the gap repair.** It became a tool, stamping
+   * what the GM accepts into the added-ink layer, so nothing in the stack re-invents itself on a
+   * later recompose and the asterisk on "order does not matter" is gone. The one ordering that
+   * outlived it is inside the tool: the gap search runs against the *composite*, so a gap the GM has
+   * already brushed closed is not a gap, and one their suppression opened is.
    */
   readonly mask: BinaryMask;
   /**
@@ -437,7 +437,7 @@ export function probeWorldPoint(x: number, y: number): string {
  * reading it from `lastRun` meant it was null until a *full trace* had run, which in a fresh
  * workspace session means until the GM opens Walls. Two of the three derived readouts in the ink mode
  * were therefore less informative than the third for no reason anyone had stated: the stroke-width
- * readout said "under ~6px goes (ink is 5.7px)" while the break and prune readouts said only "12px",
+ * readout said "under ~6px goes (ink is 5.7px)" while the gap and prune readouts said only "12px",
  * both of them dropping their "of a square" clause on a null.
  *
  * **Zero is treated as null, and that is not defensiveness.** `pxPerSquare` is computed as
@@ -918,7 +918,7 @@ function composeInk(
     draws, so the two questions stay separable.
 
     **The order lives in `composePaint` rather than here**, which is what lets a headless test pin
-    it. That became possible on 2026-09-05 when the break repair stopped being a term between the
+    it. That became possible on 2026-09-05 when the gap repair stopped being a term between the
     two: while it was derived it had to run in the middle, so the composition could not be one
     expression. As a tool writing into the added-ink layer it is not part of this at all, and what
     is left is three independent layers and one function that says how they stack.
@@ -940,7 +940,7 @@ function composeInk(
     devLog(
       "info",
       `trace: added ink — ${paintedCount(inkLayer)} px painted, including anything accepted from ` +
-        `the break search, which writes into this layer like a brush stroke.`,
+        `the gap search, which writes into this layer like a brush stroke.`,
     );
   }
 

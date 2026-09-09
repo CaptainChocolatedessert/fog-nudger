@@ -44,7 +44,7 @@ export function greyImage(
 /**
  * A room: a hollow rectangle of ink on a light ground, with an optional gap in one wall.
  *
- * The gap is the point of the parameter. A doorway break is what merges two regions, so every stage
+ * The gap is the point of the parameter. A doorway gap is what merges two regions, so every stage
  * downstream needs a fixture that has one and a fixture that does not, and a single closed box
  * cannot tell correct code from several kinds of wrong.
  */

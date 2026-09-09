@@ -37,7 +37,7 @@ import { brushKind, type PaintTool } from "./paintGesture";
 import { anyUnsavedPaint, hasUnsavedPaint, paintRaster, workingLayer } from "./paintState";
 import {
   abandonPaint,
-  acceptAllShownBreaks,
+  acceptAllShownGaps,
   currentPaintTool,
   currentVerb,
   finishPaint,
@@ -115,7 +115,7 @@ export function renderInkTools(body: HTMLElement): void {
       body.append(settingRow(control));
     }
 
-    body.append(kind ? brushActions(kind) : breakActions());
+    body.append(kind ? brushActions(kind) : gapActions());
   }
 
   // Last, and outside the branch: saving is one act for both layers, so it belongs to the step
@@ -218,17 +218,17 @@ function brushActions(kind: PaintKind): HTMLElement {
   return wrapper;
 }
 
-/** The break tool's one button, which is the reason the automatic search still earns its place. */
-function breakActions(): HTMLElement {
+/** The gap tool's one button, which is the reason the automatic search still earns its place. */
+function gapActions(): HTMLElement {
   const row = document.createElement("div");
   row.className = "step-actions";
 
   const acceptAll = document.createElement("button");
   acceptAll.type = "button";
   acceptAll.className = "chip";
-  acceptAll.textContent = "Close every break shown";
+  acceptAll.textContent = "Close every gap shown";
   acceptAll.addEventListener("click", () => {
-    acceptAllShownBreaks();
+    acceptAllShownGaps();
   });
 
   row.append(acceptAll);

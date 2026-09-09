@@ -4,7 +4,7 @@
  * ## Why this is not in a step
  *
  * Several controls change the reading and they are spread across steps — what counts as ink, the two
- * linework filters, and the break repair, which is a sub-heading inside Ink rather than a step of
+ * linework filters, and the gap repair, which is a sub-heading inside Ink rather than a step of
  * its own — and every one of them wants the *same* mask back. Putting the request cycle in one step
  * would make the others depend on it, and putting a copy in each would be more implementations of
  * the chain, which is the duplication the sibling paid for. So the steps subscribe: a reading lands
@@ -52,11 +52,11 @@ let lastInkShare: number | null = null;
 let lastReused = false;
 
 /*
-  The break counts were here, and they went with the search (2026-09-05).
+  The gap counts were here, and they went with the search (2026-09-05).
 
-  A reading no longer finds breaks — the search is a tool inside Add ink, run when the GM asks — so
+  A reading no longer finds gaps — the search is a tool inside Add ink, run when the GM asks — so
   there is nothing here to count. That is a real loss and worth naming: this line reported a total on
-  every recompose, which is how a break on a part of the map nobody was looking at got mentioned at
+  every recompose, which is how a gap on a part of the map nobody was looking at got mentioned at
   all. Now nothing mentions one until the tool is opened. The record already accepted the smaller
   version of this cost when the repair was defaulted off; this is the same cost, one step further.
 */
@@ -87,7 +87,7 @@ export function requestReread(): void {
  * nothing on screen that goes stale, so blanking it would take the GM's own map away for the length
  * of a recompose in exchange for nothing.
  *
- * **Nothing on screen lags this any more.** There was one thing that did — the break rings, found on
+ * **Nothing on screen lags this any more.** There was one thing that did — the gap rings, found on
  * the suppressed mask, so a saved suppression left them describing the ink from just before it. The
  * search is a tool now and holds its own marks, re-running them when the GM asks, so the reading has
  * nothing left that a paint change could make stale.

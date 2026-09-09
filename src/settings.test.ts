@@ -166,25 +166,25 @@ describe("isDefault and describeSettings", () => {
       expect(line, `no "${part}" in: ${line}`).toContain(part);
     }
     /*
-      The breaks term is one phrase covering two settings, and the **default now reports both**.
+      The gaps term is one phrase covering two settings, and the **default now reports both**.
 
       It collapsed to "off" while zero was the default, because a travel distance for a repair that
       was not running was noise. Zero stopped being the default on 2026-09-05: the search proposes
       rather than writes, so nothing needed protecting from a nonzero value, and a tool that shows
       nothing until a slider is found is one nobody finds.
     */
-    expect(line).toContain("breaks up to 12px");
+    expect(line).toContain("gaps up to 12px");
     expect(line).toContain("travel 40px");
   });
 
-  it("collapses the break settings to off when the search is switched off", () => {
+  it("collapses the gap settings to off when the search is switched off", () => {
     // The other half of the conditional, which the default line no longer reaches. Zero is a
     // legitimate setting — it is how a GM silences the search — and reporting a travel distance
     // beside it would describe a search that is not looking for anything.
     const off = normaliseSettings({ trace: { gapFillPx: 0, gapTravelPx: 40 } });
     const line = describeSettings(off);
 
-    expect(line).toContain("breaks off");
+    expect(line).toContain("gaps off");
     expect(line).not.toContain("travel 40px");
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Painting the binary mask into RGBA pixels.
  *
- * How the ink and break masks become pixels — not the whole of what the surface draws, since the
+ * How the ink and gap masks become pixels — not the whole of what the surface draws, since the
  * skeleton and regions layers draw vectors that never pass through here. Ink gets the chosen colour
  * at full alpha; everything else is left completely transparent, so the map shows through untouched
  * wherever the pipeline found nothing. **Opacity is deliberately not applied here** — it is a
@@ -93,7 +93,7 @@ export function paintMask(
 }
 
 /**
- * Paint the gap labels: one colour for a break the repair closed, and optionally another for one it
+ * Paint the gap labels: one colour for a gap the repair closed, and optionally another for one it
  * did not.
  *
  * Two states in one pass rather than two layers, because they are disjoint by construction and a
@@ -101,7 +101,7 @@ export function paintMask(
  * — `DESIGN.md` §8 requires that invented ink never be indistinguishable from read ink, and the
  * filled state is exactly the pixels the repair invented.
  *
- * **`open` may be `null`, and that is what the workspace passes.** A break the search could not
+ * **`open` may be `null`, and that is what the workspace passes.** A gap the search could not
  * finish examining is reported but never repaired, so it has no invented pixels to draw: painting it
  * in the same colour as a repair would say ink was added where none was. It shows as a ring with
  * nothing inside instead.
@@ -125,7 +125,7 @@ export function paintGaps(
       out[p + 3] = 255;
     } else {
       // Cleared explicitly, for the reason `paintMask` gives: a reused buffer holding last run's
-      // marks would draw breaks that are no longer there, which is worse than drawing none.
+      // marks would draw gaps that are no longer there, which is worse than drawing none.
       out[p] = 0;
       out[p + 1] = 0;
       out[p + 2] = 0;

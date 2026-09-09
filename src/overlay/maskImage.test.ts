@@ -1,5 +1,5 @@
 /**
- * How the ink and break masks become pixels.
+ * How the ink and gap masks become pixels.
  *
  * Worth testing rather than eyeballing in a room, because the two ways this fails both look like
  * something else entirely. Ink painted at the wrong offset reads as the *pipeline* having found the
@@ -152,8 +152,8 @@ describe("paintGaps", () => {
     expect([...out.slice(8, 12)]).toEqual([40, 210, 120, 255]);
   });
 
-  it("leaves an unrepaired break unpainted when no colour is given for it", () => {
-    // What the workspace asks for. A break the search could not finish examining has no invented
+  it("leaves an unrepaired gap unpainted when no colour is given for it", () => {
+    // What the workspace asks for. A gap the search could not finish examining has no invented
     // pixels, and painting it like a repair would claim ink was added where none was — it draws as
     // a ring with nothing inside instead.
     const out = paintGaps(labels([1, 2]), null, FILLED);
@@ -162,8 +162,8 @@ describe("paintGaps", () => {
   });
 
   it("clears a reused buffer rather than leaving last run's marks behind", () => {
-    // A break that has been filled, or has gone away entirely, must stop being drawn. Stale alpha
-    // here would show breaks the current settings do not have, which is worse than showing none.
+    // A gap that has been filled, or has gone away entirely, must stop being drawn. Stale alpha
+    // here would show gaps the current settings do not have, which is worse than showing none.
     const first = paintGaps(labels([1, 1, 1]), OPEN, FILLED);
     const second = paintGaps(labels([0, 2, 0]), OPEN, FILLED, first);
     expect(second).toBe(first);

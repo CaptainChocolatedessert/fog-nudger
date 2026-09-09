@@ -38,7 +38,7 @@ const JUNCTION_CLUSTER = [
 ];
 
 /**
- * One straight run with a one-pixel break in it.
+ * One straight run with a one-pixel gap in it.
  *
  * **The spacing was deliberate for reasons that no longer exist.** Both were about welding: a short
  * run's own two ends welded to each other and became a closed nothing, and a run near the edge
@@ -204,8 +204,8 @@ describe("claiming every pixel", () => {
 });
 
 describe("joining where exactly two ends meet", () => {
-  it("leaves a break in the linework open", () => {
-    // Nothing welds any more, so a break stays a break however narrow it is. Closing one is the gap
+  it("leaves a gap in the linework open", () => {
+    // Nothing welds any more, so a gap stays a gap however narrow it is. Closing one is the gap
     // repair's job, where a GM can see it happen.
     const runs = graphOf(BROKEN_RUN).edges.filter((edge) =>
       edge.points.every((point) => point.y === 4),

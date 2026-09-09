@@ -142,7 +142,7 @@ export function describeEdit(merged: boolean, splits: number, overlaps: number):
  *
  * `onNode` is the whole reason drawing needs snapping at all. A wall that merely *ends* where
  * another begins is two coincident points that agree until one of them moves; a wall that shares a
- * node **is** joined, permanently, which is what closing a break in the linework has to mean. So the
+ * node **is** joined, permanently, which is what closing a gap in the linework has to mean. So the
  * tool snaps by default and the layer marks it, exactly as the vertex drag does.
  */
 export interface DrawPoint {

@@ -60,7 +60,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   context.globalAlpha = 1;
 };
 
-/** Wire the layer up. Called in draw order, which is what puts the ink under the breaks. */
+/** Wire the layer up. Called in draw order, which is what puts the ink under the gaps. */
 export function registerInkLayer(): void {
   addPainter("ink", paint);
   onReading((result) => {

@@ -1,16 +1,16 @@
 /**
- * The breaks layer: what the search proposes, and a ring round every break it found.
+ * The gaps layer: what the search proposes, and a ring round every gap it found.
  *
- * A break merges two rooms, which is the worst outcome this project has. The tool that finds them
- * is the Breaks tool inside the Ink step; this draws what it is holding.
+ * A gap merges two rooms, which is the worst outcome this project has. The tool that finds them
+ * is the Gaps tool inside the Ink step; this draws what it is holding.
  *
  * ## It draws a PROPOSAL now, not invented ink
  *
  * Until 2026-09-05 the repair ran inside the pipeline and this drew pixels it had already added to
  * the mask. The search is a tool now: nothing is in the ink until the GM accepts it, so the purple
- * here is **what accepting would add** rather than what was added. The moment a break is accepted
+ * here is **what accepting would add** rather than what was added. The moment a gap is accepted
  * its pixels leave this layer and appear on the paint layer in cyan, which is the picture saying
- * exactly what the design says — an accepted break is added ink like any other.
+ * exactly what the design says — an accepted gap is added ink like any other.
  *
  * That makes the §8 requirement easier to keep rather than harder. There is no invented ink in the
  * mask to be mistaken for read ink, because there is no invented ink at all.
@@ -24,12 +24,12 @@ import { devLog } from "../../devlog";
 import { parseColour } from "../../overlay/maskImage";
 import type { GapMark } from "../../trace/gaps";
 import { bitmapFrom, type Bitmap } from "../bitmap";
-import { RING_MIN_RADIUS, RING_PADDING } from "../breakGesture";
-import { breakMarks, breakRaster } from "../breakSearch";
+import { RING_MIN_RADIUS, RING_PADDING } from "../gapGesture";
+import { gapMarks, gapRaster } from "../gapSearch";
 import { addPainter, invalidate, say, type Painter } from "../shell";
 
 /**
- * The colour a proposed break is drawn in — the one ink on this surface that is in no mask at all.
+ * The colour a proposed gap is drawn in — the one ink on this surface that is in no mask at all.
  *
  * `DESIGN.md` §8 requires that ink this stage made up never be indistinguishable from ink the map
  * contains, and this meets it twice over: a different colour from the ink, at full alpha on its own
@@ -54,10 +54,10 @@ let builtFrom: readonly GapMark[] | null = null;
  * Only the acceptable ones. A channel the flood ran out of budget on is a **guess**, and accepting
  * it is not offered — so painting its pixels would show ink about to be added that no click can add.
  * That is the failure this layer already had once in the other direction: it drew an unexamined
- * break as a solid block indistinguishable from ink the repair had really invented.
+ * gap as a solid block indistinguishable from ink the repair had really invented.
  */
 function rebuild(marks: readonly GapMark[]): void {
-  const raster = breakRaster();
+  const raster = gapRaster();
   if (!raster || marks.length === 0) {
     painted = null;
     return;
@@ -88,28 +88,28 @@ function rebuild(marks: readonly GapMark[]): void {
   const bitmap = bitmapFrom(buffer, raster.width, raster.height, painted);
   if (!bitmap) {
     painted = null;
-    devLog("error", "workspace: could not allocate the break overlay");
+    devLog("error", "workspace: could not allocate the gap overlay");
     // On the state line as well as in the log, matching the other map-sized layers. This layer
     // exists to warn, and a warning that fails quietly is the failure the surface was built to
     // prevent — the log is explicitly not a channel to the GM. The rings still draw; see the painter.
-    say("could not allocate the break fill — rings only", "bad");
+    say("could not allocate the gap fill — rings only", "bad");
     return;
   }
   painted = bitmap;
 }
 
 /**
- * A ring round each break, in screen space.
+ * A ring round each gap, in screen space.
  *
  * Two strokes over one path — a dark halo, then the gap colour inside it — so the ring reads against
  * pale paper and dark stonework alike without anyone choosing a colour for the map in hand.
  *
  * Culled against the viewport, which is what keeps this cheap when zoomed in. Zoomed out every ring
- * is on screen at once, and a map with hundreds of breaks pays for all of them every frame; that is
+ * is on screen at once, and a map with hundreds of gaps pays for all of them every frame; that is
  * the case to watch if the surface ever feels heavy, and it is also a map telling the GM something.
  */
 const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight }) => {
-  const marks = breakMarks();
+  const marks = gapMarks();
   /*
     No freshness gate, because there is nothing to be stale against.
 
@@ -140,7 +140,7 @@ const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight })
     placed correctly even when the fill could not be allocated — which is exactly the case where the
     rings are the only thing left.
   */
-  const raster = breakRaster();
+  const raster = gapRaster();
   const scaleX = raster && raster.width > 0 ? drawWidth / raster.width : view.scale;
   const scaleY = raster && raster.height > 0 ? drawHeight / raster.height : view.scale;
 
@@ -152,7 +152,7 @@ const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight })
       continue;
     }
 
-    // Dashed for a break the flood never examined. With the fill correctly withheld for those, the
+    // Dashed for a gap the flood never examined. With the fill correctly withheld for those, the
     // ring is the only thing carrying them at all, and at map scale it is the only thing carrying
     // any of them — a few pixels are sub-pixel with a whole map on screen. Solid means "this can be
     // accepted, and here is what it would add"; dashed means "found, not proved, not on offer".
@@ -176,11 +176,11 @@ const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight })
  * is holding — one subscriber rather than two, which is also what stops the pair disagreeing about
  * which reading the marks on screen belong to.
  */
-export function registerBreaksLayer(): void {
-  addPainter("breaks", paint);
+export function registerGapsLayer(): void {
+  addPainter("gaps", paint);
 }
 
 /** Repaint, because the tool's marks changed. */
-export function breaksChanged(): void {
+export function gapsChanged(): void {
   invalidate();
 }

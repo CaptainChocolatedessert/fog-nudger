@@ -9,7 +9,7 @@
  * ## Fixed colours, and neither is the ink's
  *
  * The ink is a colour the GM chooses because no single one works on every map. These two are fixed,
- * the same arrangement the break fill has and resting on the same rule: what the map said and what
+ * the same arrangement the gap fill has and resting on the same rule: what the map said and what
  * we did to it must never look alike (`DESIGN.md` §8). Amber for ink taken away, cyan for ink put
  * in — and both at full alpha whatever the ink opacity is set to, so a GM who has tinted the mask
  * down to compare it against the linework underneath has not also turned their own edits down.
@@ -46,7 +46,7 @@ import { addPainter, invalidate, say, type Frame, type Painter } from "../shell"
 /**
  * Kept in step with `.suppress-key` and `.addink-key` in the page's stylesheet by hand.
  *
- * Amber and cyan are chosen against what is already on this canvas: red-by-default ink, purple break
+ * Amber and cyan are chosen against what is already on this canvas: red-by-default ink, purple gap
  * fills, green skeleton, blue graph handles, and the six cycling region colours. They are also the
  * two that read as opposites, which is what the pair means.
  */
@@ -246,7 +246,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }: Frame) => {
  *
  * Only while a brush is actually in hand. The paint is drawn in the Walls step too, where it is
  * being *looked at* rather than edited, and a ring there would promise a gesture that step does not
- * have — as would one in the Ink step with the break tool or no tool selected.
+ * have — as would one in the Ink step with the gap tool or no tool selected.
  */
 function drawBrushRing(
   context: CanvasRenderingContext2D,
@@ -286,7 +286,7 @@ function widthFor(kind: PaintKind): number {
   return kind === "suppress" ? overlay.suppressBrushPx : overlay.inkBrushPx;
 }
 
-/** Wire the layer up. Registered over the ink and under the breaks — see the composition root. */
+/** Wire the layer up. Registered over the ink and under the gaps — see the composition root. */
 export function registerPaintLayer(): void {
   addPainter("paint", paint);
   // A load, a commit, a discard or a mode opening all replace a layer object, which the painter

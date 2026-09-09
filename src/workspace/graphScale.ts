@@ -25,7 +25,7 @@
  * delete from the bottom**, so the observed minimum is the most mobile quantity there is: prune at
  * budget B and the shortest surviving spur is B. A tracking bottom would chase the slider upward
  * every pass, so "30%" would mean a larger bite each time — which is exactly the non-monotonicity
- * that collapsed the two-slider break design and is worth refusing twice.
+ * that collapsed the two-slider gap design and is worth refusing twice.
  *
  * ## Measured once per opening, not once per derive
  *

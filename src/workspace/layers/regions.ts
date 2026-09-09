@@ -10,7 +10,7 @@
  *
  * ## Vectors, not a bitmap
  *
- * Unlike the ink and the breaks, this is drawn as paths every frame rather than rasterised once. The
+ * Unlike the ink and the gaps, this is drawn as paths every frame rather than rasterised once. The
  * regions *are* vectors — a few hundred polygons of a few thousand points between them — and
  * rasterising them at map resolution to draw them scaled would throw away the sharpness that makes a
  * boundary judgeable at zoom, which is the whole reason to look at them.

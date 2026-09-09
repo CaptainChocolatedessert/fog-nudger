@@ -71,7 +71,7 @@ export type StepId = "map" | "ink" | "walls" | "edit" | "view";
   drawing both would have put two answers to one question on the canvas -- and the graph is the
   honest one, because it is what gets stored.
 */
-export const LAYERS = ["ink", "paint", "breaks", "regions", "graph"] as const;
+export const LAYERS = ["ink", "paint", "gaps", "regions", "graph"] as const;
 
 /*
   One rule about `paint`, because it is the layer that does not follow the convention.
@@ -82,12 +82,12 @@ export const LAYERS = ["ink", "paint", "breaks", "regions", "graph"] as const;
   downstream. The concrete bite is the Walls step: its skeleton is thinned from the whole composite,
   so without both colours the centreline and the ink under it visibly disagree.
 
-  `breaks` is drawn in exactly one step, Ink, which is where its tool runs. It was in Walls too while
+  `gaps` is drawn in exactly one step, Ink, which is where its tool runs. It was in Walls too while
   the search ran on every recompose and there was always something to show; on demand, that step
   would carry an empty layer in the ordinary case.
 
   They do not compete for the ink's own channel. The mask is drawn in the GM's chosen colour and
-  these two in fixed colours of their own, which is the same arrangement the break fill has and rests
+  these two in fixed colours of their own, which is the same arrangement the gap fill has and rests
   on the same rule: what the map said and what we did to it must never look alike (`DESIGN.md` §8).
 */
 
@@ -219,8 +219,9 @@ export const STEPS: readonly Step[] = [
       "What the trace calls a mark, which marks it keeps, and the tools for correcting that by hand. " +
       "The sliders decide what counts as ink everywhere at once; below them are three tools that " +
       "work on one spot &mdash; <b>Suppress</b> to cover marks the trace should ignore, <b>Add " +
-      "ink</b> to draw linework the map lacks, and <b>Breaks</b> to hunt for gaps in a wall, which " +
-      "are the faults that merge two rooms and are far too small to spot by eye. Everything the " +
+      "ink</b> to draw linework the map lacks, and <b>Gaps</b> to hunt for places a wall stops " +
+      "short, which are the faults that merge two rooms and are far too small to spot by eye. " +
+      "Everything the " +
       "tools write goes into a layer of your own that no slider here can undo.",
     /*
       One step, and it took two others into itself on 2026-09-05 (user).
@@ -243,7 +244,7 @@ export const STEPS: readonly Step[] = [
       controls stayed, under the Linework sub-heading: they are ink *filters*, deciding which marks
       survive rather than what a wall is.
     */
-    layers: ["ink", "paint", "breaks"],
+    layers: ["ink", "paint", "gaps"],
     /*
       A brush takes every press, which is what `brush` means -- and here it is qualified by the tool.
 
@@ -292,13 +293,13 @@ export const STEPS: readonly Step[] = [
         parameters: ["inkBrushPx"],
       },
       {
-        tool: "breaks",
-        title: "Breaks",
+        tool: "gaps",
+        title: "Gaps",
         blurb:
           "A wall with a section missing merges two rooms, which is the worst this can get wrong " +
           "&mdash; and a crack four pixels wide is not something anyone finds by scanning a map. " +
           "This searches for them and rings each one in <b class='gap-key'>purple</b>. <b>Click " +
-          "inside a ring</b> to close that break, or close them all with the button below. " +
+          "inside a ring</b> to close that gap, or close them all with the button below. " +
           "<b>Nothing is added until you accept it</b>, and what you accept becomes ordinary added " +
           "ink. A <b>dashed</b> ring is a channel the search could not finish examining and will " +
           "not offer. Dragging pans.",
@@ -341,12 +342,12 @@ export const STEPS: readonly Step[] = [
       dissolved step showed the partition on bare map. The lever for it is the ink opacity, one step
       up rather than here.
 
-      **The breaks were here too, and are not any more** (2026-09-05). That was the one argued
+      **The gaps were here too, and are not any more** (2026-09-05). That was the one argued
       exception to "each step shows its own layer", on the grounds that a severed wall becomes
       visible here. What retired it is that the search is a **tool** now, run when the GM asks rather
       than on every recompose: there is nothing to draw here unless something ran it. **The cost is
       real and is the one to watch in a room** -- a wall this step's own filter severed no longer
-      announces itself, and finding it means running the Breaks tool one step up.
+      announces itself, and finding it means running the Gaps tool one step up.
     */
     layers: ["ink", "paint", "regions", "graph"],
     drag: "pan",
