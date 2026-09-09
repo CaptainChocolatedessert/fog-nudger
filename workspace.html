@@ -316,12 +316,17 @@
         color: #e8e9f5;
       }
       /*
-        A step the map gate has not opened yet. Dimmed rather than hidden, so the order of what is
-        coming is visible from the first frame — the accordion's order is the cascade, and a cascade
-        with its later half missing does not teach it.
+        A group the map gate has not opened yet. Dimmed rather than hidden, so the order of what is
+        coming is visible from the first frame — the rail's order is the cascade, and a cascade with
+        its later half missing does not teach it.
+
+        **0.65 rather than 0.4, and the number is measured.** At 0.4 the header computed to 2.17:1
+        against the panel, which is below even the 3:1 floor for non-text UI — so a heading that
+        exists precisely to be *read* while inactive could not be. 0.65 lands at 3.74:1: still
+        unmistakably disabled beside a live header at 7.26:1, and legible.
       */
       .step.locked > .step-header {
-        opacity: 0.4;
+        opacity: 0.65;
         cursor: default;
       }
       /* The open step is named in the accent colour and marked down the edge, because an accordion

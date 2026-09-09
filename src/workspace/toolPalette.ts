@@ -33,9 +33,9 @@
  */
 
 import { STEPS, toolsOf, type Drag, type ToolChoice } from "../steps";
-import { currentPaintTool, requestPaintMode, setPaintTool } from "./paintTool";
+import { requestPaintMode, setPaintTool } from "./paintTool";
 import { workspaceMode } from "./mode";
-import { currentTool as currentWallTool, setTool as setWallTool, type WallTool } from "./wallEdit";
+import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { onStageChange, wallGraph } from "./stage";
 
@@ -54,15 +54,22 @@ function hintFor(choice: ToolChoice): string {
 }
 
 /**
- * The tool in hand, recovered from the two modules that hold it rather than duplicated here.
+ * The tool in hand. **Held here, not recovered from the modules underneath.**
  *
- * A third copy would be a third thing to keep in step, and the failure would be silent: the palette
- * showing one tool pressed while a press did something else.
+ * The first version derived it — the paint tool in the ink mode, the wall tool in the editor — on the
+ * reasoning that a third copy would be a third thing to keep in step. That derivation is *lossy*, and
+ * it showed the moment the editor was opened: `wallEdit` has no idle state, so panning there had to
+ * leave `move` selected with the drag bound to `pan`, and the strip then drew Move as pressed while a
+ * press actually panned. **The palette said one thing and the surface did another**, which is the
+ * exact failure the derivation was supposed to prevent.
+ *
+ * So this owns the answer and `apply` pushes it down. The modules underneath keep whatever they need
+ * to represent, and what a press does is decided by the drag binding rather than by either of them.
  */
+let tool: Tool = "pan";
+
 export function currentTool(): Tool {
-  if (workspaceMode() === "edit") return currentWallTool();
-  const paint = currentPaintTool();
-  return paint === "none" ? "pan" : paint;
+  return tool;
 }
 
 const listeners: ((tool: Tool) => void)[] = [];
@@ -92,23 +99,27 @@ function dragFor(tool: Tool): Drag {
  * reason it always did — leaving a brush and coming back inside the second a write takes is a write
  * and then an open.
  */
-function apply(tool: Tool): void {
+function apply(next: Tool): void {
+  tool = next;
   if (workspaceMode() === "edit") {
-    setWallTool(tool === "pan" ? "move" : (tool as WallTool));
-    // Pan in the editor is the absence of a wall tool, and the wall modules have no such state —
-    // the drag binding is what actually decides, so it is enough to leave `move` selected and not
-    // hand it the press.
+    /*
+      `wallEdit` has no idle state, so pan leaves whatever was there. That is harmless *because the
+      drag binding decides*: with `pan` bound, the wall handler is never offered the press, so which
+      verb it would have used cannot matter. What must not happen is the strip reading its answer
+      back — see `currentTool`.
+    */
+    if (next !== "pan") setWallTool(next as WallTool);
   } else {
-    setPaintTool(tool === "pan" ? "none" : (tool as "suppress" | "ink" | "gaps"));
+    setPaintTool(next === "pan" ? "none" : (next as "suppress" | "ink" | "gaps"));
   }
-  setDrag(dragFor(tool));
-  requestPaintMode(tool === "suppress" || tool === "ink" || tool === "gaps");
+  setDrag(dragFor(next));
+  requestPaintMode(next === "suppress" || next === "ink" || next === "gaps");
 }
 
-export function setTool(tool: Tool): void {
-  apply(tool);
+export function setTool(next: Tool): void {
+  apply(next);
   render();
-  for (const listener of listeners) listener(tool);
+  for (const listener of listeners) listener(next);
   invalidate();
 }
 
@@ -129,8 +140,14 @@ export function render(): void {
   const strip = document.getElementById("tools");
   if (strip) {
     strip.replaceChildren();
-    const active = currentTool();
     const usable = workspaceMode() === "edit" ? wallGraph() !== null : true;
+    /*
+      A tool that has become unavailable cannot stay in hand. Removing the walls from the panel is
+      the way there, and leaving Erase selected over a map with no graph would show a pressed button
+      whose presses do nothing.
+    */
+    if (!usable && tool !== "pan") apply("pan");
+    const active = currentTool();
     let band: ToolChoice["band"] | null = null;
 
     for (const choice of toolsOf(workspaceMode())) {
