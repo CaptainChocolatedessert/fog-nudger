@@ -95,11 +95,27 @@
         width: 22rem;
         max-width: 42vw;
         box-sizing: border-box;
-        padding: 0.9rem 1rem 1.4rem;
-        overflow-y: auto;
+        /* A column, so the head can stay put while the groups scroll under it. */
+        display: flex;
+        flex-direction: column;
         background: rgba(16, 18, 36, 0.94);
         border-right: 1px solid rgba(187, 153, 255, 0.25);
         backdrop-filter: blur(6px);
+      }
+      #panel-head {
+        flex: none;
+        padding: 0.9rem 1rem 0;
+      }
+      /*
+        `min-height: 0` is what makes the scroll actually happen: a flex child's default is
+        `min-height: auto`, which refuses to shrink below its content, so the body would grow the
+        column past the viewport and take the head off the top with it rather than scrolling.
+      */
+      #panel-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 0 1rem 1.4rem;
       }
       #panel.hidden {
         display: none;
@@ -272,7 +288,7 @@
         happen to be expanded.
       */
       #tool-hint {
-        margin: 0 0 0.8rem;
+        margin: 0 0 0.9rem;
         padding: 0.45rem 0.6rem;
         border-left: 2px solid #bb99ff;
         background: rgba(187, 153, 255, 0.09);
@@ -558,21 +574,29 @@
       <canvas id="canvas"></canvas>
 
       <div id="panel">
-        <!-- Replaced at start-up with the mode's own name. This is the ink mode's, which is the
-             fallback for an unrecognised query. -->
-        <h1 id="mode-name">Reading the map</h1>
-        <p class="sub" id="map-name">Loading…</p>
+        <!--
+          The head does not scroll. It says where you are and what a press will do, and both of those
+          have to stay true while you are reading something further down — the hint scrolled away
+          exactly when a GM was deep in a group and least able to remember which tool was in hand.
+        -->
+        <div id="panel-head">
+          <!-- Replaced at start-up with the mode's own name. This is the ink mode's, which is the
+               fallback for an unrecognised query. -->
+          <h1 id="mode-name">Reading the map</h1>
+          <p class="sub" id="map-name">Loading…</p>
+          <p id="tool-hint"></p>
+        </div>
 
         <!--
-          The steps and the persistent View group, both built from the declaration in `steps.ts`
+          The groups and the persistent View group, both built from the declaration in `steps.ts`
           rather than written out here. Two headings in the markup and a third in the code was how
-          the sections drifted apart in the first place, and a step now decides what the canvas
-          paints, so it cannot be described in a place the canvas cannot read.
+          the sections drifted apart in the first place, and a group decides what the canvas paints,
+          so it cannot be described in a place the canvas cannot read.
         -->
-        <p id="tool-hint"></p>
-
-        <div id="steps"></div>
-        <div id="view-group"></div>
+        <div id="panel-body">
+          <div id="steps"></div>
+          <div id="view-group"></div>
+        </div>
       </div>
 
       <div id="tools"></div>
