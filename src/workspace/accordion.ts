@@ -55,24 +55,28 @@ import { recomputeFor, resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
 import { workspaceMode } from "./mode";
-import { invalidate, say, setActiveLayers, setDrag } from "./shell";
+import { invalidate, say, setActiveLayers } from "./shell";
 
 /**
- * Which step is open, or `null` for none.
+ * Which groups are expanded. Several may be, and none is a legitimate state.
  *
  * Not stored in the scene: it is where the GM is looking, not a setting, and a workspace that
- * reopened in the step you left last session would be guessing.
+ * reopened where you left it last session would be guessing.
  *
- * It starts at the first step — Map — because that is the only honest place to be before anything is
- * known about the scene, and the one step that can do something about there being no map.
+ * **Exclusivity went when the tool palette took the drag** (user, 2026-09-08). It was never wanted
+ * for its own sake — it was there because a step bound the gesture, so two open steps would have
+ * been two meanings for one press. With the verb chosen elsewhere a heading decides nothing but what
+ * is on screen, and forcing one closed to open another was making the commonest move in the whole
+ * job expensive: look at the rooms, spot a merged one, go back to the ink, look again.
  *
- * **`null` became reachable 2026-09-05** (user): clicking an open header closes it. The accordion
- * was exclusive-open with no way to shut, so the whole map could never be seen without the controls
- * over part of it — and on a surface whose entire job is looking at a map, that is the one state it
- * could not reach. Nothing open means no layers and a plain pan, which is a coherent mode rather
- * than a gap: the map, and nothing of ours on top of it.
+ * It starts with the first group expanded, which is the only honest place to be before anything is
+ * known about the scene, and the one that can do something about there being no map.
  */
-let open: StepId | null = workspaceSteps(workspaceMode())[0]?.id ?? null;
+const open = new Set<StepId>();
+{
+  const first = workspaceSteps(workspaceMode())[0]?.id;
+  if (first) open.add(first);
+}
 
 /**
  * Whether a step can be entered at all yet.
@@ -124,15 +128,18 @@ export function registerStepContent(
 }
 
 /**
- * Move to a step, unless the GM has already chosen one.
+ * Expand a group at start-up, unless the GM has already chosen for themselves.
  *
- * **`touched` covers closing as well as opening**, which is what stops start-up reopening a step the
- * GM has just shut. It is set by any header click, and a click that closes is still a choice about
- * where to be.
+ * **`touched` covers collapsing as well as expanding**, which is what stops start-up reopening a
+ * group the GM has just shut. It is set by any header click, and a click that closes is still a
+ * choice about what to look at.
+ *
+ * It only ever *adds*, now that several groups can be expanded: moving the GM on when a map turns
+ * out to be chosen should not take away whatever else they were reading.
  */
 export function advanceTo(id: StepId): void {
-  if (touched || open === id) return;
-  open = id;
+  if (touched || open.has(id)) return;
+  open.add(id);
   renderPanel();
 }
 
@@ -259,20 +266,23 @@ export function onStepChange(listener: (step: StepId | null) => void): void {
 }
 
 /**
- * Tell the canvas what the open step wants. The one place a step's declaration becomes behaviour.
+ * Tell the canvas what the expanded groups want.
  *
- * **With nothing open it says so rather than returning early**, which is the whole of what makes
- * closing a step safe. An early return would leave the last step's layers drawn and its drag bound,
- * so a closed accordion would show a mode the GM had just left and hand a brush every press with no
- * tool picker on screen to say so. Nothing open is no layers and a plain pan, told to everyone who
- * subscribes — which is also how a paint mode gets finished and its work saved.
+ * **The union, because several may be expanded.** Each group still declares the layers it is about,
+ * and what changed is only that more than one can be asking at once — which is what a GM comparing
+ * the ink against the rooms it produced is doing on purpose.
+ *
+ * **It no longer binds the drag.** That moved to the tool palette, and this is the seam that made
+ * exclusivity necessary: while a heading chose the verb, two expanded headings were two meanings for
+ * one press. With nothing expanded there are simply no layers, which stays a coherent state — the
+ * map, and nothing of ours on top of it.
  */
 function applyOpenStep(): void {
-  const step = workspaceSteps(workspaceMode()).find((candidate) => candidate.id === open);
-  setActiveLayers(step?.layers ?? []);
-  setDrag(step?.drag ?? "pan");
-  for (const listener of openListeners) listener.changed(listener.id === open);
-  for (const listener of stepListeners) listener(open);
+  const steps = workspaceSteps(workspaceMode()).filter((step) => open.has(step.id));
+  const layers = [...new Set(steps.flatMap((step) => step.layers))];
+  setActiveLayers(layers);
+  for (const listener of openListeners) listener.changed(open.has(listener.id));
+  for (const listener of stepListeners) listener(steps[steps.length - 1]?.id ?? null);
   invalidate();
 }
 
@@ -306,14 +316,15 @@ export function renderPanel(): void {
       step that has just become unreachable would show its layers over nothing and leave its header
       unable to close it.
     */
-    const current = workspaceSteps(workspaceMode()).find((step) => step.id === open);
-    if (current && locked(current)) open = "map";
+    for (const step of workspaceSteps(workspaceMode())) {
+      if (locked(step)) open.delete(step.id);
+    }
 
     for (const step of workspaceSteps(workspaceMode())) {
       const shut = locked(step);
       const section = document.createElement("section");
       section.className = "step";
-      if (step.id === open) section.classList.add("open");
+      if (open.has(step.id)) section.classList.add("open");
       if (shut) section.classList.add("locked");
 
       const header = document.createElement("button");
@@ -322,11 +333,12 @@ export function renderPanel(): void {
       header.textContent = step.title;
       header.disabled = shut;
       if (shut) header.title = "Choose a map first";
-      header.setAttribute("aria-expanded", String(step.id === open));
+      header.setAttribute("aria-expanded", String(open.has(step.id)));
       header.addEventListener("click", () => {
-        // Clicking the open one closes it. Exclusivity is unchanged — there is still never more than
-        // one open — and what this adds is the state where there is none.
-        open = open === step.id ? null : step.id;
+        // A plain toggle. Nothing else closes, which is the point: reading the ink controls and the
+        // wall controls at the same time is the ordinary case rather than a thing to pay for.
+        if (open.has(step.id)) open.delete(step.id);
+        else open.add(step.id);
         touched = true;
         renderPanel();
       });

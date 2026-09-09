@@ -33,7 +33,7 @@ import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
 import { STEPS, groupControls, toolGroups } from "../steps";
 import { confirmAction } from "./confirmDialog";
 import { renderPanel } from "./accordion";
-import { brushKind, type PaintTool } from "./paintGesture";
+import { brushKind } from "./paintGesture";
 import { anyUnsavedPaint, hasUnsavedPaint, paintRaster, workingLayer } from "./paintState";
 import {
   abandonPaint,
@@ -41,7 +41,6 @@ import {
   currentPaintTool,
   currentVerb,
   finishPaint,
-  setPaintTool,
   setVerb,
 } from "./paintTool";
 import { settingRow } from "./settingRows";
@@ -68,39 +67,23 @@ export function renderInkTools(body: HTMLElement): void {
   const tools = toolGroups(step);
   const active = currentPaintTool();
 
+  /*
+    The picker itself moved to the tool strip, which is what lets the rail stop being exclusive.
+
+    What stays here is the chosen tool's own controls — its brush width, its verb, its Save. Those
+    belong beside the sliders whose results they correct, and the strip is deliberately narrow.
+  */
   const heading = document.createElement("h3");
   heading.textContent = "Correcting it by hand";
-  const lead = document.createElement("p");
-  lead.className = "sub";
-  lead.innerHTML =
-    "Three tools, all writing into layers of your own that survive every re-read. Pick one to use " +
-    "it; <b>pick it again to put it down</b>, which is when dragging pans as usual.";
-  body.append(heading, lead);
-
-  const row = document.createElement("div");
-  row.className = "step-actions";
-  for (const group of tools) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chip";
-    button.textContent = group.title;
-    // `aria-pressed` is the selected style already, so it carries the look and the meaning together
-    // rather than a class saying the same thing beside it.
-    button.setAttribute("aria-pressed", String(group.tool === active));
-    button.addEventListener("click", () => {
-      setPaintTool(group.tool === active ? "none" : (group.tool as PaintTool));
-      renderPanel();
-    });
-    row.append(button);
-  }
-  body.append(row);
+  body.append(heading);
 
   const chosen = tools.find((group) => group.tool === active);
   if (!chosen) {
     const idle = document.createElement("p");
-    idle.className = "hint";
+    idle.className = "sub";
     idle.textContent =
-      "No tool in hand, so dragging pans and the sliders above are all that is acting on the map.";
+      "Pick a tool from the strip to correct the reading by hand. Each writes into a layer of your " +
+      "own that survives every re-read.";
     body.append(idle);
   } else {
     const hint = document.createElement("p");

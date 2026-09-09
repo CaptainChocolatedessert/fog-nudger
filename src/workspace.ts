@@ -40,7 +40,8 @@ import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devl
 import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
-import { onStepChange, onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
+import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
+import { registerToolPalette } from "./workspace/toolPalette";
 import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
@@ -56,7 +57,7 @@ import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderInkTools } from "./workspace/paintControls";
-import { finishPaint, registerPaintTool, requestPaintMode } from "./workspace/paintTool";
+import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
@@ -188,17 +189,16 @@ registerPaintTool();
 onStepOpen("walls", (open) => watchRegions("walls", open));
 onStepOpen("edit", (open) => watchRegions("edit", open));
 /*
-  Whether the paint mode is open, which is whether Ink is the step the GM is in.
+  The paint mode follows the **tool**, not a heading, and `toolPalette` is where that happens.
 
-  `onStepChange` rather than `onStepOpen`, and the reason survived the merge in a weaker form: it
-  says where the GM now *is*, once, where the per-step listeners deliver a move as an arrival and a
-  departure in registration order. With one painting step that ordering no longer matters, but the
-  destination is still the honest thing to be told, and `requestPaintMode` serialises what follows —
-  leaving Ink and coming back inside the second the write takes is a write and then an open.
+  It was `onStepChange((step) => requestPaintMode(step === "ink"))` while a step was the mode. Under
+  a rail that no longer forces one section shut, a heading says nothing about what a press does — so
+  a GM could collapse Ink with a brush still in hand and the working copies would have gone out from
+  under it. Tying the copies to the brush is also what they always meant.
 */
-onStepChange((step) => {
-  requestPaintMode(step === "ink");
-});
+
+// The tool strip, which owns what a press means and is why the rail below it need not be exclusive.
+registerToolPalette();
 
 // The one step whose body is not built from parameters: choosing a map is a list of what the scene
 // holds, not a number to turn.

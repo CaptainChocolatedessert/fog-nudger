@@ -55,6 +55,20 @@ const PINCH_SENSITIVITY = 1;
 const surface = document.getElementById("surface");
 const canvas = document.getElementById("canvas");
 const panel = document.getElementById("panel");
+const tools = document.getElementById("tools");
+
+/**
+ * How much of the window the controls occupy down the left.
+ *
+ * Two elements rather than one since the tool strip arrived, and they hide together — so anything
+ * that wants "the space the map actually has" asks here rather than measuring the rail and being a
+ * strip's width out.
+ */
+function chromeWidth(): number {
+  const visible = (el: HTMLElement | null) =>
+    el && !el.classList.contains("hidden") ? el.getBoundingClientRect().width : 0;
+  return visible(panel) + visible(tools);
+}
 const stateLine = document.getElementById("state");
 const mapNameLine = document.getElementById("map-name");
 
@@ -277,7 +291,9 @@ function fitMap(): void {
   const { width, height } = viewportSize();
   // Fitted into the space left of the controls, so "fit" means what a GM can actually see rather
   // than what is nominally on screen.
-  const panelWidth = panel && !panel.classList.contains("hidden") ? panel.getBoundingClientRect().width : 0;
+  // The rail *and* the tool strip, which are one band of chrome down the left however many
+  // elements it takes to draw. Measuring only the rail put the map a strip's width off centre.
+  const panelWidth = chromeWidth();
   const fitted = fitToViewport(
     { width: mapImage.naturalWidth, height: mapImage.naturalHeight },
     { width: Math.max(1, width - panelWidth), height },
@@ -873,7 +889,10 @@ document.getElementById("exit-anyway")?.addEventListener("click", () => exitAnyw
 document.getElementById("close")?.addEventListener("click", () => void close());
 document.getElementById("fit")?.addEventListener("click", fitMap);
 document.getElementById("toggle-panel")?.addEventListener("click", (event) => {
+  // Both halves of the chrome, together. Hiding the controls to see the whole map should not leave
+  // a strip of buttons floating over it.
   panel?.classList.toggle("hidden");
+  tools?.classList.toggle("hidden");
   const button = event.currentTarget;
   if (button instanceof HTMLButtonElement) {
     const showing = !panel?.classList.contains("hidden");

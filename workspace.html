@@ -198,11 +198,98 @@
       }
 
       /* ----------------------------------------------------------------------------------------
-         The steps, as an exclusive accordion.
+         The tool strip: what a press means, chosen once for the whole surface.
+
+         Docked beside the rail rather than inside a step, which is the change that lets the rail
+         stop being exclusive. While a heading bound the drag, two expanded headings were two
+         meanings for one press; with the verb chosen here a heading decides only what is on screen.
+
+         Banded in the order the rail is numbered by, so reading down the strip and reading down the
+         rail meet the same three subjects in the same sequence.
+         ---------------------------------------------------------------------------------------- */
+      #tools {
+        position: fixed;
+        top: 0;
+        left: 22rem;
+        bottom: 0;
+        width: 5.6rem;
+        box-sizing: border-box;
+        padding: 0.9rem 0.5rem;
+        overflow-y: auto;
+        background: rgba(12, 14, 30, 0.94);
+        border-right: 1px solid rgba(187, 153, 255, 0.25);
+        backdrop-filter: blur(6px);
+      }
+      #tools.hidden {
+        display: none;
+      }
+      .tool-band {
+        margin: 0 0 0.3rem;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #7f86ad;
+      }
+      .tool-rule {
+        height: 1px;
+        margin: 0.7rem 0;
+        background: rgba(187, 153, 255, 0.18);
+      }
+      button.tool {
+        display: block;
+        width: 100%;
+        margin: 0 0 0.25rem;
+        padding: 0.35rem 0.4rem;
+        border-radius: 0.3rem;
+        border: 1px solid transparent;
+        background: transparent;
+        color: #c2c7e4;
+        font: inherit;
+        font-size: 0.78rem;
+        text-align: left;
+        cursor: pointer;
+      }
+      button.tool:hover:not(:disabled) {
+        background: rgba(187, 153, 255, 0.14);
+        color: #e8e9f5;
+      }
+      button.tool[aria-pressed="true"] {
+        background: #bb99ff;
+        border-color: #bb99ff;
+        color: #14162a;
+        font-weight: 600;
+      }
+      button.tool:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      /*
+        What the tool in hand does, at the top of the rail rather than beside the tool's controls.
+
+        Under a rail that no longer forces one section shut, those controls may be collapsed while
+        the tool is still in hand — and what a press will do must not depend on which headings
+        happen to be expanded.
+      */
+      #tool-hint {
+        margin: 0 0 0.8rem;
+        padding: 0.45rem 0.6rem;
+        border-left: 2px solid #bb99ff;
+        background: rgba(187, 153, 255, 0.09);
+        font-size: 0.8rem;
+        color: #c2c7e4;
+      }
+      #tool-hint:empty {
+        display: none;
+      }
+
+      /* ----------------------------------------------------------------------------------------
+         The groups, as a rail rather than an exclusive accordion.
 
          Every header stays on screen in order, so the cascade is a shape rather than something to
-         remember, and exactly one body is open — which is what makes "one step, one set of layers,
-         one meaning for a drag" true rather than merely intended.
+         remember. **Several may be expanded at once**, which is what the tool strip bought: while a
+         step bound the drag, exclusivity was what kept "one meaning for a press" true, and forcing
+         one section shut to read another made the commonest move in the job expensive.
          ---------------------------------------------------------------------------------------- */
       .step {
         border-top: 1px solid rgba(187, 153, 255, 0.18);
@@ -422,7 +509,7 @@
           the window is; the outer one stops a narrow window producing a negative width, which CSS
           discards as invalid — leaving exactly the unbounded line this is here to prevent.
         */
-        max-width: max(12rem, min(34rem, calc(100vw - 26rem)));
+        max-width: max(12rem, min(34rem, calc(100vw - 32rem)));
         text-align: left;
       }
       /*
@@ -477,9 +564,13 @@
           the sections drifted apart in the first place, and a step now decides what the canvas
           paints, so it cannot be described in a place the canvas cannot read.
         -->
+        <p id="tool-hint"></p>
+
         <div id="steps"></div>
         <div id="view-group"></div>
       </div>
+
+      <div id="tools"></div>
 
       <div id="bar">
         <button class="chip" id="fit" title="Fit the whole map">Fit</button>

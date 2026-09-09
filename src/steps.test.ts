@@ -35,6 +35,7 @@ import {
   stepsOf,
   resetStep,
   STEPS,
+  TOOLS,
   stepControls,
   stepParameters,
   toolGroups,
@@ -238,13 +239,40 @@ describe("a step's groups", () => {
     }
   });
 
-  it("only lets a step with tools take the drag those tools need", () => {
-    // A tool picker in a step that pans would be three buttons that change nothing about a press.
-    // The converse is not asserted: a `brush` step with no declared tools is what an unconditional
-    // brush would look like, and nothing rules that out.
+  it("offers a tool for every group of tool controls", () => {
+    /*
+      The coupling that replaced `Step.drag`.
+
+      A group naming a tool is drawn only while that tool is in hand, so a group whose tool the
+      palette does not offer declares controls nothing can ever reveal. This is the check that was
+      free while a step declared its own drag and had to be written down once the verb moved out.
+    */
+    const offered = new Set(TOOLS.map((tool) => tool.id));
     for (const step of STEPS) {
-      if (toolGroups(step).length === 0) continue;
-      expect(step.drag, step.id).not.toBe("pan");
+      for (const group of toolGroups(step)) {
+        expect(offered, `${step.id}/${group.tool}`).toContain(group.tool);
+      }
+    }
+  });
+
+  it("puts every tool in the modes its controls are declared in", () => {
+    // A tool offered where its controls are not is a button that reveals nothing.
+    for (const tool of TOOLS) {
+      const owning = STEPS.filter((step) => toolGroups(step).some((g) => g.tool === tool.id));
+      for (const step of owning) {
+        for (const mode of tool.modes) {
+          expect(step.modes, `${tool.id} in ${mode}`).toContain(mode);
+        }
+      }
+    }
+  });
+
+  it("only lets `pan` mean a plain pan", () => {
+    // Any other tool taking `pan` would be a button that changes nothing about a press — the same
+    // defect the old per-step assertion guarded, one level down.
+    for (const tool of TOOLS) {
+      if (tool.id === "pan") continue;
+      expect(tool.drag, tool.id).not.toBe("pan");
     }
   });
 

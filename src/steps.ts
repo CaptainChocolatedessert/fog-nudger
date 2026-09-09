@@ -107,6 +107,101 @@ export type LayerId = (typeof LAYERS)[number];
  */
 export type Drag = "pan" | "brush" | "edit";
 
+/*
+  **A step no longer declares this.** It used to carry `drag`, which is what forced the accordion to
+  be exclusive: two expanded steps would have been two meanings for one press. The verb moved to the
+  tool palette, so a heading now decides only what is on screen and several can be expanded at once.
+
+  The type stays because the shell still dispatches on it — it is how a press finds the handler that
+  wants it — and `toolPalette.ts` is what maps a tool onto it now.
+*/
+
+/**
+ * Every tool, and what a press means while it is in hand.
+ *
+ * **Declared here rather than in the palette that draws it**, for the reason everything else in this
+ * file is: the palette imports the shell and the SDK, so it cannot be reached from a node test, and
+ * a tool list nothing can check is one that drifts from the groups whose controls it reveals.
+ *
+ * `pan` is a tool rather than the absence of one. The surface used to reach the same state by
+ * clicking the selected tool a second time to put it down, which is undiscoverable and looks exactly
+ * like a tool that declined the press.
+ */
+export interface ToolChoice {
+  readonly id: string;
+  readonly label: string;
+  /** The band it sits in, which is the same order the rail is numbered by. */
+  readonly band: "navigate" | "ink" | "walls";
+  readonly modes: readonly WorkspaceMode[];
+  /**
+   * What a plain left-drag does while this tool is in hand.
+   *
+   * The gap tool takes `brush` and not `pan`, which looks wrong and is not: the brush branch is what
+   * offers a press to the paint tool at all, and that tool declines a press outside every ring so it
+   * falls through to a pan. Giving it `pan` would mean a click inside a ring never reached it.
+   */
+  readonly drag: Drag;
+  /**
+   * What a press does, shown while the tool is in hand. May carry markup.
+   *
+   * Empty for a tool whose controls carry their own blurb — the ink tools each have a step group,
+   * and repeating its sentence here would be two copies to keep in step.
+   */
+  readonly hint: string;
+}
+
+export const TOOLS: readonly ToolChoice[] = [
+  {
+    id: "pan",
+    label: "Pan",
+    band: "navigate",
+    modes: ["ink", "edit"],
+    drag: "pan",
+    hint:
+      "Drag to move the map, and nothing here changes it. Click once without dragging to ask what " +
+      "the trace made of that pixel.",
+  },
+  { id: "suppress", label: "Suppress", band: "ink", modes: ["ink"], drag: "brush", hint: "" },
+  { id: "ink", label: "Add ink", band: "ink", modes: ["ink"], drag: "brush", hint: "" },
+  { id: "gaps", label: "Gaps", band: "ink", modes: ["ink"], drag: "brush", hint: "" },
+  {
+    id: "move",
+    label: "Move",
+    band: "walls",
+    modes: ["edit"],
+    drag: "edit",
+    hint:
+      "Drag a point to move it. Drop it on another to join them — hold <b>Shift</b> to keep them " +
+      "apart.",
+  },
+  {
+    id: "draw",
+    label: "Draw",
+    band: "walls",
+    modes: ["edit"],
+    drag: "edit",
+    hint:
+      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>green</b> where " +
+      "it would attach to an existing point, which is how you close a gap — hold <b>Shift</b> to " +
+      "leave it loose. <b>Ctrl</b>-drag pans. Escape or right-click abandons a wall part-drawn.",
+  },
+  {
+    id: "erase",
+    label: "Erase",
+    band: "walls",
+    modes: ["edit"],
+    drag: "edit",
+    hint:
+      "Click a wall to remove it. <b>One segment at a time</b>, so a long wall drawn as many " +
+      "segments takes a click each — the highlight shows exactly what would go.",
+  },
+];
+
+/** The tools this mode offers, in declaration order. */
+export function toolsOf(mode: WorkspaceMode): readonly ToolChoice[] {
+  return TOOLS.filter((tool) => tool.modes.includes(mode));
+}
+
 /**
  * Which of the two workspaces a step belongs to.
  *
@@ -150,8 +245,6 @@ export interface Step {
   readonly blurb: string;
   /** What the canvas shows while this step is open. */
   readonly layers: readonly LayerId[];
-  /** What a plain left-drag does while this step is open. */
-  readonly drag: Drag;
   /**
    * Which workspaces this step appears in.
    *
@@ -209,7 +302,6 @@ export const STEPS: readonly Step[] = [
       here but the picker, and that is a complete and honest state rather than an empty canvas.
     */
     layers: [],
-    drag: "pan",
   },
   {
     id: "ink",
@@ -252,7 +344,6 @@ export const STEPS: readonly Step[] = [
       always had for a brush opened before the map has been read. That is what makes the sliders
       usable without a modifier: this step is a brush only once you have said which brush.
     */
-    drag: "brush",
     groups: [
       {
         // Called "Walls" until the skeleton arrived and took the name back: these two decide which
@@ -350,7 +441,6 @@ export const STEPS: readonly Step[] = [
       announces itself, and finding it means running the Gaps tool one step up.
     */
     layers: ["ink", "paint", "regions", "graph"],
-    drag: "pan",
   },
   {
     id: "edit",
@@ -384,7 +474,6 @@ export const STEPS: readonly Step[] = [
       graph is mostly looking, and a mode that took every drag would make the looking part awkward to
       pay for the editing.
     */
-    drag: "edit",
   },
   /*
     The Regions step was here, and it is GONE (user, 2026-09-05).
@@ -429,7 +518,6 @@ export const STEPS: readonly Step[] = [
       one the other home has to be left in order to reach.
     */
     layers: [],
-    drag: "pan",
     persistent: true,
   },
 ];
