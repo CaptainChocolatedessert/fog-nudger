@@ -2438,6 +2438,15 @@ forces a section shut, so two handles on one setting would be reachable at once 
 the moment either moved. `steps.test.ts` pins that, and the naming in the disabled sentence is what
 the second handle would have been for.
 
+**Confirmed in the room, both halves** (2026-09-09): the straighten button greys and un-greys as its
+own slider crosses zero, and the prune button's note reads *"Off — set Longest dead end to remove
+under Walls"*. That is the rare case where a desk claim was checked rather than assumed — and it had
+to be, because the first attempt at checking it produced a **false** failure report. The straighten
+button appeared stuck disabled, and the cause was almost certainly a half-updated module set: the
+files were being edited under a live dev server while the room was open, so HMR was swapping them in
+mid-change. A clean reopen fixed it and it has not recurred. See `CLAUDE.md` for the working
+agreement that came out of that.
+
 #### Bugs
 
 - **Save the ink edits** reports that nothing has changed, after *Smallest mark to keep* was adjusted.
@@ -2484,6 +2493,11 @@ the second handle would have been for.
   question from the other end.
 - **Undo, and whether redo is possible.** The room suggested undo belongs in the tool column as a
   curved back arrow.
+- **`editSimplifyFraction` is declared `read` stage, and that looks wrong.** The stage is what a
+  change *destroys*, and `read` means re-derive the graph from the map — so once there are hand
+  edits, moving the editor's straighten slider should raise the discard confirmation. That control
+  only ever restraightens the **stored** graph and never touches the reading. **Not verified**: found
+  by reading while chasing something else, and no room has tried moving it with edits outstanding.
 - **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
   *Create walls around map border* was offered as an alternative.
 - **Per-colour opacity.** Explicitly **not to be built until it has been discussed** — it may not fit
