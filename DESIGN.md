@@ -2395,9 +2395,25 @@ the most informative thing that can happen to this project.
 than left in a conversation because a conversation ends: this is the working set, and anything struck
 from it should be struck by being *done*, not by being forgotten.
 
-**Two are already fixed** — see §7a. The tool's controls were unreachable (a missing `onToolChange`
-subscription, plus a home three conditions deep), and the "Correcting it by hand / Pick a tool from
-the strip" empty state went with the slot it labelled.
+### Where to pick this up
+
+**Everything below is the working set, and it is complete** — the conversation that produced it ended
+at a context limit, so this list is the handover rather than a summary of one.
+
+**Closed, and confirmed in a room:** the tool's controls were unreachable (a missing `onToolChange`
+subscription plus a home three conditions deep) and now sit in the pinned head; the "Correcting it by
+hand / Pick a tool from the strip" empty state went with the slot it labelled; and the three wall
+actions are gated before the press, with the prune button naming the step that holds its slider.
+
+**Closed at the desk, not yet judged in a room:** the prose cull, the paint verbs becoming Draw and
+Erase on both layers, the panel dropping to two buttons, and the spur *limit* rename.
+
+**The next thing worth doing** is the two outright bugs below — the ghost mark on a slider especially,
+since it is met on every control. **The largest thing** is the fractured save-then-buttons workflow,
+which is a conversation and not a build, and which the two parked button cuts are downstream of.
+
+**One agreement, learned expensively:** do not edit the running modules while the user has a room
+open, and try a reopen before diagnosing anything. `CLAUDE.md` says why.
 
 Where an entry carries a guess about the cause, it says so. **None of these has been diagnosed beyond
 what the room reported** unless the entry says otherwise.
@@ -2488,9 +2504,38 @@ agreement that came out of that.
   estimate and several readouts quote it as though it were a fact. One candidate: if a line of text
   is needed to say how many pixels something is, make **pixels the unit the slider reports on the
   right** instead.
-- **Why do Straighten and Prune need a button at all?** Both are a slider plus a separate press, and
-  the room asked why. **Prune in Edit walls has no slider beside its button**, which is the same
-  question from the other end.
+- **The save-then-buttons workflow is fractured, and this is the big one** (user, 2026-09-09): *"It
+  seems fractured and unintuitive."* It absorbs the narrower "why a button at all" question, because
+  they are the same conversation from two ends.
+
+  **What a GM currently does.** Tune the reading in **Walls**, where straightening and pruning are
+  live sliders re-applied on every derive and costing nothing to sweep. Press **Put the walls on the
+  map**. Then, in **Edit walls**, straighten and prune *again* — through a different slider, a button
+  each, and a confirmation each, now deleting things that do not come back.
+
+  **What makes it feel like two tools rather than one.** Straightening has **two settings**
+  (`simplifyFraction` and `editSimplifyFraction`) that mean the same thing on opposite terms. Pruning
+  has **one** setting applied two ways, with its slider in Walls and its button in Edit walls.
+  Crossing the save changes a slider into a slider-plus-button without saying so, and the operation
+  a GM just spent time tuning is offered to them again as though it had not happened.
+
+  **The existing justification, which is real and is not obviously worth the cost.** Before the save
+  the graph is a **derivation** — rebuilt from the reading on every change, so turning a slider down
+  puts the detail straight back and nothing is risked. After it the graph is the **document**, with
+  nothing to re-derive it from, so the same slider on release would silently delete hand-drawn walls
+  on a gesture as small as brushing the track. The button is what makes the destruction deliberate.
+
+  **What the conversation has to settle.** Whether the two halves can be one thing — and if they
+  cannot, whether the seam can at least be *stated* rather than left to be discovered. Some threads
+  worth pulling: does the editor need its own straighten and prune at all, given the ink mode already
+  offers both on free terms and a GM who wanted more could go back and re-save? Could undo carry the
+  risk instead of a confirmation, now that it exists? Is "save" the wrong shape for the crossing —
+  the room also asked whether **Put the walls on the map** should still exist at all, which is the
+  same seam seen from the other side.
+
+  **Do not start building on this.** It touches the stage boundary, which is §3's core, and the two
+  cuts already parked (*Put the walls on the map*, *Put on the map*) are downstream of whatever it
+  decides.
 - **Undo, and whether redo is possible.** The room suggested undo belongs in the tool column as a
   curved back arrow.
 - **`editSimplifyFraction` is declared `read` stage, and that looks wrong.** The stage is what a
