@@ -282,7 +282,7 @@
         top: 0;
         left: 22rem;
         bottom: 0;
-        width: 5.6rem;
+        width: 6.3rem;
         box-sizing: border-box;
         padding: 0.9rem 0.5rem;
         overflow-y: auto;
@@ -306,18 +306,30 @@
         background: rgba(187, 153, 255, 0.18);
       }
       button.tool {
-        display: block;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         width: 100%;
         margin: 0 0 0.25rem;
-        padding: 0.35rem 0.4rem;
+        padding: 0.3rem 0.35rem;
         border-radius: 0.3rem;
         border: 1px solid transparent;
         background: transparent;
         color: #c2c7e4;
         font: inherit;
-        font-size: 0.78rem;
+        font-size: 0.74rem;
         text-align: left;
         cursor: pointer;
+      }
+      /*
+        Sized here rather than on the element, so one rule covers all seven. `currentColor` in the
+        glyph means the selected state needs no second rule: the button inverts and the drawing
+        follows.
+      */
+      button.tool svg {
+        width: 1.05rem;
+        height: 1.05rem;
+        flex: none;
       }
       button.tool:hover:not(:disabled) {
         background: rgba(187, 153, 255, 0.14);
@@ -646,7 +658,7 @@
           the window is; the outer one stops a narrow window producing a negative width, which CSS
           discards as invalid — leaving exactly the unbounded line this is here to prevent.
         */
-        max-width: max(12rem, min(34rem, calc(100vw - 32rem)));
+        max-width: max(12rem, min(34rem, calc(100vw - 33rem)));
         text-align: left;
       }
       /*

@@ -38,6 +38,7 @@ import { mapChosen } from "./mapSource";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { requireLayer } from "./layerToggles";
+import { toolIcon } from "./toolIcons";
 import { handEdits, onStageChange, wallGraph } from "./stage";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
@@ -195,7 +196,19 @@ export function render(): void {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "tool";
-      button.textContent = choice.label;
+      /*
+        Glyph and name together, rather than either alone.
+
+        The name stays because discoverability is this surface's oldest weakness — nothing on it says
+        the map is interactive at all — and an unlabelled picture is a thing to learn rather than a
+        thing to read. The glyph is what makes the strip scannable once it *has* been learned, which
+        is the state a GM spends almost all of their time in.
+      */
+      const glyph = toolIcon(choice.id);
+      if (glyph) button.append(glyph);
+      const name = document.createElement("span");
+      name.textContent = choice.label;
+      button.append(name);
       // `aria-pressed` carries the selected look and the meaning together, rather than a class
       // saying the same thing beside it.
       button.setAttribute("aria-pressed", String(choice.id === active));
