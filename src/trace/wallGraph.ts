@@ -452,7 +452,7 @@ export interface DoomedSpurs {
  *
  * ## Why this is separate from doing it
  *
- * **Pruning is destructive and cannot be undone**, and the standing rule is that a control which can
+ * **Pruning is destructive**, and the standing rule is that a control which can
  * be wrong needs a visual channel *before* it is used rather than a report afterwards. So the editor
  * draws the doomed walls in red while the slider moves, and this is what it asks. Reported from a
  * room on 2026-09-07: *"the slider should show the spurs that will be pruned in red or something for

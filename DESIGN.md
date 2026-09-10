@@ -1205,7 +1205,9 @@ not the cursor**; they differ by that offset, and measuring from the cursor make
 beside a wall that never comes close.
 
 **A snap is drawn in the target's place, not merely coloured**, because that is exactly what releasing
-produces. A merge cannot be undone, so the boundary has to be visible **before** it is crossed.
+produces, so the boundary has to be visible **before** it is crossed. (This said a merge "cannot be
+undone", which stopped being true when undo arrived; the rule stands on the better reason, that Undo
+only helps a GM who noticed what a release did.)
 
 **A press and release that did not move writes nothing**, and does not fire the point probe either — a
 gesture the tool took is finished by the tool.
@@ -1239,7 +1241,8 @@ thing being transformed.
 - **Prune the dead ends** (`pruneWallGraph`) — deletes wall runs with a free end shorter than a
   limit, cascading, since every arm of a junction becomes a dead end once its neighbours go. **The
   doomed runs are drawn in red while the slider moves**, in the same red the erase tool uses, because
-  deleting cannot be undone and a limit is not a number anybody can picture on their own map — the
+  a limit is not a number anybody can picture on their own map — and Undo, which does take a prune
+  back, only helps a GM who saw what went. (It said deleting "cannot be undone" until 2026-09-10.) The
   same setting takes four hairs off one map and a third of the walls off another. **`spurEdgesToPrune`
   is the question and `pruneWallGraph` is written in terms of it**, so the picture cannot lie about
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
@@ -1784,8 +1787,13 @@ Three things kept their text, and each for a reason that generalises:
   changes it. `steps.test.ts` pins that every tool is still explained by its own hint or by the blurb
   of the group it reveals — the one place this cull could have removed the last copy silently, since
   an empty hint slot collapses and looks like a tool with nothing to say.
-- **Warnings on the three actions that lose work** — prune, straighten, and the save button, which is
-  the only control in the rail whose *absence* costs the graph.
+- **Warnings on the actions that lose work** — which turned out to be one, not three. The save button
+  is the only control in the rail whose *absence* costs the graph, and its warning is true. **Prune and
+  straighten kept "It cannot be undone" through this cull and it was false**: both are saved like any
+  hand edit and sit on the undo history — the Undo button's own doc names *"Undo pruning the dead
+  ends"* as its example. Found on 2026-09-10 and removed; the prune confirmation now says *"Undo takes
+  it back"*. The cull kept the one sentence on those buttons that was wrong, which is worth knowing
+  about any rule of the form "keep the warnings": check that the thing warned of still happens.
 - **Two hints**, on the gap controls: that a proposal is ringed and not applied until accepted, and
   which way the same-wall distance leans. No name found says either.
 
@@ -2592,7 +2600,8 @@ agreement that came out of that.
   cannot, whether the seam can at least be *stated* rather than left to be discovered. Some threads
   worth pulling: does the editor need its own straighten and prune at all, given the ink mode already
   offers both on free terms and a GM who wanted more could go back and re-save? Could undo carry the
-  risk instead of a confirmation, now that it exists? Is "save" the wrong shape for the crossing —
+  risk instead of a confirmation, now that it exists? **It already does, for two of the three** — see
+  below. Is "save" the wrong shape for the crossing —
   the room also asked whether **Put the walls on the map** should still exist at all, which is the
   same seam seen from the other side.
 
@@ -2606,11 +2615,28 @@ agreement that came out of that.
   moment in which nothing is replaced. It was left alone deliberately: whether a warning belongs at
   the slider, at the save, or both is exactly the seam this entry is about.
 
+  **A second fact, same day: Prune and Straighten are already undoable.** Both save through the same
+  path as every hand edit, so both sit on the undo history, and until today both carried a
+  confirmation or a note saying they "cannot be undone". Those were false and are corrected. So the
+  button-plus-confirmation shape the editor gives them was built to guard a permanent loss that undo
+  had already removed — which answers the "could undo carry the risk" thread for these two, and makes
+  the case for their separate buttons thinner than it was argued. **What undo does not cover** is the
+  save from Walls: it clears the history, so replacing the stored graph remains the one step with no
+  way back.
+
   **Do not start building on this.** It touches the stage boundary, which is §3's core, and the two
   cuts already parked (*Put the walls on the map*, *Put on the map*) are downstream of whatever it
   decides.
 - **Undo, and whether redo is possible.** The room suggested undo belongs in the tool column as a
-  curved back arrow.
+  curved back arrow. **Redo is possible and small — answered from the code, not built (2026-09-10).**
+  Undo is snapshot-based: each wall edit and each of the three wall actions pushes the pre-edit graph
+  onto a stack twenty deep (`EditHistory`, pure and tested), and undo writes a snapshot back to the
+  scene. Redo is the usual second stack — undo parks the current graph on it before restoring, redo
+  takes it back, any fresh edit clears it — at one scene write per step, the same as undo. Snapshots
+  already carry the label a button would say. **Ctrl+Shift+Z is free**: the Ctrl+Z handler refuses
+  Shift explicitly. Its limits would be undo's: it clears on a save from Walls and on a map change,
+  and it would not cover painted strokes, which have their own Discard and Clear. **What is left to
+  decide is where the two go**, which is the design half of this entry.
 - ~~**`editSimplifyFraction` is declared `read` stage, and that looks wrong.**~~ **Settled from the code
   and fixed (2026-09-10), and it was five controls, not one.** The discard prompt read a parameter's
   stage and never its kind, so it fired for every `read`-filed control — including both brush widths,

@@ -10,9 +10,16 @@
  * the walls straight back. Nothing is lost by sweeping it.
  *
  * Here the graph is the **document**. There is nothing to re-derive it from, so applying a limit
- * deletes walls that do not come back — including, if the limit is high enough, walls the GM drew by
- * hand a minute ago. A slider that did that on release would destroy work on a gesture as small as
+ * deletes walls the map cannot give back — including, if the limit is high enough, walls the GM drew
+ * by hand a minute ago. A slider that did that on release would destroy work on a gesture as small as
  * brushing the track, so what the editor gets is the same number and a deliberate act to apply it.
+ *
+ * **Undo does give them back**, and this used to say they "do not come back" (corrected 2026-09-10).
+ * A prune is saved through `saveEditedWalls` like every hand edit, so it is on the undo history —
+ * the Undo button's own doc names "Undo pruning the dead ends" as its example. What is still true is
+ * that a slider would prune on every brush of the track, twenty undos deep; what is no longer true is
+ * that the button's deliberate act is the only thing between the GM and a permanent loss. That
+ * weakens the case for a button here at all, and it belongs to the save-then-buttons conversation.
  *
  * The number lives in the same setting either way, which is the point: a GM who found a limit that
  * suits their map in the ink mode does not have to find it again here.
@@ -40,8 +47,13 @@ import { wallGraph, saveEditedWalls } from "./stage";
 const BUTTON_ID = "prune-action";
 const NOTE_ID = "prune-action-note";
 
-/** Shown when it can actually run. Cut to the warning: what it deletes is named by its own slider. */
-const READY_NOTE = "Runs once, on the whole graph. <b>It cannot be undone.</b>";
+/*
+  Nothing, when it can run. This said "It cannot be undone", which was the one sentence the prose
+  cull kept here and it was false: a prune is on the undo history like any hand edit. With the
+  warning gone there is nothing the label and its slider do not already say — and the confirmation
+  that follows the press is where the reassurance belongs, at the moment of deciding.
+*/
+const READY_NOTE = "";
 
 export function renderPruneAction(body: HTMLElement): void {
   const actions = document.createElement("div");
@@ -125,8 +137,8 @@ async function run(button: HTMLButtonElement): Promise<void> {
     title: `Delete ${pruned.removed} dead-end wall${pruned.removed === 1 ? "" : "s"}?`,
     body: [
       `${pruned.removed} of this map's ${before} walls have a free end and are short enough to go, ` +
-        `taking ${pruned.segments} segment${pruned.segments === 1 ? "" : "s"} with them. It cannot ` +
-        "be undone.",
+        `taking ${pruned.segments} segment${pruned.segments === 1 ? "" : "s"} with them. Undo ` +
+        "takes it back.",
       "A wall that is part of a room is safe whatever the limit, because a loop presents no free " +
         "end. What goes is the hairs a ragged ink edge leaves behind — and any stub short enough " +
         "to look like one.",

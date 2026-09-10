@@ -342,8 +342,9 @@ export const DEFAULT_SETTINGS: Settings = {
       across scanned maps in a way its width in pixels is not.
     */
     simplifyFraction: 4e-4,
-    // Off. The editor's copy deletes vertices that do not come back, so opening the editor must not
-    // arrive holding a proposal to destroy detail — the same reasoning that keeps pruning at zero.
+    // Off. The editor's copy deletes vertices the map cannot give back — Undo can, which this used
+    // to deny — so opening the editor must not arrive holding a proposal to destroy detail. The same
+    // reasoning keeps pruning at zero.
     editSimplifyFraction: 0,
   },
   review: {

@@ -413,9 +413,10 @@ export interface WallSimplification extends EditResult {
  *
  * There, the tolerance is a *fitting* parameter: the graph is re-derived from the reading every time
  * anything moves, so turning it down puts the detail straight back. Here the graph **is** the
- * document. There is nothing to re-derive it from, so a vertex dropped is gone — including one the GM
- * placed by hand a minute ago. That is why the editor's control is a number plus a deliberate act
- * rather than a slider that applies on release, and why its default is off.
+ * document. There is nothing to re-derive it from, so a vertex dropped is one the map cannot give
+ * back — including one the GM placed by hand a minute ago. (The editor's undo can; this said the
+ * vertex was simply "gone" until 2026-09-10.) That is why the editor's control is a number plus a
+ * deliberate act rather than a slider that applies on release, and why its default is off.
  *
  * ## Per wall run, which is what makes junctions safe without special-casing them
  *

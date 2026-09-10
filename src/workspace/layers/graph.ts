@@ -96,8 +96,10 @@ const MERGE_RADIUS = 6;
 /**
  * The wall about to be erased, and the wall about to be drawn.
  *
- * Both are the §8 rule doing the same job in two places: an erase cannot be undone and a drawn wall
+ * Both are the §8 rule doing the same job in two places: an erase removes a wall and a drawn wall
  * changes which rooms exist, so what is about to happen is on screen before the click that does it.
+ * It said an erase "cannot be undone", which stopped being true when undo arrived; the rule stands on
+ * the better reason, which is that Undo only helps a GM who noticed what went.
  * Red for the one that removes and green for the one that adds, which is the only pair of meanings
  * on this canvas that a colour can carry without being learned.
  */
@@ -215,7 +217,8 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   /*
     The walls the prune button would delete, marked while the slider moves rather than reported after.
 
-    Pruning cannot be undone, and the standing rule is that a control which can be wrong needs a
+    Pruning is destructive — Undo takes it back, but only if the GM noticed what went, which is the
+    point of showing it first — and the standing rule is that a control which can be wrong needs a
     visual channel *before* it is used. A limit is also not a number anybody can picture on their own
     map — the same setting takes four hairs off one and a third of the walls off another — so the only
     honest way to choose one is to see what it would take.

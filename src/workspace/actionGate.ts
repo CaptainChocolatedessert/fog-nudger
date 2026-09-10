@@ -79,8 +79,8 @@ export function applyActionGate(
 ): void {
   const blocked = actionBlockedFor(button);
   button.disabled = !live || blocked !== null;
-  // The ready note is the warning about what the action costs, and it must not be shown beside a
-  // button that cannot do it — a "cannot be undone" over a dead control is a threat with no act.
+  // A ready note says something about the act itself, so it must not be shown beside a button that
+  // cannot act. All three are empty today; the mechanism is kept for the note that earns a place.
   note.innerHTML = blocked === null ? ready : blocked;
 }
 

@@ -7,9 +7,10 @@
  * time anything moves, so turning the slider down puts the detail straight back and sweeping it costs
  * nothing but a derive.
  *
- * Here the graph **is** the document. Nothing re-derives it, so a vertex this removes is gone —
- * including one the GM placed by hand a minute ago. So the editor gets its own number, starting at
- * off, and a deliberate act to apply it. Same reasoning as the prune button beside it, and the reason
+ * Here the graph **is** the document. Nothing re-derives it, so a vertex this removes is one the map
+ * cannot give back — including one the GM placed by hand a minute ago. Undo can, since this is saved
+ * like any hand edit; this said the vertex was simply "gone" until 2026-09-10. So the editor gets its
+ * own number, starting at off, and a deliberate act to apply it. Same reasoning as the prune button beside it, and the reason
  * the two modes hold two keys rather than one: they need different defaults, which is what says they
  * are different settings.
  *
@@ -55,13 +56,13 @@ const BUTTON_ID = "simplify-action";
 const NOTE_ID = "simplify-action-note";
 
 /*
-  Shown when it can run, and it is the one sentence a slider label cannot carry: this side of the
-  handover has no map to re-read, so what it removes is not recoverable the way the ink mode's
-  straightening is.
+  Nothing, when it can run. This said "It cannot be undone — there is nothing here to derive the
+  detail back from", and the first half was false: straightening is saved through `saveEditedWalls`
+  and sits on the undo history like any hand edit (corrected 2026-09-10). The second half is true —
+  the map cannot give the detail back the way the ink mode's straightening can — but Undo can, which
+  is the half a GM needs.
 */
-const READY_NOTE =
-  "Runs once, on the whole graph. <b>It cannot be undone</b> &mdash; there is nothing here to " +
-  "derive the detail back from.";
+const READY_NOTE = "";
 
 export function renderSimplifyAction(body: HTMLElement): void {
   const actions = document.createElement("div");
