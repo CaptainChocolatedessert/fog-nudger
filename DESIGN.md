@@ -2572,16 +2572,33 @@ agreement that came out of that.
   the room also asked whether **Put the walls on the map** should still exist at all, which is the
   same seam seen from the other side.
 
+  **One fact for this conversation, established from the code on 2026-09-10.** A slider release
+  **never** replaces the stored graph. The only thing that does is *Put the walls on the map*, which
+  confirms separately — and §5 already says so: *"only the two save buttons … replace what is
+  stored."* Even a genuine re-read rebuilds the ink and a background derivation, while
+  `showingSaved()` keeps the edited graph on screen as long as there are hand edits. So the discard
+  prompt still attached to the five ink-reading sliders warns of a loss that happens only **if and
+  when the GM later saves**, and says *"the graph that replaces them is a fresh reading"* about a
+  moment in which nothing is replaced. It was left alone deliberately: whether a warning belongs at
+  the slider, at the save, or both is exactly the seam this entry is about.
+
   **Do not start building on this.** It touches the stage boundary, which is §3's core, and the two
   cuts already parked (*Put the walls on the map*, *Put on the map*) are downstream of whatever it
   decides.
 - **Undo, and whether redo is possible.** The room suggested undo belongs in the tool column as a
   curved back arrow.
-- **`editSimplifyFraction` is declared `read` stage, and that looks wrong.** The stage is what a
-  change *destroys*, and `read` means re-derive the graph from the map — so once there are hand
-  edits, moving the editor's straighten slider should raise the discard confirmation. That control
-  only ever restraightens the **stored** graph and never touches the reading. **Not verified**: found
-  by reading while chasing something else, and no room has tried moving it with edits outstanding.
+- ~~**`editSimplifyFraction` is declared `read` stage, and that looks wrong.**~~ **Settled from the code
+  and fixed (2026-09-10), and it was five controls, not one.** The discard prompt read a parameter's
+  stage and never its kind, so it fired for every `read`-filed control — including both brush widths,
+  both gap sliders and the editor's straighten slider, all of which are `tool` kind and re-read
+  nothing. With wall edits outstanding each told the GM it *"decides what counts as ink"* and would
+  derive the walls again; neither was true, and confirming did nothing. The code's own comment on the
+  declaration said *"nothing reads it"*, which was false. **The prompt now asks `rereadsTheMap`**, the
+  same predicate the recompute uses to request a re-read, so the two cannot disagree — pinned by name
+  to the five ink-reading sliders. Pruning left the list too: it is a reading-stage pipeline parameter
+  and still never goes near the map.
+  **Unverified in a room**, and the first thing to check: with a wall edit outstanding, a brush width
+  should now move without a dialog.
 - **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
   *Create walls around map border* was offered as an alternative.
 - **Per-colour opacity.** Explicitly **not to be built until it has been discussed** — it may not fit

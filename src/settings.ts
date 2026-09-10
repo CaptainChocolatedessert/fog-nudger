@@ -526,8 +526,12 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
 
     The three stages are about what a change destroys **in the ink pipeline**, and this control acts
     on a document that pipeline is not deriving. The mapping has to be total, so it takes the same
-    answer the editor's other control does; nothing reads it, because a `tool` kind never reaches the
-    fingerprints or the recompute cascade.
+    answer the editor's other control does.
+
+    **This used to say "nothing reads it", and something did.** A `tool` kind never reaches the
+    fingerprints or the recompute cascade — but the discard prompt read the stage and not the kind, so
+    with wall edits outstanding this slider offered to re-read the map and discard them. It does
+    neither. The prompt asks `rereadsTheMap` now, which excludes every `tool` kind by construction.
   */
   editSimplifyFraction: "read",
   fillOpacity: "adjust",
@@ -747,6 +751,24 @@ const GRAPH_ONLY: readonly SettingName[] = ["spurPruneFraction"];
  */
 export function isSkeletonOnly(name: SettingName): boolean {
   return GRAPH_ONLY.includes(name);
+}
+
+/**
+ * Whether changing this parameter re-reads the map.
+ *
+ * **One statement of it, used twice**, and the second use is the reason it exists. The recompute
+ * cascade asks it to decide whether a release requests a re-read; the discard prompt asks it to
+ * decide whether to warn. They used to ask different questions — the prompt read the stage alone and
+ * never the kind — so it fired for five controls that re-read nothing: both brush widths, both gap
+ * sliders and the editor's straighten slider (found 2026-09-10). Each of them told a GM with wall
+ * edits outstanding that it "decides what counts as ink" and would derive the walls again, which was
+ * false on both counts, and confirming did nothing at all.
+ *
+ * A pipeline parameter of the reading stage, less the graph-only ones: pruning re-applies to a graph
+ * already in hand and never goes near the map.
+ */
+export function rereadsTheMap(name: SettingName): boolean {
+  return PARAMETER_KIND[name] === "pipeline" && PARAMETER_STAGE[name] === "read" && !isSkeletonOnly(name);
 }
 
 /** Every reading-stage pipeline parameter, in `SETTING_LIMITS`' declaration order. */

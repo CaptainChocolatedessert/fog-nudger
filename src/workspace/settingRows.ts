@@ -14,8 +14,8 @@ import { lastInkWidth, lastPixelsPerSquare, lastRasterWidth } from "../pipeline"
 import {
   isSkeletonOnly,
   PARAMETER_KIND,
-  PARAMETER_STAGE,
   readParameter,
+  rereadsTheMap,
   SETTING_LIMITS,
   writeParameter,
 } from "../settings";
@@ -223,7 +223,8 @@ export function recomputeFor(names: readonly SettingName[]): void {
   const rest = pipeline.filter((name) => !isSkeletonOnly(name));
   const graphChanged = pipeline.some(isSkeletonOnly);
 
-  if (rest.some((name) => PARAMETER_STAGE[name] === "read")) requestReread();
+  // The same predicate the discard prompt asks, so the two can never disagree about what re-reads.
+  if (names.some(rereadsTheMap)) requestReread();
   // Ordered so the broadest wins: a Defaults reset changes both kinds at once, and a full derive
   // re-prunes on its way through where a re-prune would leave the trace stale.
   else if (rest.length > 0) invalidateRegions();
@@ -431,7 +432,9 @@ export function settingRow(control: Control): HTMLElement {
     */
     const previous = placed;
     placed = position;
-    const destroys = PARAMETER_STAGE[control.name] === "read" && handEdits() > 0;
+    // Only a change that re-reads the map, which is the prompt's own premise — "decides what counts
+    // as ink". It read the stage alone, and fired for five controls that re-read nothing.
+    const destroys = rereadsTheMap(control.name) && handEdits() > 0;
     if (destroys) {
       setPendingEdit(false);
       void confirmDiscard(

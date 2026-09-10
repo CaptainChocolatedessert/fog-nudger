@@ -24,6 +24,7 @@ import {
   PARAMETER_STAGE,
   readingFingerprint,
   readParameter,
+  rereadsTheMap,
   SETTING_LIMITS,
   STAGES,
   stageParameters,
@@ -69,6 +70,43 @@ describe("the stage declaration", () => {
     // adjusting. The cache invalidation and the workspace's recompute-on-release both read this
     // array, so reversing it would change what a slider destroys without changing what it says.
     expect(STAGES).toEqual(["read", "derive", "adjust"]);
+  });
+});
+
+describe("what re-reads the map", () => {
+  /*
+    Named, not derived from the declarations, because deriving it would only restate the predicate
+    and pass whatever it said.
+
+    This is the list the discard prompt fires for. It used to fire for every reading-stage parameter
+    whatever its kind, which put a "this decides what counts as ink" warning in front of five controls
+    that re-read nothing — the two brush widths, the two gap sliders and the editor's straighten
+    slider — and a GM with wall edits outstanding met it every time they painted.
+
+    Mutation-tested: four mutations, four caught — among them the old test itself, the stage read
+    alone with the kind ignored.
+  */
+  it("is exactly the ink-reading sliders, and nothing a tool or a display setting owns", () => {
+    const rereading = ALL_NAMES.filter(rereadsTheMap).sort();
+    expect(rereading).toEqual(
+      ["blurSigma", "minIslandPx", "minStrokeInkWidths", "sauvolaK", "sauvolaRadiusPx"].sort(),
+    );
+  });
+
+  it("excludes pruning, which re-applies to a graph already in hand", () => {
+    // A pipeline parameter of the reading stage, and still not a re-read: the reason `isSkeletonOnly`
+    // exists. Its own prompt claimed it "decides what counts as ink", which it does not.
+    expect(PARAMETER_KIND.spurPruneFraction).toBe("pipeline");
+    expect(PARAMETER_STAGE.spurPruneFraction).toBe("read");
+    expect(rereadsTheMap("spurPruneFraction")).toBe(false);
+  });
+
+  it("excludes every tool control, whatever stage it is filed under", () => {
+    // The five the prompt wrongly fired for are all filed `read`, which is the whole trap.
+    for (const name of ALL_NAMES.filter((n) => PARAMETER_KIND[n] === "tool")) {
+      expect(PARAMETER_STAGE[name], name).toBe("read");
+      expect(rereadsTheMap(name), name).toBe(false);
+    }
   });
 });
 
