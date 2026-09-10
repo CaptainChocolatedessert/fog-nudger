@@ -345,10 +345,13 @@ export const STEPS: readonly Step[] = [
       {
         tool: "suppress",
         title: "Suppress",
+        // "Uncovers" became "erases" with the buttons (2026-09-09). The blurb has to name the same
+        // verb the modifier actually performs, or Shift is documented as doing something the tool
+        // no longer calls by that name.
         blurb:
-          "Drag to cover marks the trace should <b>ignore</b> &mdash; hatching, a printed floor " +
-          "grid, a compass rose. Covered areas show in <b class='suppress-key'>amber</b>. " +
-          "<b>Shift</b> uncovers, <b>Ctrl</b> pans.",
+          "Drag over marks the trace should <b>ignore</b> &mdash; hatching, a printed floor grid, " +
+          "a compass rose. Your strokes show in <b class='suppress-key'>amber</b>, and none of the " +
+          "map is lost. <b>Shift</b> erases, <b>Ctrl</b> pans.",
         parameters: ["suppressBrushPx"],
       },
       {

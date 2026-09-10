@@ -135,7 +135,7 @@ function verbRow(kind: PaintKind): HTMLElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "chip";
-    button.textContent = verb === "paint" ? labelFor(kind) : eraseLabelFor(kind);
+    button.textContent = verb === "paint" ? PAINT_VERB : ERASE_VERB;
     button.setAttribute("aria-pressed", String(verb === current));
     button.addEventListener("click", () => {
       setVerb(kind, verb);
@@ -154,14 +154,24 @@ function verbRow(kind: PaintKind): HTMLElement {
   return wrapper;
 }
 
-/** What laying paint down is called on each layer, which is not the same word. */
-function labelFor(kind: PaintKind): string {
-  return kind === "suppress" ? "Cover" : "Draw";
-}
+/*
+  One pair of verbs for both layers (user, 2026-09-09).
 
-function eraseLabelFor(kind: PaintKind): string {
-  return kind === "suppress" ? "Uncover" : "Rub out";
-}
+  It was **Cover / Uncover** on suppression and **Draw / Rub out** on added ink, and the trouble is
+  that the two pairs were describing different things. Cover/Uncover names what the mask does to the
+  pipeline; Draw/Rub out names what the GM's hand does. A GM is performing the same physical act on
+  both layers — putting marks down and taking them off — and what actually differs is *which layer is
+  in hand*, which the tool strip, the tool name and the colour of the marks all say already.
+
+  Two vocabularies for one gesture made the layers read as different kinds of tool when they are the
+  same tool pointed at different rasters.
+
+  **The cost, stated:** "Cover" hinted that suppression is *additive* — you lay something over the
+  map rather than deleting from it, and nothing of the map is lost. That hint is gone from the verb.
+  What carries it now is the tool's own name, its blurb, and the amber the strokes are drawn in.
+*/
+const PAINT_VERB = "Draw";
+const ERASE_VERB = "Erase";
 
 /**
  * Discard and Clear, for the brush in hand.
