@@ -88,7 +88,7 @@ describe("the step declaration", () => {
   */
   it("covers every parameter exactly once", () => {
     /*
-      Once, not merely at least once. `PARAMETER_STEP` still admits a list, and the spur budget used
+      Once, not merely at least once. `PARAMETER_STEP` still admits a list, and the spur limit used
       it while the wall groups were separate pages — safe then, because only one was ever on screen.
       On one page a repeat is two sliders writing one setting, which disagree the moment either moves.
     */

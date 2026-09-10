@@ -531,10 +531,10 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
   // Both of the controls that shape the graph, together. Pruning decides which walls survive and
   // smoothing decides what shape they are, and the step draws the result of both.
   /*
-    One budget, one handle, in the group that says how the walls come out.
+    One limit, one handle, in the group that says how the walls come out.
 
     It was declared in **both** wall groups while they were separate pages, on the argument that a GM
-    should not have to find a budget twice — and that was safe precisely because only one mode was on
+    should not have to find a limit twice — and that was safe precisely because only one mode was on
     screen at a time. On one page it would be two sliders writing one setting, which disagree the
     moment either moves.
 

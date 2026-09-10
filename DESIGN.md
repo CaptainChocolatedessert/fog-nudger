@@ -94,6 +94,25 @@ about what a settings change **destroys**. Those are a property of a parameter, 
 | **planarity** | no two segments cross. The separate check Euler does not imply. |
 | **the point probe** | *"what is here?"* — the luminance actually read at one pixel, whether it was called ink, and whether the GM painted it. The one diagnostic that answers what looking cannot. |
 
+### A limit is not a budget
+
+**Two words that were one until 2026-09-09** (user), and keeping them apart is the point rather than
+a preference:
+
+- A **budget** is a resource, spent down until it runs out. Three are real: the **megapixel budget**
+  bounding the raster, the gap search's **flood budget**, and the emit **item budget**. Each is
+  consumed by the work, and running out of one changes what the answer *is* — a gap whose flood
+  exhausted its budget is marked as a guess and refuses to be filled.
+- A **limit** is a threshold, compared against and never consumed. The **prune limit** (*Longest dead
+  end to remove*) and the straightening limit are these: nothing is spent, a value is measured
+  against a ceiling, and running the same operation twice at the same setting costs the same both
+  times.
+
+Pruning was called a budget everywhere, and it is the clearer case of the two — spending implies a
+running total that pruning does not have. **Do not rename the three real budgets to match.** The
+distinction is the useful part; collapsing it in the other direction would lose it just as
+completely.
+
 **The area check is gone**, and §8 says why. Do not reintroduce it.
 ---
 
@@ -1218,9 +1237,9 @@ thing being transformed.
   sweep is **total and quadratic**, because this touches everything and the "only what moved" argument
   offers no saving.
 - **Prune the dead ends** (`pruneWallGraph`) — deletes wall runs with a free end shorter than a
-  budget, cascading, since every arm of a junction becomes a dead end once its neighbours go. **The
+  limit, cascading, since every arm of a junction becomes a dead end once its neighbours go. **The
   doomed runs are drawn in red while the slider moves**, in the same red the erase tool uses, because
-  deleting cannot be undone and a budget is not a number anybody can picture on their own map — the
+  deleting cannot be undone and a limit is not a number anybody can picture on their own map — the
   same setting takes four hairs off one map and a third of the walls off another. **`spurEdgesToPrune`
   is the question and `pruneWallGraph` is written in terms of it**, so the picture cannot lie about
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
@@ -1253,7 +1272,7 @@ measure the top of the slider's track off the graph itself.**
   the longest wall run for pruning, the largest bend for simplification, re-measured when the tool
   opens and held for that opening.
 - **The floor is PINNED, not the observed minimum**, and the reason is sharp: **both tools delete from
-  the bottom**, so the minimum is the most mobile quantity there is. Prune at budget B and the shortest
+  the bottom**, so the minimum is the most mobile quantity there is. Prune at limit B and the shortest
   surviving run is B. A tracking bottom would chase the slider upward every time, and "30%" would mean
   a larger bite on each pass — the same non-monotonicity that collapsed the two-slider gap design.
 - **The far left is a literal zero**, so the tools are exactly off rather than doing a little work at
@@ -1278,7 +1297,7 @@ Three details that were each learned the hard way:
   a free end *today* means a run that sits between two junctions was never counted — and the cascade
   frees exactly such runs on later rounds, so at the far right, where a GM reasonably expects every
   dead end to go, those are the walls left standing. No run can be longer than the longest run, so a
-  budget there reaches anything the cascade ever frees, while staying a real measurement. It must be
+  limit there reaches anything the cascade ever frees, while staying a real measurement. It must be
   the *run*, not the longest segment, because pruning removes a whole run at a time.
 - **`largestBend` is per VERTEX, not per wall** — how far one point sits off the line joining its
   neighbours. A whole wall's deviation from the chord between its ends is dominated by the exterior,
@@ -1565,7 +1584,7 @@ and so does anything the tool must *recompute*. **`pipeline` must never join the
 690ms and synchronous, which is 690ms the slider cannot move.
 
 **`PARAMETER_STEP` is a COVER, not a partition.** A parameter may name several steps, and one does:
-the spur budget, which both modes draw. What is asserted instead is that **nothing appears twice within
+the spur limit, which both modes draw. What is asserted instead is that **nothing appears twice within
 one mode**, which would be two handles on one setting.
 
 **What the axis test can and cannot pin.** It asserts each declaration is **total on its own**, since
@@ -1587,7 +1606,7 @@ A reading marks the partition stale; rebuilding is visible in one step, so **ent
 pays**. A slider release consults `PARAMETER_STAGE` to decide which cycle it triggers — the cascade, not
 a third list.
 
-**The prune budget has a fast path.** The built graph is kept, so a budget change is a run walk and
+**The prune limit has a fast path.** The built graph is kept, so a limit change is a run walk and
 a traversal — single-digit milliseconds — rather than a full re-derive.
 
 **The partition's source is the MODE, not the presence of a stored graph.** Reading a stored graph in
@@ -1752,7 +1771,7 @@ were restating in words.
 `controls.ts` defended a hint on every control on the grounds that a direction is not guessable —
 raising Sauvola's `k` finds *less* ink, and "sensitivity" suggests the opposite. That was right about
 the problem and wrong about the fix. The control is **Ink strictness** now, and a stricter threshold
-finding less ink needs no explaining. Likewise **Longest dead end to remove** for the spur budget,
+finding less ink needs no explaining. Likewise **Longest dead end to remove** for the spur limit,
 because *spur* is this document's vocabulary and not a GM's; and **Make the outside a room** for the
 frame button, which was *Wall the map's edge* — a mechanism, with the point left to four sentences
 underneath.
@@ -1837,8 +1856,8 @@ surface opens on a map that has been through it before. Otherwise the derivation
 keeps tuning the ink meaningful: **the rooms change as the threshold moves, and that is where a merge
 is actually visible.**
 
-**One handle per setting.** The spur budget was declared in both wall groups while they were separate
-pages, so a GM would not have to find a budget twice — safe only because one page was on screen at a
+**One handle per setting.** The spur limit was declared in both wall groups while they were separate
+pages, so a GM would not have to find a limit twice — safe only because one page was on screen at a
 time. On one page it would be two sliders writing one setting. It lives with the other derive-time
 control now; the button in Edit walls spends the same number destructively, which is what you need
 once re-deriving is no longer free.
@@ -2498,7 +2517,7 @@ interface says so.
   the graph but not the mask" — is spread across three declarations that agree today, with a test
   pinning that they do. Collapsing them would make it one fact in one place, at the cost of a stage
   that is not a step and does not appear in the UI. **A question about the shape of the cascade, which
-  is architecture rather than tidying.** The spur budget is the only member.
+  is architecture rather than tidying.** The spur limit is the only member.
 - **Who is `index.html` for?** It says "Pre-release — nothing to install yet", while the manifest is
   served from the same Pages site and can be added to Owlbear by URL. So the only public front door
   tells a visitor who *could* install it that they cannot. Either the page carries the manifest URL, or
@@ -2618,7 +2637,7 @@ closed outright.
 | `trace/thinning.ts` | Zhang–Suen skeletonisation |
 | `trace/wallGraph.ts` | skeleton to nodes and edges (moves no point, ever), plus `eraseSpecks` and `rasterizeGraph` |
 | `trace/faces.ts` | the half-edge walk and sliver detection, and nothing else |
-| `trace/spurs.ts` | **which** dead-end wall runs a budget removes — the decision alone, no geometry and no raster |
+| `trace/spurs.ts` | **which** dead-end wall runs a limit removes — the decision alone, no geometry and no raster |
 | `trace/simplify.ts` | Douglas–Peucker (`simplifyIndices` is the decision, `simplifyPolyline` that plus a lookup), `dropCollinear`, and `COMMAND_CAP` |
 | `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, and the escalation ladder that meets the command cap. It also keeps a space labelling, for the point probe and nothing else |
 | `trace/label.ts` | region labelling |

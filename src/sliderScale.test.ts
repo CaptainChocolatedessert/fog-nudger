@@ -142,7 +142,7 @@ describe("round-tripping", () => {
       prevents is the worst a control can have: merely opening a surface rewrites a GM's setting, and
       nothing announces it.
 
-      **Two shipping controls are log-scaled now** — the prune budget and the simplification
+      **Two shipping controls are log-scaled now** — the prune limit and the simplification
       tolerance — and they are excluded here rather than tested more loosely, because for them the
       property is not merely unmet, it is *unmeetable*. Their track's top end is measured off the
       graph when the step opens, so the value at a given position depends on the map; no stored

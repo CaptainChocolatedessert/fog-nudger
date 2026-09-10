@@ -64,16 +64,16 @@ const SHAPES = [
 
 describe("the graph derivation over generated linework", () => {
   /*
-    **There is no spur budget here any more, and that is the code changing rather than the test.**
+    **There is no spur limit here any more, and that is the code changing rather than the test.**
 
-    This sweep was briefly run at two budgets, on 2026-09-06, because until that day it had only ever
+    This sweep was briefly run at two limits, on 2026-09-06, because until that day it had only ever
     run at zero — so the whole pruning path sat outside the only instrument that has ever found a
     defect in graph building. It found one immediately: with pruning on, more than one cycle came
     back with no interior at all.
 
     Pruning then left the raster entirely, which is what that finding argued for. It is an operation
     on the *fitted* graph now, past the derivation, where there is nothing to rasterise back and nothing
-    to rebuild — so `deriveWalls` never prunes and there is no budget to sweep. The pruning
+    to rebuild — so `deriveWalls` never prunes and there is no limit to sweep. The pruning
     that survives has its own tests in `spurs.test.ts` and needs none of this apparatus, because it
     deletes a run whole and can strand nothing.
   */

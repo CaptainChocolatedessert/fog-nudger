@@ -259,7 +259,7 @@ export function watchRegions(step: StepId, open: boolean): void {
  * What the last trace produced, before pruning — held so a prune needs no second trace.
  *
  * Spur pruning is an operation on the *fitted* graph now (2026-09-06), which means a change to its
- * budget invalidates nothing the trace did. Keeping the derivation's output lets the slider re-apply in
+ * limit invalidates nothing the trace did. Keeping the derivation's output lets the slider re-apply in
  * a few milliseconds where a re-derive costs the better part of a second on a cached mask, which is
  * the difference between a control a GM sweeps and one they nudge and wait for.
  *
@@ -273,7 +273,7 @@ let derivation: {
   readonly dropped: number;
   /** Points the derivation dropped for lying exactly on the line between their neighbours. Lossless. */
   readonly collinear: number;
-  /** The trace's raster width, which is what turns a pixel budget into a map fraction. */
+  /** The trace's raster width, which is what turns a figure in pixels into a map fraction. */
   readonly rasterWidth: number;
   readonly pxPerSquare: number;
 } | null = null;
@@ -286,18 +286,18 @@ let derivation: {
  * is a few milliseconds against the second the trace took.
  */
 function publish(from: NonNullable<typeof derivation>, generation: number): void {
-  // Both the budget and the graph are in fractions of the map, so there is nothing to convert —
+  // Both the limit and the graph are in fractions of the map, so there is nothing to convert —
   // which is the point of the unit, and what lets the editor run the same operation.
-  const budget = currentSettings().trace.spurPruneFraction;
-  const pruned = pruneWallGraph(from.graph, budget);
+  const limit = currentSettings().trace.spurPruneFraction;
+  const pruned = pruneWallGraph(from.graph, limit);
 
   preview = pruned.graph;
   previewDropped = from.dropped;
   /*
-    Measured from the graph **before** pruning, which is the graph the slider's own budget acts on.
+    Measured from the graph **before** pruning, which is the graph the slider's own limit acts on.
 
     Handing over the pruned one would make the top the longest spur that *survived* — which is the
-    budget itself, so raising the slider would raise the floor of what it measures against and the
+    limit itself, so raising the slider would raise the floor of what it measures against and the
     handle would chase the setting. The bottom of these tracks is pinned for the same reason.
   */
   noteGraph(from.graph);
@@ -338,22 +338,22 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   devLog(
     "info",
     `workspace: partition ${generation} — pruned ${pruned.removed} spurs ` +
-      `(${pruned.segments} segments) in ${pruned.rounds} rounds at a budget of ` +
-      `${budget.toExponential(2)} of the map; ${from.collinear} points dropped as exactly ` +
+      `(${pruned.segments} segments) in ${pruned.rounds} rounds at a limit of ` +
+      `${limit.toExponential(2)} of the map; ${from.collinear} points dropped as exactly ` +
       `collinear, which costs nothing; ${describeWallFaces(faces)}`,
   );
   invalidate();
 }
 
 /**
- * Re-apply the spur budget without re-deriving anything.
+ * Re-apply the spur limit without re-deriving anything.
  *
  * The dispatch calls this for a graph-only change. Falls back to a full derive when there is no
  * derivation in hand — which is the state after any reading or deriving change, and after opening
  * the workspace — so the caller never has to know which of the two it is asking for.
  */
 export function repruneRegions(): void {
-  // Nothing to re-prune against: what is on screen is the stored document, and the budget reaches it
+  // Nothing to re-prune against: what is on screen is the stored document, and the limit reaches it
   // through the button in Edit walls rather than by re-deriving.
   if (showingSaved()) return;
   if (!derivation || inFlight) {

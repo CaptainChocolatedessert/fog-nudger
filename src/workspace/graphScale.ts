@@ -23,7 +23,7 @@
  *
  * The floor is a constant in `SETTING_LIMITS`, not the smallest observed spur or bend. **Both tools
  * delete from the bottom**, so the observed minimum is the most mobile quantity there is: prune at
- * budget B and the shortest surviving spur is B. A tracking bottom would chase the slider upward
+ * limit B and the shortest surviving spur is B. A tracking bottom would chase the slider upward
  * every pass, so "30%" would mean a larger bite each time — which is exactly the non-monotonicity
  * that collapsed the two-slider gap design and is worth refusing twice.
  *
@@ -132,7 +132,7 @@ function measure(graph: WallGraph): Tops {
  * Round a measurement **up** to three significant figures, which is what the slider snaps to.
  *
  * Without it the top of the track lands a hair *below* what was measured: `fromSlider` snaps a log
- * value to three figures, so a maximum of 0.1364 comes back as 0.136, and the prune budget then
+ * value to three figures, so a maximum of 0.1364 comes back as 0.136, and the prune limit then
  * fails to reach the very run it was measured from. Rounding the bound up is what keeps the far left
  * meaning exactly off and the far right meaning exactly everything, which is the pair of guarantees
  * these two tracks exist to offer.

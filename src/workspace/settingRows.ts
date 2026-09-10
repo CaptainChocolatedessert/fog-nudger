@@ -208,7 +208,7 @@ export function recomputeFor(names: readonly SettingName[]): void {
   /*
     Graph-only first, and it is now a third thing rather than a cheaper second.
 
-    `GRAPH_ONLY` has exactly one member, the spur budget. It used to mean "skip the 690ms re-read but
+    `GRAPH_ONLY` has exactly one member, the spur limit. It used to mean "skip the 690ms re-read but
     re-derive everything", because pruning happened between thinning and chaining. **Pruning moved
     past the derivation on 2026-09-06**, so it changes nothing the trace did — the graph is already
     fitted and stored, and re-pruning it is a run walk and a face traversal, single-digit
@@ -362,8 +362,8 @@ export function settingRow(control: Control): HTMLElement {
 
         **`tool` joined `display` here on 2026-09-07**, and only for what a repaint shows. Held in
         memory and not persisted — the scene write still waits for the release, so one sweep is still
-        one write. What it buys is the prune preview: the editor draws the walls a budget would delete
-        in red, and a budget is not a number anybody can picture on their own map, so seeing it follow
+        one write. What it buys is the prune preview: the editor draws the walls a limit would delete
+        in red, and a limit is not a number anybody can picture on their own map, so seeing it follow
         the drag is the difference between choosing one and guessing.
 
         What a tool *recomputes* still waits for the release. The gap search re-runs from

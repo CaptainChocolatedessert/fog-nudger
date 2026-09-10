@@ -172,7 +172,7 @@ export interface TraceSettings {
    * genuinely stops in mid-air. They are the same shape locally and only length separates them,
    * which is why this is a number rather than a rule. Zero is off.
    *
-   * Destructive out of proportion to its size at the top end: a budget longer than a wall's own arms
+   * Destructive out of proportion to its size at the top end: a limit longer than a wall's own arms
    * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
    */
   readonly spurPruneFraction: number;
@@ -325,7 +325,7 @@ export const DEFAULT_SETTINGS: Settings = {
     gapFillPx: 12,
     gapTravelPx: 40,
     // Off by default, like every other control that removes something a GM has not looked at yet.
-    // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a budget longer
+    // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a limit longer
     // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
     // graph as fitting produced it, hairs and all.
     spurPruneFraction: 0,
@@ -449,7 +449,7 @@ export const SETTING_LIMITS = {
 
     **The `floor` is pinned and is NOT `min`.** A log scale cannot start at zero and both of these
     have a real off state, so the far-left position is off and the log part starts one step in. It
-    must not be the *observed* minimum: both tools delete from the bottom, so prune at budget B and
+    must not be the *observed* minimum: both tools delete from the bottom, so prune at limit B and
     the shortest surviving spur is B — a tracking bottom would chase the slider upward and make the
     same percentage mean a larger bite every pass, which is the non-monotonicity that collapsed the
     two-slider gap design. And `min` stays 0 because the normaliser clamps into `[min, max]`, so a

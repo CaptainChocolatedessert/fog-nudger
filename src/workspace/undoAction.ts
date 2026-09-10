@@ -7,7 +7,7 @@
  * destroyed by accident — the boundary was in the way. On one surface they can be, and the hand-edit
  * count and its warning only help a GM *predict*: they say what a re-read would cost before it
  * happens. Neither does anything for a judgement that looked right and was not, which is the ordinary
- * case. Pruning at a budget that seemed sensible and taking a wall you wanted had no route back but
+ * case. Pruning at a limit that seemed sensible and taking a wall you wanted had no route back but
  * regenerating the whole graph and losing every other edit with it.
  *
  * ## In the bar, not in a group

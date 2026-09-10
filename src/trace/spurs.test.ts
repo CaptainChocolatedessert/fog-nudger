@@ -36,7 +36,7 @@ function graphOf(
 }
 
 describe("spursToPrune", () => {
-  it("removes nothing at a budget of zero, which is the off position", () => {
+  it("removes nothing at a limit of zero, which is the off position", () => {
     const runs: PrunableRun[] = [{ a: 0, b: 1, length: 0.001 }];
     expect(spursToPrune(runs, 0).removed.size).toBe(0);
     expect(spursToPrune(runs, 0).rounds).toBe(0);
@@ -89,15 +89,15 @@ describe("spursToPrune", () => {
 
   it("never takes a closed loop, however short", () => {
     // A loop contributes two to its own node's degree, so it can never present a free end — which
-    // is the guard that stops a budget swallowing a room.
+    // is the guard that stops a limit swallowing a room.
     const runs: PrunableRun[] = [{ a: 0, b: 0, length: 0.001 }];
     expect(spursToPrune(runs, 1).removed.size).toBe(0);
   });
 
   /*
-    **A run that becomes free later is judged against the same budget, and this is what a room saw.**
+    **A run that becomes free later is judged against the same limit, and this is what a room saw.**
 
-    The cascade frees new ends round by round, but the budget never moves — so a long wall whose end
+    The cascade frees new ends round by round, but the limit never moves — so a long wall whose end
     was a junction, and which only becomes a dead end once the short spurs around it go, is kept
     because it is long. That is correct on its own terms: everything past the threshold is meant to be
     treated as deliberate.
@@ -108,7 +108,7 @@ describe("spursToPrune", () => {
     walls left standing. Reported from a room on 2026-09-07 as "very long walls that do not enclose a
     space".
   */
-  it("keeps a run that outgrew the budget before its end came free", () => {
+  it("keeps a run that outgrew the limit before its end came free", () => {
     const runs: PrunableRun[] = [
       // A long wall between two junctions, with a short spur off each end.
       { a: 0, b: 1, length: 50 },
@@ -120,7 +120,7 @@ describe("spursToPrune", () => {
     expect([...result.removed].sort()).toEqual([1, 2]);
     expect(result.rounds).toBe(1);
 
-    // Only a budget past its own length reaches it, which the track's top end does not offer.
+    // Only a limit past its own length reaches it, which the track's top end does not offer.
     expect([...spursToPrune(runs, 50).removed].sort()).toEqual([0, 1, 2]);
   });
 
@@ -164,7 +164,7 @@ describe("pruneWallGraph", () => {
 
     A stub meets the wall it hangs off at a junction, and that junction keeps its other walls — so
     pruning leaves it exactly where it is. Marking it would be the preview claiming more than the
-    button takes, on the one control whose whole problem is that a budget is impossible to picture.
+    button takes, on the one control whose whole problem is that a limit is impossible to picture.
   */
   it("marks the vertices that go, and not the junction that stays", () => {
     const going = spurEdgesToPrune(wallWithBoth, 0.15);
@@ -191,20 +191,20 @@ describe("pruneWallGraph", () => {
     expect([...going.vertices].sort((a, b) => a - b)).toEqual([0, 1]);
   });
 
-  it("marks nothing when the budget is off", () => {
+  it("marks nothing when the limit is off", () => {
     const going = spurEdgesToPrune(wallWithBoth, 0);
     expect(going.edges.size).toBe(0);
     expect(going.vertices.size).toBe(0);
   });
 
-  it("leaves the graph alone at a budget of zero", () => {
+  it("leaves the graph alone at a limit of zero", () => {
     const result = pruneWallGraph(wallWithBoth, 0);
     expect(result.graph).toBe(wallWithBoth);
     expect(result.removed).toBe(0);
   });
 
   it("takes the short spur and keeps the stub", () => {
-    // The spur is 0.1 long along itself and the stub 0.2, so a budget between them separates them.
+    // The spur is 0.1 long along itself and the stub 0.2, so a limit between them separates them.
     const result = pruneWallGraph(wallWithBoth, 0.15);
     expect(result.removed).toBe(1);
     expect(result.segments).toBe(2);
@@ -223,7 +223,7 @@ describe("pruneWallGraph", () => {
 
     A spur that doubles back has its ends close together and is long along itself. Two graphs
     identical but for one vertex have to be treated differently, or a curled spur is pruned at a
-    budget far shorter than the linework it actually holds.
+    limit far shorter than the linework it actually holds.
   */
   it("measures a run along itself, not end to end", () => {
     // A wall through node 1 so that node is a junction and the branch off it is a run of its own.
@@ -262,7 +262,7 @@ describe("pruneWallGraph", () => {
     expect(pruneWallGraph(doubled, 0.3).removed).toBe(0);
   });
 
-  it("erodes the whole graph once the budget passes a wall's own arms", () => {
+  it("erodes the whole graph once the limit passes a wall's own arms", () => {
     // Deliberate over-reach, the same kind the ink filters have: every arm of a junction becomes a
     // dead end once its neighbours go. Visible, because the graph is drawn.
     const result = pruneWallGraph(wallWithBoth, 1);
@@ -291,7 +291,7 @@ describe("pruneWallGraph", () => {
     );
     const result = pruneWallGraph(room, 0.5);
     // The spur goes; the four walls of the room stay, because the loop through them presents no
-    // free end at any budget.
+    // free end at any limit.
     expect(result.removed).toBe(1);
     expect(result.graph.edges).toHaveLength(5);
     expect(nodeDegrees(result.graph).every((degree) => degree === 2)).toBe(true);
@@ -335,7 +335,7 @@ describe("longestRun", () => {
 
     It measured only *spurs* — runs with a free end — which is what pruning can reach at that instant.
     But pruning cascades: a run between two junctions becomes a dead end once the spurs around it go,
-    and it was then judged against a budget whose maximum had never counted it. So the far right of
+    and it was then judged against a limit whose maximum had never counted it. So the far right of
     the track left exactly those walls standing.
   */
   it("counts a run with no free end, because pruning can reach it later", () => {
@@ -358,12 +358,12 @@ describe("longestRun", () => {
       ],
     );
     // The spur off the bottom wall is 0.4; the room's own perimeter is a closed run of 4. The bound
-    // has to be the larger, or a budget can never be set high enough to erode the room's arms once
+    // has to be the larger, or a limit can never be set high enough to erode the room's arms once
     // the spur has gone and left them free.
     expect(longestRun(room)).toBeCloseTo(4, 6);
   });
 
-  it("is a bound on what any budget could ever prune", () => {
+  it("is a bound on what any limit could ever prune", () => {
     const chain = graphOf(
       [
         [0, 0],
@@ -376,11 +376,11 @@ describe("longestRun", () => {
       ],
     );
     /*
-      The property the maximum has to have: at this budget nothing is refused for being too long, so
+      The property the maximum has to have: at this limit nothing is refused for being too long, so
       everything with a free end goes and what is left is only what cycles hold in place.
     */
-    const budget = longestRun(chain);
-    expect(pruneWallGraph(chain, budget).graph.edges).toHaveLength(0);
+    const limit = longestRun(chain);
+    expect(pruneWallGraph(chain, limit).graph.edges).toHaveLength(0);
   });
 
   it("is zero when there is nothing to measure", () => {

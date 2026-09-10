@@ -376,13 +376,13 @@ export interface WallPruning {
 }
 
 /**
- * Prune the dead-end walls shorter than `budget`, measured along the wall in map fractions.
+ * Prune the dead-end walls shorter than `limit`, measured along the wall in map fractions.
  *
  * ## Why this is on the fitted graph rather than on the skeleton
  *
  * Pruning used to happen in the raster, between thinning and chaining, and the obvious alternative
  * was to build the graph, prune it, rasterise the survivors and build again. **That was tried and
- * abandoned, and the measurement is the reason.** At a spur budget of 4 over generated linework, the
+ * abandoned, and the measurement is the reason.** At a spur limit of 4 over generated linework, the
  * rebuild left 181 of 400 seeds carrying a sub-pixel sliver the cleanup cannot remove, against 1 of
  * 400 for the raster prune — the same artefact, thirty to a hundred times more of it. The cause is
  * that the raster walk stops *before* the junction a branch runs into and leaves that pixel, where
@@ -407,8 +407,8 @@ export interface WallPruning {
  * Node ids are renumbered by the compaction at the end, so **this may not run inside a gesture** —
  * the standing rule. Everywhere it is called, the caller stops holding ids across it.
  */
-export function pruneWallGraph(graph: WallGraph, budget: number): WallPruning {
-  const doomed = spurEdgesToPrune(graph, budget);
+export function pruneWallGraph(graph: WallGraph, limit: number): WallPruning {
+  const doomed = spurEdgesToPrune(graph, limit);
   if (doomed.edges.size === 0) {
     return { graph, removed: 0, segments: 0, length: 0, rounds: doomed.rounds };
   }
@@ -426,7 +426,7 @@ export function pruneWallGraph(graph: WallGraph, budget: number): WallPruning {
   };
 }
 
-/** Which segments a spur budget would remove, without removing them. */
+/** Which segments a spur limit would remove, without removing them. */
 export interface DoomedSpurs {
   /** Indices into `graph.edges`. */
   readonly edges: ReadonlySet<number>;
@@ -448,7 +448,7 @@ export interface DoomedSpurs {
 }
 
 /**
- * The segments a budget would prune — the question asked without the answer being applied.
+ * The segments a limit would prune — the question asked without the answer being applied.
  *
  * ## Why this is separate from doing it
  *
@@ -467,7 +467,7 @@ export interface DoomedSpurs {
  * plus a cascade, and a canvas redraws sixty times a second for reasons that have nothing to do with
  * the slider.
  */
-export function spurEdgesToPrune(graph: WallGraph, budget: number): DoomedSpurs {
+export function spurEdgesToPrune(graph: WallGraph, limit: number): DoomedSpurs {
   const empty = {
     edges: new Set<number>(),
     vertices: new Set<number>(),
@@ -475,7 +475,7 @@ export function spurEdgesToPrune(graph: WallGraph, budget: number): DoomedSpurs 
     length: 0,
     rounds: 0,
   };
-  if (!(budget > 0)) return empty;
+  if (!(limit > 0)) return empty;
 
   const runs = walkRuns(graph);
   const prunable: PrunableRun[] = runs.map((run) => ({
@@ -483,7 +483,7 @@ export function spurEdgesToPrune(graph: WallGraph, budget: number): DoomedSpurs 
     b: run.nodes[run.nodes.length - 1]!,
     length: runLength(graph, run.nodes),
   }));
-  const decision = spursToPrune(prunable, budget);
+  const decision = spursToPrune(prunable, limit);
   if (decision.removed.size === 0) return { ...empty, rounds: decision.rounds };
 
   const edges = new Set<number>();
@@ -549,7 +549,7 @@ function runLength(graph: WallGraph, nodes: readonly number[]): number {
  * don't enclose a space"*.
  *
  * The longest run is the honest bound (user, 2026-09-07): **no run can be longer than the longest
- * run**, so a budget set here can reach anything the cascade ever frees. The far right therefore
+ * run**, so a limit set here can reach anything the cascade ever frees. The far right therefore
  * means "every dead end, whatever its length", while staying a finite number measured off this graph
  * rather than an infinity dressed up as a setting.
  *
@@ -558,7 +558,7 @@ function runLength(graph: WallGraph, nodes: readonly number[]): number {
  * The note this replaces said including non-spurs would put every useful setting "in the first
  * percent", because the exterior wall's run would dominate. **That was overstated, and the arithmetic
  * is why**: the track is logarithmic, so a top twenty times larger costs about a fifth of the track
- * rather than all of it. A working budget on the test map sits around two thirds of the way up under
+ * rather than all of it. A working limit on the test map sits around two thirds of the way up under
  * the old measurement and around half under this one.
  *
  * The argument does still hold for `largestBend`, which is measured per *vertex* for exactly that

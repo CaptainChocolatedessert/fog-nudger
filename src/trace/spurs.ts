@@ -32,7 +32,7 @@
  *
  * Deliberately not a `WallGraph` edge, and not a run of them. The *decision* pruning makes needs
  * two things — which nodes a run joins, and how long it is — and neither is a fact about how the
- * caller stores its geometry. The caller measures the length in the unit its own budget is in.
+ * caller stores its geometry. The caller measures the length in the unit its own limit is in.
  *
  * That is the same shape `simplifyPolyline` has: points in, points out, no idea where they came from.
  * It is what lets the ink mode and the wall editor share one implementation rather than growing two
@@ -42,25 +42,25 @@ export interface PrunableRun {
   /** Node indices. Equal when the run is a closed loop. */
   readonly a: number;
   readonly b: number;
-  /** How long the run is, in whatever unit the caller's budget is expressed in. */
+  /** How long the run is, in whatever unit the caller's limit is expressed in. */
   readonly length: number;
 }
 
 export interface GraphPruning {
   /** Indices into the runs handed in. */
   readonly removed: ReadonlySet<number>;
-  /** How many passes it took to settle. Zero when the budget removed nothing. */
+  /** How many passes it took to settle. Zero when the limit removed nothing. */
   readonly rounds: number;
   /** Total length removed, for the log. */
   readonly length: number;
 }
 
 /**
- * Which runs a spur budget removes, iterated until nothing more qualifies.
+ * Which runs a spur limit removes, iterated until nothing more qualifies.
  *
  * A **spur** is a run with a free end: one of its two nodes is joined to nothing else. Removing one
  * can free the end of another — every arm of a junction becomes a dead end once its neighbours go —
- * so this runs in rounds rather than a single pass. That cascade is why **a budget longer than a
+ * so this runs in rounds rather than a single pass. That cascade is why **a limit longer than a
  * wall's arms erodes the whole graph**, which is deliberate over-reach of the same kind the ink
  * filters have: it is visible, because the graph is drawn.
  *
@@ -76,7 +76,7 @@ export interface GraphPruning {
  *
  * A run whose two ends are the same node contributes **two** to that node's degree, so it can never
  * present a free end. That is correct rather than incidental: a loop encloses a face, and deleting it
- * would merge two rooms — which is this project's worst outcome and not something a spur budget may
+ * would merge two rooms — which is this project's worst outcome and not something a spur limit may
  * ever do.
  *
  * A run free at *both* ends is a free-standing wall touching nothing, and it does qualify. That
@@ -85,9 +85,9 @@ export interface GraphPruning {
  *
  * Pure: no DOM, no SDK, no raster.
  */
-export function spursToPrune(runs: readonly PrunableRun[], budget: number): GraphPruning {
+export function spursToPrune(runs: readonly PrunableRun[], limit: number): GraphPruning {
   const removed = new Set<number>();
-  if (!(budget > 0) || runs.length === 0) return { removed, rounds: 0, length: 0 };
+  if (!(limit > 0) || runs.length === 0) return { removed, rounds: 0, length: 0 };
 
   let highest = 0;
   for (const run of runs) highest = Math.max(highest, run.a, run.b);
@@ -104,9 +104,9 @@ export function spursToPrune(runs: readonly PrunableRun[], budget: number): Grap
     for (let i = 0; i < runs.length; i++) {
       if (removed.has(i)) continue;
       const run = runs[i]!;
-      if (run.length > budget) continue;
+      if (run.length > limit) continue;
       // A loop contributes two to its own node, so it cannot reach one here — which is the guard
-      // that stops a budget swallowing a room.
+      // that stops a limit swallowing a room.
       if (degree[run.a] === 1 || degree[run.b] === 1) going.push(i);
     }
     if (going.length === 0) break;

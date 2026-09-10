@@ -66,7 +66,7 @@ export function handEdits(): number {
  * **Undo exists because the boundary that used to make this unnecessary is gone.** While the reading
  * controls and the editing tools were separate pages, wall edits could not be destroyed by accident;
  * on one surface they can, and the count plus its warning only help a GM *predict*. Nothing helped
- * with a judgement that looked right and was not — pruning at a budget that seemed fine and taking a
+ * with a judgement that looked right and was not — pruning at a limit that seemed fine and taking a
  * wall you wanted had no route back but regenerating and losing everything.
  *
  * Snapshots rather than inverse operations. The graph is tens of kilobytes and every edit already

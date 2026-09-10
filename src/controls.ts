@@ -113,7 +113,7 @@ export interface Control {
  * The old note here defended the hints on the grounds that a direction is not guessable — raising
  * Sauvola's `k` finds *less* ink, and "sensitivity" suggests the opposite. That argument was right
  * about the problem and wrong about the fix: the control is called **strictness** now, and a
- * stricter threshold finding less ink needs no explaining. Likewise the spur budget, which is *the
+ * stricter threshold finding less ink needs no explaining. Likewise the spur limit, which is *the
  * longest dead end to remove* because "spur" is this project's word and not a GM's.
  *
  * **Two hints survive**, and each says something neither a name nor a number can: that a gap
