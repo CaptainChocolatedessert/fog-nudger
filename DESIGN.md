@@ -455,7 +455,8 @@ one and touching-the-border matches both.
 every map.** It has no polygon, so it drops out for free with nothing to identify.
 
 **The cost, stated:** a GM who *wants* the outside revealable has to say so, by drawing walls at the
-map's edge. That is one button — *Wall the map's edge* (§5) — and it is an ordinary edit afterwards.
+map's edge. That is one button — *Make the outside a room* (§5) — and it is an ordinary edit
+afterwards.
 
 ### What emits as a shape and what emits as a line — the bridge criterion
 
@@ -632,13 +633,13 @@ the grid *silently*.
 | --- | --- | --- |
 | Texture blur | px | a filter kernel size |
 | Detail window | px | a filter kernel size, tuned beside the blur |
-| Minimum stroke width | ink widths | genuinely a statement about stroke thickness |
-| Smallest ink island | px | a size on the image, and ink width is not trusted here |
-| Largest gap to repair | px | a threshold that moved with a measurement would change what is repaired invisibly |
+| Thinnest stroke to keep | ink widths | genuinely a statement about stroke thickness |
+| Smallest mark to keep | px | a size on the image, and ink width is not trusted here |
+| Largest gap to look for | px | a threshold that moved with a measurement would change what is proposed invisibly |
 | Same-wall distance | px | a distance travelled across the image |
 | Brush widths | px | what the GM is aiming with, on screen |
-| Edge simplification | fraction of the map | must be expressible in both modes |
-| Prune spurs | fraction of the map | same |
+| Straightening | fraction of the map | must be expressible in both modes |
+| Longest dead end to remove | fraction of the map | same |
 
 **Nothing in the pipeline depends on the grid.** The one control that did — the deleted smallest-room
 filter — depended on it *squared*, so a grid off by four put it off by sixteen.
@@ -800,12 +801,12 @@ Both act on the composed mask and neither is safe on its own. **Both maxima deli
 enough to erase the map**, because a control whose top end still looks reasonable gives no feel for
 where the edge is. That is only defensible because the surface draws the result.
 
-- **Minimum stroke width** — a morphological **opening** (erode k, then dilate k), denominated in
+- **Thinnest stroke to keep** — a morphological **opening** (erode k, then dilate k), denominated in
   measured ink widths, default zero. It works on **width**, which is the axis a floor grid printed as
   dark as the walls actually sits on; blur works on **contrast** and cannot reach it. It **runs after
   the ink-width measurement, never before** — measuring a filtered mask would raise the mean width,
   move the threshold, and change what it removes.
-- **Smallest ink island** — removes 8-connected ink components whose bounding box is short on **both**
+- **Smallest mark to keep** — removes 8-connected ink components whose bounding box is short on **both**
   sides, in raster pixels. Walls join into one network and decorations are islands, so connectivity
   does the separating and size only has to catch islands. **Longest bounding-box side, not area**,
   because that is the measure that means *stubby*.
@@ -1225,7 +1226,7 @@ thing being transformed.
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
   vertices that actually go, since the junction where a stub meets its wall keeps its other walls and
   stays put.
-- **Wall the map's edge** (`addFrameWalls`) — four segments at the map's extent as **one closed run**,
+- **Make the outside a room** (`addFrameWalls`) — four segments at the map's extent as **one closed run**,
   so the corners are shared vertices by construction. **It adds, so it asks nothing first**, unlike the
   two above. **A second press is refused rather than absorbed**: four segments laid on four existing
   ones are collinear overlaps, which splitting cannot separate and which make Euler's identity fail —
@@ -1684,14 +1685,55 @@ this was a rework of the surface only.
 the hand-edit count and the warning it prices, one page with one panel button, undo, the derive
 indicators, the markup palette, the layer toggles and the colour pickers.
 
-> **None of it has been through a room.** It types, 781 tests pass, the production build is clean, and
+> **None of it has been through a room.** It types, 782 tests pass, the production build is clean, and
 > both pages were driven in a browser outside Owlbear. What that cannot say is whether the arrangement
 > is one a GM wants, which is the whole question the redesign was for. **A real session of map
 > correction is the next thing this project needs**, and it now tests the surface as well as the
 > partition.
 
-**One known cost, carried forward:** the blurbs are wordy, which the tool hint made obvious by putting
-six lines at the top of the rail. Not a defect and not yet addressed.
+**That known cost is paid** (user, 2026-09-09): *"most items don't need any description at all. Let's
+see how far we can get just with good naming."* Roughly 1,400 words across the rail and the panel came
+down to about 250.
+
+### The rule for UI text, and what it kept
+
+**A line of description survives only if it says something the label and the readout beside it
+cannot.** The readout is half of that and is easy to forget: every slider already prints its value in
+a unit a GM can feel — *"under ~4px goes, ink is 3.2px"* — which is what most of the deleted sentences
+were restating in words.
+
+**Where a name was doing too little, the name changed rather than being propped up.** The old note in
+`controls.ts` defended a hint on every control on the grounds that a direction is not guessable —
+raising Sauvola's `k` finds *less* ink, and "sensitivity" suggests the opposite. That was right about
+the problem and wrong about the fix. The control is **Ink strictness** now, and a stricter threshold
+finding less ink needs no explaining. Likewise **Longest dead end to remove** for the spur budget,
+because *spur* is this document's vocabulary and not a GM's; and **Make the outside a room** for the
+frame button, which was *Wall the map's edge* — a mechanism, with the point left to four sentences
+underneath.
+
+Three things kept their text, and each for a reason that generalises:
+
+- **The tool sentences.** A tool is an inline glyph in a strip with a tooltip, so the pinned line at
+  the top of the rail is the *only* thing on screen saying what a press does and which modifier
+  changes it. `steps.test.ts` pins that every tool is still explained by its own hint or by the blurb
+  of the group it reveals — the one place this cull could have removed the last copy silently, since
+  an empty hint slot collapses and looks like a tool with nothing to say.
+- **Warnings on the three actions that lose work** — prune, straighten, and the save button, which is
+  the only control in the rail whose *absence* costs the graph.
+- **Two hints**, on the gap controls: that a proposal is ringed and not applied until accepted, and
+  which way the same-wall distance leans. No name found says either.
+
+**The tests were inverted, and that is the change rather than a relaxation.** `controls.test.ts` used
+to demand a non-empty hint from every control and `steps.test.ts` a non-empty blurb from every step —
+which is a suite making the prose mandatory and the naming optional. Both now name the exceptions
+exactly. A cap was tried first and let a third hint through under mutation; naming them means adding
+one fails and has to be argued for.
+
+**The cost, stated: the Gaps tool no longer teaches.** Its seventy words spent most of themselves on
+*why* a four-pixel crack matters — that a severed wall merges two rooms, which is the worst thing this
+tool can get wrong and the best argument in the product. What is left says what a press does. A
+first-time GM does not meet the argument anywhere now, and **whether that costs anything is a question
+only a room can answer.**
 
 ### Why: the mode boundary runs across the grain of the task
 
@@ -1935,9 +1977,12 @@ alternatives there would be inviting a GM to make *added* look like *going*.
 - **Locked group headers fail their own purpose.** They are dimmed to teach the order of what is
   coming, and at 40% opacity over the panel that is **2.17:1** — below even the 3:1 floor for non-text
   UI. Around 55–60% lands near 3.5:1: still unmistakably inactive, and legible.
-- **The type is too small where it carries the most meaning.** Base is 13px, but control hints are
-  **9.9px** and the state line **9.8px** — and the hints are where every control's explanation lives.
-  A 14px base with an 11px floor costs nothing; the rail scrolls already.
+- **The type is too small in the places that are left.** Base is 13px, but control hints are **9.9px**
+  and the state line **9.8px**. A 14px base with an 11px floor costs nothing; the rail scrolls already.
+  **The second half of this finding has been overtaken**: it read *"the hints are where every
+  control's explanation lives"*, which was the argument for raising them and is no longer true — the
+  explanation lives in the label now, and two controls have a hint at all. The state line still
+  carries what it always did, so the floor is still worth having.
 
 ### What does not change
 
@@ -1954,14 +1999,14 @@ Worth stating, because it is most of the project:
 
 **The cost, stated: this lands almost entirely in the untested half.** The surface touches the SDK, so
 it cannot be imported into a node test, and the ~6,800 lines of workspace code it reworks have no
-coverage. The 766 tests stay green throughout and will not be evidence about any of it. **A room is
+coverage. The 782 tests stay green throughout and will not be evidence about any of it. **A room is
 the only instrument here**, which is an argument for building it in stages that can each be looked at
 rather than as one landing.
 ---
 
 ## 8. Testing and diagnostic practice
 
-**766 tests across 52 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**782 tests across 54 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
