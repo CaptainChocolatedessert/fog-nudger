@@ -197,18 +197,21 @@ export function render(): void {
       button.type = "button";
       button.className = "tool";
       /*
-        Glyph and name together, rather than either alone.
+        The glyph alone, with the name in the tooltip.
 
-        The name stays because discoverability is this surface's oldest weakness — nothing on it says
-        the map is interactive at all — and an unlabelled picture is a thing to learn rather than a
-        thing to read. The glyph is what makes the strip scannable once it *has* been learned, which
-        is the state a GM spends almost all of their time in.
+        The words were there because discoverability is this surface's oldest weakness, and dropping
+        them is a real trade rather than a tidy-up: an unlabelled picture is a thing to learn where a
+        word is a thing to read. Three things carry the cost. The **tooltip** names it on hover; the
+        **hint at the top of the rail** says in full what the tool in hand does, and stays there
+        however the rail is scrolled; and the **band captions** keep the strip's order legible.
+
+        `aria-label` rather than the text it replaces, because the button now has no text content at
+        all and a screen reader would otherwise announce nothing.
       */
       const glyph = toolIcon(choice.id);
       if (glyph) button.append(glyph);
-      const name = document.createElement("span");
-      name.textContent = choice.label;
-      button.append(name);
+      button.title = choice.label;
+      button.setAttribute("aria-label", choice.label);
       // `aria-pressed` carries the selected look and the meaning together, rather than a class
       // saying the same thing beside it.
       button.setAttribute("aria-pressed", String(choice.id === active));
