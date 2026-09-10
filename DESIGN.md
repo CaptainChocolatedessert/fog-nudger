@@ -2515,7 +2515,13 @@ agreement that came out of that.
   anti-aliases to grey; they are drawn at 2 units and a little larger now, landing at 1.52px. The
   band captions passed on contrast but were 9.1px uppercase, and are at the record's 11px floor.
   Checked in Chromium by measurement and by eye; **not in Firefox**.
-- The layer toggles across the top are not self-explanatory; it is not obvious what they are for.
+- ~~The layer toggles across the top are not self-explanatory; it is not obvious what they are
+  for.~~ **Addressed at the desk (2026-09-10), by naming rather than explaining.** They were a row of
+  bare words with the purpose in a hover tooltip, and two of the words — *Ink* and *Walls* — are also
+  rail sections, so the row read as navigation. It now leads with a caption, **Show**, styled like the
+  tool strip's band captions: *Show — Ink · Rooms · Walls*. **Not seen on screen**: nothing proposes a
+  layer outside a room, so the row is empty there. If the caption is not enough, the next step would be
+  an eye glyph on each switch — a design change rather than a naming one.
 - **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
   control that writes to it is in the left rail, so a message about a press arrives as far from the
   press as the window allows. This is what made three working buttons read as dead. Gating them
@@ -2544,9 +2550,13 @@ agreement that came out of that.
 
 #### Naming
 
-- **Rub out** on the Add ink tool should be **Erase**.
-- **Cover** and **Uncover** on Suppress are not right. The candidate is that **both paint-like tools
-  use Draw and Erase**, and the difference is which layer is in hand rather than which words are used.
+- ~~**Rub out** on the Add ink tool should be **Erase**.~~ **Done (2026-09-09).**
+- ~~**Cover** and **Uncover** on Suppress are not right.~~ **Done (2026-09-09): both paint tools use
+  Draw and Erase**, and the layer in hand carries the difference. The cost is that "Cover" hinted
+  suppression is additive — nothing of the map is lost — and the Suppress blurb now says so outright.
+- **Still open, and smaller:** the suppression *colour* in View is labelled **Covered**, the verb the
+  tool dropped. **Suppressed** would match the tool. And two colour labels, **Ink** and **Walls**,
+  share their names with rail sections, which may read as a link to the section rather than a colour.
 
 #### Wants a conversation before any code
 

@@ -18,6 +18,16 @@
  *
  * A layer the GM has hidden is still *proposed*, so its switch stays and stays off. That is the whole
  * of getting it back.
+ *
+ * ## Led by the word "Show" — room, 2026-09-09
+ *
+ * *"The buttons at the top for hiding different layers are not clear. It isn't obvious what they are
+ * for."* They were a row of bare words, and the purpose lived only in a hover tooltip. Worse, two of
+ * the words — *Ink* and *Walls* — are also rail sections, so the row read as navigation.
+ *
+ * One caption fixes the reading without adding an explanation: *Show — Ink · Rooms · Walls*. A lit
+ * switch then reads as "shown" and a dim one as "not", which is what the pressed state was already
+ * saying to anyone who knew what the row was.
  */
 
 import type { LayerId } from "../steps";
@@ -46,7 +56,14 @@ function render(): void {
   host.replaceChildren();
 
   const showing = allLayers().filter((layer) => layerProposed(layer));
+  // Nothing proposed means no row at all, caption included — the stylesheet collapses it on `:empty`,
+  // so the caption is appended only once there is something for it to introduce.
   if (showing.length === 0) return;
+
+  const caption = document.createElement("span");
+  caption.className = "layer-caption";
+  caption.textContent = "Show";
+  host.append(caption);
 
   for (const layer of showing) {
     const button = document.createElement("button");
