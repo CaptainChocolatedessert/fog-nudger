@@ -2465,11 +2465,13 @@ agreement that came out of that.
 
 #### Bugs
 
-- **Save the ink edits** reports that nothing has changed, after *Smallest mark to keep* was adjusted.
-  *Suspected:* that slider is part of the reading, not a paint layer, and the button's guard asks
-  whether either **hand-painted layer** has unsaved strokes. If so the button is behaving correctly
-  and the *message* is what is wrong — it claims nothing changed when what it means is that nothing
-  it can save changed.
+- ~~**Save the ink edits** reports that nothing has changed, after *Smallest mark to keep* was
+  adjusted.~~ **Fixed at the desk (2026-09-10), and the suspicion was right.** The guard compares only
+  the two painted layers against their saved copies, and a slider writes itself to the scene on
+  release — so there was genuinely nothing left to save. The fault was the phrase *ink edits*: on a
+  step called Ink every control is an ink edit, and the button only ever saved strokes. It is now
+  **Save painted strokes**, and its refusal says *"no painted strokes to save — sliders save
+  themselves as you release them"*, which answers the anxiety the old message produced.
 - **The ghost mark on a slider** lands near the new value rather than on it, and never disappears.
   Wanted: a grey circle matching the control's own handle, so the previous position is easy to return
   to by eye.

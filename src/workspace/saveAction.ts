@@ -133,7 +133,7 @@ async function mayReplace(): Promise<boolean> {
       `This map already has ${wallRuns(stored).length} walls saved, and any moving, drawing or ` +
         "erasing done to them in the wall editor goes with them. It cannot be undone.",
       "What replaces them is the graph on screen, exactly as it is drawn. Your reading settings, " +
-        "your map choice and your ink edits are untouched either way.",
+        "your map choice and your painted strokes are untouched either way.",
     ],
     confirmLabel: "Replace them",
     destructive: true,

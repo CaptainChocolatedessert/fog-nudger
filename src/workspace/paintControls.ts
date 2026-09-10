@@ -245,10 +245,23 @@ function gapActions(): HTMLElement {
 /**
  * Save now, at the foot of the step, for both layers at once.
  *
- * **Not the only way work is kept**, and saying so is the point of its blurb: leaving the step or
- * closing the workspace saves too. That keeps the standing claim true — nothing on this surface is
- * ever lost by navigating away — and it makes the tools' own Discard the only control here that
- * throws anything away, which is the right shape for the one that does.
+ * **Not the only way work is kept**: putting the brush down or closing the workspace saves too. That
+ * keeps the standing claim true — nothing on this surface is ever lost by navigating away — and it
+ * makes the tools' own Discard the only control here that throws anything away, which is the right
+ * shape for the one that does.
+ *
+ * ## It saves strokes and nothing else, and the name has to say so — room, 2026-09-09
+ *
+ * It was *Save the ink edits*, and a room adjusted *Smallest mark to keep*, pressed it, and was told
+ * "nothing has changed since the ink edits were last saved" — which read as the slider change having
+ * been lost. It had not: a slider writes itself to the scene on release, so by the time this button
+ * is pressed there is nothing of the slider's left to save. The guard was right. **"Ink edits" was
+ * the fault**, because on a step called Ink every control is an ink edit, and the button only ever
+ * saved the two painted layers.
+ *
+ * So the label names what it saves, and the refusal says where the slider's change went — which is
+ * the anxiety the old message produced, and the one thing a GM pressing this with nothing painted
+ * needs to hear.
  */
 function renderSave(body: HTMLElement): void {
   const row = document.createElement("div");
@@ -257,10 +270,10 @@ function renderSave(body: HTMLElement): void {
   const save = document.createElement("button");
   save.type = "button";
   save.className = "chip";
-  save.textContent = "Save the ink edits";
+  save.textContent = "Save painted strokes";
   save.addEventListener("click", () => {
     if (!anyUnsavedPaint()) {
-      say("nothing has changed since the ink edits were last saved");
+      say("no painted strokes to save — sliders save themselves as you release them");
       return;
     }
     void finishPaint("save");
