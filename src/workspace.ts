@@ -60,7 +60,7 @@ import { refreshPruneAction, renderPruneAction } from "./workspace/pruneAction";
 import { refreshSimplifyAction, renderSimplifyAction } from "./workspace/simplifyAction";
 import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
-import { renderInkSwatches, renderSwatches } from "./workspace/swatches";
+import { renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
@@ -265,11 +265,9 @@ onSettingCommitted(() => {
   refreshPruneAction();
   refreshFrameAction();
 });
-// The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
-// particular map is change the colour, and it is not a number so it cannot be a row.
-registerStepContent("ink", renderInkSwatches);
 /*
-  The other four markup colours, in the group that is never entered.
+  All five markup colours, in the group that is never entered — the ink's included since 2026-09-09,
+  when it came down from the top of the Ink step (user: "should move down with the others").
 
   Grouped by what a colour *means* rather than by which layer shows it, which is the whole point:
   adjusting for a map with an unusual tint moves one control and everything additive follows. They sit

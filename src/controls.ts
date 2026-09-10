@@ -124,9 +124,10 @@ export interface Control {
  * uses. Two lists would be two places to disagree about what a knob invalidates.
  *
  * **Order is presentation and nothing else**, and it is the only ordering a step has: each step
- * draws its controls in this order, so a control that should be met first is declared first. The two
- * that decide how a step's own layer is *drawn* lead their steps, because looking at the thing comes
- * before tuning it.
+ * draws its controls in this order, so a control that should be met first is declared first. A
+ * control that decides how a step's own layer is *drawn* leads its step, because looking at the thing
+ * comes before tuning it — which is why the preview fill and outline come first in View. The ink's
+ * opacity led the Ink step on the same argument until it was removed (2026-09-09).
  */
 /**
  * What a brush width says, shared by the two brushes.
@@ -159,11 +160,6 @@ function brushReadout(value: number, { pxPerSquare }: Measured): string {
 }
 
 export const CONTROLS: readonly Control[] = [
-  {
-    name: "inkOpacity",
-    label: "Ink overlay",
-    hint: "",
-  },
   {
     name: "sauvolaK",
     // "Strictness" rather than "threshold" or "sensitivity", which is the whole of the direction

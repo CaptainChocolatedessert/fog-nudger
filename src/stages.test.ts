@@ -309,10 +309,27 @@ describe("the overlay colour", () => {
     }
   });
 
-  it("falls back per field, so a bad colour does not discard the opacity beside it", () => {
-    const mixed = normaliseSettings({ overlay: { inkColour: "nonsense", inkOpacity: 0.5 } });
+  it("falls back per field, so a bad colour does not discard the number beside it", () => {
+    // The neighbour was the ink opacity until that parameter was removed (2026-09-09). What is
+    // being pinned is that one malformed field does not take the rest of its group down with it, so
+    // any numeric field in the same group carries it; the brush width is the nearest.
+    const width = DEFAULT_SETTINGS.overlay.suppressBrushPx + 2;
+    const mixed = normaliseSettings({ overlay: { inkColour: "nonsense", suppressBrushPx: width } });
     expect(mixed.overlay.inkColour).toBe(DEFAULT_SETTINGS.overlay.inkColour);
-    expect(mixed.overlay.inkOpacity).toBe(0.5);
+    expect(mixed.overlay.suppressBrushPx).toBe(width);
+  });
+
+  it("drops a stored ink opacity rather than carrying it", () => {
+    /*
+      The reason the parameter was removed instead of its slider being hidden: a GM who had lowered
+      it would otherwise have a faded overlay forever and nothing left to raise it with. A scene saved
+      before the removal still holds the key, and it has to be discarded on the way in.
+
+      Mutation-tested with the fallback test above it: two mutations, two caught — the stored value
+      carried through again, and the brush width lost to a bad neighbouring colour.
+    */
+    const stale = normaliseSettings({ overlay: { inkOpacity: 0.2 } });
+    expect("inkOpacity" in stale.overlay).toBe(false);
   });
 
   // Two tests about the colour surviving a per-STAGE reset lived here. They moved to

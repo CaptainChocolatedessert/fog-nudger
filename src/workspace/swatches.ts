@@ -1,13 +1,24 @@
 /**
- * The ink colour: a row of swatches and a picker, at the top of the Ink step.
+ * The five markup colours, together, at the foot of the persistent View group.
  *
- * It sat in a View group of its own until 2026-08-29, and moved for the reason that emptied that
- * group: a control that decides how a layer is *drawn* belongs beside the controls that decide what
- * is in it. The colour is the first thing a GM reaches for when the overlay is invisible against a
- * particular map, which is why it leads the step rather than trailing it.
+ * ## The ink colour came back down here — user, 2026-09-09
  *
- * It is not a slider and cannot be a `settingRow`: the colour is the one setting that is not a
- * number, so it sits outside the parameter machinery entirely and needs its own row of buttons.
+ * *"The ink color picker should move down with the others."* It had led the Ink step since
+ * 2026-08-29, on the argument that a control deciding how a layer is *drawn* belongs beside the
+ * controls deciding what is in it — and that the colour is the first thing a GM reaches for when the
+ * overlay vanishes against a particular map.
+ *
+ * What overturned it is that there are five colours now, not one. Grouping them by what a colour
+ * *means* is this module's whole design, and one of the five living in a different section was the
+ * exception a GM had to remember. Here they are one list, and the View group is never entered, so
+ * the colour is reachable from anywhere rather than only while Ink is open — which answers the
+ * "first thing reached for" argument better than leading one step did.
+ *
+ * **The cost:** a GM tuning the ink sliders now scrolls to the foot of the rail to recolour the
+ * overlay they are judging, where it used to be directly above them.
+ *
+ * None of these is a slider and none can be a `settingRow`: a colour is not a number, so it sits
+ * outside the parameter machinery and needs its own row.
  */
 
 import { colourFor, applyPalette, colourKey } from "./palette";
@@ -75,9 +86,10 @@ function setRoleColour(role: AdjustableRole, colour: string): void {
  * native picker is there for the one thing that matters, which is legibility on their own map.
  */
 export function renderSwatches(body: HTMLElement): void {
+  // In the palette's declared order, which puts ink first: it is the one covering real area and the
+  // one most often changed, so it leads the list it has joined.
   for (const role of PALETTE_ROLES) {
-    if (role === "ink") continue;
-    body.append(colourRow(role));
+    body.append(role === "ink" ? inkRow() : colourRow(role));
   }
 }
 
@@ -107,8 +119,22 @@ function colourRow(role: AdjustableRole): HTMLElement {
   return row;
 }
 
-/** The ink row, which keeps its swatches because it is the one colour covering real area. */
-export function renderInkSwatches(body: HTMLElement): void {
+/**
+ * The ink row, which keeps its swatches because it is the one colour covering real area.
+ *
+ * Labelled like the others now. At the top of the Ink step the heading above it said what it was;
+ * among four other colours it needs its own name, and the same one-line meaning they carry.
+ */
+function inkRow(): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "row";
+
+  const top = document.createElement("div");
+  top.className = "top";
+  const label = document.createElement("label");
+  label.textContent = ROLE_LABELS.ink.name;
+  top.append(label);
+
   const container = document.createElement("div");
   container.className = "swatches";
 
@@ -141,5 +167,11 @@ export function renderInkSwatches(body: HTMLElement): void {
   picker.addEventListener("input", () => setRoleColour("ink", picker.value));
   picker.addEventListener("change", () => void persistSettings());
   container.append(picker);
-  body.append(container);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = ROLE_LABELS.ink.means;
+
+  row.append(top, container, hint);
+  return row;
 }

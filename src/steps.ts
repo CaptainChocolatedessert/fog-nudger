@@ -20,10 +20,10 @@
  * protection that replaces it is that the four declarations stay separate, with a test pinning that
  * none is read from another.
  *
- * They are *not* required to disagree everywhere. Every parameter in the ink step happens to be a
- * pipeline parameter today, and that is a fact about these twelve parameters rather than a rule —
- * pinning it would fail the day a step legitimately holds one of each, which is exactly what the
- * independence is for.
+ * They are *not* required to disagree everywhere. Every *sliding* parameter in the Ink step happens
+ * to be a pipeline parameter today — the tools' own widths and gap settings are `tool`, and sit in
+ * the pinned head — and that is a fact about today's parameters rather than a rule. Pinning it would
+ * fail the day a step legitimately holds one of each, which is exactly what the independence is for.
  *
  * ## What a step is
  *
@@ -507,10 +507,8 @@ export const STEPS: readonly Step[] = [
  * both surfaces, which is a control a GM cannot reach and nothing to say it is missing.
  */
 export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly StepId[]>> = {
-  // How the ink is drawn sits with the ink, and how a proposal is drawn sits with the proposals
-  // (user, 2026-08-29). They were a View group of their own while the partition existed only in the
-  // scene; now that both are drawn on this canvas, a control that changes one belongs beside it.
-  inkOpacity: "ink",
+  // The ink's opacity led this list and is gone (user, 2026-09-09), along with the parameter —
+  // see the tombstone in `settings.ts` for why the setting could not simply be hidden.
   sauvolaK: "ink",
   blurSigma: "ink",
   sauvolaRadiusPx: "ink",
@@ -562,13 +560,34 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
 };
 
 /**
- * The step the overlay's colour belongs to.
+ * The step the markup colours belong to, and which of the settings they are.
  *
- * The same wart `settings.ts` carries one axis down, for the same reason: the colour is the one
- * setting that is not a number, so it sits outside `SETTING_LIMITS` and every function that walks a
- * step's parameters has to remember it separately. Named once here rather than in each of them.
+ * The same wart `settings.ts` carries one axis down, for the same reason: a colour is not a number,
+ * so it sits outside `SETTING_LIMITS` and every function that walks a step's parameters has to
+ * remember the colours separately. Named once here rather than in each of them.
+ *
+ * ## View, and all five — 2026-09-10
+ *
+ * It was `"ink"` and covered the ink colour alone, because the ink swatch sat at the top of the Ink
+ * step. The swatch moved down to join the other four in View (user, 2026-09-09), and this had to
+ * follow it — **left behind, Ink's Defaults would have reset a colour no longer shown in Ink**, while
+ * View's Defaults, directly under the picker, left it alone.
+ *
+ * **The other four were never reset by anything**, which reads as a gap left when they became
+ * adjustable rather than a decision. With all five in one group a Defaults that restored one and not
+ * the other four would be the button and the section disagreeing, so it covers the lot.
+ * `steps.test.ts` pins that the list names every colour the settings carry, so a sixth cannot join
+ * the palette and be forgotten here.
  */
-const COLOUR_STEP: StepId = "ink";
+const COLOUR_STEP: StepId = "view";
+
+export const COLOUR_KEYS = [
+  "inkColour",
+  "structureColour",
+  "additiveColour",
+  "subtractiveColour",
+  "destructiveColour",
+] as const satisfies readonly (keyof Settings["overlay"])[];
 
 /** Whether a step's controls are all at their defaults. */
 export function isStepDefault(settings: Settings, id: StepId): boolean {
@@ -576,7 +595,7 @@ export function isStepDefault(settings: Settings, id: StepId): boolean {
     (name) => readParameter(settings, name) === readParameter(DEFAULT_SETTINGS, name),
   );
   if (id !== COLOUR_STEP) return numbers;
-  return numbers && settings.overlay.inkColour === DEFAULT_SETTINGS.overlay.inkColour;
+  return numbers && COLOUR_KEYS.every((key) => settings.overlay[key] === DEFAULT_SETTINGS.overlay[key]);
 }
 
 /**
@@ -593,10 +612,8 @@ export function resetStep(settings: Settings, id: StepId): Settings {
     settings,
   );
   if (id !== COLOUR_STEP) return numbers;
-  return {
-    ...numbers,
-    overlay: { ...numbers.overlay, inkColour: DEFAULT_SETTINGS.overlay.inkColour },
-  };
+  const colours = Object.fromEntries(COLOUR_KEYS.map((key) => [key, DEFAULT_SETTINGS.overlay[key]]));
+  return { ...numbers, overlay: { ...numbers.overlay, ...colours } };
 }
 
 /**

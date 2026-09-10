@@ -1531,7 +1531,8 @@ an edge mark.
 A layer is drawn because the open step asks for it, by name. Each step has its own display style —
 with **one deliberate exception**: `paint` is drawn wherever the ink is, because a picture of the ink
 that omits the GM's edits is a picture of something that no longer exists downstream. Amber for ink
-taken away, cyan for ink put in, both at full alpha whatever the ink opacity is.
+taken away, cyan for ink put in, both at full alpha. (The ink itself is solid too now — its opacity
+control was removed on 2026-09-09, and with it the case where the two could differ.)
 
 **The ink layer draws the BASE, not the composite.** Handing it the composite would make invented
 pixels indistinguishable from read ones.
@@ -1920,9 +1921,11 @@ which is the whole of how it comes back.
 
 **One subject, everything else reference.** Most of the crowding is a *strength* problem rather than a
 presence problem — the ink mask, the paint layers, the gap marks and the wall centrelines all want the
-same few pixels of a wall stroke. Two controls for it already exist (ink opacity, preview fill and
-outline). Deliberately **not** automated: which layer is the subject is a judgement, and guessing it
-wrongly is more annoying than leaving it.
+same few pixels of a wall stroke. The controls for it are the preview fill and outline and the layer
+toggles; **the ink opacity was one of them and was removed on 2026-09-09**, which takes away the
+in-between setting — the ink is now either solid or hidden. Per-colour opacity is parked for a
+conversation and is where that would come back. Deliberately **not** automated: which layer is the
+subject is a judgement, and guessing it wrongly is more annoying than leaving it.
 
 *Reassurance on scale: the densest state today is already four layers together in the Walls step, and
 that has been through a room. Everything-on is five.*
@@ -2510,8 +2513,21 @@ agreement that came out of that.
 
 #### Cuts and moves
 
-- The **ink colour picker** should move down with the other swatches, and the **ink opacity** control
-  should go.
+- ~~The **ink colour picker** should move down with the other swatches, and the **ink opacity**
+  control should go.~~ **Done at the desk (2026-09-10).** The ink row now leads the five colours at
+  the foot of View, labelled like its neighbours. Two consequences worth knowing:
+  - **The ink opacity went as a parameter, not just a slider.** Hiding only the control would have
+    left anyone who had already lowered it with a faded overlay forever and no way back; with the key
+    gone the settings normaliser drops a stored value. **The cost** is the in-between setting — the
+    ink is solid or it is hidden, and "does this ink sit on the line underneath" takes two views where
+    it took one.
+  - **View's Defaults now resets all five colours.** The ink colour's reset had lived on Ink and had
+    to follow the swatch, or Ink's Defaults would restore a colour it no longer shows. The other four
+    were never reset by anything, which looks like a gap left when they became adjustable; with all
+    five side by side, restoring one and not the others would have been the button and the section
+    disagreeing.
+  - *Noticed, not changed:* the suppression colour is labelled **Covered**, which is the verb the
+    Suppress tool dropped for Draw/Erase. Probably wants to be **Suppressed**, to match the tool.
 - **Put the walls on the map** — the room's reaction was that it no longer makes sense.
 - **Put on the map** in Edit walls — consider removing it too.
 

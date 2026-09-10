@@ -27,6 +27,7 @@ import { describe, expect, it } from "vitest";
 
 import { CONTROLS } from "./controls";
 import {
+  COLOUR_KEYS,
   groupControls,
   headingGroups,
   isStepDefault,
@@ -353,29 +354,41 @@ describe("per-step defaults", () => {
     }
   });
 
-  it("counts the ink colour as part of the Ink step, since nothing else would", () => {
-    // The colour is not in SETTING_LIMITS, so a step-walking function that only looked at numbers
-    // would report Ink as untouched with a changed colour, and its Defaults button would do nothing.
-    const edited = {
-      ...DEFAULT_SETTINGS,
-      overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" },
-    };
+  /*
+    The colours moved to View on 2026-09-10 and the reset went with them — see `COLOUR_STEP`. Each
+    colour is edited on its own, so a reset that restored only the ink one (which is what it did for
+    the whole of its life) fails for the four others by name rather than passing on the first.
 
-    expect(isStepDefault(edited, "ink")).toBe(false);
-    expect(resetStep(edited, "ink").overlay.inkColour).toBe(DEFAULT_SETTINGS.overlay.inkColour);
+    Mutation-tested: four mutations, four caught — the reset left on Ink as before the move, the
+    reset and the default check each narrowed back to the ink colour alone, and a colour dropped
+    from the list.
+  */
+  it("counts every markup colour as part of View, since nothing else would", () => {
+    // Not in SETTING_LIMITS, so a step-walking function that only looked at numbers would report View
+    // as untouched with a changed colour, and its Defaults button would do nothing to it.
+    for (const key of COLOUR_KEYS) {
+      const edited = { ...DEFAULT_SETTINGS, overlay: { ...DEFAULT_SETTINGS.overlay, [key]: "#00ff00" } };
+      expect(isStepDefault(edited, "view"), key).toBe(false);
+      expect(resetStep(edited, "view").overlay[key], key).toBe(DEFAULT_SETTINGS.overlay[key]);
+    }
   });
 
-  it("leaves the ink colour alone when another step is reset", () => {
-    const edited = {
-      ...DEFAULT_SETTINGS,
-      overlay: { ...DEFAULT_SETTINGS.overlay, inkColour: "#00ff00" },
-    };
-
-    for (const step of STEPS) {
-      if (step.id === "ink") continue;
-      expect(isStepDefault(edited, step.id), step.id).toBe(true);
-      expect(resetStep(edited, step.id).overlay.inkColour, step.id).toBe("#00ff00");
+  it("leaves every colour alone when another step is reset", () => {
+    // Ink especially, which is where the ink colour's reset used to live: it would now be restoring
+    // a colour that is not shown in its section.
+    for (const key of COLOUR_KEYS) {
+      const edited = { ...DEFAULT_SETTINGS, overlay: { ...DEFAULT_SETTINGS.overlay, [key]: "#00ff00" } };
+      for (const step of STEPS) {
+        if (step.id === "view") continue;
+        expect(isStepDefault(edited, step.id), `${step.id}/${key}`).toBe(true);
+        expect(resetStep(edited, step.id).overlay[key], `${step.id}/${key}`).toBe("#00ff00");
+      }
     }
+  });
+
+  it("names every colour the settings carry, so a new one cannot be missed by the reset", () => {
+    const carried = Object.keys(DEFAULT_SETTINGS.overlay).filter((key) => key.endsWith("Colour"));
+    expect([...COLOUR_KEYS].sort()).toEqual(carried.sort());
   });
 });
 

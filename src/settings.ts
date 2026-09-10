@@ -259,15 +259,19 @@ export interface OverlaySettings {
   readonly additiveColour: string;
   readonly subtractiveColour: string;
   readonly destructiveColour: string;
-  /**
-   * How opaque that paint is.
-   *
-   * Defaults to fully opaque, which is the honest starting point: the question stage one asks is
-   * "is this what you call a wall", and a solid answer is easiest to read. Lowering it turns the
-   * overlay into a tint the map shows through, which is what you want when the question shifts to
-   * "does this line up with the linework underneath".
-   */
-  readonly inkOpacity: number;
+  /*
+    `inkOpacity` was here, and the parameter went with its control (user, 2026-09-09: "The ink
+    opacity control can be removed").
+
+    **Removed rather than hidden**, which is the part that needed deciding. Dropping only the slider
+    would have left anyone who had already lowered it with a faded overlay forever and no control to
+    undo it. With the key gone the normaliser drops a stored value, so every map draws the ink solid.
+
+    **The cost:** tinting the overlay so the map's own linework shows through it was a real use —
+    it answered "does this ink sit on the line underneath" in one view. The layer toggle answers it
+    in two, by taking the overlay away entirely. Per-colour opacity is parked for discussion and is
+    where this would come back, if it does.
+  */
   /**
    * How wide the suppression brush is, in raster pixels.
    *
@@ -375,7 +379,6 @@ export const DEFAULT_SETTINGS: Settings = {
     additiveColour: PALETTE_DEFAULTS.additive,
     subtractiveColour: PALETTE_DEFAULTS.subtractive,
     destructiveColour: PALETTE_DEFAULTS.destructive,
-    inkOpacity: 1,
     // Wide enough to cover an area rather than trace a line, which is what suppression is mostly
     // for and is also the shape of paint that costs almost nothing to store. Fine work is a matter
     // of turning it down and zooming in.
@@ -420,9 +423,6 @@ export const SETTING_LIMITS = {
   editSimplifyFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   fillOpacity: { min: 0, max: 1, step: 0.02 },
   strokeSquares: { min: 0, max: 0.3, step: 0.01 },
-  // Not floored above zero. Dragging it to nothing is a legitimate way to check what is underneath
-  // without taking the overlay down and losing its position.
-  inkOpacity: { min: 0, max: 1, step: 0.02 },
   // Runs past a doorway on purpose, like the two filters above it: at the top end whole doorways
   // get sealed, which is what makes the middle of the track feel like a choice. No measurement can
   // separate a doorway from a severed wall — both are a gap of some width — so where that line
@@ -515,7 +515,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   sauvolaRadiusPx: "read",
   minStrokeInkWidths: "read",
   minIslandPx: "read",
-  inkOpacity: "read",
   gapFillPx: "read",
   gapTravelPx: "read",
   spurPruneFraction: "read",
@@ -596,7 +595,6 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   sauvolaRadiusPx: "pipeline",
   minStrokeInkWidths: "pipeline",
   minIslandPx: "pipeline",
-  inkOpacity: "display",
   // The gap search proposes and the GM accepts; nothing is recomputed until the tool is run, and
   // what it writes goes into the added-ink layer rather than into a term of the composition.
   gapFillPx: "tool",
@@ -842,7 +840,6 @@ export function normaliseSettings(raw: unknown): Settings {
       additiveColour: normaliseColour(overlay.additiveColour, o.additiveColour),
       subtractiveColour: normaliseColour(overlay.subtractiveColour, o.subtractiveColour),
       destructiveColour: normaliseColour(overlay.destructiveColour, o.destructiveColour),
-      inkOpacity: clamp(overlay.inkOpacity, "inkOpacity", o.inkOpacity),
       suppressBrushPx: clamp(overlay.suppressBrushPx, "suppressBrushPx", o.suppressBrushPx),
       inkBrushPx: clamp(overlay.inkBrushPx, "inkBrushPx", o.inkBrushPx),
     },

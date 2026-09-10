@@ -55,9 +55,8 @@ export function recolourInk(): void {
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   if (!painted || !maskShowing()) return;
-  context.globalAlpha = currentSettings().overlay.inkOpacity;
+  // Solid, always. The opacity control went on 2026-09-09; see `settings.ts` for the cost.
   context.drawImage(painted.canvas, view.x, view.y, drawWidth, drawHeight);
-  context.globalAlpha = 1;
 };
 
 /** Wire the layer up. Called in draw order, which is what puts the ink under the gaps. */
