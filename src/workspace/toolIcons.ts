@@ -51,7 +51,14 @@ const ICONS: Readonly<Record<string, string>> = {
  *
  * Built rather than returned as markup so the caller appends a node: the strip is rebuilt on every
  * tool change, and handing back a string would put an `innerHTML` assignment in that loop for no
- * reason. `aria-hidden` because the button already carries the tool's name as text.
+ * reason. `aria-hidden` because the button carries the tool's name in its `aria-label` — the visible
+ * text went to a tooltip on 2026-09-09, and this used to say the button had it as text.
+ *
+ * **Drawn at 2, not 1.6** (2026-09-10). A room reported the tool column as too thin to read, and the
+ * arithmetic agreed: on a 24-unit grid shown at about 15px, a 1.6 line renders at 1.04 CSS pixels,
+ * which anti-aliases across two pixel columns and reads as grey rather than as its colour. At 2, and
+ * with the glyph drawn a little larger by the stylesheet, it lands near 1.5px — the weight common
+ * line-icon sets use at this size.
  */
 export function toolIcon(id: string): SVGElement | null {
   const paths = ICONS[id];
@@ -61,7 +68,7 @@ export function toolIcon(id: string): SVGElement | null {
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("fill", "none");
   svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-width", "2");
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");

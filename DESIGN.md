@@ -2040,13 +2040,18 @@ in amber"* — cannot outlive the mark it describes.
 worth offering; the other four are marks a few pixels wide whose meaning is fixed, and offering
 alternatives there would be inviting a GM to make *added* look like *going*.
 
-### Two measured fixes to carry over
+### Two measured fixes to carry over — one done, one half done
 
-- **Locked group headers fail their own purpose.** They are dimmed to teach the order of what is
-  coming, and at 40% opacity over the panel that is **2.17:1** — below even the 3:1 floor for non-text
-  UI. Around 55–60% lands near 3.5:1: still unmistakably inactive, and legible.
+- ~~**Locked group headers fail their own purpose.**~~ **Done, and this entry went on listing it as
+  outstanding.** At 40% opacity a locked header was 2.17:1, under the 3:1 floor for non-text UI. The
+  stylesheet has had it at **0.65 (3.74:1)** for some time, with the measurement written beside the
+  rule — found on 2026-09-10 while applying the same fix to the tool strip. **0.65 is now the one
+  value for "inactive" on the surface**: disabled tools were at 0.4 (2.74:1) and match it at 5.35:1.
 - **The type is too small in the places that are left.** Base is 13px, but control hints are **9.9px**
   and the state line **9.8px**. A 14px base with an 11px floor costs nothing; the rail scrolls already.
+  **Half applied (2026-09-10):** the tool strip's band captions were 9.1px and are at the 11px floor.
+  The hints and the state line are still under it, and the 14px base is not applied — it changes the
+  look of every control, which is worth a GM seeing before it lands rather than after.
   **The second half of this finding has been overtaken**: it read *"the hints are where every
   control's explanation lives"*, which was the argument for raising them and is no longer true — the
   explanation lives in the label now, and two controls have a hint at all. The state line still
@@ -2502,8 +2507,14 @@ agreement that came out of that.
 
 #### Legibility
 
-- The text in the tool column is too thin or too dark to read comfortably. Related to the measured
-  typography finding in §7a, which is still unapplied.
+- ~~The text in the tool column is too thin or too dark to read comfortably.~~ **Fixed at the desk
+  (2026-09-10), and it was both.** *Too dark*: disabled tools were at 40% opacity, which measured
+  2.74:1 against the strip — under the 3:1 non-text floor — and before a map or a graph most of the
+  column is disabled. They match a locked header's 0.65 now, at 5.35:1. *Too thin*: the glyphs drew a
+  1.6-unit line on a 24-unit grid shown at about 15px, which renders at **1.04 CSS pixels** and
+  anti-aliases to grey; they are drawn at 2 units and a little larger now, landing at 1.52px. The
+  band captions passed on contrast but were 9.1px uppercase, and are at the record's 11px floor.
+  Checked in Chromium by measurement and by eye; **not in Firefox**.
 - The layer toggles across the top are not self-explanatory; it is not obvious what they are for.
 - **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
   control that writes to it is in the left rail, so a message about a press arrives as far from the

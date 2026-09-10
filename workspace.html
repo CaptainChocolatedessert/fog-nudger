@@ -337,13 +337,19 @@
       #tools.hidden {
         display: none;
       }
+      /*
+        The band captions — Look, Ink, Walls — are the only words in the column, and a room found them
+        hard to read (2026-09-10). Their contrast was fine at 5.39:1; their size was not, at 9.1px of
+        uppercase. 11px is the floor the design record already set for the smallest text on this
+        surface, and the colour is the rail's own secondary grey rather than a dimmer one of its own.
+      */
       .tool-band {
         margin: 0 0 0.3rem;
         text-align: center;
-        font-size: 0.7rem;
+        font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        color: #7f86ad;
+        color: #9aa0c8;
       }
       .tool-rule {
         height: 1px;
@@ -369,8 +375,8 @@
         follows.
       */
       button.tool svg {
-        width: 1.2rem;
-        height: 1.2rem;
+        width: 1.4rem;
+        height: 1.4rem;
         flex: none;
       }
       button.tool:hover:not(:disabled) {
@@ -383,8 +389,15 @@
         color: #14162a;
         font-weight: 600;
       }
+      /*
+        **0.65, matching a locked accordion header, and both numbers are measured.** At 0.4 a disabled
+        glyph computed to 2.74:1 against the strip — under the 3:1 floor for non-text marks — and in
+        the state a GM meets first, before a map or a graph, most of the column is disabled. 0.65 is
+        5.35:1: plainly inactive beside a live glyph, and legible. One value for "inactive" across the
+        surface rather than a second, dimmer one here.
+      */
       button.tool:disabled {
-        opacity: 0.4;
+        opacity: 0.65;
         cursor: default;
       }
 
