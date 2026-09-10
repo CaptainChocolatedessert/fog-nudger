@@ -29,7 +29,7 @@ standing obligation — see §11. Everything else it taught this project is writ
 5. [The wall graph](#5-the-wall-graph--stored-walked-and-edited)
 6. [Emitting](#6-emitting)
 7. [The surfaces](#7-the-surfaces)
-   - [7a. The surface redesign — partly built](#7a-the-surface-redesign--partly-built)
+   - [7a. The surface redesign — built, and unproven](#7a-the-surface-redesign--built-and-unproven)
 8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
 9. [Constraints and pitfalls](#9-constraints-and-pitfalls)
 10. [Open questions and what is next](#10-open-questions-and-what-is-next)
@@ -1401,7 +1401,7 @@ zero. That is the gap the warning stands in for.
 
 > **This section describes the surface before the redesign, and parts of it are already superseded —
 > see
-> [§7a](#7a-the-surface-redesign--partly-built). Read that before changing anything here.**
+> [§7a](#7a-the-surface-redesign--built-and-unproven). Read that before changing anything here.**
 
 **One page, two modes**, chosen by `?mode=` on the URL and by which of two panel buttons opened it.
 The shell, the accordion, the map loading, the transform and every layer are shared; `steps.ts` gives
@@ -1674,18 +1674,24 @@ hides what you compare on. The native `<input type="color">` is still offered be
 because when it works it beats any fixed palette.
 ---
 
-## 7a. The surface redesign — partly built
+## 7a. The surface redesign — built, and unproven
 
-**Everything in §7 above describes the surface as it was before this.** The pipeline, the emit path
-and the storage are untouched; this is a rework of the surface only.
+**§7 above describes the surface as it was before this**, and is kept because the reasoning that
+produced it is what this had to answer. The pipeline, the emit path and the storage are untouched;
+this was a rework of the surface only.
 
-**Built:** the tool strip, the non-exclusive rail, the pinned rail head, the hand-edit count and the
-warning it prices, the merge to one page with one panel button, undo, the derive indicators, the markup palette, the layer toggles and the colour pickers.
+**All of it is built**: the tool strip and its glyphs, the non-exclusive rail, the pinned rail head,
+the hand-edit count and the warning it prices, one page with one panel button, undo, the derive
+indicators, the markup palette, the layer toggles and the colour pickers.
 
-**Section 7a is built.** What remains of the redesign is judgement rather than code: none of it has
-been through a room, and the wordiness of the blurbs — which the tool hint made obvious by putting six
-lines at the top of the rail — is still outstanding. The layer *rules*
-landed with the merge, because it forced them — handles follow the wall tools.
+> **None of it has been through a room.** It types, 781 tests pass, the production build is clean, and
+> both pages were driven in a browser outside Owlbear. What that cannot say is whether the arrangement
+> is one a GM wants, which is the whole question the redesign was for. **A real session of map
+> correction is the next thing this project needs**, and it now tests the surface as well as the
+> partition.
+
+**One known cost, carried forward:** the blurbs are wordy, which the tool hint made obvious by putting
+six lines at the top of the rail. Not a defect and not yet addressed.
 
 ### Why: the mode boundary runs across the grain of the task
 
@@ -2249,19 +2255,22 @@ nobody has yet gone room by room and said whether these are the rooms they would
 session of map correction end to end is still the most informative thing that can happen to this
 project**, and it does not depend on anything below.
 
-### The largest piece of planned work is the surface redesign
+### The surface redesign is built and unproven
 
-**§7a**, and it is now partly built. The structural half has landed: one workspace instead of two
-modes, a tool palette separated from a non-exclusive rail, and the irreversibility carried as a
-hand-edit count rather than a boundary. **What remains is undo, the derive indicators, the markup
-palette and the layer toggles.**
+**§7a is complete** — one workspace instead of two, a tool strip holding the verb, a rail that no
+longer forces one section shut, undo, the derive indicators, the markup palette, the layer toggles and
+the colour pickers.
 
 It came out of using the thing: the accordion made switching tasks expensive, and the two doors into
-the workspace read as artificial. Both turned out to have one cause.
+the workspace read as artificial. Both turned out to have one cause — the mode boundary ran across the
+grain of the task, and what it was protecting is a property of the document rather than a place.
 
-**Undo is the one to take next**, and it is no longer optional. The old mode boundary made destroying
-wall edits impossible by construction; the count and its warning are now the only guard, and they
-work by helping a GM *predict*. Nothing helps with a judgement that looked right and was not.
+**So the most useful next thing is unchanged, and now carries more weight: a real session of map
+correction, end to end.** It was already the only way to answer whether the partition is the one a GM
+wants; it is now also the only way to judge a surface that has been rebuilt around a guess about how
+the work actually flows.
+
+**Nothing below depends on it**, and nothing below is urgent.
 
 ### Two features unimplemented, and one still needs a conversation before code
 
@@ -2467,25 +2476,33 @@ read it before touching any parameter. Then `controls.ts` (every control a GM ca
 
 ### The workspace
 
-`steps.ts` declares the steps and which mode each is in; `workspace/mode.ts` reads that mode off the
-URL; `workspace.ts` is the composition root only.
+**One page.** `steps.ts` declares the groups and the tools; `workspace.ts` is the composition root
+only. There is no `mode.ts` — the two workspaces merged, and nothing branches on which one you are in.
 
-- **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`) ·
-  `accordion.ts` · `reading.ts` (the mask request cycle, subscribed to by the layers) · `regions.ts`
-  (the lazy derive cycle) · `stage.ts` (reading and writing the stored graph)
-- **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `saveAction.ts` (how the ink
-  mode ends: save, push, hand off) · `workspaceControl.ts` (open either mode)
-- **Controls** — `settingRows.ts` · `settingsState.ts` · `swatches.ts` · `graphScale.ts` (the sliders'
-  graph-measured tops) · `seedSimplify.ts` · `confirmDialog.ts`
-- **Tools** — `wallTools.ts` and `paintControls.ts` (the pickers) · `wallEdit.ts` and `paintTool.ts` (the
-  pointer events) · `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a
-  gesture means — pure and tested, which is where the sequencing defects were fixed**) ·
-  `paintState.ts` · `gapSearch.ts`
-- **The editor's three one-shot buttons** — `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`
-- **Layers** — `layers/ink.ts` · `layers/paint.ts` (amber and cyan, repainting only the rectangle a
-  stroke changed) · `layers/gaps.ts` (purple proposals and a ring each) · `layers/regions.ts` (the
-  partition as vector paths) · `layers/graph.ts` (the walls, with a handle only where one can be
-  grabbed) · `bitmap.ts`
+- **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`,
+  `whileWorking`) · `accordion.ts` (the rail, non-exclusive) · `reading.ts` (the mask request cycle,
+  subscribed to by the layers) · `regions.ts` (the lazy derive cycle, and `showingSaved` — the one
+  predicate deciding which graph is on screen) · `stage.ts` (the stored graph, the hand-edit count and
+  undo)
+- **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `saveAction.ts` ·
+  `workspaceControl.ts`
+- **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `settingsState.ts`
+  (working and *applied* settings) · `swatches.ts` (the five colour pickers) · `graphScale.ts` ·
+  `seedSimplify.ts` · `confirmDialog.ts`
+- **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag) ·
+  `toolIcons.ts` (seven inline glyphs) · `wallEdit.ts` and `paintTool.ts` (the pointer events) ·
+  `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
+  pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
+  untouched**) · `paintControls.ts` · `paintState.ts` · `gapSearch.ts` · `wallTools.ts` (only the
+  sentence shown when no graph is saved)
+- **Acting on the document** — `undoAction.ts` and `editHistory.ts` (the snapshot stack, pure and
+  tested) · `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`
+- **What is drawn** — `layerToggles.ts` (pure and tested: groups propose, the GM disposes, a tool may
+  only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
+  the values and is pure)
+- **Layers** — `layers/ink.ts` · `layers/paint.ts` (repainting only the rectangle a stroke changed) ·
+  `layers/gaps.ts` (proposals, ringed) · `layers/regions.ts` (the partition as vector paths) ·
+  `layers/graph.ts` (the walls, with handles only for the tools that can use them) · `bitmap.ts`
 
 ---
 
