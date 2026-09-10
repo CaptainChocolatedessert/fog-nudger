@@ -2402,18 +2402,41 @@ the strip" empty state went with the slot it labelled.
 Where an entry carries a guess about the cause, it says so. **None of these has been diagnosed beyond
 what the room reported** unless the entry says otherwise.
 
-#### Probably one cause, not four: no saved wall graph
+#### The wall-graph group — diagnosed, and it was not one cause
 
-- The wall editing tools are greyed out and cannot be selected.
-- **Straighten walls** does nothing.
-- **Make the outside a room** does nothing.
-- **Undo** is greyed out.
+Four entries: the wall tools greyed out, **Straighten walls** doing nothing, **Make the outside a
+room** doing nothing, **Undo** greyed out.
 
-*The hypothesis, and it is a hypothesis:* all four gate on there being a saved `WallGraph` for the
-map, and the room also asked why **Put the walls on the map** still exists — which suggests it was
-never pressed and nothing was ever saved. If that is right, these are not four defects but one design
-failure: the surface makes saving look optional and then silently disables everything downstream of
-it, with no line anywhere saying that is why.
+**The one-cause hypothesis was half right.** Three of the four are the same condition — nothing had
+ever been saved from the Walls step, so `wallGraph()` was null. The tools grey out correctly, Undo
+greys out correctly on an empty history, and the frame button does check. Honest behaviour on a map
+that was never saved.
+
+**What made them look dead was where they answered.** All three actions *did* respond, by writing to
+the state line — which is pinned to the bottom-right corner of a full-screen window at 0.75rem in
+muted grey, while the button pressed is in the left rail. A diagonal across the whole screen. "It
+does nothing" is the correct reading of that, and the placement is now its own open item below.
+
+**Straighten was a different fault**: its limit defaults to off, so it refused for a reason that had
+nothing to do with the graph.
+
+**And the real find was Prune**, which is the room's separate entry about a button with no slider.
+Its limit is declared to **Walls** because it also shapes the derived graph; its button is rendered in
+**Edit walls**, where it re-applies the same number to the stored document. With the limit defaulting
+to off, that button could only ever refuse — and the control that would fix it was in another section
+with nothing pointing there.
+
+**Fixed by applying a rule the project already had.** `toolPalette` states it: *a tool offered in a
+state where its presses do nothing is a button that lies.* The strip obeyed it and the three actions
+did not. They are now gated before the press, in `actionGate.ts`, whose decision half is pure and
+tested — and gated buttons carry a sentence, because greying out alone trades a lying button for a
+silent one. No graph is silent by design, since `wallTools` already says it once; a limit at zero is
+per-action and names its own slider **and the step that holds it**.
+
+**Declaring the prune limit to both steps was the obvious fix and is forbidden.** The rail no longer
+forces a section shut, so two handles on one setting would be reachable at once and would disagree
+the moment either moved. `steps.test.ts` pins that, and the naming in the disabled sentence is what
+the second handle would have been for.
 
 #### Bugs
 
@@ -2431,6 +2454,11 @@ it, with no line anywhere saying that is why.
 - The text in the tool column is too thin or too dark to read comfortably. Related to the measured
   typography finding in §7a, which is still unapplied.
 - The layer toggles across the top are not self-explanatory; it is not obvious what they are for.
+- **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
+  control that writes to it is in the left rail, so a message about a press arrives as far from the
+  press as the window allows. This is what made three working buttons read as dead. Gating them
+  removed the need for that particular message; the placement is unchanged and affects every other
+  message on the surface.
 
 #### Cuts and moves
 

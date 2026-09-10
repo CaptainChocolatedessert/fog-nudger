@@ -31,6 +31,7 @@ import { describeError } from "../describeError";
 import { readParameter } from "../settings";
 import { wallRuns } from "../trace/wallGraph";
 import { simplifyWalls } from "../trace/planarOps";
+import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
 import { confirmAction } from "./confirmDialog";
 import { currentSettings } from "./settingsState";
 import { controlsLive } from "./settingRows";
@@ -50,6 +51,18 @@ const SLOW_SWEEP_SEGMENTS = 2_000;
 /** How long a sweep may take before the log says it was slow, in milliseconds. */
 const SLOW_SWEEP_MS = 1_000;
 
+const BUTTON_ID = "simplify-action";
+const NOTE_ID = "simplify-action-note";
+
+/*
+  Shown when it can run, and it is the one sentence a slider label cannot carry: this side of the
+  handover has no map to re-read, so what it removes is not recoverable the way the ink mode's
+  straightening is.
+*/
+const READY_NOTE =
+  "Runs once, on the whole graph. <b>It cannot be undone</b> &mdash; there is nothing here to " +
+  "derive the detail back from.";
+
 export function renderSimplifyAction(body: HTMLElement): void {
   const actions = document.createElement("div");
   actions.className = "step-actions";
@@ -57,16 +70,21 @@ export function renderSimplifyAction(body: HTMLElement): void {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "chip";
+  button.id = BUTTON_ID;
   button.textContent = "Straighten the walls";
-  button.disabled = !controlsLive();
 
   const note = document.createElement("p");
+  note.id = NOTE_ID;
   note.className = "sub";
-  // The one sentence a slider label cannot carry: this side of the handover has no map to re-read,
-  // so the detail it removes is not recoverable the way the ink mode's straightening is.
-  note.innerHTML =
-    "Runs once, on the whole graph. <b>It cannot be undone</b> &mdash; there is nothing here to " +
-    "derive the detail back from.";
+
+  // Its slider is in this same step, directly above, so the reason only has to say which one.
+  setActionGate(button, () =>
+    actionBlocked(wallGraph() !== null, {
+      value: readParameter(currentSettings(), "editSimplifyFraction"),
+      reason: "Off &mdash; raise <b>Straighten walls</b> above to say how far a wall may move.",
+    }),
+  );
+  applyActionGate(button, note, READY_NOTE, controlsLive());
 
   button.addEventListener("click", () => {
     void run(button);
@@ -104,7 +122,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
           "one against every other for crossings — there is no shortcut once every wall has moved. " +
           "The surface will not respond while it runs.",
         "A graph this size is usually a sign the reading was saved with very little smoothing. " +
-          "Reopening the ink mode and raising Edge simplification there is the cheaper fix.",
+          "Reopening the Walls step and raising Straightening there is the cheaper fix.",
       ],
       confirmLabel: "Straighten them anyway",
     });
@@ -154,6 +172,16 @@ async function run(button: HTMLButtonElement): Promise<void> {
     devLog("error", "workspace: straightening failed to save", detail);
     console.error("Fog Nudger — straightening failed to save", error);
   } finally {
-    button.disabled = !controlsLive();
+    // Through the gate rather than straight to `disabled`, for the reason the prune button gives.
+    refreshSimplifyAction();
+  }
+}
+
+/** Re-ask the gate, for when its slider moves. */
+export function refreshSimplifyAction(): void {
+  const button = document.getElementById(BUTTON_ID);
+  const note = document.getElementById(NOTE_ID);
+  if (button instanceof HTMLButtonElement && note) {
+    applyActionGate(button, note, READY_NOTE, controlsLive());
   }
 }

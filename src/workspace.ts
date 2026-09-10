@@ -56,9 +56,9 @@ import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSimplifySeed } from "./workspace/seedSimplify";
-import { renderPruneAction } from "./workspace/pruneAction";
-import { renderSimplifyAction } from "./workspace/simplifyAction";
-import { renderFrameAction } from "./workspace/frameAction";
+import { refreshPruneAction, renderPruneAction } from "./workspace/pruneAction";
+import { refreshSimplifyAction, renderSimplifyAction } from "./workspace/simplifyAction";
+import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderInkSwatches, renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
@@ -69,7 +69,7 @@ import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
-import { refreshHints, setControlsLive } from "./workspace/settingRows";
+import { onSettingCommitted, refreshHints, setControlsLive } from "./workspace/settingRows";
 import { registerWallEdit } from "./workspace/wallEdit";
 import { renderWallTools } from "./workspace/wallTools";
 import { renderSaveAction } from "./workspace/saveAction";
@@ -248,6 +248,23 @@ registerHeadContent(renderToolControls);
   The head has the same dependency, so this one line serves both.
 */
 onToolChange(() => renderPanel());
+/*
+  The three wall actions are disabled while their own limit is at zero, so the slider that lifts one
+  has to tell them.
+
+  At module scope rather than inside the step body that draws them: that body is rebuilt on every
+  accordion click, and a subscription there would add three listeners per click. Each refresh looks
+  its button up by id and does nothing when the step is closed, which is the same shape the readout
+  painters use.
+
+  A graph arriving is the other thing that lifts these, and that path is already covered --
+  `onStageChange` rebuilds the whole rail.
+*/
+onSettingCommitted(() => {
+  refreshSimplifyAction();
+  refreshPruneAction();
+  refreshFrameAction();
+});
 // The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
 // particular map is change the colour, and it is not a number so it cannot be a row.
 registerStepContent("ink", renderInkSwatches);

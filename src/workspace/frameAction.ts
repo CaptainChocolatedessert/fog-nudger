@@ -28,9 +28,22 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { addFrameWalls } from "../trace/frameWalls";
+import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
 import { controlsLive } from "./settingRows";
 import { say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
+
+const BUTTON_ID = "frame-action";
+const NOTE_ID = "frame-action-note";
+
+/*
+  Empty, and that is the whole of its ready state.
+
+  The name says the consequence, which is what the four-sentence note it replaced was for. What is
+  left for this element to carry is the blocked case, where there is something to say that no label
+  can: that there is no graph to add walls to yet.
+*/
+const READY_NOTE = "";
 
 export function renderFrameAction(body: HTMLElement): void {
   const actions = document.createElement("div");
@@ -47,15 +60,28 @@ export function renderFrameAction(body: HTMLElement): void {
     be out there and the GM can reveal it. Without them the outside is enclosed by nothing and stays
     fogged for ever. Naming the outcome carries that in three words.
   */
+  button.id = BUTTON_ID;
   button.textContent = "Make the outside a room";
-  button.disabled = !controlsLive();
+
+  const note = document.createElement("p");
+  note.id = NOTE_ID;
+  note.className = "sub";
+
+  /*
+    No limit of its own, which is why `actionBlocked` takes none here.
+
+    It is the only one of the three that **adds** rather than removes, so there is no ceiling on what
+    it would take and nothing to set before pressing it. A graph is the whole of what it needs.
+  */
+  setActionGate(button, () => actionBlocked(wallGraph() !== null));
+  applyActionGate(button, note, READY_NOTE, controlsLive());
 
   button.addEventListener("click", () => {
     void run(button);
   });
 
   actions.append(button);
-  body.append(actions);
+  body.append(actions, note);
 }
 
 async function run(button: HTMLButtonElement): Promise<void> {
@@ -93,6 +119,17 @@ async function run(button: HTMLButtonElement): Promise<void> {
     devLog("error", "workspace: framing failed to save", detail);
     console.error("Fog Nudger — framing failed to save", error);
   } finally {
-    button.disabled = !controlsLive();
+    // Through the gate, not straight to `disabled`. Framing a graph that was already framed
+    // leaves it unchanged, and re-enabling blind would also re-enable it with no graph at all.
+    refreshFrameAction();
+  }
+}
+
+/** Re-ask the gate, for when a graph arrives. */
+export function refreshFrameAction(): void {
+  const button = document.getElementById(BUTTON_ID);
+  const note = document.getElementById(NOTE_ID);
+  if (button instanceof HTMLButtonElement && note) {
+    applyActionGate(button, note, READY_NOTE, controlsLive());
   }
 }

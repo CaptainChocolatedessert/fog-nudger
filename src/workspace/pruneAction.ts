@@ -30,26 +30,51 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { readParameter } from "../settings";
 import { pruneWallGraph, wallRuns } from "../trace/wallGraph";
+import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
 import { confirmAction } from "./confirmDialog";
 import { currentSettings } from "./settingsState";
 import { controlsLive } from "./settingRows";
 import { say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
 
+const BUTTON_ID = "prune-action";
+const NOTE_ID = "prune-action-note";
+
+/** Shown when it can actually run. Cut to the warning: what it deletes is named by its own slider. */
+const READY_NOTE = "Runs once, on the whole graph. <b>It cannot be undone.</b>";
+
 export function renderPruneAction(body: HTMLElement): void {
   const actions = document.createElement("div");
   actions.className = "step-actions";
 
   const button = document.createElement("button");
+  button.id = BUTTON_ID;
   button.type = "button";
   button.className = "chip";
   button.textContent = "Prune the dead ends";
-  button.disabled = !controlsLive();
 
   const note = document.createElement("p");
+  note.id = NOTE_ID;
   note.className = "sub";
-  // Cut to the warning. What it deletes is the slider directly above it, which now names itself.
-  note.innerHTML = "Runs once, on the whole graph. <b>It cannot be undone.</b>";
+
+  /*
+    The one action whose limit lives in a different step, and the reason it names where.
+
+    `spurPruneFraction` is declared to **Walls**, because it also shapes the graph the reading
+    derives; this button re-applies the same number to the stored document. Declaring it to both
+    steps was the obvious fix and is forbidden — the rail no longer forces a section shut, so two
+    handles on one setting would be reachable at once and would disagree the moment either moved.
+    `steps.test.ts` pins that. So the button names its slider and says which step holds it, which is
+    what the second handle would have been for.
+  */
+  setActionGate(button, () =>
+    actionBlocked(wallGraph() !== null, {
+      value: readParameter(currentSettings(), "spurPruneFraction"),
+      reason:
+        "Off &mdash; set <b>Longest dead end to remove</b> under <b>Walls</b> to say what would go.",
+    }),
+  );
+  applyActionGate(button, note, READY_NOTE, controlsLive());
 
   button.addEventListener("click", () => {
     void run(button);
@@ -57,6 +82,15 @@ export function renderPruneAction(body: HTMLElement): void {
 
   actions.append(button);
   body.append(actions, note);
+}
+
+/** Re-ask the gate, for when the slider that lifts it moves in another step. */
+export function refreshPruneAction(): void {
+  const button = document.getElementById(BUTTON_ID);
+  const note = document.getElementById(NOTE_ID);
+  if (button instanceof HTMLButtonElement && note) {
+    applyActionGate(button, note, READY_NOTE, controlsLive());
+  }
 }
 
 async function run(button: HTMLButtonElement): Promise<void> {
@@ -120,6 +154,8 @@ async function run(button: HTMLButtonElement): Promise<void> {
     devLog("error", "workspace: pruning failed to save", detail);
     console.error("Fog Nudger — pruning failed to save", error);
   } finally {
-    button.disabled = !controlsLive();
+    // Through the gate rather than straight to `disabled`, or a run that finished would re-enable
+    // the button whatever the limit and the graph now say.
+    refreshPruneAction();
   }
 }

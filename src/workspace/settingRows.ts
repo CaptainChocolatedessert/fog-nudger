@@ -226,6 +226,25 @@ export function recomputeFor(names: readonly SettingName[]): void {
   else if (rest.length > 0) invalidateRegions();
   else if (graphChanged) repruneRegions();
   invalidate();
+  for (const listener of commitListeners) listener();
+}
+
+/**
+ * Told whenever a setting has been committed, which is the funnel every write already goes through.
+ *
+ * **For controls whose availability depends on another control's value.** The three wall actions are
+ * disabled while their own limit is at zero, and without this the slider that lifts the limit would
+ * leave the button dead until something unrelated happened to redraw the rail — the same defect the
+ * tool strip had, where the state changed and nothing was told.
+ *
+ * Subscribed at module scope and never cleared, so **do not call this from a render function**: a
+ * step's body is rebuilt on every accordion click, and a subscription there adds a listener per
+ * click.
+ */
+const commitListeners: (() => void)[] = [];
+
+export function onSettingCommitted(listener: () => void): void {
+  commitListeners.push(listener);
 }
 
 /**
