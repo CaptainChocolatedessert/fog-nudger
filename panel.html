@@ -66,6 +66,8 @@
       .note em { font-style: normal; color: var(--text); }
 
       .actions { margin: 0.5rem 0 0.2rem; }
+      /* Kept with the buttons it styles: `quiet` was *Close probe*, the one control here that
+         undoes rather than does. It comes back with any unwired button that needs the same. */
       button.quiet { background: transparent; color: var(--dim); }
       button.quiet:hover:not(:disabled) { color: var(--text); }
 
@@ -123,37 +125,25 @@
     </p>
 
     <!--
-      Not product UI. Step 1's shape-placing buttons are gone now that it is closed; these earned a
-      longer stay because they answer "what is actually in this scene", which the workspace cannot.
-    -->
-    <p class="field">Diagnostics</p>
-    <div class="actions">
-      <button id="dry-run" disabled>Trace, emit nothing</button>
-      <button id="inspect" disabled>Inspect fog</button>
-    </div>
-    <!--
-      The area check was removed from the pipeline and this note went on advertising it (fixed
-      2026-09-09). It described "two independent computations of the same figure agreeing", which is
-      a diagnostic nothing has run for some time. The line about a button that no longer exists went
-      with it: that is a changelog entry, and a panel is not where one belongs.
-    -->
-    <p class="note">
-      <em>Trace, emit nothing</em> runs the whole chain and writes coverage and region counts to the
-      log. It is the only thing that reports the partition in numbers.
-    </p>
+      The Diagnostics band was here, and it is gone (user, 2026-09-09): *"Remove everything except
+      open and remove ours. We haven't used them in a long time."*
 
-    <div class="actions">
-      <button id="workspace-probe-bare" disabled>Workspace probe</button>
-      <button id="workspace-probe-framed" disabled>&hellip;framed</button>
-      <button id="workspace-probe-close" class="quiet" disabled>Close probe</button>
-    </div>
-    <p class="note">
-      <em>Workspace probe</em> puts up an <strong>opaque</strong> full-screen sheet that keeps its
-      own input, which is what the workspace is drawn on. Drag on the pad, spin the wheel,
-      right-click, and type in the box; the sheet reports whether Owlbear moved underneath, which you
-      cannot see, because the sheet is covering it. Kept because its leak detector is the only way to
-      re-check that a change has not started letting input through to Owlbear.
-    </p>
+      Five buttons — Trace, emit nothing · Inspect fog · Workspace probe · …framed · Close probe.
+      **Every one of their functions is still exported and still works**, and re-displaying any of
+      them is this markup plus one `wireButton` line in `panel.ts`, which is where the list of what
+      was here is kept. Nothing was deleted, so nothing has to be rebuilt to come back.
+
+      Two of them had also stopped being honest, which is why this is a tidy-up rather than a loss:
+
+      - *Trace, emit nothing* justified itself by running exactly the emit path's code, so its
+        numbers and the scene could not disagree. That stopped being true when the wall graph became
+        the document — `pushToFog` emits the **saved** graph and only traces when a map has none, so
+        on any map a GM has actually worked, the dry run described a graph that was not on the map.
+      - The *workspace probe* asked whether a full-screen modal without `disablePointerEvents` is
+        usable at all. The workspace has been running on that combination for weeks, which answers
+        it. Its leak detector is the part still worth having, and it is the reason the page and its
+        control are kept rather than removed.
+    -->
 
     <p id="result">Waiting for a scene.</p>
 

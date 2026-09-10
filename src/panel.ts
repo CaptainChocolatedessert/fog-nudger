@@ -1,11 +1,14 @@
 /**
  * The action popover: what acts on the *scene*, and nothing else.
  *
- * Every control a GM turns is a step on the workspace now. What is left here is the button that
- * opens it, removing what we put in the scene, and the diagnostics — and what those have in common is
- * that they are about a scene rather than about a picture. Which is also why they are not on the
- * workspace: a full-screen sheet over the map is the one place you cannot look at the map as
- * Owlbear is actually drawing it, and that is exactly what these buttons need you to do.
+ * Every control a GM turns is a step on the workspace now. What is left is **two buttons**: open the
+ * workspace, and remove what we put in the scene. Both are about a scene rather than about a
+ * picture, which is why they are not on the workspace — a full-screen sheet over the map is the one
+ * place you cannot look at the map as Owlbear is actually drawing it.
+ *
+ * **The diagnostics band went on 2026-09-09** (user), after a long stretch of nobody pressing any of
+ * it. The five functions behind those buttons are all still exported and still work; the import
+ * block below says what each was and what to know before re-wiring it.
  *
  * **This used to list three buttons for moving staged items around.** Staging is gone: there is one
  * operation, push, and the workspace both judges the partition and triggers the write.
@@ -37,7 +40,6 @@ import { themeVariables } from "./theme";
 // flag is the difference between a shape that *is* fog and one that has been cleared, and believing
 // that note is what shipped every accepted room coming back revealed. A corrected copy of a
 // function for a design that no longer exists is an invitation to re-wire it.
-import { inspectFogShapes } from "./probe/fogProbe";
 // The overlay probe is not wired up either, and for a stronger reason than the shape-placing
 // buttons: it measured whether a *click-through* sheet over the map was possible at all, and that
 // design is closed — the workspace owns its input instead, and its probe measured the same modal
@@ -45,8 +47,37 @@ import { inspectFogShapes } from "./probe/fogProbe";
 // answer was got; re-import `openOverlayProbe` **and `closeOverlayProbe`** here and re-add both
 // buttons to bring it back. Both, because opening a sheet you cannot close from the panel is
 // survivable only for a click-through one, and would not be for anything else.
-import { closeWorkspaceProbe, openWorkspaceProbe } from "./probe/workspaceProbeControl";
-import { dryRun } from "./pipeline";
+//
+/*
+  ## The panel is two buttons now (user, 2026-09-09)
+
+  *"Remove everything except open and remove ours. You can keep the machinery in the background if
+  it's useful, and we could easily re-display a button for them if we need to. We haven't used them
+  in a long time."*
+
+  So five more joined the unwired list, and this is the record of what they were and how to get each
+  back. **None of the code was deleted**; every function below is still exported and still works, so
+  a button is this import plus one `wireButton` line plus the markup in `panel.html`.
+
+  - `dryRun` from `./pipeline` — *Trace, emit nothing*. **Re-wire this one with care.** Its stated
+    value was running exactly the emit path's code, so its numbers and the scene could not disagree
+    by construction. The wall graph becoming the document ended that: `pushToFog` emits the **saved**
+    graph and only calls `runTrace` when a map has none, so on a map with saved walls the dry run
+    reported a freshly-derived graph that was not the one on the map. It also has a live substitute —
+    `workspace/regions.ts` logs the identical `runTrace` summary on every derive.
+  - `inspectFogShapes` from `./probe/fogProbe` — *Inspect fog*. This one is still entirely true, and
+    it is the only thing that says what is actually on the `FOG` layer, ours against the GM's, with
+    styles. It went with the band rather than on its own merits, and it is the first to bring back if
+    a scene ever looks wrong.
+  - `openWorkspaceProbe` and `closeWorkspaceProbe` from `./probe/workspaceProbeControl` — *Workspace
+    probe*, *…framed* and *Close probe*. Re-import **both**, for the reason the overlay probe's note
+    gives: this sheet is opaque, so opening one the panel cannot close is worse here than there.
+    Its original question — whether a full-screen modal without `disablePointerEvents` is usable —
+    is answered by the workspace running on that combination. What survives is its **leak
+    detector**, still the only way to re-check that a change has not started letting input through
+    to Owlbear, and the reason the page and its control are kept. The *framed* variant tested
+    `hidePaper: false`; shipping bare decided that, so bare is the one to bring back.
+*/
 import { openWorkspace } from "./workspace/workspaceControl";
 import { clearWallGraph } from "./wallGraphStore";
 import {
@@ -180,7 +211,6 @@ OBR.onReady(async () => {
   }
 
   const buttons = [
-    wireButton("dry-run", dryRun),
     /*
       One button, because there is one workspace.
 
@@ -191,10 +221,6 @@ OBR.onReady(async () => {
     */
     wireButton("open-workspace", openWorkspace),
     wireButton("remove", removeEverythingOfOurs),
-    wireButton("inspect", inspectFogShapes),
-    wireButton("workspace-probe-bare", () => openWorkspaceProbe("bare")),
-    wireButton("workspace-probe-framed", () => openWorkspaceProbe("framed")),
-    wireButton("workspace-probe-close", closeWorkspaceProbe),
   ];
 
   try {

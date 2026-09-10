@@ -1655,7 +1655,29 @@ ahead of the map.
 
 ### The panel
 
-Down to what acts on the scene: **open either mode**, **Remove ours**, and the diagnostics.
+Down to **two buttons**: *Open the workspace* and *Remove ours*. One mode, so one door, and nothing
+else that acts on the scene.
+
+**The diagnostics band went on 2026-09-09** (user): *"Remove everything except open and remove ours…
+we haven't used them in a long time."* It held *Trace, emit nothing*, *Inspect fog* and the three
+workspace-probe buttons. **Every function behind them is still exported and unchanged** — the import
+block in `panel.ts` is the list of what they were and what to know before re-wiring one, and a button
+is that import plus one line plus the markup.
+
+Two of the five had also stopped being true, which is why this is not purely a tidy-up:
+
+- *Trace, emit nothing* justified itself by running exactly the emit path's code, so its numbers and
+  the scene could not disagree by construction. **The wall graph becoming the document ended that.**
+  `pushToFog` emits the *saved* graph and calls `runTrace` only when a map has none — so on any map a
+  GM has actually worked, the dry run described a graph that was not the one on the map. It has a
+  live substitute in any case: the workspace logs the identical `runTrace` summary on every derive.
+- The *workspace probe* asked whether a full-screen modal without `disablePointerEvents` is usable at
+  all. The workspace has been running on that combination for weeks, which answers it. Its **leak
+  detector** is the part still worth having, and is why the page and its control are kept.
+
+*Inspect fog* is the one that left on the band's coat-tails rather than on its own merits: it is still
+entirely true, and still the only thing that says what is on the `FOG` layer, ours against the GM's.
+**It is the first to bring back if a scene ever looks wrong.**
 
 **Remove ours drops the fog AND the stored graph.** On its own it would be half a removal, since the
 next save from either surface would put the same walls straight back.
@@ -2054,13 +2076,16 @@ every mention of its harness is a **number**. It was a measurement rig with a vi
 viewer is the part nobody needed.
 
 Numbers do not need a page. Measurement on synthetic input belongs in unit tests; measurement on real
-maps belongs where the real maps already are, which is Owlbear. **And the dry run is strictly better on
-the point the harness was worst at**: the sibling diagnosed a real bug only after harness and room
-disagreed *in direction*, because the harness never ran world placement. Code inside the extension
-cannot diverge from itself that way.
+maps belongs where the real maps already are, which is Owlbear. **And running inside the extension is
+strictly better on the point the harness was worst at**: the sibling diagnosed a real bug only after
+harness and room disagreed *in direction*, because the harness never ran world placement. Code inside
+the extension cannot diverge from itself that way. That was originally an argument for the dry-run
+button, which is unwired now — it survives unchanged as an argument against a harness, because what it
+turns on is *where* the code runs rather than which button starts it.
 
 *Kept in reserve:* a throwaway local page that renders an intermediate raster. Owlbear cannot display
-one at all, so it is the single capability neither tests nor the dry run supply. Perhaps thirty lines
+one at all, so it is the single capability neither tests nor a trace inside the extension supply.
+Perhaps thirty lines
 at the moment something is inexplicable, and building it before then would be infrastructure guessing
 at its own question.
 
@@ -2469,9 +2494,12 @@ under `trace/` is pure and headless-testable.
 (retired probes, kept as the record of how the platform facts were got). **Each must call
 `setDevLogLabel`.**
 
-The workspace probe stays wired to the panel: **its leak detector is the only way to re-check that a
-change has not started leaking input to Owlbear.** The overlay probe is unwired — that design is
-closed — but not deleted.
+**Both probes are unwired now**, the workspace one since 2026-09-09 with the rest of the diagnostics
+band. Neither is deleted, and the workspace probe is the one with a live reason to come back: **its
+leak detector is the only way to re-check that a change has not started leaking input to Owlbear.**
+Re-import `openWorkspaceProbe` *and* `closeWorkspaceProbe` together — the sheet is opaque, so one the
+panel cannot close is worse than the overlay's click-through equivalent. The overlay probe's design is
+closed outright.
 
 ### The trace
 
