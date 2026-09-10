@@ -1,3 +1,5 @@
+import { PALETTE_DEFAULTS } from "./palette";
+
 /**
  * The knobs a GM can turn, and the three stages they belong to.
  *
@@ -239,6 +241,25 @@ export interface OverlaySettings {
    */
   readonly inkColour: string;
   /**
+   * The other four markup colours, as `#rrggbb`.
+   *
+   * Adjustable **by category rather than by layer**, which is the whole of why they are grouped: a
+   * map with an unusual tint wants one move, not three hunted down across three layers that then have
+   * to agree with each other.
+   *
+   * They adjust the saturated **core** of a mark. The light casing under it is fixed, because that is
+   * the half doing the visibility work on a ground we do not control — tinting it would let a GM tune
+   * away the mechanism the hues rely on.
+   *
+   * `inkColour` above keeps its name rather than becoming `inkColour`-by-another-route: renaming a
+   * stored key means the old one is ignored and the default applies, and that is the one colour a GM
+   * is most likely to have already chosen.
+   */
+  readonly structureColour: string;
+  readonly additiveColour: string;
+  readonly subtractiveColour: string;
+  readonly destructiveColour: string;
+  /**
    * How opaque that paint is.
    *
    * Defaults to fully opaque, which is the honest starting point: the question stage one asks is
@@ -349,7 +370,11 @@ export const DEFAULT_SETTINGS: Settings = {
 
       A stored setting is untouched: this is the default a scene gets when it has never chosen one.
     */
-    inkColour: "#9333ea",
+    inkColour: PALETTE_DEFAULTS.ink,
+    structureColour: PALETTE_DEFAULTS.structure,
+    additiveColour: PALETTE_DEFAULTS.additive,
+    subtractiveColour: PALETTE_DEFAULTS.subtractive,
+    destructiveColour: PALETTE_DEFAULTS.destructive,
     inkOpacity: 1,
     // Wide enough to cover an area rather than trace a line, which is what suppression is mostly
     // for and is also the shape of paint that costs almost nothing to store. Fine work is a matter
@@ -813,6 +838,10 @@ export function normaliseSettings(raw: unknown): Settings {
     },
     overlay: {
       inkColour: normaliseColour(overlay.inkColour, o.inkColour),
+      structureColour: normaliseColour(overlay.structureColour, o.structureColour),
+      additiveColour: normaliseColour(overlay.additiveColour, o.additiveColour),
+      subtractiveColour: normaliseColour(overlay.subtractiveColour, o.subtractiveColour),
+      destructiveColour: normaliseColour(overlay.destructiveColour, o.destructiveColour),
       inkOpacity: clamp(overlay.inkOpacity, "inkOpacity", o.inkOpacity),
       suppressBrushPx: clamp(overlay.suppressBrushPx, "suppressBrushPx", o.suppressBrushPx),
       inkBrushPx: clamp(overlay.inkBrushPx, "inkBrushPx", o.inkBrushPx),

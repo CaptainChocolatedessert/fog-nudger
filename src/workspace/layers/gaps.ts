@@ -26,7 +26,7 @@ import type { GapMark } from "../../trace/gaps";
 import { bitmapFrom, type Bitmap } from "../bitmap";
 import { RING_MIN_RADIUS, RING_PADDING } from "../gapGesture";
 import { gapMarks, gapRaster } from "../gapSearch";
-import { PALETTE } from "../palette";
+import { colourFor } from "../palette";
 import { addPainter, invalidate, say, type Painter } from "../shell";
 
 /**
@@ -52,7 +52,7 @@ import { addPainter, invalidate, say, type Painter } from "../shell";
   fill. That is also what stops the failure this layer has already had, where an unexamined gap was
   drawn solid and became indistinguishable from ink the repair had really invented.
 */
-const GAP_COLOUR = PALETTE.additive;
+const gapColour = () => colourFor("additive");
 
 let painted: Bitmap | null = null;
 /** The marks the bitmap was built from, so it is rebuilt only when the search finds something new. */
@@ -73,7 +73,7 @@ function rebuild(marks: readonly GapMark[]): void {
     return;
   }
 
-  const colour = parseColour(GAP_COLOUR);
+  const colour = parseColour(gapColour());
   if (!colour) return;
 
   const needed = raster.width * raster.height * 4;
@@ -173,7 +173,7 @@ const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight })
     context.strokeStyle = "rgba(6, 4, 12, 0.7)";
     context.stroke();
     context.lineWidth = 2;
-    context.strokeStyle = GAP_COLOUR;
+    context.strokeStyle = gapColour();
     context.stroke();
   }
   context.setLineDash([]);

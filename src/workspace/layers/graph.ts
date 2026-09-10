@@ -40,7 +40,7 @@ import {
   type DoomedSpurs,
   type WallGraph,
 } from "../../trace/wallGraph";
-import { PALETTE } from "../palette";
+import { colourFor } from "../palette";
 import { addPainter, type Painter } from "../shell";
 import { showingSaved, previewGraph } from "../regions";
 import { currentTool } from "../toolPalette";
@@ -60,7 +60,7 @@ import {
 } from "../wallEdit";
 
 /** Kept distinct from the wall lines' red and from the six proposal colours. */
-const WALL_COLOUR = PALETTE.structure;
+const wallColour = () => colourFor("structure");
 /**
  * What pruning would take, in the colour this canvas already uses for "about to go".
  *
@@ -69,13 +69,13 @@ const WALL_COLOUR = PALETTE.structure;
  * is drawn at the wall's own width rather than the erase highlight's, because there can be hundreds
  * of them and a thickened red would swamp the picture it is meant to be read against.
  */
-const DOOMED_COLOUR = PALETTE.destructive;
-const WALL_CASING = PALETTE.casing;
+const doomedColour = () => colourFor("destructive");
+const WALL_CASING = colourFor("casing");
 /** Screen pixels. A hairline over busy map art is not a wall anybody can judge or aim at. */
 const WALL_WIDTH_PX = 2;
 
-const HANDLE_FILL = PALETTE.casing;
-const HANDLE_RIM = PALETTE.structure;
+const HANDLE_FILL = colourFor("casing");
+const handleRim = () => colourFor("structure");
 const HANDLE_RADIUS = 3;
 
 /**
@@ -89,7 +89,7 @@ const HANDLE_RADIUS = 3;
  */
 const HOVER_RADIUS = 5;
 const ACTIVE_FILL = "#ffcc00";
-const MERGE_FILL = PALETTE.additive;
+const mergeFill = () => colourFor("additive");
 const ACTIVE_RIM = "#20242c";
 const MERGE_RADIUS = 6;
 
@@ -101,9 +101,9 @@ const MERGE_RADIUS = 6;
  * Red for the one that removes and green for the one that adds, which is the only pair of meanings
  * on this canvas that a colour can carry without being learned.
  */
-const ERASE_COLOUR = PALETTE.destructive;
+const eraseColour = () => colourFor("destructive");
 const ERASE_WIDTH_PX = 5;
-const DRAW_COLOUR = PALETTE.additive;
+const drawColour = () => colourFor("additive");
 
 /**
  * Past this many handles *on screen*, none are drawn.
@@ -208,7 +208,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   context.strokeStyle = WALL_CASING;
   context.lineWidth = WALL_WIDTH_PX + 2;
   context.stroke();
-  context.strokeStyle = WALL_COLOUR;
+  context.strokeStyle = wallColour();
   context.lineWidth = WALL_WIDTH_PX;
   context.stroke();
 
@@ -234,7 +234,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
       context.moveTo(x(from.x), y(from.y));
       context.lineTo(x(to.x), y(to.y));
     }
-    context.strokeStyle = DOOMED_COLOUR;
+    context.strokeStyle = doomedColour();
     context.lineWidth = WALL_WIDTH_PX;
     context.stroke();
   }
@@ -249,7 +249,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
       context.beginPath();
       context.moveTo(x(from.x), y(from.y));
       context.lineTo(x(to.x), y(to.y));
-      context.strokeStyle = ERASE_COLOUR;
+      context.strokeStyle = eraseColour();
       context.lineWidth = ERASE_WIDTH_PX;
       context.stroke();
     }
@@ -272,7 +272,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     context.strokeStyle = WALL_CASING;
     context.lineWidth = WALL_WIDTH_PX + 2;
     context.stroke();
-    context.strokeStyle = DRAW_COLOUR;
+    context.strokeStyle = drawColour();
     context.lineWidth = WALL_WIDTH_PX;
     context.stroke();
     context.restore();
@@ -392,8 +392,8 @@ function paintHandles(
       px,
       py,
       grabbable ? HOVER_RADIUS : HANDLE_RADIUS,
-      going ? DOOMED_COLOUR : HANDLE_FILL,
-      going ? DOOMED_COLOUR : HANDLE_RIM,
+      going ? doomedColour() : HANDLE_FILL,
+      going ? doomedColour() : handleRim(),
     );
   }
 
@@ -405,7 +405,7 @@ function paintHandles(
   // merge is what release would do and it cannot be taken back.
   if (snap !== null) {
     const point = graph.nodes[snap];
-    if (point) dot(x(point.x), y(point.y), MERGE_RADIUS, MERGE_FILL, ACTIVE_RIM);
+    if (point) dot(x(point.x), y(point.y), MERGE_RADIUS, mergeFill(), ACTIVE_RIM);
   }
 
   /*
@@ -444,7 +444,7 @@ function paintHandles(
       x(point.at.x),
       y(point.at.y),
       attaching ? MERGE_RADIUS : HOVER_RADIUS,
-      attaching ? MERGE_FILL : ACTIVE_FILL,
+      attaching ? mergeFill() : ACTIVE_FILL,
       ACTIVE_RIM,
     );
   }

@@ -41,7 +41,7 @@ import { bitmapFrom, type Bitmap } from "../bitmap";
 import { brushRadius } from "../paintGesture";
 import { onPaintChange, paintLayerFor } from "../paintState";
 import { currentSettings } from "../settingsState";
-import { PALETTE } from "../palette";
+import { colourFor } from "../palette";
 import { addPainter, invalidate, say, type Frame, type Painter } from "../shell";
 
 /**
@@ -51,8 +51,8 @@ import { addPainter, invalidate, say, type Frame, type Painter } from "../shell"
  * fills, green skeleton, blue graph handles, and the six cycling region colours. They are also the
  * two that read as opposites, which is what the pair means.
  */
-export const SUPPRESS_COLOUR = PALETTE.subtractive;
-export const ADD_COLOUR = PALETTE.additive;
+export const suppressColour = (): string => colourFor("subtractive");
+export const addColour = (): string => colourFor("additive");
 
 /**
  * The brush ring's stroke, in screen pixels.
@@ -121,8 +121,8 @@ function rebuild(suppress: PaintLayer | null, ink: PaintLayer | null): void {
     return;
   }
 
-  const amber = parseColour(SUPPRESS_COLOUR);
-  const cyan = parseColour(ADD_COLOUR);
+  const amber = parseColour(suppressColour());
+  const cyan = parseColour(addColour());
   if (!amber || !cyan) return;
 
   const { width, height } = shape;
@@ -186,8 +186,8 @@ export function refreshPaintRegion(bounds: StrokeBounds): void {
     return;
   }
 
-  const amber = parseColour(SUPPRESS_COLOUR);
-  const cyan = parseColour(ADD_COLOUR);
+  const amber = parseColour(suppressColour());
+  const cyan = parseColour(addColour());
   if (!amber || !cyan) return;
 
   const { width, height } = shape;
@@ -276,7 +276,7 @@ function drawBrushRing(
   context.strokeStyle = "rgba(255, 255, 255, 0.9)";
   context.lineWidth = RING_WIDTH * 2.5;
   context.stroke();
-  context.strokeStyle = kind === "suppress" ? SUPPRESS_COLOUR : ADD_COLOUR;
+  context.strokeStyle = kind === "suppress" ? suppressColour() : addColour();
   context.lineWidth = RING_WIDTH;
   context.stroke();
   context.restore();

@@ -10,10 +10,12 @@
  * number, so it sits outside the parameter machinery entirely and needs its own row of buttons.
  */
 
-import { PALETTE } from "./palette";
-import { DEFAULT_SETTINGS, normaliseColour } from "../settings";
+import { colourFor, applyPalette, colourKey } from "./palette";
+import { normaliseColour } from "../settings";
+import { PALETTE_ROLES, PALETTE_DEFAULTS, ROLE_LABELS, type AdjustableRole } from "../palette";
 import { recolourInk } from "./layers/ink";
 import { controlsLive } from "./settingRows";
+import { invalidate } from "./shell";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 
 /**
@@ -34,7 +36,7 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
   it is reserved for what an action would remove.
 */
 const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[] = [
-  { value: PALETTE.ink, name: "Violet" },
+  { value: PALETTE_DEFAULTS.ink, name: "Violet" },
   { value: "#ff20d0", name: "Magenta" },
   { value: "#2b6bff", name: "Blue" },
   { value: "#ffd000", name: "Yellow" },
@@ -43,13 +45,70 @@ const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[]
   { value: "#000000", name: "Black" },
 ];
 
-function setInkColour(colour: string): void {
+/**
+ * Set one role's colour and put it into effect everywhere at once.
+ *
+ * `applyPalette` republishes the custom properties so a blurb naming a colour keeps matching the mark
+ * it describes, and `recolourInk` rebuilds the mask buffer — the one layer whose colour is baked into
+ * pixels rather than read while drawing.
+ */
+function setRoleColour(role: AdjustableRole, colour: string): void {
   const settings = currentSettings();
-  setSettings({ ...settings, overlay: { ...settings.overlay, inkColour: colour } });
-  recolourInk();
+  setSettings({
+    ...settings,
+    overlay: { ...settings.overlay, [colourKey(role)]: colour },
+  });
+  applyPalette();
+  if (role === "ink") recolourInk();
+  invalidate();
 }
 
+/**
+ * One row per category, grouped by **what a colour means** rather than by which layer shows it.
+ *
+ * That grouping is the point. Adjusting for a map with an unusual tint should move one control and
+ * have everything additive follow — the added ink, the gap rings, the end that would attach — rather
+ * than hunting three layers for three hues that then have to agree with each other.
+ *
+ * The swatches are offered for ink alone. The other four are marks a few pixels wide whose meaning is
+ * fixed, so a palette of alternatives would be inviting a GM to make *added* look like *going*; the
+ * native picker is there for the one thing that matters, which is legibility on their own map.
+ */
 export function renderSwatches(body: HTMLElement): void {
+  for (const role of PALETTE_ROLES) {
+    if (role === "ink") continue;
+    body.append(colourRow(role));
+  }
+}
+
+function colourRow(role: AdjustableRole): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "row";
+
+  const top = document.createElement("div");
+  top.className = "top";
+  const label = document.createElement("label");
+  label.textContent = ROLE_LABELS[role].name;
+
+  const picker = document.createElement("input");
+  picker.type = "color";
+  picker.disabled = !controlsLive();
+  picker.value = colourFor(role);
+  picker.addEventListener("input", () => setRoleColour(role, picker.value));
+  picker.addEventListener("change", () => void persistSettings());
+
+  top.append(label, picker);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = ROLE_LABELS[role].means;
+
+  row.append(top, hint);
+  return row;
+}
+
+/** The ink row, which keeps its swatches because it is the one colour covering real area. */
+export function renderInkSwatches(body: HTMLElement): void {
   const container = document.createElement("div");
   container.className = "swatches";
 
@@ -58,14 +117,14 @@ export function renderSwatches(body: HTMLElement): void {
   const picker = document.createElement("input");
   picker.type = "color";
   picker.disabled = !controlsLive();
-  picker.value = normaliseColour(currentSettings().overlay.inkColour, DEFAULT_SETTINGS.overlay.inkColour);
+  picker.value = normaliseColour(currentSettings().overlay.inkColour, PALETTE_DEFAULTS.ink);
 
   for (const swatch of INK_SWATCHES) {
     const button = document.createElement("button");
     button.style.background = swatch.value;
     button.title = swatch.name;
     button.addEventListener("click", () => {
-      setInkColour(swatch.value);
+      setRoleColour("ink", swatch.value);
       // The picker is the readout of the current colour as well as a way to set one, so a swatch
       // that left it showing the previous colour made the row disagree with itself until the next
       // rebuild of the panel.
@@ -79,7 +138,7 @@ export function renderSwatches(body: HTMLElement): void {
 
   // Live on `input`, saved on `change`: a colour costs a buffer rewrite rather than a re-read, so
   // there is nothing to be gained by making the GM let go to see it.
-  picker.addEventListener("input", () => setInkColour(picker.value));
+  picker.addEventListener("input", () => setRoleColour("ink", picker.value));
   picker.addEventListener("change", () => void persistSettings());
   container.append(picker);
   body.append(container);

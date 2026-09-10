@@ -1680,11 +1680,11 @@ because when it works it beats any fixed palette.
 and the storage are untouched; this is a rework of the surface only.
 
 **Built:** the tool strip, the non-exclusive rail, the pinned rail head, the hand-edit count and the
-warning it prices, the merge to one page with one panel button, undo, the derive indicators, the markup palette and the layer toggles.
+warning it prices, the merge to one page with one panel button, undo, the derive indicators, the markup palette, the layer toggles and the colour pickers.
 
-**Not built:** the per-category colour pickers. The palette's values are declared in one place and
-published as custom properties, but not yet adjustable — which is what a map with an unusual tint
-would want. The layer *rules*
+**Section 7a is built.** What remains of the redesign is judgement rather than code: none of it has
+been through a room, and the wordiness of the blurbs — which the tool hint made obvious by putting six
+lines at the top of the rail — is still outstanding. The layer *rules*
 landed with the merge, because it forced them — handles follow the wall tools.
 
 ### Why: the mode boundary runs across the grain of the task
@@ -1913,8 +1913,16 @@ red for *will remove* — the classic unreadable pair. Folding attach into the a
 and is more correct anyway, since a snap target *is* an addition.
 
 **Five pickers, grouped by category rather than by layer**, so adjusting for an unusually tinted map
-moves one control and everything additive follows. They adjust the **core** hue only; the casing stays
-light, because that is the part doing the visibility work.
+moves one control and everything additive follows. They adjust the **core** hue only; the casing is
+not adjustable at all, because it is the part doing the visibility work and tinting it would let a GM
+tune away the mechanism the hues rely on.
+
+**Changing one republishes the custom properties**, so a blurb naming a colour — *"covered areas show
+in amber"* — cannot outlive the mark it describes.
+
+**Only ink keeps swatches.** It is the one colour covering real area, so a palette of alternatives is
+worth offering; the other four are marks a few pixels wide whose meaning is fixed, and offering
+alternatives there would be inviting a GM to make *added* look like *going*.
 
 ### Two measured fixes to carry over
 

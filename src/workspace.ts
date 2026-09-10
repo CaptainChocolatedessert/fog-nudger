@@ -55,7 +55,7 @@ import { renderPruneAction } from "./workspace/pruneAction";
 import { renderSimplifyAction } from "./workspace/simplifyAction";
 import { renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
-import { renderSwatches } from "./workspace/swatches";
+import { renderInkSwatches, renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
@@ -225,7 +225,16 @@ registerStepContent("map", renderMapPicker);
 registerStepContent("ink", renderInkTools, "bottom");
 // The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
 // particular map is change the colour, and it is not a number so it cannot be a row.
-registerStepContent("ink", renderSwatches);
+registerStepContent("ink", renderInkSwatches);
+/*
+  The other four markup colours, in the group that is never entered.
+
+  Grouped by what a colour *means* rather than by which layer shows it, which is the whole point:
+  adjusting for a map with an unusual tint moves one control and everything additive follows. They sit
+  here for the same reason the preview fill and outline do — they describe marks drawn across several
+  groups, so filing them under one would leave the others to reach for them.
+*/
+registerStepContent("view", renderSwatches, "bottom");
 /*
   How each mode ends, at the foot of its last step.
 

@@ -378,6 +378,20 @@ export function renderPanel(): void {
       view.append(settingRow(control));
     }
 
+    /*
+      The bottom slot, which this used to drop on the floor.
+
+      Only the top one was rendered, so `registerStepContent("view", …, "bottom")` registered content
+      nothing ever drew — silently, because a slot that is never read looks exactly like a slot with
+      nothing in it. The step bodies have always honoured both.
+
+      Before Defaults, for the reason the step bodies put it there: Defaults restores everything above
+      it, so it is a footer rather than a divider, and content past it reads as furniture. A room
+      found that once already, when the ink tools were rendered after it and a GM reported not being
+      able to find them.
+    */
+    content.get(persistent.id)?.bottom?.(view);
+
     if (stepParameters(persistent.id).length > 0) view.append(defaultsButton(persistent));
   }
 
