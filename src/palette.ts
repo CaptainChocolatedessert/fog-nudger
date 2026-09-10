@@ -102,6 +102,8 @@ export const ROLE_LABELS: Readonly<Record<AdjustableRole, { name: string; means:
   ink: { name: "Ink", means: "what the trace read as a mark" },
   structure: { name: "Walls", means: "the wall graph, drawn over its own linework" },
   additive: { name: "Added", means: "ink you drew, gaps proposed, an end that would attach" },
-  subtractive: { name: "Covered", means: "ink you covered up" },
+  // "Covered" until 2026-09-10: the verb the Suppress tool used before both paint tools became Draw
+  // and Erase. Named for the tool now, the way "Added" is named for Add ink.
+  subtractive: { name: "Suppressed", means: "ink you told the trace to ignore" },
   destructive: { name: "Going", means: "what the next click would remove" },
 };

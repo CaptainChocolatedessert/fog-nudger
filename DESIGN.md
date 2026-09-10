@@ -2543,8 +2543,8 @@ agreement that came out of that.
     were never reset by anything, which looks like a gap left when they became adjustable; with all
     five side by side, restoring one and not the others would have been the button and the section
     disagreeing.
-  - *Noticed, not changed:* the suppression colour is labelled **Covered**, which is the verb the
-    Suppress tool dropped for Draw/Erase. Probably wants to be **Suppressed**, to match the tool.
+  - The suppression colour's label, **Covered**, was the verb the Suppress tool had dropped; it is
+    **Suppressed** now (see Naming).
 - **Put the walls on the map** — the room's reaction was that it no longer makes sense.
 - **Put on the map** in Edit walls — consider removing it too.
 
@@ -2554,9 +2554,12 @@ agreement that came out of that.
 - ~~**Cover** and **Uncover** on Suppress are not right.~~ **Done (2026-09-09): both paint tools use
   Draw and Erase**, and the layer in hand carries the difference. The cost is that "Cover" hinted
   suppression is additive — nothing of the map is lost — and the Suppress blurb now says so outright.
-- **Still open, and smaller:** the suppression *colour* in View is labelled **Covered**, the verb the
-  tool dropped. **Suppressed** would match the tool. And two colour labels, **Ink** and **Walls**,
-  share their names with rail sections, which may read as a link to the section rather than a colour.
+- ~~The suppression *colour* in View was labelled **Covered**~~, the verb the tool dropped. **Done
+  (2026-09-10): Suppressed**, named for the tool the way *Added* is named for *Add ink*.
+- **Considered and left:** the colour labels **Ink** and **Walls** share their names with rail
+  sections. On reflection that is agreement rather than collision — each names the same thing the
+  section and the layer toggle do, the ink layer and the wall graph. Recorded in case a room reads
+  them as links anyway.
 
 #### Wants a conversation before any code
 
