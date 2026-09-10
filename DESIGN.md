@@ -1707,9 +1707,33 @@ this was a rework of the surface only.
 the hand-edit count and the warning it prices, one page with one panel button, undo, the derive
 indicators, the markup palette, the layer toggles and the colour pickers.
 
-> **None of it has been through a room.** It types, 782 tests pass, the production build is clean, and
-> both pages were driven in a browser outside Owlbear. What that cannot say is whether the arrangement
-> is one a GM wants, which is the whole question the redesign was for. **A real session of map
+### What the first room found
+
+**It has now been through one** (2026-09-09), and the first pass returned fifteen observations. Two
+are settled here; the rest are open.
+
+**The rail never redrew when a tool was picked.** `toolPalette` exports an `onToolChange` hook, added
+when the picker moved out of the rail and into the strip, and **nothing ever subscribed to it** — so
+choosing a tool set the state, redrew the strip and invalidated the canvas while the rail kept
+whatever body it was last given. The tool's controls were built correctly and simply never drawn
+again; collapsing and reopening the section made them appear, which is what identified it. An
+exported symbol no live path reaches is the shape to watch for: here the unreachability *was* the
+defect, not a tidy-up opportunity.
+
+**A tool's controls moved to the pinned head.** They were at the foot of the Ink step, so the brush
+width needed the section expanded, a tool selected and a scroll to the bottom, all at once — and was
+reported missing. The rule this settles is in `accordion.ts` and is worth stating here: **the rail
+body is about the map, the pinned head is about the hand.** What counts as ink is a setting of the
+document; how wide the brush is, and whether it covers or uncovers, is a property of what you are
+holding. The head already carried the tool *hint* on exactly this argument — that a tool's controls
+"may be collapsed while the tool is still in hand" — and stopped one step short of the controls
+themselves. The cost is that the head grows while a tool is armed, and that space comes off the
+scrollable rail.
+
+> **The rest of the surface has still not been judged.** It types, 782 tests pass, the production
+> build is clean, and both pages were driven in a browser outside Owlbear. What that cannot say is
+> whether the arrangement is one a GM wants, which is the whole question the redesign was for. **A
+> real session of map
 > correction is the next thing this project needs**, and it now tests the surface as well as the
 > partition.
 
@@ -2566,7 +2590,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `toolIcons.ts` (seven inline glyphs) · `wallEdit.ts` and `paintTool.ts` (the pointer events) ·
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
-  untouched**) · `paintControls.ts` · `paintState.ts` · `gapSearch.ts` · `wallTools.ts` (only the
+  untouched**) · `paintControls.ts` (the tool in hand, drawn into the **pinned head**, plus the step's own Save) · `paintState.ts` · `gapSearch.ts` · `wallTools.ts` (only the
   sentence shown when no graph is saved)
 - **Acting on the document** — `undoAction.ts` and `editHistory.ts` (the snapshot stack, pure and
   tested) · `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`

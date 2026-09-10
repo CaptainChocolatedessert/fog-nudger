@@ -129,6 +129,35 @@ export function registerStepContent(
 }
 
 /**
+ * Anything drawn into the **pinned head**, which does not scroll and cannot be collapsed.
+ *
+ * ## Why a control lives here rather than in a step — user, 2026-09-09
+ *
+ * The rail body holds settings **about the map**: what counts as ink, how hard to straighten. The
+ * head holds the state of **what is in your hand**: which tool, what a press does, how wide the
+ * brush is, paint or erase. A control's home follows from which of those it is, not from which
+ * heading it seems tidiest under — a brush width is not a property of the map.
+ *
+ * The argument was already made here for the tool *hint*, and stopped half way: the hint sits in the
+ * head precisely because a tool's controls "may be collapsed while the tool is still in hand", and
+ * then the controls themselves were left in the collapsible body. A room found it immediately —
+ * they were reported missing, and turned out to be behind an expanded section, a selected tool and a
+ * scroll to the bottom of it.
+ *
+ * **The cost, stated:** the head grows while a tool is armed, and that space comes off the
+ * scrollable rail. On a short window the ink sliders are what get pushed down.
+ *
+ * Drawn from inside `renderPanel` rather than on its own, which is not a detail: `resetHints` clears
+ * every readout painter on each rebuild, so a row built outside that pass would keep its element and
+ * lose its painter — a slider whose number silently stops moving.
+ */
+const headContent: Render[] = [];
+
+export function registerHeadContent(render: Render): void {
+  headContent.push(render);
+}
+
+/**
  * Expand a group at start-up, unless the GM has already chosen for themselves.
  *
  * **`touched` covers collapsing as well as expanding**, which is what stops start-up reopening a
@@ -305,6 +334,14 @@ export function renderPanel(): void {
     holds still. A top re-measured on every derive would chase the slider that caused the derive.
   */
   forgetGraphScale();
+
+  // The pinned head, inside this pass so its rows get their painters from the same `resetHints`
+  // above. Empty whenever nothing is in hand, and the stylesheet collapses it then.
+  const head = document.getElementById("tool-controls");
+  if (head) {
+    head.replaceChildren();
+    for (const render of headContent) render(head);
+  }
 
   const container = document.getElementById("steps");
   if (container) {

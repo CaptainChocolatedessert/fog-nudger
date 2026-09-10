@@ -40,10 +40,15 @@ import { installDevLog, devLog, setDevLogLabel, formatDevLogLabel } from "./devl
 import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
-import { onStepOpen, registerStepContent, renderPanel } from "./workspace/accordion";
+import {
+  onStepOpen,
+  registerHeadContent,
+  registerStepContent,
+  renderPanel,
+} from "./workspace/accordion";
 import { applyPalette } from "./workspace/palette";
 import { registerLayerRow } from "./workspace/layerRow";
-import { registerToolPalette } from "./workspace/toolPalette";
+import { onToolChange, registerToolPalette } from "./workspace/toolPalette";
 import { registerUndoAction } from "./workspace/undoAction";
 import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
@@ -59,7 +64,7 @@ import { renderInkSwatches, renderSwatches } from "./workspace/swatches";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
-import { renderInkTools } from "./workspace/paintControls";
+import { renderInkSave, renderToolControls } from "./workspace/paintControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
@@ -222,7 +227,27 @@ registerStepContent("map", renderMapPicker);
   is, which is what makes flicking between them free — the thing two separate steps could not offer,
   because leaving one wrote it to the scene.
 */
-registerStepContent("ink", renderInkTools, "bottom");
+registerStepContent("ink", renderInkSave, "bottom");
+/*
+  The tool's own controls go to the pinned head instead, and only Save is left in the step.
+
+  A room could not find the brush width: it needed the section expanded, a tool selected and a scroll
+  to the bottom, all at once. The head cannot be scrolled past or collapsed, and it is where the tool
+  hint already sits for the same reason.
+*/
+registerHeadContent(renderToolControls);
+/*
+  The rail redraws when the tool changes, which it did not until now.
+
+  `onToolChange` was exported when the picker moved to the strip and **nothing ever subscribed to
+  it** — so choosing a tool set the state, redrew the strip and invalidated the canvas, while the
+  rail kept whatever body it was last given. The controls were built correctly and simply never
+  drawn again; collapsing and reopening the section was what made them appear, because that is a
+  path that does redraw.
+
+  The head has the same dependency, so this one line serves both.
+*/
+onToolChange(() => renderPanel());
 // The ink colour leads its step: the first thing a GM does when the overlay is invisible against a
 // particular map is change the colour, and it is not a number so it cannot be a row.
 registerStepContent("ink", renderInkSwatches);

@@ -374,6 +374,23 @@
       #tool-hint:empty {
         display: none;
       }
+      /*
+        The tool's own controls, sharing the hint's left rule so the two read as one block about the
+        thing in hand rather than as a hint and then some unrelated sliders.
+
+        Pulled up under the hint by a negative margin matching the hint's own bottom, so a tool with
+        a hint and controls shows one bordered band and a tool with only a hint shows the same band
+        shorter. `:empty` is what makes that work with no tool selected at all.
+      */
+      #tool-controls:not(:empty) {
+        margin: -0.9rem 0 0.9rem;
+        padding: 0.45rem 0.6rem 0.1rem;
+        border-left: 2px solid #bb99ff;
+        background: rgba(187, 153, 255, 0.09);
+      }
+      #tool-controls .row:last-child {
+        margin-bottom: 0.5rem;
+      }
 
       /*
         How much a re-read would cost, in the head so it does not depend on what is expanded.
@@ -721,6 +738,13 @@
           <h1 id="mode-name">Fog Nudger</h1>
           <p class="sub" id="map-name">Loading…</p>
           <p id="tool-hint"></p>
+          <!--
+            The controls of whatever is in hand, directly under the sentence describing it, because
+            they are the same subject: what a press does and how wide it does it. Built by
+            `renderPanel` so its sliders share the readout-painter lifecycle of every other row, and
+            empty whenever no tool is selected.
+          -->
+          <div id="tool-controls"></div>
           <div id="layer-row"></div>
           <p id="edit-count"></p>
         </div>

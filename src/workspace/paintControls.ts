@@ -60,50 +60,61 @@ function inkStep(): (typeof STEPS)[number] | undefined {
  * the results of. That ordering is the step's argument in miniature: the sliders decide what the map
  * says, and the tools are for the places where no slider can be right.
  */
-export function renderInkTools(body: HTMLElement): void {
+/**
+ * The tool in hand, drawn into the **pinned head**.
+ *
+ * ## Why this is not in the Ink step any more — user, 2026-09-09
+ *
+ * It was, at the foot of the step body, and a room reported the brush width simply missing. Three
+ * things had to be true at once for it to be on screen: the section expanded, a tool selected, and a
+ * scroll past the sliders and the Linework group to the bottom. *"They can get lost in the scrolling
+ * or a collapsed section."*
+ *
+ * The head is where a tool's things already lived — the hint sits there because a tool's controls
+ * "may be collapsed while the tool is still in hand", which is the same argument one step short of
+ * its conclusion. `accordion.ts` states the rule this settles: the body is about the map, the head
+ * is about the hand.
+ *
+ * **Everything the tool owns comes**, the verb and the actions as well as the width, rather than
+ * splitting the pair across two places — which is the thing being fixed rather than a shape to
+ * reproduce. Discard confirms before it destroys anything, so a pinned button is not a new hazard.
+ *
+ * Empty when nothing is in hand: no heading, no "pick a tool" line. There is nothing to label when
+ * there is nothing there, and the strip is what says a tool can be picked.
+ */
+export function renderToolControls(head: HTMLElement): void {
   const step = inkStep();
   if (!step) return;
 
-  const tools = toolGroups(step);
   const active = currentPaintTool();
+  const chosen = toolGroups(step).find((group) => group.tool === active);
+  if (!chosen) return;
 
   /*
-    The picker itself moved to the tool strip, which is what lets the rail stop being exclusive.
+    The blurb is NOT drawn here, and that is the duplication this had before.
 
-    What stays here is the chosen tool's own controls — its brush width, its verb, its Save. Those
-    belong beside the sliders whose results they correct, and the strip is deliberately narrow.
+    `toolPalette` paints the same string into `#tool-hint`, immediately above this — its fallback for
+    a tool with no hint of its own is exactly this group's blurb. Two copies, an inch apart.
   */
-  const heading = document.createElement("h3");
-  heading.textContent = "Correcting it by hand";
-  body.append(heading);
+  const kind = brushKind(active);
+  if (kind) head.append(verbRow(kind));
 
-  const chosen = tools.find((group) => group.tool === active);
-  if (!chosen) {
-    const idle = document.createElement("p");
-    idle.className = "sub";
-    idle.textContent = "Pick a tool from the strip.";
-    body.append(idle);
-  } else {
-    /*
-      The blurb was drawn here as well, and that was a straight duplication.
-
-      `toolPalette` paints the same string into `#tool-hint` at the top of the rail — its own
-      fallback for a tool with no hint of its own is exactly this group's blurb — so the chosen
-      tool's sentence appeared twice on one screen, once pinned above and once here. The pinned copy
-      is the one that survives, because it stays put when these controls are scrolled past.
-    */
-    const kind = brushKind(active);
-    if (kind) body.append(verbRow(kind));
-
-    for (const control of groupControls(chosen)) {
-      body.append(settingRow(control));
-    }
-
-    body.append(kind ? brushActions(kind) : gapActions());
+  for (const control of groupControls(chosen)) {
+    head.append(settingRow(control));
   }
 
-  // Last, and outside the branch: saving is one act for both layers, so it belongs to the step
-  // rather than to whichever tool happens to be in hand — including no tool at all.
+  head.append(kind ? brushActions(kind) : gapActions());
+}
+
+/**
+ * Saving, which stays at the foot of the Ink step.
+ *
+ * **It did not go to the head with the rest**, and the split is the rule rather than an exception:
+ * saving is one act for *both* layers, so it belongs to the step and not to whichever tool happens
+ * to be in hand — including no tool at all. A GM who paints, puts the brush down and then wants the
+ * work committed must still find it.
+ */
+export function renderInkSave(body: HTMLElement): void {
   renderSave(body);
 }
 
