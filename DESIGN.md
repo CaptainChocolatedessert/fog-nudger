@@ -2472,9 +2472,30 @@ agreement that came out of that.
   step called Ink every control is an ink edit, and the button only ever saved strokes. It is now
   **Save painted strokes**, and its refusal says *"no painted strokes to save — sliders save
   themselves as you release them"*, which answers the anxiety the old message produced.
-- **The ghost mark on a slider** lands near the new value rather than on it, and never disappears.
-  Wanted: a grey circle matching the control's own handle, so the previous position is easy to return
-  to by eye.
+- ~~**The ghost mark on a slider** lands near the new value rather than on it, and never
+  disappears.~~ **Fixed at the desk (2026-09-10) — five faults behind one sentence**, all now in
+  `ghostMark.ts`, whose decision half is pure and tested:
+  - *Near, never on.* The old test compared track positions, and a release snaps its position to
+    the step or to three significant figures, so converting the value back lands a few steps off the
+    handle. An exact comparison of two numbers apart by rounding is never equal. **Settledness is now
+    asked in values** — applied and current are the same number once a recompute lands.
+  - *Never gone on brush widths, gap sliders and opacities*, which recompute nothing, so nothing was
+    ever pending on them and nothing could clear their ghost. **Only a pipeline control gets one.**
+  - *Never gone on pruning*, which re-applied without recording it. It now records itself.
+  - *Never re-asked when a derive landed*, only when a reading did. The rows are now re-run whenever
+    the picture catches up with any setting.
+  - *A leak underneath*: every row subscribed to the reading on build and that list is never cleared,
+    so each rail rebuild — every accordion click, and every tool change — stranded another row's
+    worth of listeners on detached elements. The ghost now lives with the row painters, which are
+    reset with the rows.
+
+  **The look is the room's**: a grey circle the size of the handle, placed where the handle's own
+  centre would be — which is half a thumb in from each end, not a bare percentage of the track.
+  **Measured in Chromium, not Firefox**: the circle is 16px, vertically centred on the track, and at
+  the far left exactly where a 16px thumb centres. The first attempt sized it in `rem` and came out
+  13px, because this surface's root text is 13px; the native thumb does not follow the root font.
+  **What only a room can confirm** is that Firefox's own thumb is also 16px — if the ghost sits beside
+  the handle at either end of a track, `--thumb` in `workspace.html` is the number to change.
 
 #### Legibility
 
@@ -2768,7 +2789,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
 - **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `saveAction.ts` ·
   `workspaceControl.ts`
 - **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `settingsState.ts`
-  (working and *applied* settings) · `swatches.ts` (the five colour pickers) · `graphScale.ts` ·
+  (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `swatches.ts` (the five colour
+  pickers) · `graphScale.ts` ·
   `seedSimplify.ts` · `confirmDialog.ts`
 - **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag) ·
   `toolIcons.ts` (seven inline glyphs) · `wallEdit.ts` and `paintTool.ts` (the pointer events) ·

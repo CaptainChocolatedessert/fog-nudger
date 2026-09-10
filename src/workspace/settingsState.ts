@@ -71,14 +71,44 @@ export function appliedSettings(): Settings {
  * they are set and can never be ahead.
  */
 export function markApplied(stage: Stage): void {
+  markParametersApplied(
+    (Object.keys(PARAMETER_STAGE) as SettingName[]).filter((name) => PARAMETER_STAGE[name] === stage),
+  );
+}
+
+/**
+ * Record that particular parameters are what the picture shows, by name rather than by stage.
+ *
+ * **For pruning, which is not a stage's worth of anything.** Its limit is filed `read` so that
+ * changing it prices the discard of hand edits, but moving it neither re-reads nor re-derives: it
+ * re-applies to a graph already in hand, in single-digit milliseconds, and never recorded that it
+ * had. The ghost on its slider therefore stayed up for good (room, 2026-09-09).
+ */
+export function markParametersApplied(names: readonly SettingName[]): void {
   // Through the accessors, so this does not need to know which group a parameter lives in — that
   // grouping is storage shape and `settings.ts` owns it.
   let next = applied;
-  for (const name of Object.keys(PARAMETER_STAGE) as SettingName[]) {
-    if (PARAMETER_STAGE[name] !== stage) continue;
+  for (const name of names) {
     next = writeParameter(next, name, readParameter(settings, name));
   }
   applied = next;
+  for (const listener of appliedListeners) listener();
+}
+
+/**
+ * Told whenever the picture catches up with any setting.
+ *
+ * The ghost on a slider is the thing that needs it: it marks where the picture is while the handle
+ * is ahead, so it has to be re-asked the moment that stops being true — and it used to be asked only
+ * when a *reading* landed, so a derive or a prune catching up left it standing.
+ *
+ * Module scope and never cleared, so subscribe once, from the composition root — not from a row,
+ * which is rebuilt on every accordion click.
+ */
+const appliedListeners: (() => void)[] = [];
+
+export function onApplied(listener: () => void): void {
+  appliedListeners.push(listener);
 }
 
 /** Apply a new settings object in memory. Persisting is a separate, explicit step. */

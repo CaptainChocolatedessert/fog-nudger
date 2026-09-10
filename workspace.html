@@ -265,17 +265,49 @@
         missing; it was nowhere near where anyone was looking. On the track it is also legible when
         several rows are ahead at once, which one status line can never be.
       */
+      /*
+        The ghost is a grey circle the size of the handle, sitting exactly where the handle would be
+        (room, 2026-09-10: "it should be a gray circle matching the control, so it's visually easier
+        to place the circle back where it was before").
+
+        It was a 2px amber hairline positioned at a bare percentage of the track. That was off by up
+        to half a thumb at either end, because a range thumb's centre never reaches the track's own
+        edges — invisible on a hairline, and exactly the wrong thing for a mark whose job is to have
+        the handle put back on top of it. `settingRows` does the inset arithmetic against `--thumb`.
+
+        **`--thumb` is matched to the browser's own handle rather than set on it**, which is the one
+        assumption here: the native thumb is 16 CSS pixels. The alternative was restyling every
+        slider's thumb so its size is known, which is a larger change to every control than a ghost
+        warrants. **If the ghost sits beside rather than under the handle at either end of a track,
+        this is the number that has drifted.**
+
+        **Pixels, not `rem`, and that was a measured mistake.** The first version said `1rem`, and
+        this surface's root text size is 13px — so the ghost came out 13px against a 16px thumb and
+        the inset used the wrong width. The native thumb is sized in CSS pixels and does not follow
+        the root font, so neither may this. Measured in Chromium on 2026-09-10; **not measured in
+        Firefox**, which is the browser this is actually used in.
+
+        The vertical centring needs the margin on the track and not on the input: centring at 50% is
+        only the handle's centre if the box is exactly the input's box.
+      */
       .row .track {
+        --thumb: 16px;
         position: relative;
+        margin: 0.3rem 0 0.1rem;
+      }
+      .row .track input[type="range"] {
+        display: block;
+        margin: 0;
       }
       .row .ghost {
         position: absolute;
-        top: 0.3rem;
-        width: 2px;
-        height: 0.85rem;
-        margin-left: -1px;
-        background: #ffd479;
-        opacity: 0.85;
+        top: 50%;
+        width: var(--thumb);
+        height: var(--thumb);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(201, 205, 234, 0.45);
+        box-shadow: 0 0 0 1px rgba(201, 205, 234, 0.7);
         pointer-events: none;
       }
 

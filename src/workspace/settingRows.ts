@@ -31,7 +31,8 @@ import {
 } from "../sliderScale";
 import { graphScaleTop, onGraphScale } from "./graphScale";
 import { refreshGapSearch } from "./paintTool";
-import { onReading, requestReread } from "./reading";
+import { requestReread } from "./reading";
+import { ghostPosition } from "./ghostMark";
 import { invalidateRegions, repruneRegions } from "./regions";
 import { appliedSettings, currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
@@ -91,16 +92,18 @@ function measured(): Measured {
 }
 
 /**
- * One repaint function per row, so every derived readout can be refreshed when a reading lands.
+ * Repaint functions for the rows on screen: each row's derived readout, and each row's ghost.
  *
  * Several readouts report a setting against a **measurement** — the minimum stroke width against the
  * measured ink width, the gap widths against pixels per square — and before a first trace those
  * say "trace once for a figure". Without this they would go on saying it until the row's own slider
  * was touched, which is a readout being quietly wrong about what it knows.
  *
- * It arrived for a different reason: the repair width was briefly a share of a separate marking
- * width, so moving one changed what the other's readout meant. That coupling is gone and this is
- * not — the measurement case was always the stronger one.
+ * **The ghosts joined on 2026-09-10**, because they have the same lifetime and the same problem.
+ * They were each subscribed to the reading on build, and that list is never cleared, so every rebuild
+ * of the rail stranded a row's worth of listeners on detached elements. Here they are reset with the
+ * rows they belong to — and they are re-run whenever the picture catches up with any setting, not
+ * only when a reading lands, which is what let a derive or a prune leave a ghost standing.
  */
 let hintPainters: (() => void)[] = [];
 
@@ -436,6 +439,7 @@ export function settingRow(control: Control): HTMLElement {
         input,
         (back) => {
           placed = back;
+          showGhost();
         },
         previous,
         position,
@@ -451,6 +455,7 @@ export function settingRow(control: Control): HTMLElement {
 
     recomputeFor([control.name]);
     void persistSettings();
+    showGhost();
   });
 
   /*
@@ -486,19 +491,41 @@ export function settingRow(control: Control): HTMLElement {
    * Show where the picture actually is, when that is not where the handle is.
    *
    * Hidden whenever they agree, which is the ordinary case — a permanent mark is one nobody reads.
-   * Positioned as a fraction of the track rather than in pixels, so it stays right when the rail is
-   * resized.
+   * **Whether** to show it is decided in `ghostMark.ts`, which carries the five faults a room found
+   * behind "it jumps near the new value and never disappears"; this only draws.
+   *
+   * **Positioned where the thumb would sit**, not at a bare fraction of the track. A range input's
+   * thumb does not travel the full width: its centre runs from half a thumb in from the left to half
+   * a thumb in from the right. A mark at a plain percentage is off by up to half a thumb at either
+   * end and right only in the middle — close enough for a hairline, and visibly wrong for a circle
+   * the size of the thumb, which is what the room asked for so the handle could be put back on it.
    */
   const showGhost = (): void => {
-    const shown = readParameter(appliedSettings(), control.name);
-    const at = toSlider(shown, limits, scale);
-    const behind = at !== Number(input.value);
-    ghost.hidden = !behind;
-    if (behind) ghost.style.left = `${(at / SLIDER_STEPS) * 100}%`;
+    const at = ghostPosition({
+      lags: PARAMETER_KIND[control.name] === "pipeline",
+      applied: readParameter(appliedSettings(), control.name),
+      current: readParameter(currentSettings(), control.name),
+      handle: Number(input.value),
+      placed,
+      positionOf: (value) => toSlider(value, limits, scale),
+    });
+    ghost.hidden = at === null;
+    if (at !== null) {
+      ghost.style.left = `calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${at / SLIDER_STEPS})`;
+    }
   };
 
   input.addEventListener("input", showGhost);
-  onReading(showGhost);
+  /*
+    Re-asked through the row painters rather than a subscription of the row's own.
+
+    It was `onReading(showGhost)`, and the reading's listener list is never cleared — so every
+    rebuild of the rail left the old row's closure subscribed, holding a detached element, and added
+    a new one beside it. The rail rebuilds on every accordion click and, since the tool strip began
+    redrawing it, on every tool change. The painters are reset with the rows they belong to, and
+    `onApplied` in the composition root re-runs them whenever the picture catches up with anything.
+  */
+  hintPainters.push(showGhost);
   onGraphScale(showGhost);
   showGhost();
 

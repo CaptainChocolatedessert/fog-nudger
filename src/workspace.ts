@@ -74,7 +74,7 @@ import { registerWallEdit } from "./workspace/wallEdit";
 import { renderWallTools } from "./workspace/wallTools";
 import { renderSaveAction } from "./workspace/saveAction";
 import { onStageChange } from "./workspace/stage";
-import { loadSettings, onSettingsWriteFailure } from "./workspace/settingsState";
+import { loadSettings, onApplied, onSettingsWriteFailure } from "./workspace/settingsState";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
 
 installDevLog("workspace");
@@ -392,6 +392,16 @@ onStageChange(() => {
 // The measurements a readout reports against only exist once a reading has landed. Registered after
 // the layers, so a layer that could not take a reading stops this too.
 onReading(() => {
+  refreshHints();
+});
+/*
+  And whenever the picture catches up with any setting, which is what clears a slider's ghost.
+
+  A reading was the only thing that re-asked, so a derive landing or a prune applying left the ghost
+  marking a delay that had already ended. Once here, at module scope, because the rows themselves are
+  rebuilt on every accordion click.
+*/
+onApplied(() => {
   refreshHints();
 });
 

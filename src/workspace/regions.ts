@@ -50,6 +50,7 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
+import { isSkeletonOnly, SETTING_LIMITS, type SettingName } from "../settings";
 import type { StepId } from "../steps";
 import { buildWallFaces, describeWallFaces, wallSegments } from "../trace/wallFaces";
 import {
@@ -61,7 +62,7 @@ import { noteGraph } from "./graphScale";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
-import { currentSettings, markApplied } from "./settingsState";
+import { currentSettings, markApplied, markParametersApplied } from "./settingsState";
 import { invalidate, isClosing, say, whileWorking } from "./shell";
 import { handEdits, wallGraph } from "./stage";
 
@@ -355,7 +356,14 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
 export function repruneRegions(): void {
   // Nothing to re-prune against: what is on screen is the stored document, and the limit reaches it
   // through the button in Edit walls rather than by re-deriving.
-  if (showingSaved()) return;
+  //
+  // Recorded as applied all the same, because nothing on screen is waiting for it — the picture is
+  // the stored document and will never show this value. Left unrecorded, the slider's ghost marked a
+  // delay that would never end (room, 2026-09-09).
+  if (showingSaved()) {
+    markGraphOnlyApplied();
+    return;
+  }
   if (!derivation || inFlight) {
     invalidateRegions();
     return;
@@ -370,6 +378,14 @@ export function repruneRegions(): void {
   requests.request();
   publish(derivation, requests.latest());
   requests.fulfil(requests.latest());
+  markGraphOnlyApplied();
+}
+
+/** The parameters a re-prune applies, which is exactly what `GRAPH_ONLY` names. */
+const GRAPH_ONLY_NAMES = (Object.keys(SETTING_LIMITS) as SettingName[]).filter(isSkeletonOnly);
+
+function markGraphOnlyApplied(): void {
+  markParametersApplied(GRAPH_ONLY_NAMES);
 }
 
 async function derive(): Promise<void> {
@@ -466,6 +482,9 @@ async function derive(): Promise<void> {
     // The picture now shows these deriving-stage settings, so any row that was marked ahead of it
     // stops being.
     markApplied("derive");
+    // And the prune limit, which a derive re-applies on its way through but which is filed under a
+    // different stage, so `markApplied("derive")` alone never copied it across.
+    markGraphOnlyApplied();
     publish(derivation, generation);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
   } catch (error) {
