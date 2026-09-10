@@ -62,11 +62,11 @@ export function renderSimplifyAction(body: HTMLElement): void {
 
   const note = document.createElement("p");
   note.className = "sub";
+  // The one sentence a slider label cannot carry: this side of the handover has no map to re-read,
+  // so the detail it removes is not recoverable the way the ink mode's straightening is.
   note.innerHTML =
-    "Applies <b>Straighten walls</b> above, once, to every wall at once. Junctions and the ends of " +
-    "walls never move, so the rooms stay joined where they were joined; what goes is the wandering " +
-    "in between. <b>It cannot be undone</b> &mdash; there is nothing here to derive the detail back " +
-    "from. Set the slider to off and nothing happens.";
+    "Runs once, on the whole graph. <b>It cannot be undone</b> &mdash; there is nothing here to " +
+    "derive the detail back from.";
 
   button.addEventListener("click", () => {
     void run(button);

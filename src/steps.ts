@@ -155,9 +155,7 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Pan",
     band: "navigate",
     drag: "pan",
-    hint:
-      "Drag to move the map, and nothing here changes it. Click once without dragging to ask what " +
-      "the trace made of that pixel.",
+    hint: "Drag to move the map. Click without dragging to ask what the trace made of that pixel.",
   },
   { id: "suppress", label: "Suppress", band: "ink", drag: "brush", hint: "" },
   { id: "ink", label: "Add ink", band: "ink", drag: "brush", hint: "" },
@@ -167,9 +165,7 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Move",
     band: "walls",
     drag: "edit",
-    hint:
-      "Drag a point to move it. Drop it on another to join them — hold <b>Shift</b> to keep them " +
-      "apart.",
+    hint: "Drag a point to move it. Drop it on another to join them; <b>Shift</b> keeps them apart.",
   },
   {
     id: "draw",
@@ -177,18 +173,15 @@ export const TOOLS: readonly ToolChoice[] = [
     band: "walls",
     drag: "edit",
     hint:
-      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>cyan</b> where " +
-      "it would attach to an existing point, which is how you close a gap — hold <b>Shift</b> to " +
-      "leave it loose. <b>Ctrl</b>-drag pans. Escape or right-click abandons a wall part-drawn.",
+      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>cyan</b> where it " +
+      "would attach; <b>Shift</b> leaves it loose. <b>Ctrl</b> pans, Escape abandons.",
   },
   {
     id: "erase",
     label: "Erase",
     band: "walls",
     drag: "edit",
-    hint:
-      "Click a wall to remove it. <b>One segment at a time</b>, so a long wall drawn as many " +
-      "segments takes a click each — the highlight shows exactly what would go.",
+    hint: "Click a wall to remove it, <b>one segment at a time</b>. The highlight shows what would go.",
   },
 ];
 
@@ -209,7 +202,13 @@ export const TOOLS: readonly ToolChoice[] = [
 /** A sub-heading within a step, for a handful of controls that want their own explanation. */
 export interface StepGroup {
   readonly title: string;
-  /** Shown under the heading. May carry markup. */
+  /**
+   * Shown under the heading, or in the tool-hint slot for a group that belongs to a tool.
+   *
+   * Empty for an ordinary sub-heading, for the reason a step's is. A **tool's** group is the one
+   * place a blurb is nearly always earned: a tool is a glyph in a strip with a tooltip, so this is
+   * the only text saying what a press does and which modifier changes it.
+   */
   readonly blurb: string;
   readonly parameters: readonly SettingName[];
   /**
@@ -231,7 +230,14 @@ export interface StepGroup {
 export interface Step {
   readonly id: StepId;
   readonly title: string;
-  /** Shown under the title, saying what the step is for. May carry markup. */
+  /**
+   * Shown under the title. May carry markup, and is **empty for all but one step**.
+   *
+   * The default is nothing (user, 2026-09-09): a heading plus the labels under it says what a step
+   * is for, and a paragraph at the top of every section is prose a GM scrolls past to reach the
+   * controls. A blurb has to earn its line by saying something no label in the step can — View's
+   * does, because "Preview fill" cannot also say what the emitted shape looks like.
+   */
   readonly blurb: string;
   /** What the canvas shows while this step is open. */
   readonly layers: readonly LayerId[];
@@ -270,9 +276,9 @@ export const STEPS: readonly Step[] = [
   {
     id: "map",
     title: "Map",
-    blurb:
-      "Which image the trace reads. Everything below is about this one picture, and stays closed " +
-      "until one is chosen.",
+    // Nothing to say: the picker is the whole step, and the steps below being disabled until an
+    // image is chosen says the rest without a sentence.
+    blurb: "",
     /*
       Nothing over the map, deliberately.
 
@@ -286,14 +292,10 @@ export const STEPS: readonly Step[] = [
   {
     id: "ink",
     title: "Ink",
-    blurb:
-      "What the trace calls a mark, which marks it keeps, and the tools for correcting that by hand. " +
-      "The sliders decide what counts as ink everywhere at once; below them are three tools that " +
-      "work on one spot &mdash; <b>Suppress</b> to cover marks the trace should ignore, <b>Add " +
-      "ink</b> to draw linework the map lacks, and <b>Gaps</b> to hunt for places a wall stops " +
-      "short, which are the faults that merge two rooms and are far too small to spot by eye. " +
-      "Everything the " +
-      "tools write goes into a layer of your own that no slider here can undo.",
+    // The ninety words here listed the three tools and said what each was for. All three are buttons
+    // in the strip with a blurb of their own, so this was a table of contents for a list one scroll
+    // further down.
+    blurb: "",
     /*
       One step, and it took two others into itself on 2026-09-05 (user).
 
@@ -329,7 +331,7 @@ export const STEPS: readonly Step[] = [
         // marks are *linework*, which is a question about ink. A wall is what the step below makes
         // of the linework.
         title: "Linework",
-        blurb: "Filtering those marks down to linework. Both go far past useful, so the edge is findable.",
+        blurb: "",
         parameters: ["minStrokeInkWidths", "minIslandPx"],
       },
       /*
@@ -344,35 +346,35 @@ export const STEPS: readonly Step[] = [
         tool: "suppress",
         title: "Suppress",
         blurb:
-          "Drag to cover marks the trace should <b>ignore</b> &mdash; meaningless crosshatching, a " +
-          "printed floor grid, a compass rose. The sliders above work on every mark at once and " +
-          "cannot tell decoration from linework; you can, by looking. Covered areas show in " +
-          "<b class='suppress-key'>amber</b>. Hold <b>Shift</b> to uncover while you drag, " +
-          "<b>Ctrl</b> to pan.",
+          "Drag to cover marks the trace should <b>ignore</b> &mdash; hatching, a printed floor " +
+          "grid, a compass rose. Covered areas show in <b class='suppress-key'>amber</b>. " +
+          "<b>Shift</b> uncovers, <b>Ctrl</b> pans.",
         parameters: ["suppressBrushPx"],
       },
       {
         tool: "ink",
         title: "Add ink",
         blurb:
-          "Drag to draw linework the map does not have, or does not have clearly: a wall the reading " +
-          "broke, a doorway to close off, a boundary that was never drawn. This goes in <b>last of " +
-          "everything</b>, so no filter above can take it away again. Drawn ink shows in " +
-          "<b class='addink-key'>cyan</b>. Hold <b>Shift</b> to erase while you drag, <b>Ctrl</b> " +
-          "to pan.",
+          "Drag to draw linework the map lacks. Goes in <b>last of everything</b>, so no filter " +
+          "above can take it away again. Shows in <b class='addink-key'>cyan</b>. <b>Shift</b> " +
+          "erases, <b>Ctrl</b> pans.",
         parameters: ["inkBrushPx"],
       },
       {
         tool: "gaps",
         title: "Gaps",
+        /*
+          Mechanics only (user, 2026-09-09), and the teaching is the stated cost.
+
+          The seventy words this replaces spent most of themselves on *why* a four-pixel crack
+          matters — that a severed wall merges two rooms, which is the worst thing the tool can get
+          wrong. That is the best argument in the product and a first-time GM no longer meets it.
+          What is left says what a press does, which is what the slot is for.
+        */
         blurb:
-          "A wall with a section missing merges two rooms, which is the worst this can get wrong " +
-          "&mdash; and a crack four pixels wide is not something anyone finds by scanning a map. " +
-          "This searches for them and rings each one in <b class='gap-key'>cyan rings</b>. <b>Click " +
-          "inside a ring</b> to close that gap, or close them all with the button below. " +
-          "<b>Nothing is added until you accept it</b>, and what you accept becomes ordinary added " +
-          "ink. A <b>dashed</b> ring is a channel the search could not finish examining and will " +
-          "not offer. Dragging pans.",
+          "Searches for places a wall stops short and rings each in " +
+          "<b class='gap-key'>cyan</b>. <b>Click inside a ring</b> to close that gap, or use the " +
+          "button below for all of them. A <b>dashed</b> ring is not offered. Dragging pans.",
         parameters: ["gapFillPx", "gapTravelPx"],
       },
     ],
@@ -380,11 +382,7 @@ export const STEPS: readonly Step[] = [
   {
     id: "walls",
     title: "Walls",
-    blurb:
-      "The <b>graph</b> the reading arrives at, over the rooms it encloses: every wall a line, every " +
-      "corner a point. <b>A face boundary is a wall's centreline</b>, so both controls here change " +
-      "which rooms exist and what shape they are. <b>This is what goes on the map</b>, and it is the " +
-      "same picture the wall editor opens on.",
+    blurb: "",
     /*
       The graph over the partition over the ink: three layers, and each earns its place.
 
@@ -423,10 +421,7 @@ export const STEPS: readonly Step[] = [
   {
     id: "edit",
     title: "Edit walls",
-    blurb:
-      "The walls as they were saved, and yours to move. Every wall is a line and every corner a " +
-      "point; joining two points makes them one for ever, so the rooms either side of a wall follow " +
-      "it when it moves. Nothing here recalculates anything from the map.",
+    blurb: "",
     /*
       The partition under the graph, which is the one pairing that answers this step's question.
 
@@ -481,10 +476,14 @@ export const STEPS: readonly Step[] = [
       group that is never entered is the one place a control can sit and be reachable from both
       without either mode claiming it.
     */
-    blurb:
-      "How the rooms are drawn, wherever they are drawn \u2014 which is <b>Walls</b> and <b>Edit " +
-      "walls</b>. Neither of these changes what goes on the map: an emitted room is fully opaque " +
-      "and carries no outline at all.",
+    /*
+      The one step blurb kept, cut to the half a label cannot carry.
+
+      "Preview fill" and "Preview outline" say these are local to this canvas. What they cannot say
+      is what the *emitted* shape looks like instead \u2014 and a GM who assumes a tinted preview means a
+      tinted fog shape has assumed something false about the thing this tool exists to produce.
+    */
+    blurb: "Preview only \u2014 an emitted room is fully opaque and has no outline.",
     /*
       No layers of its own, and that is what a persistent group means rather than an oversight.
 

@@ -163,10 +163,9 @@ export function renderSaveAction(body: HTMLElement): void {
 
   const note = document.createElement("p");
   note.className = "sub";
-  note.innerHTML =
-    "Saves the graph above and replaces what we put in the scene before. <b>Closing without " +
-    "pressing it saves nothing</b> &mdash; your settings and ink edits are kept whatever you do, so " +
-    "coming back here is always cheap. Once saved, the wall tools in the strip change it by hand.";
+  // Cut to the one half that is a warning rather than reassurance. This is the only button in the
+  // rail whose absence loses work, and nothing else on the surface says so.
+  note.innerHTML = "<b>Closing without pressing it saves no walls.</b>";
 
   const run = async (): Promise<void> => {
     // Size first, because it is the question that might change what the GM does with the sliders —

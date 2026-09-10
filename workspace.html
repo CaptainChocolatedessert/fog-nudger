@@ -152,6 +152,18 @@
         color: #9aa0c8;
         font-size: 0.8rem;
       }
+      /*
+        Most of these are empty now, and an empty paragraph is still a paragraph.
+
+        The blurbs and hints went from "always present" to "present when they earn it" (2026-09-09),
+        and the elements stayed: a row's hint is repainted as measurements land, so it cannot simply
+        not be built. Without this every step header carries 0.4rem of nothing under it and every
+        slider a blank line, which is the same wasted column the prose was taking.
+      */
+      .sub:empty,
+      .row .hint:empty {
+        display: none;
+      }
 
       .row {
         margin: 0 0 0.9rem;

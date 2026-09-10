@@ -81,16 +81,17 @@ export function renderInkTools(body: HTMLElement): void {
   if (!chosen) {
     const idle = document.createElement("p");
     idle.className = "sub";
-    idle.textContent =
-      "Pick a tool from the strip to correct the reading by hand. Each writes into a layer of your " +
-      "own that survives every re-read.";
+    idle.textContent = "Pick a tool from the strip.";
     body.append(idle);
   } else {
-    const hint = document.createElement("p");
-    hint.className = "sub";
-    hint.innerHTML = chosen.blurb;
-    body.append(hint);
+    /*
+      The blurb was drawn here as well, and that was a straight duplication.
 
+      `toolPalette` paints the same string into `#tool-hint` at the top of the rail — its own
+      fallback for a tool with no hint of its own is exactly this group's blurb — so the chosen
+      tool's sentence appeared twice on one screen, once pinned above and once here. The pinned copy
+      is the one that survives, because it stays put when these controls are scrolled past.
+    */
     const kind = brushKind(active);
     if (kind) body.append(verbRow(kind));
 
@@ -134,7 +135,9 @@ function verbRow(kind: PaintKind): HTMLElement {
 
   const note = document.createElement("p");
   note.className = "hint";
-  note.innerHTML = "<b>Shift</b> swaps these for the length of one stroke, which is what a correction usually is.";
+  // Kept, short. The tool's own blurb names what Shift does *from the default verb*; this is the
+  // general statement, and it stays true when the GM flips the row.
+  note.innerHTML = "<b>Shift</b> swaps these for one stroke.";
 
   wrapper.append(row, note);
   return wrapper;
@@ -242,15 +245,10 @@ function renderSave(body: HTMLElement): void {
     void finishPaint("save");
   });
 
-  const note = document.createElement("p");
-  note.className = "sub";
-  note.innerHTML =
-    "Writes both hand-made layers and rebuilds the ink. Leaving this step or closing the workspace " +
-    "does the same thing &mdash; nothing here is lost by navigating away, and this is only for " +
-    "seeing the effect without going anywhere.";
-
+  // No note: it said leaving does the same thing, which is reassurance about a button that cannot
+  // lose anything. The two buttons beside it that *can* — Discard and Clear — confirm instead.
   row.append(save);
-  body.append(row, note);
+  body.append(row);
 }
 
 /**

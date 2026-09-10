@@ -97,30 +97,29 @@
     <div class="actions">
       <button id="open-workspace" disabled>Open the workspace</button>
     </div>
-    <p class="note">
-      The workspace is where the picture becomes walls: choose the image, decide what counts as ink,
-      correct it by hand, and save the result. It is a full-screen surface because the answers are
-      per-pixel verdicts, which only a picture can carry.
-    </p>
-    <p class="note">
-      The same surface moves, draws and erases walls once they exist. Changing a reading setting
-      afterwards derives them again, which discards those hand edits &mdash; so it counts them and
-      says what it would cost before doing it.
-    </p>
+    <!--
+      One note, down from three (2026-09-09).
+
+      Two of them described the workspace: what it is for, that it is full-screen, that the same
+      surface edits walls afterwards. All of that is behind a button labelled "Open the workspace"
+      and is discovered by pressing it. What survives is the one thing a GM cannot discover safely,
+      because discovering it means having already lost a hand edit.
+    -->
     <p class="note">
       Saving puts the result straight on the fog layer, replacing whatever we put there before.
-      <strong>There is no staging step.</strong> So a hand edit to one of our fog items does not
-      survive the next write &mdash; edit it in one of these instead.
+      <strong>There is no staging step</strong> &mdash; a hand edit to one of our fog items does not
+      survive the next write.
     </p>
 
     <p class="field">Our fog</p>
     <div class="actions">
       <button id="remove" disabled>Remove ours</button>
     </div>
+    <!-- Kept, halved. "Remove ours" does not say that the saved walls go too, and that is the
+         destructive half of what the button does. -->
     <p class="note">
-      Takes out everything this extension put in the scene, <em>and</em> the saved walls behind it,
-      and leaves anything you drew by hand alone. Only needed to stop using the extension on a map;
-      an ordinary re-run replaces its own output.
+      Takes out our fog <em>and the saved walls behind it</em>, and leaves anything you drew by hand
+      alone.
     </p>
 
     <!--
@@ -132,11 +131,15 @@
       <button id="dry-run" disabled>Trace, emit nothing</button>
       <button id="inspect" disabled>Inspect fog</button>
     </div>
+    <!--
+      The area check was removed from the pipeline and this note went on advertising it (fixed
+      2026-09-09). It described "two independent computations of the same figure agreeing", which is
+      a diagnostic nothing has run for some time. The line about a button that no longer exists went
+      with it: that is a changelog entry, and a panel is not where one belongs.
+    -->
     <p class="note">
-      <em>Trace, emit nothing</em> runs the whole chain and writes the numbers to the log &mdash;
-      coverage, region counts, and the area check, which is two independent computations of the same
-      figure agreeing. The workspace draws the same partition; this is the only thing that reports
-      it in numbers. <em>What is here?</em> is no longer a button: click the map in the workspace.
+      <em>Trace, emit nothing</em> runs the whole chain and writes coverage and region counts to the
+      log. It is the only thing that reports the partition in numbers.
     </p>
 
     <div class="actions">

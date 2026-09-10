@@ -48,11 +48,8 @@ export function renderPruneAction(body: HTMLElement): void {
 
   const note = document.createElement("p");
   note.className = "sub";
-  note.innerHTML =
-    "Deletes every dead-end wall shorter than <b>Prune spurs</b> above, once, and keeps going while " +
-    "each deletion frees the next. <b>It cannot be undone</b> and it does not touch a wall that is " +
-    "part of a room, however short &mdash; a loop has no free end to start from. Set the slider to " +
-    "off and nothing happens.";
+  // Cut to the warning. What it deletes is the slider directly above it, which now names itself.
+  note.innerHTML = "Runs once, on the whole graph. <b>It cannot be undone.</b>";
 
   button.addEventListener("click", () => {
     void run(button);

@@ -39,23 +39,23 @@ export function renderFrameAction(body: HTMLElement): void {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "chip";
-  button.textContent = "Wall the map's edge";
-  button.disabled = !controlsLive();
+  /*
+    The name says the consequence, so the four-sentence note that used to say it is gone.
 
-  const note = document.createElement("p");
-  note.className = "sub";
-  note.innerHTML =
-    "Adds four walls around the outside of the map, which turns the space outside your buildings " +
-    "into <b>a room of its own</b> &mdash; somewhere the party can be, and somewhere you can reveal. " +
-    "Without them the outside stays fogged for ever, which is usually what a dungeon wants. Anything " +
-    "running off the edge is joined where it meets them.";
+    It was called "Wall the map's edge", which describes the mechanism — four walls at the extent —
+    and left the point to a paragraph: those walls turn the outside into a region, so the party can
+    be out there and the GM can reveal it. Without them the outside is enclosed by nothing and stays
+    fogged for ever. Naming the outcome carries that in three words.
+  */
+  button.textContent = "Make the outside a room";
+  button.disabled = !controlsLive();
 
   button.addEventListener("click", () => {
     void run(button);
   });
 
   actions.append(button);
-  body.append(actions, note);
+  body.append(actions);
 }
 
 async function run(button: HTMLButtonElement): Promise<void> {

@@ -189,11 +189,29 @@ describe("the control declaration", () => {
     }
   });
 
-  it("gives every control a label and a hint", () => {
+  it("gives every control a label, and leans on it rather than on a hint", () => {
+    /*
+      **The hint assertion was inverted on 2026-09-09**, and this is the point of the change rather
+      than a relaxation to let one through. It used to demand a non-empty hint from every control,
+      which is a test enforcing a paragraph under every slider — so the label was allowed to be
+      whatever it liked as long as prose underneath explained it.
+
+      What the surface needs is the opposite: a label that carries the control on its own, and a
+      hint only where nothing else can say the thing. Two qualify today, and they are named.
+
+      **Named rather than counted, and the cap was tried first.** A `<= 3` against two hints passed a
+      mutation that added a third, which is precisely the change this exists to stop: one free slot
+      is a slot something slips into. Naming them means adding a hint fails here and the author has
+      to come and argue for it, which is the whole intent.
+
+      Mutation-tested with the two below in `steps.test.ts`: six mutations, six caught — but only
+      after the cap became a list. The `<= 3` form scored four of six.
+    */
     for (const control of CONTROLS) {
       expect(control.label.length, control.name).toBeGreaterThan(0);
-      expect(control.hint.length, control.name).toBeGreaterThan(0);
     }
+    const hinted = CONTROLS.filter((control) => control.hint.length > 0).map((it) => it.name);
+    expect(hinted).toEqual(["gapFillPx", "gapTravelPx"]);
   });
 
   it("names each parameter at most once", () => {

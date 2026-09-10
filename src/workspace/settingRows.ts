@@ -304,7 +304,14 @@ export function settingRow(control: Control): HTMLElement {
     // trace of a session lands after these exist, and a figure fixed here would go on reporting
     // "trace once for a figure" for the rest of the session.
     const derived = control.derive ? control.derive(current, measured()) : "";
-    hint.innerHTML = derived ? `${control.hint} <b>${derived}</b>` : control.hint;
+    /*
+      Joined rather than interpolated, because most controls now have no hint at all.
+
+      The old form put the readout after `control.hint` unconditionally, which on an empty hint left
+      a leading space — enough to stop `:empty` matching, so the row kept a blank line where the
+      stylesheet was trying to collapse one.
+    */
+    hint.innerHTML = [control.hint, derived && `<b>${derived}</b>`].filter(Boolean).join(" ");
   };
   paintHint(value);
   // Registered so a change to one control can refresh the readouts of the others.

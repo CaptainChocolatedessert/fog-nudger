@@ -204,13 +204,8 @@ export function renderPushAction(body: HTMLElement): void {
   button.textContent = "Put on the map";
   button.disabled = !controlsLive();
 
-  const note = document.createElement("p");
-  note.className = "sub";
-  note.textContent =
-    "Replaces what we put in the scene before with the walls as they are now. Closing this does the " +
-    "same thing, so it is only needed to update the table without stopping work — your edits are " +
-    "saved as you make them either way.";
-
+  // No note. All three of its sentences were reassurance — that closing does the same thing, that
+  // edits are saved either way — and reassurance about a button is prose in the shape of a warning.
   button.addEventListener("click", () => {
     /*
       Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for a
@@ -235,5 +230,5 @@ export function renderPushAction(body: HTMLElement): void {
   });
 
   actions.append(button);
-  body.append(actions, note);
+  body.append(actions);
 }

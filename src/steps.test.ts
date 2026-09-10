@@ -111,16 +111,27 @@ describe("the step declaration", () => {
     expect(empty.length).toBeGreaterThan(0);
     for (const step of empty) {
       expect(step.title.length, `step ${step.id} has no title`).toBeGreaterThan(0);
-      expect(step.blurb.length, `step ${step.id} has no blurb`).toBeGreaterThan(0);
     }
   });
 
-  it("gives every step a unique id, a title and a blurb", () => {
+  it("gives every step a unique id and a title, and almost none of them a blurb", () => {
+    /*
+      **The blurb assertion was inverted on 2026-09-09**, the same way the control hint's was, and
+      for the same reason: demanding a paragraph under every heading is a test that makes the prose
+      mandatory and the naming optional.
+
+      The rule now is that a title carries the step, and a blurb has to say something no label in the
+      step can. Exactly one does — View, because "Preview fill" cannot also state what the emitted
+      shape looks like. Pinned at one rather than a cap: a second would mean the argument was made
+      twice, and it should have to be made here first.
+
+      Mutation-tested with the control-hint test: six mutations, six caught.
+    */
     expect(new Set(STEPS.map((step) => step.id)).size).toBe(STEPS.length);
     for (const step of STEPS) {
       expect(step.title.length).toBeGreaterThan(0);
-      expect(step.blurb.length).toBeGreaterThan(0);
     }
+    expect(STEPS.filter((step) => step.blurb.length > 0).map((step) => step.id)).toEqual(["view"]);
   });
 
   it("has exactly one persistent group, which is the one that is never entered", () => {
@@ -224,6 +235,27 @@ describe("a step's groups", () => {
       for (const group of toolGroups(step)) {
         expect(offered, `${step.id}/${group.tool}`).toContain(group.tool);
       }
+    }
+  });
+
+  it("explains every tool, either by its own hint or by the blurb of the group it reveals", () => {
+    /*
+      The one place the 2026-09-09 prose cull could take away something nothing replaces.
+
+      Steps lost their blurbs and controls lost their hints because a heading and a label were
+      already saying it. **A tool has neither.** It is an inline glyph in a strip with an
+      `aria-label` and a `title` tooltip, so the sentence in `#tool-hint` is the only thing on screen
+      that says what a press will do and which modifier changes it — and `toolPalette` composes that
+      slot exactly the way this walks it: the tool's own hint, or failing that the blurb of the
+      group it reveals.
+
+      Emptying both would leave a picture with no explanation anywhere, silently, because an empty
+      hint slot collapses and looks like a tool that simply has nothing to say.
+    */
+    for (const tool of TOOLS) {
+      const group = STEPS.flatMap((step) => toolGroups(step)).find((it) => it.tool === tool.id);
+      const explained = tool.hint.length > 0 || (group?.blurb.length ?? 0) > 0;
+      expect(explained, `tool ${tool.id} has no hint and no group blurb`).toBe(true);
     }
   });
 

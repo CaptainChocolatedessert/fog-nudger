@@ -102,12 +102,22 @@ export interface Control {
 }
 
 /**
- * Every control, in the order a GM meets them, each with a hint saying which way to turn it.
+ * Every control, in the order a GM meets them.
  *
- * **The hints are not decoration.** Every one of these is a number whose direction is not guessable —
- * raising Sauvola's `k` makes *less* ink, which is the opposite of what "sensitivity" suggests to
- * most people. A control whose direction you have to discover by experiment is a control that gets
- * turned once and left alone.
+ * **Almost none carries a hint, and that is deliberate** (user, 2026-09-09). A paragraph under every
+ * slider in a 22rem column is a wall of prose nobody reads, and the label plus the readout beside it
+ * is already the explanation — the readout says the value in a unit a GM can feel, which is the part
+ * the sentence was mostly restating.
+ *
+ * Where a name was doing too little the **name changed** rather than being propped up by a sentence.
+ * The old note here defended the hints on the grounds that a direction is not guessable — raising
+ * Sauvola's `k` finds *less* ink, and "sensitivity" suggests the opposite. That argument was right
+ * about the problem and wrong about the fix: the control is called **strictness** now, and a
+ * stricter threshold finding less ink needs no explaining. Likewise the spur budget, which is *the
+ * longest dead end to remove* because "spur" is this project's word and not a GM's.
+ *
+ * **Two hints survive**, and each says something neither a name nor a number can: that a gap
+ * proposal is not applied until it is accepted, and which way the same-wall distance leans.
  *
  * One list rather than one per surface: which stage a control belongs to is read from the stage
  * declaration in `settings.ts`, which is the same declaration the pipeline's cache invalidation
@@ -151,30 +161,33 @@ function brushReadout(value: number, { pxPerSquare }: Measured): string {
 export const CONTROLS: readonly Control[] = [
   {
     name: "inkOpacity",
-    label: "Overlay opacity",
-    hint: "Solid is easiest to judge <b>what</b> the trace called ink. Lower it to a tint when the question is whether that ink sits on the linework underneath.",
+    label: "Ink overlay",
+    hint: "",
   },
   {
     name: "sauvolaK",
-    label: "Ink threshold",
-    hint: "Higher finds <b>less</b> ink — only decisively dark pixels. Lower catches faint linework, and eventually the paper.",
+    // "Strictness" rather than "threshold" or "sensitivity", which is the whole of the direction
+    // hint this used to carry: a stricter reading keeping only decisively dark pixels is guessable,
+    // and a higher *sensitivity* finding less ink is not.
+    label: "Ink strictness",
+    hint: "",
   },
   {
     name: "blurSigma",
     label: "Texture blur",
-    hint: "Fades the finest marks below the threshold. The blunt lever against speckle and a printed floor grid — blunt because it works on contrast, so it takes faint walls too.",
+    hint: "",
     derive: (value) => `${value.toFixed(2)} px`,
   },
   {
     name: "sauvolaRadiusPx",
     label: "Detail window",
-    hint: "How local the threshold is, as a radius in pixels. Wants to stay comfortably wider than the linework is thick, or a bold stroke becomes its own background and stops counting as ink.",
+    hint: "",
     derive: (value) => `${Math.round(value) * 2 + 1} px across`,
   },
   {
     name: "minStrokeInkWidths",
-    label: "Minimum stroke width",
-    hint: "Removes marks narrower than this, keeping thicker ones at full width. As a share of the measured ink width; <b>zero is off</b>. Works on width, not contrast, so it reaches a floor grid the blur cannot.",
+    label: "Thinnest stroke to keep",
+    hint: "",
     derive: (value, { inkWidth }) => {
       if (value <= 0) return "off";
       if (inkWidth === null || inkWidth <= 0) return "trace once for a figure";
@@ -187,14 +200,17 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "minIslandPx",
-    label: "Smallest ink island",
-    hint: "Removes isolated marks shorter than this on <b>both</b> sides — decoration that survived the filter above. Walls join into one network, so they are not islands. In pixels; <b>zero is off</b>.",
+    label: "Smallest mark to keep",
+    hint: "",
     derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
   },
   {
     name: "gapFillPx",
     label: "Largest gap to look for",
-    hint: "How wide a gap the search will find, in pixels; <b>zero finds none</b>. Each one is ringed and shown in <b class='gap-key'>cyan</b> &mdash; <b>nothing is added until you accept it</b>. Past a doorway's width it starts proposing doorways, and no measurement can tell those apart.",
+    // One of the two hints kept. Not a direction — the label and the readout give that — but the
+    // one fact a GM must not learn by surprise: past a doorway's width the search proposes
+    // doorways, and nothing about a proposal reaches the ink until it is accepted.
+    hint: "Ringed, never added until you accept it. Past a doorway's width it proposes doorways.",
     derive: (value, { pxPerSquare }) => {
       if (value <= 0) return "off";
       if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;
@@ -204,15 +220,19 @@ export const CONTROLS: readonly Control[] = [
   {
     name: "gapTravelPx",
     label: "Same-wall distance",
-    hint: "How far apart two edges of a gap can be <b>along the ink</b> and still count as one piece of wall. Low proposes more: a crack beside a corner starts counting. High treats distant linework as connected and goes quiet.",
+    // The other one kept. No name found says what "along the ink" means here, and the direction is
+    // genuinely backwards: a *shorter* distance proposes *more*.
+    hint: "How far apart a gap's two banks may be measured <b>along the ink</b>. Lower proposes more.",
     derive: (value) =>
       value <= 0 ? "propose every gap" : `${Math.round(value)}px along the ink`,
   },
   {
     name: "spurPruneFraction",
-    label: "Prune spurs",
+    // A spur is a wall run with a free end, and "spur" is vocabulary from `DESIGN.md` rather than
+    // anything a GM brought with them. The label says the whole of what the number means.
+    label: "Longest dead end to remove",
     scale: "log",
-    hint: "Removes dead-end walls shorter than this, measured along the wall. A ragged ink edge grows hairs; a wall that really stops in mid-air is a <b>stub</b> and must survive. Only length tells them apart. <b>Far left is off</b>, and the top of the track is the longest dead end this graph has &mdash; past a wall's own length it eats the graph.",
+    hint: "",
     readout: "position",
     // Nothing when off, because the readout has already said so beside the label. These are the only
     // controls whose own readout names the off state, so they are the only ones whose hint must not
@@ -222,13 +242,13 @@ export const CONTROLS: readonly Control[] = [
   {
     name: "suppressBrushPx",
     label: "Brush width",
-    hint: "In raster pixels, so a stroke covers the same amount of map however far you are zoomed out &mdash; zoom in to work finely rather than turning this down. A stroke keeps the width it was painted at.",
+    hint: "",
     derive: brushReadout,
   },
   {
     name: "inkBrushPx",
     label: "Brush width",
-    hint: "In raster pixels. This draws linework, so a width near the map's own ink is usually right &mdash; the readout below says what that measured.",
+    hint: "",
     derive: (value, measured) => {
       const base = brushReadout(value, measured);
       const { inkWidth } = measured;
@@ -239,18 +259,22 @@ export const CONTROLS: readonly Control[] = [
   {
     name: "fillOpacity",
     label: "Preview fill",
-    hint: "How the partition is drawn <b>here</b>, and nowhere else &mdash; an emitted fog shape is always fully opaque, or revealed ground keeps a tint of the fog colour. Low keeps the map readable underneath.",
+    // "Preview" is the whole of the old sentence: it says this is how the rooms are drawn here and
+    // nowhere else. What an emitted shape looks like is stated once, under the View heading.
+    hint: "",
   },
   {
     name: "strokeSquares",
     label: "Preview outline",
-    hint: "In grid squares, and <b>only here</b>. An emitted shape carries no outline at all: Dynamic Fog offsets its walls by exactly that width, so an outline would push them half of one either side of the boundary.",
+    hint: "",
   },
   {
     name: "simplifyFraction",
-    label: "Edge simplification",
+    label: "Straightening",
     scale: "log",
-    hint: "How far a wall may be moved to straighten it, as a share of the map. <b>Far left is off</b>; the top of the track is the biggest bend this graph has, which flattens everything. The bottom of the track does nothing on a graph already fitted this hard &mdash; that dead stretch is how far it has been taken already.",
+    // No warning needed, unlike its namesake in the editor: this one is part of the derive, so
+    // moving it back re-reads the map and the detail comes with it.
+    hint: "",
     readout: "position",
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
@@ -258,7 +282,9 @@ export const CONTROLS: readonly Control[] = [
     name: "editSimplifyFraction",
     label: "Straighten walls",
     scale: "log",
-    hint: "How far a wall may be moved to straighten it. <b>Nothing happens until you press the button below</b> &mdash; and unlike the reading, there is nothing here to derive the detail back from, so what it removes is gone. Walls that cross after straightening are split where they meet.",
+    // The irreversibility is stated once, in the note under the button that does it — which is also
+    // the only thing that acts on this number.
+    hint: "",
     readout: "position",
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },
