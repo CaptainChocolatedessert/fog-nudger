@@ -2413,20 +2413,47 @@ from it should be struck by being *done*, not by being forgotten.
 
 ### Where to pick this up
 
-**Everything below is the working set, and it is complete** — the conversation that produced it ended
-at a context limit, so this list is the handover rather than a summary of one.
+**Everything below is the working set, and it is complete** — this list is the handover rather than
+a summary of a conversation, and it was brought up to date after an unattended pass on 2026-09-10.
 
 **Closed, and confirmed in a room:** the tool's controls were unreachable (a missing `onToolChange`
 subscription plus a home three conditions deep) and now sit in the pinned head; the "Correcting it by
 hand / Pick a tool from the strip" empty state went with the slot it labelled; and the three wall
 actions are gated before the press, with the prune button naming the step that holds its slider.
 
-**Closed at the desk, not yet judged in a room:** the prose cull, the paint verbs becoming Draw and
-Erase on both layers, the panel dropping to two buttons, and the spur *limit* rename.
+**Closed at the desk on 2026-09-09, not yet judged in a room:** the prose cull, the paint verbs
+becoming Draw and Erase on both layers, the panel dropping to two buttons, and the spur *limit*
+rename.
 
-**The next thing worth doing** is the two outright bugs below — the ghost mark on a slider especially,
-since it is met on every control. **The largest thing** is the fractured save-then-buttons workflow,
-which is a conversation and not a build, and which the two parked button cuts are downstream of.
+**Closed at the desk on 2026-09-10, unattended, and none of it seen in a room:**
+
+- *Save the ink edits* is **Save painted strokes**, and its refusal says where a slider's change went.
+- **The slider ghost** — five faults fixed, now a grey circle the size of the handle.
+- **The ink colour** leads the five colours in View; **the ink opacity is gone**, as a parameter; and
+  View's Defaults restores all five colours.
+- **Five false discard prompts removed** — the brush widths, the gap sliders and the editor's
+  straighten slider no longer offer to re-read the map.
+- **The tool column** — heavier glyphs, larger captions, disabled tools over the contrast floor.
+- **The layer toggles** lead with the word *Show*. The suppression colour is labelled **Suppressed**.
+- **Prune and Straighten no longer claim they cannot be undone.** They always could be.
+
+**What a room should check first, in order** — each is something only a room can confirm:
+
+1. **The ghost, at both ends of a track, in Firefox.** It was measured in Chromium only, and it rests
+   on the browser's own thumb being 16px. If it sits beside the handle rather than under it,
+   `--thumb` in `workspace.html` is the number.
+2. **A brush width with a wall edit outstanding** should move with no dialog.
+3. **The *Show* caption** has never been drawn — nothing proposes a layer outside a room.
+4. **The ink colour row in View**, and View's Defaults putting all five colours back.
+
+**The largest thing** is still the fractured save-then-buttons workflow, a conversation and not a
+build, and it now has **two facts it did not have**: a slider release never replaces the stored graph
+(only a save does), and Prune and Straighten were undoable all along. Both are in its entry below.
+
+**Still parked, each needing a decision:** the state line's placement; the two button cuts, which wait
+on the workflow; the ink-width readouts; where undo and redo go (redo itself is answered — possible and
+small); the frame button's wording; per-colour opacity; and the 14px base size, which changes every
+control's look.
 
 **One agreement, learned expensively:** do not edit the running modules while the user has a room
 open, and try a reopen before diagnosing anything. `CLAUDE.md` says why.
