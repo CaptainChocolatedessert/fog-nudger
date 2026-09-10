@@ -2359,12 +2359,88 @@ It came out of using the thing: the accordion made switching tasks expensive, an
 the workspace read as artificial. Both turned out to have one cause — the mode boundary ran across the
 grain of the task, and what it was protecting is a property of the document rather than a place.
 
-**So the most useful next thing is unchanged, and now carries more weight: a real session of map
-correction, end to end.** It was already the only way to answer whether the partition is the one a GM
-wants; it is now also the only way to judge a surface that has been rebuilt around a guess about how
-the work actually flows.
+**The most useful next thing was a real session of map correction, end to end**, as the only way to
+judge a surface rebuilt around a guess about how the work actually flows. **The first half of that
+has now happened** and the list it returned is below.
 
-**Nothing below depends on it**, and nothing below is urgent.
+**What it did not do is judge the partition.** That session looked at the surface — where controls
+are, what is greyed, what reads badly — and never got as far as going room by room and saying whether
+these are the rooms a GM would have drawn. So the oldest open question is still open, and it is still
+the most informative thing that can happen to this project.
+
+**Nothing after the room's list depends on that list**, and nothing after it is urgent.
+
+### The first room's list
+
+**The first real session happened on 2026-09-09** and returned a list. It is written down here rather
+than left in a conversation because a conversation ends: this is the working set, and anything struck
+from it should be struck by being *done*, not by being forgotten.
+
+**Two are already fixed** — see §7a. The tool's controls were unreachable (a missing `onToolChange`
+subscription, plus a home three conditions deep), and the "Correcting it by hand / Pick a tool from
+the strip" empty state went with the slot it labelled.
+
+Where an entry carries a guess about the cause, it says so. **None of these has been diagnosed beyond
+what the room reported** unless the entry says otherwise.
+
+#### Probably one cause, not four: no saved wall graph
+
+- The wall editing tools are greyed out and cannot be selected.
+- **Straighten walls** does nothing.
+- **Make the outside a room** does nothing.
+- **Undo** is greyed out.
+
+*The hypothesis, and it is a hypothesis:* all four gate on there being a saved `WallGraph` for the
+map, and the room also asked why **Put the walls on the map** still exists — which suggests it was
+never pressed and nothing was ever saved. If that is right, these are not four defects but one design
+failure: the surface makes saving look optional and then silently disables everything downstream of
+it, with no line anywhere saying that is why.
+
+#### Bugs
+
+- **Save the ink edits** reports that nothing has changed, after *Smallest mark to keep* was adjusted.
+  *Suspected:* that slider is part of the reading, not a paint layer, and the button's guard asks
+  whether either **hand-painted layer** has unsaved strokes. If so the button is behaving correctly
+  and the *message* is what is wrong — it claims nothing changed when what it means is that nothing
+  it can save changed.
+- **The ghost mark on a slider** lands near the new value rather than on it, and never disappears.
+  Wanted: a grey circle matching the control's own handle, so the previous position is easy to return
+  to by eye.
+
+#### Legibility
+
+- The text in the tool column is too thin or too dark to read comfortably. Related to the measured
+  typography finding in §7a, which is still unapplied.
+- The layer toggles across the top are not self-explanatory; it is not obvious what they are for.
+
+#### Cuts and moves
+
+- The **ink colour picker** should move down with the other swatches, and the **ink opacity** control
+  should go.
+- **Put the walls on the map** — the room's reaction was that it no longer makes sense.
+- **Put on the map** in Edit walls — consider removing it too.
+
+#### Naming
+
+- **Rub out** on the Add ink tool should be **Erase**.
+- **Cover** and **Uncover** on Suppress are not right. The candidate is that **both paint-like tools
+  use Draw and Erase**, and the difference is which layer is in hand rather than which words are used.
+
+#### Wants a conversation before any code
+
+- **The ink-width readouts state a guess too confidently.** The measured ink width is a programmatic
+  estimate and several readouts quote it as though it were a fact. One candidate: if a line of text
+  is needed to say how many pixels something is, make **pixels the unit the slider reports on the
+  right** instead.
+- **Why do Straighten and Prune need a button at all?** Both are a slider plus a separate press, and
+  the room asked why. **Prune in Edit walls has no slider beside its button**, which is the same
+  question from the other end.
+- **Undo, and whether redo is possible.** The room suggested undo belongs in the tool column as a
+  curved back arrow.
+- **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
+  *Create walls around map border* was offered as an alternative.
+- **Per-colour opacity.** Explicitly **not to be built until it has been discussed** — it may not fit
+  the design language, and that is the conversation.
 
 ### Two features unimplemented, and one still needs a conversation before code
 
