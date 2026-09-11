@@ -2439,9 +2439,9 @@ rename.
 
 **What a room should check first, in order** — each is something only a room can confirm:
 
-1. **The ghost, at both ends of a track, in Firefox.** It was measured in Chromium only, and it rests
-   on the browser's own thumb being 16px. If it sits beside the handle rather than under it,
-   `--thumb` in `workspace.html` is the number.
+1. ~~**The ghost in Firefox.**~~ **Sits right under the handle** (room, 2026-09-10), so the 16px
+   size holds. **Still open: the ends of a track**, where a wrong inset would show and mid-track would
+   not. If it sits beside the handle there, `--thumb` in `workspace.html` is the number.
 2. **A brush width with a wall edit outstanding** should move with no dialog.
 3. **The *Show* caption** has never been drawn — nothing proposes a layer outside a room.
 4. **The ink colour row in View**, and View's Defaults putting all five colours back.
@@ -2534,11 +2534,13 @@ agreement that came out of that.
 
   **The look is the room's**: a grey circle the size of the handle, placed where the handle's own
   centre would be — which is half a thumb in from each end, not a bare percentage of the track.
-  **Measured in Chromium, not Firefox**: the circle is 16px, vertically centred on the track, and at
-  the far left exactly where a 16px thumb centres. The first attempt sized it in `rem` and came out
-  13px, because this surface's root text is 13px; the native thumb does not follow the root font.
-  **What only a room can confirm** is that Firefox's own thumb is also 16px — if the ghost sits beside
-  the handle at either end of a track, `--thumb` in `workspace.html` is the number to change.
+  **Measured in Chromium**: the circle is 16px, vertically centred on the track, and at the far left
+  exactly where a 16px thumb centres. The first attempt sized it in `rem` and came out 13px, because
+  this surface's root text is 13px; the native thumb does not follow the root font.
+  **Confirmed in Firefox by a room (2026-09-10): "the ghost sits right under the handle"** — so
+  Firefox's own thumb is 16px too, and the size is right. What that does not yet establish is the
+  *inset*, which only shows near either end of a track; a wrong one is invisible mid-track. If the
+  ghost ever sits beside the handle at an end, `--thumb` in `workspace.html` is the number to change.
 
 #### Legibility
 
