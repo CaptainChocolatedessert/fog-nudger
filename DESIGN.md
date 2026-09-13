@@ -2584,6 +2584,24 @@ agreement that came out of that.
   removed the need for that particular message; the placement is unchanged and affects every other
   message on the surface.
 
+#### Bugs found later
+
+- ~~**The first ink tool picked after opening the workspace did nothing**~~ — the cursor stayed a hand
+  and no stroke landed; picking any other tool and coming back fixed it for the session (user,
+  2026-09-13). **Fixed the same day.** `openPaintMode` began by putting the tool back down. That was
+  right while the **accordion** opened the mode, when a GM entering the Ink step had no brush in hand
+  — but the strip took the verb, so the mode is opened *by* choosing a tool, and the reset wiped the
+  selection that had just asked for it. With no tool in hand the brush declines every press and the
+  drag falls through to a pan, which is the hand cursor. The second pick worked because the mode was
+  open by then and the early return meant nothing clobbered it.
+  **A second instance of the same clobber was found in the same function and not reported:** it also
+  cleared the gap search, which `setPaintTool` had just *run* for the gap tool — so the first time a
+  GM chose Gaps, its rings vanished as they appeared while the state line reported how many had been
+  found. Both lines are gone; `setPaintTool` owns the tool and the search.
+  **Not covered by a test:** `paintTool.ts` reaches the SDK and the DOM, so it cannot be imported into
+  a node test, and the ordering rule that broke here — *opening a mode must not change what is in
+  hand* — is not a decision that can be split out the way a gesture's can. Confirmed by a room instead.
+
 #### Wanted, and not built
 
 - **A way to delete all the metadata and start over** (user, 2026-09-13). There is none today, and
@@ -2602,9 +2620,10 @@ agreement that came out of that.
   - *Clear everything* — all of that plus the settings and the nomination, as though the extension had
     never run in this scene.
 
-  The room's phrasing points at the second. **It is the one genuinely irreversible control on the
-  surface** — undo does not reach metadata — so it wants a confirmation that names what goes, and it
-  is the one place "this cannot be undone" would be true.
+  **Decided (user, 2026-09-13): "It should clear everything."** The scene as though the extension had
+  never run — items, wall graph, both painted layers, the settings and the nomination. **It is the one
+  genuinely irreversible control on the surface** — undo does not reach metadata — so it wants a
+  confirmation that names what goes, and it is the one place "this cannot be undone" would be true.
 
 #### Cuts and moves
 
@@ -2684,6 +2703,12 @@ agreement that came out of that.
   when the GM later saves**, and says *"the graph that replaces them is a fresh reading"* about a
   moment in which nothing is replaced. It was left alone deliberately: whether a warning belongs at
   the slider, at the save, or both is exactly the seam this entry is about.
+
+  **Which side a room actually worked on (user, 2026-09-13):** the missing walls were inserted **on
+  the graph side**, in the editor after saving — *"but it could go either way depending on the task."*
+  So the editor's tools are not redundant, and the seam is not one a GM crosses once: the answer to
+  "which half does the correcting" is *both, depending on what is wrong*. Any design that makes one
+  side the ending is wrong about how the work goes.
 
   **A second fact, same day: Prune and Straighten are already undoable.** Both save through the same
   path as every hand edit, so both sit on the undo history, and until today both carried a

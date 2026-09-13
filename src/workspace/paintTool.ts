@@ -335,15 +335,39 @@ export function requestPaintMode(open: boolean): void {
 /**
  * Open the mode: take a working copy of both layers.
  *
- * Reached through `requestPaintMode` when the accordion moves, never directly.
+ * Reached through `requestPaintMode`, and **the thing that reaches it is a tool being picked up** —
+ * `toolPalette`'s `apply` calls `setPaintTool` and then asks for the mode, in that order.
+ *
+ * ## It used to put the tool back down, which killed the first pick every time — room, 2026-09-13
+ *
+ * This began with `tool = "none"`, and that was right while the **accordion** opened the mode: a GM
+ * entering the Ink step had no brush in hand yet, so starting from none was the honest state. Since
+ * the strip took the verb, the mode is opened *by* choosing a tool — so the reset wiped the very
+ * selection that had just asked for it.
+ *
+ * The symptom was precise and looked like nothing else: the **first** ink tool picked after opening
+ * the workspace did nothing at all — the cursor stayed a hand and no stroke landed, because with no
+ * tool in hand the brush declines every press and the drag falls through to a pan. Picking any other
+ * tool fixed it for the rest of the session, because by then the mode was open and the early return
+ * above meant nothing clobbered the tool again.
+ *
+ * **The tool belongs to `setPaintTool` and to nothing else here.** Closing still puts it down, which
+ * is correct: there is no brush in hand once the mode is shut.
  */
 async function openPaintMode(): Promise<void> {
   if (paintModeOpen()) return;
   await Promise.resolve();
 
-  tool = "none";
-  clearGapSearch();
-  gapsChanged();
+  /*
+    `clearGapSearch()` and `gapsChanged()` were here too, and went with the tool reset for the same
+    reason — found while fixing it rather than reported.
+
+    `setPaintTool` owns the search as well as the tool: it runs one when the gap tool is picked up and
+    clears it for every other tool. So this cleared a search that had **just been run** by the pick
+    that opened the mode — the first time a GM chose Gaps in a session, its rings vanished the instant
+    they appeared, while the state line went on reporting how many had been found. Picking any other
+    tool and coming back fixed it, exactly as it did for the brush.
+  */
 
   /*
     There is no stage-two refusal here any more.
