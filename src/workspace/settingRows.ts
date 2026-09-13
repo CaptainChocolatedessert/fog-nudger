@@ -36,7 +36,7 @@ import { ghostPosition } from "./ghostMark";
 import { invalidateRegions, repruneRegions } from "./regions";
 import { appliedSettings, currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
-import { confirmAction } from "./confirmDialog";
+import { confirmAction } from "../confirmDialog";
 import { handEdits } from "./stage";
 
 /**

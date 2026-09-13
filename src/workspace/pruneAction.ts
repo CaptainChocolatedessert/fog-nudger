@@ -38,7 +38,7 @@ import { describeError } from "../describeError";
 import { readParameter } from "../settings";
 import { pruneWallGraph, wallRuns } from "../trace/wallGraph";
 import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
-import { confirmAction } from "./confirmDialog";
+import { confirmAction } from "../confirmDialog";
 import { currentSettings } from "./settingsState";
 import { controlsLive } from "./settingRows";
 import { say } from "./shell";

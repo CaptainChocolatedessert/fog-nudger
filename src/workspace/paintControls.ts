@@ -31,7 +31,7 @@
 
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
 import { STEPS, groupControls, toolGroups } from "../steps";
-import { confirmAction } from "./confirmDialog";
+import { confirmAction } from "../confirmDialog";
 import { renderPanel } from "./accordion";
 import { brushKind } from "./paintGesture";
 import { anyUnsavedPaint, hasUnsavedPaint, paintRaster, workingLayer } from "./paintState";

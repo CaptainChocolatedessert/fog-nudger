@@ -33,7 +33,7 @@ import { readParameter } from "../settings";
 import { wallRuns } from "../trace/wallGraph";
 import { simplifyWalls } from "../trace/planarOps";
 import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
-import { confirmAction } from "./confirmDialog";
+import { confirmAction } from "../confirmDialog";
 import { currentSettings } from "./settingsState";
 import { controlsLive } from "./settingRows";
 import { say } from "./shell";

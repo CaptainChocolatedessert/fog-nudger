@@ -80,6 +80,7 @@ import { themeVariables } from "./theme";
     `hidePaper: false`; shipping bare decided that, so bare is the one to bring back.
 */
 import { clearEverything } from "./clearScene";
+import { confirmAction } from "./confirmDialog";
 import { openWorkspace } from "./workspace/workspaceControl";
 import { clearWallGraph } from "./wallGraphStore";
 import {
@@ -131,6 +132,34 @@ let sceneOpen = false;
 /** Buttons whose action is still in flight, so the readiness handler leaves them alone. */
 const running = new Set<HTMLButtonElement>();
 
+/**
+ * The full clear, asked for first.
+ *
+ * **The same dialog the workspace uses**, which is the one way dangerous actions are confirmed here
+ * (user, 2026-09-13). It was briefly a pair of armed buttons on the reasoning that a sandboxed iframe
+ * cannot rely on `confirm()` — true of the *browser's* dialog, and beside the point: `confirmAction`
+ * is ours and is plain DOM, and it carries its own styles so this page can draw it too.
+ *
+ * It names what goes, because two of the five are the ones a GM does not expect: their tuning, and
+ * the map choice that makes the extension ask which image to read as though it had never seen the
+ * scene. A declined dialog says so rather than saying nothing, which is what a GM who backed out of
+ * a destructive button is checking for.
+ */
+async function askThenClear(): Promise<string> {
+  const ok = await confirmAction({
+    title: "Clear everything in this scene?",
+    body: [
+      "Our fog, the saved walls, the ink you painted, your reading settings and the map choice all " +
+        "go. Anything you drew by hand stays.",
+      "Undo does not reach this. It is the one thing on this surface that cannot be taken back.",
+    ],
+    confirmLabel: "Clear everything",
+    destructive: true,
+  });
+  if (!ok) return "Nothing was cleared.";
+  return clearEverything();
+}
+
 function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement | null {
   const button = document.getElementById(id);
   if (!(button instanceof HTMLButtonElement)) return null;
@@ -155,59 +184,6 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
   });
   return button;
 }
-
-/**
- * The clear, behind a second press.
- *
- * **Two presses rather than a dialog.** This page is a sandboxed iframe, where `confirm()` cannot be
- * relied on, and the workspace's own confirmation belongs to the workspace. Arming swaps the button
- * for one that names the act and a way out — which says what is about to happen in the words of the
- * act itself rather than in a question about it.
- *
- * All three are returned so the readiness subscription owns their `disabled` like every other button:
- * a control that writes to a scene must not be live when there is no scene, armed or not.
- *
- * **Wired at module load, not inside `OBR.onReady`**, and the workspace states the reason: a listener
- * written inside the Owlbear path is silently dead until Owlbear answers, which the probe learned
- * three times. Arming needs no SDK — it hides one button and shows two — so gating it on readiness
- * would make it untestable outside a room for no gain. The *action* is still gated, twice over: the
- * buttons start `disabled` in the markup and the readiness subscription owns them after that.
- */
-function wireClear(): (HTMLButtonElement | null)[] {
-  const clear = document.getElementById("clear");
-  const cancel = document.getElementById("clear-cancel");
-  const confirm = document.getElementById("clear-confirm");
-  if (!(clear instanceof HTMLButtonElement)) return [];
-  if (!(cancel instanceof HTMLButtonElement) || !(confirm instanceof HTMLButtonElement)) return [];
-
-  const arm = (armed: boolean): void => {
-    clear.hidden = armed;
-    confirm.hidden = !armed;
-    cancel.hidden = !armed;
-  };
-
-  clear.addEventListener("click", () => arm(true));
-  cancel.addEventListener("click", () => {
-    arm(false);
-    // Said out loud, because a GM who armed this and backed out wants to know nothing happened —
-    // silence after pressing a destructive button is the state they are checking for.
-    reportResult("Nothing was cleared.", "ok");
-  });
-
-  const run = wireButton("clear-confirm", async () => {
-    const message = await clearEverything();
-    // Disarmed on the way out whatever happened, so a failure does not leave a primed button behind.
-    arm(false);
-    return message;
-  });
-
-  return [clear, cancel, run];
-}
-
-/**
- * The clear's buttons, wired before Owlbear answers and handed to the readiness subscription after.
- */
-const clearButtons = wireClear();
 
 /**
  * Paint the page in Owlbear's colours, over the stylesheet's own readable defaults.
@@ -276,8 +252,7 @@ OBR.onReady(async () => {
     */
     wireButton("open-workspace", openWorkspace),
     wireButton("remove", removeEverythingOfOurs),
-    // Wired at module load; the readiness subscription takes over their `disabled` from here.
-    ...clearButtons,
+    wireButton("clear", askThenClear),
   ];
 
   try {

@@ -68,9 +68,6 @@
       .actions { margin: 0.5rem 0 0.2rem; }
       /* Kept with the buttons it styles: `quiet` was *Close probe*, the one control here that
          undoes rather than does. It comes back with any unwired button that needs the same. */
-      /* The one control here that cannot be taken back, coloured like the workspace's own. */
-      button.urgent { border-color: #ff8080; color: #ff8080; }
-      button.urgent:hover:not(:disabled) { background: rgba(255, 128, 128, 0.12); }
       button.quiet { background: transparent; color: var(--dim); }
       button.quiet:hover:not(:disabled) { color: var(--text); }
 
@@ -136,17 +133,14 @@
       that needs it, a workspace that will not open because of what is stored. Beside *Remove ours*
       as well, so the destructive pair is in one place.
 
-      **Two presses rather than a dialog.** A sandboxed iframe cannot rely on `confirm()`, and the
-      workspace's own confirmation is a workspace thing. Arming swaps the button for a named one and
-      a way out, which says what is about to happen in the words of the act itself.
+      **It asks with the same dialog the workspace asks with** (2026-09-13). This was briefly a pair
+      of armed buttons, on the reasoning that a sandboxed iframe cannot rely on `confirm()` — true of
+      the *browser's* dialog, and beside the point, because `confirmDialog.ts` is ours and is plain
+      DOM. Dangerous actions on this surface ask in one way.
     -->
     <p class="field">Start over</p>
     <div class="actions">
       <button id="clear" disabled>Clear everything</button>
-      <!-- `disabled` as well as `hidden`, like every other button here: the readiness subscription
-           is what turns these on, and it only runs once Owlbear answers. -->
-      <button id="clear-confirm" class="urgent" hidden disabled>Yes, clear it all</button>
-      <button id="clear-cancel" class="quiet" hidden disabled>Cancel</button>
     </div>
     <p class="note">
       Removes everything this extension keeps in the scene: our fog, the saved walls, the ink you

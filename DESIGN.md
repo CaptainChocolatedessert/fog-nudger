@@ -2639,8 +2639,14 @@ agreement that came out of that.
   published as `…fog-nudger-something` would read as ours and have its items deleted. Five mutations,
   five caught.
 
-  **Two presses rather than a dialog**, because this page is a sandboxed iframe where `confirm()`
-  cannot be relied on. Arming swaps the button for one that names the act and a way out.
+  **It asks with `confirmAction`, the same dialog the workspace asks with** (user, 2026-09-13:
+  *"We've moved to pop-up dialogs to confirm dangerous actions, rather than those odd double-click
+  buttons"*). It was briefly a pair of armed buttons, on the reasoning that a sandboxed iframe cannot
+  rely on `confirm()` — true of the **browser's** dialog and beside the point, since `confirmDialog.ts`
+  is ours and is plain DOM. **That is what made the dialog shared**: it drew its buttons with the
+  workspace's `.chip` classes, so a component that looked reusable could only be used on one page. It
+  carries its own styles now, and the alternative — copying thirty lines of CSS into the panel — is
+  where this project's drift bugs start.
 
   **Wired at module load rather than inside `OBR.onReady`** — the arming needs no SDK, and the
   workspace already states the lesson the probe learned three times: a listener written inside the
@@ -2977,6 +2983,11 @@ wall graph's faces placed in the world · `emit/emitRegions.ts` batch it into th
 
 ### Settings and shared UI
 
+`confirmDialog.ts` is **the one way a dangerous action is confirmed**, on either surface: plain DOM
+carrying its own styles, which is what let it leave `workspace/` when the panel needed it. It reads
+`--bg`, `--text` and `--dim` with the workspace's own values as fallbacks, so the workspace looks
+exactly as it did and the panel follows Owlbear's theme.
+
 `settings.ts` is **the single declaration** of limits, stages, kinds and the post-reading boundary —
 read it before touching any parameter. Then `controls.ts` (every control a GM can turn),
 `sliderScale.ts` (log sliders), `overlay/maskImage.ts` (`paintMask`), and `theme.ts`,
@@ -2997,7 +3008,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
 - **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `settingsState.ts`
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `swatches.ts` (the five colour
   pickers) · `graphScale.ts` ·
-  `seedSimplify.ts` · `confirmDialog.ts`
+  `seedSimplify.ts`
 - **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag) ·
   `toolIcons.ts` (seven inline glyphs) · `wallEdit.ts` and `paintTool.ts` (the pointer events) ·
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —

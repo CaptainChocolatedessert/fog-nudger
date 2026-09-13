@@ -37,7 +37,7 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { wallRuns } from "../trace/wallGraph";
-import { confirmAction } from "./confirmDialog";
+import { confirmAction } from "../confirmDialog";
 import { controlsLive } from "./settingRows";
 import { currentRegions, currentWalls, previewGraph } from "./regions";
 import { pushCurrent } from "./pushAction";

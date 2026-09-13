@@ -680,39 +680,13 @@
         that appears often is one a GM learns to dismiss, and the boundary itself is shown by
         disabling what would cross it rather than by asking afterwards.
       */
-      #confirm {
-        position: fixed;
-        inset: 0;
-        z-index: 40;
-        display: grid;
-        place-items: center;
-        background: rgba(6, 7, 16, 0.72);
-      }
-      .confirm-panel {
-        max-width: 30rem;
-        margin: 1rem;
-        padding: 1rem 1.15rem;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        border-radius: 0.5rem;
-        background: #14162a;
-        box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.55);
-      }
-      .confirm-panel h2 {
-        margin: 0 0 0.5rem;
-        font-size: 0.95rem;
-      }
-      .confirm-panel p {
-        margin: 0 0 0.6rem;
-        font-size: 0.8rem;
-        line-height: 1.45;
-        color: #c8ccdf;
-      }
-      .confirm-actions {
-        display: flex;
-        gap: 0.5rem;
-        justify-content: flex-end;
-        margin-top: 0.9rem;
-      }
+      /*
+        The confirmation's own rules used to be here, and they went with it into
+        `confirmDialog.ts` on 2026-09-13 (the panel needed the same dialog, and copying thirty
+        lines of CSS into a second page is how this project's drift bugs start). The component
+        injects them and reads `--bg`, `--text` and `--dim` with these exact values as fallbacks,
+        which this page does not define — so it looks the same as it always did.
+      */
 
       /*
         The state of the mask, and the one thing on this page that must never be quietly absent.
