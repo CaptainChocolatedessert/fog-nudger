@@ -1,10 +1,11 @@
 /**
  * The action popover: what acts on the *scene*, and nothing else.
  *
- * Every control a GM turns is a step on the workspace now. What is left is **two buttons**: open the
- * workspace, and remove what we put in the scene. Both are about a scene rather than about a
- * picture, which is why they are not on the workspace — a full-screen sheet over the map is the one
- * place you cannot look at the map as Owlbear is actually drawing it.
+ * Every control a GM turns is a step on the workspace now. What is left acts on a **scene**: open the
+ * workspace, remove what we put in it, and start the scene over. None belongs on the workspace — a
+ * full-screen sheet over the map is the one place you cannot look at the map as Owlbear is actually
+ * drawing it, and the last of the three resets the workspace itself, so living inside it would put it
+ * out of reach in the case that needs it most.
  *
  * **The diagnostics band went on 2026-09-09** (user), after a long stretch of nobody pressing any of
  * it. The five functions behind those buttons are all still exported and still work; the import
@@ -78,6 +79,7 @@ import { themeVariables } from "./theme";
     to Owlbear, and the reason the page and its control are kept. The *framed* variant tested
     `hidePaper: false`; shipping bare decided that, so bare is the one to bring back.
 */
+import { clearEverything } from "./clearScene";
 import { openWorkspace } from "./workspace/workspaceControl";
 import { clearWallGraph } from "./wallGraphStore";
 import {
@@ -155,6 +157,59 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
 }
 
 /**
+ * The clear, behind a second press.
+ *
+ * **Two presses rather than a dialog.** This page is a sandboxed iframe, where `confirm()` cannot be
+ * relied on, and the workspace's own confirmation belongs to the workspace. Arming swaps the button
+ * for one that names the act and a way out — which says what is about to happen in the words of the
+ * act itself rather than in a question about it.
+ *
+ * All three are returned so the readiness subscription owns their `disabled` like every other button:
+ * a control that writes to a scene must not be live when there is no scene, armed or not.
+ *
+ * **Wired at module load, not inside `OBR.onReady`**, and the workspace states the reason: a listener
+ * written inside the Owlbear path is silently dead until Owlbear answers, which the probe learned
+ * three times. Arming needs no SDK — it hides one button and shows two — so gating it on readiness
+ * would make it untestable outside a room for no gain. The *action* is still gated, twice over: the
+ * buttons start `disabled` in the markup and the readiness subscription owns them after that.
+ */
+function wireClear(): (HTMLButtonElement | null)[] {
+  const clear = document.getElementById("clear");
+  const cancel = document.getElementById("clear-cancel");
+  const confirm = document.getElementById("clear-confirm");
+  if (!(clear instanceof HTMLButtonElement)) return [];
+  if (!(cancel instanceof HTMLButtonElement) || !(confirm instanceof HTMLButtonElement)) return [];
+
+  const arm = (armed: boolean): void => {
+    clear.hidden = armed;
+    confirm.hidden = !armed;
+    cancel.hidden = !armed;
+  };
+
+  clear.addEventListener("click", () => arm(true));
+  cancel.addEventListener("click", () => {
+    arm(false);
+    // Said out loud, because a GM who armed this and backed out wants to know nothing happened —
+    // silence after pressing a destructive button is the state they are checking for.
+    reportResult("Nothing was cleared.", "ok");
+  });
+
+  const run = wireButton("clear-confirm", async () => {
+    const message = await clearEverything();
+    // Disarmed on the way out whatever happened, so a failure does not leave a primed button behind.
+    arm(false);
+    return message;
+  });
+
+  return [clear, cancel, run];
+}
+
+/**
+ * The clear's buttons, wired before Owlbear answers and handed to the readiness subscription after.
+ */
+const clearButtons = wireClear();
+
+/**
  * Paint the page in Owlbear's colours, over the stylesheet's own readable defaults.
  *
  * Failure here is deliberately quiet on screen and loud in the log: a panel wearing the wrong
@@ -221,6 +276,8 @@ OBR.onReady(async () => {
     */
     wireButton("open-workspace", openWorkspace),
     wireButton("remove", removeEverythingOfOurs),
+    // Wired at module load; the readiness subscription takes over their `disabled` from here.
+    ...clearButtons,
   ];
 
   try {

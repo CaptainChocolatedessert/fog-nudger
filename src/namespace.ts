@@ -15,3 +15,24 @@ export const NAMESPACE = "io.github.captainchocolatedessert.fog-nudger";
 export function key(name: string): string {
   return `${NAMESPACE}/${name}`;
 }
+
+/**
+ * Whether a metadata key is one of ours.
+ *
+ * **The most dangerous predicate in the extension**, because the full clear deletes every item
+ * carrying one — and the scene it runs in holds the GM's own fog, 419 hand-drawn items in this
+ * project's test scene. Over-matching deletes their work; under-matching leaves ours behind and
+ * makes "start over" a lie.
+ *
+ * **The separator is load-bearing.** Without it, a neighbouring extension whose id merely begins with
+ * ours — any `…fog-nudger-something` — would be read as ours and have its items deleted. Matching on
+ * the full prefix *including* the slash is what makes the test "is under our namespace" rather than
+ * "starts with our name".
+ *
+ * Asked of the key rather than the value, so it is the same question for an item's metadata and for
+ * the scene's: both are flat maps keyed this way, and a key we no longer write in this build is still
+ * ours to clear.
+ */
+export function isOurKey(name: string): boolean {
+  return name.startsWith(`${NAMESPACE}/`);
+}

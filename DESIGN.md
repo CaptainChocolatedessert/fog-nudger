@@ -2602,9 +2602,11 @@ agreement that came out of that.
   a node test, and the ordering rule that broke here — *opening a mode must not change what is in
   hand* — is not a decision that can be split out the way a gesture's can. Confirmed by a room instead.
 
-#### Wanted, and not built
+#### Wanted, and now built
 
-- **A way to delete all the metadata and start over** (user, 2026-09-13). There is none today, and
+- ~~**A way to delete all the metadata and start over**~~ (user, 2026-09-13). **Built the same day**
+  as *Clear everything* on the panel, armed behind a second press. What follows is why it is shaped
+  the way it is. It was true that there was none, and
   *Remove ours* is not it: it deletes our scene items **and** clears the saved wall graph, but leaves
   the **reading settings**, the **two painted layers** and the **map nomination** in place — so
   re-reading a map you have painted on still composes your old strokes into the ink.
@@ -2622,8 +2624,33 @@ agreement that came out of that.
 
   **Decided (user, 2026-09-13): "It should clear everything."** The scene as though the extension had
   never run — items, wall graph, both painted layers, the settings and the nomination. **It is the one
-  genuinely irreversible control on the surface** — undo does not reach metadata — so it wants a
-  confirmation that names what goes, and it is the one place "this cannot be undone" would be true.
+  genuinely irreversible control on the surface** — undo does not reach metadata — so it is the one
+  place "this cannot be undone" is true, and its note says exactly that.
+
+  **How it finds what to take: by namespace, not by a list.** Every key is `NAMESPACE/<name>` and
+  every item of ours carries one, so `clearScene.ts` asks the scene what of ours is in it. A key
+  written by an older build, whose name exists nowhere in this code, is exactly what a GM starting
+  over needs gone and exactly what a maintained list forgets — and it is why this also catches the
+  retired step-one probe's shapes, which the emit path's own two-key predicate does not.
+
+  **The predicate is the dangerous part and is the tested part.** It decides what a delete removes, in
+  a scene holding the GM's own fog, so `isOurKey` lives in the pure `namespace.ts` where a node test
+  can reach it. The separator is load-bearing: without the trailing slash, a neighbouring extension
+  published as `…fog-nudger-something` would read as ours and have its items deleted. Five mutations,
+  five caught.
+
+  **Two presses rather than a dialog**, because this page is a sandboxed iframe where `confirm()`
+  cannot be relied on. Arming swaps the button for one that names the act and a way out.
+
+  **Wired at module load rather than inside `OBR.onReady`** — the arming needs no SDK, and the
+  workspace already states the lesson the probe learned three times: a listener written inside the
+  Owlbear path is silently dead until Owlbear answers. Gating it would also have made it unverifiable
+  outside a room, which is how the shape of this was checked at all.
+
+  **Verified outside a room:** all three buttons start disabled, arming shows the named pair and hides
+  the plain one, cancelling restores them and says nothing was cleared, and it re-arms. **What no desk
+  can check is the clearing itself**, which needs a scene — that a re-read after it composes no old
+  strokes is the thing to watch.
 
 #### Cuts and moves
 
