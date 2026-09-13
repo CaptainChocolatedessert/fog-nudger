@@ -2442,7 +2442,7 @@ rename.
 1. ~~**The ghost in Firefox.**~~ **Sits right under the handle** (room, 2026-09-10), so the 16px
    size holds. **Still open: the ends of a track**, where a wrong inset would show and mid-track would
    not. If it sits beside the handle there, `--thumb` in `workspace.html` is the number.
-2. **A brush width with a wall edit outstanding** should move with no dialog.
+2. ~~**A brush width with a wall edit outstanding.**~~ **Confirmed (2026-09-13):** no dialog.
 3. **The *Show* caption** has never been drawn — nothing proposes a layer outside a room.
 4. **The ink colour row in View**, and View's Defaults putting all five colours back.
 
@@ -2676,8 +2676,9 @@ agreement that came out of that.
   same predicate the recompute uses to request a re-read, so the two cannot disagree — pinned by name
   to the five ink-reading sliders. Pruning left the list too: it is a reading-stage pipeline parameter
   and still never goes near the map.
-  **Unverified in a room**, and the first thing to check: with a wall edit outstanding, a brush width
-  should now move without a dialog.
+  **Confirmed in a room (2026-09-13):** with a wall edit outstanding, a brush width moves with no
+  dialog. That is the one a GM would meet most often — it stood between them and every stroke width
+  they set while wall edits were outstanding.
 - **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
   *Create walls around map border* was offered as an alternative.
 - **Per-colour opacity.** Explicitly **not to be built until it has been discussed** — it may not fit
