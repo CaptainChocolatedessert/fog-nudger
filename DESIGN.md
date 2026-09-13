@@ -2584,6 +2584,28 @@ agreement that came out of that.
   removed the need for that particular message; the placement is unchanged and affects every other
   message on the surface.
 
+#### Wanted, and not built
+
+- **A way to delete all the metadata and start over** (user, 2026-09-13). There is none today, and
+  *Remove ours* is not it: it deletes our scene items **and** clears the saved wall graph, but leaves
+  the **reading settings**, the **two painted layers** and the **map nomination** in place — so
+  re-reading a map you have painted on still composes your old strokes into the ink.
+
+  **It belongs on the panel**, and the argument that decides it is that the workspace is the thing
+  being reset: a reset living inside it is unreachable in exactly the case that needs it, a workspace
+  that will not open or opens wrong because of bad stored state. *Remove ours* is already there and
+  this is its bigger sibling, so the destructive family stays in one place.
+
+  **What needs deciding is the scope**, because the stored state splits two ways. The wall graph and
+  the painted layers are **per map**; the settings and the nomination are **scene-wide**. So:
+  - *Start this map over* — its walls, its paint, its emitted shapes. Tuning and other maps untouched.
+  - *Clear everything* — all of that plus the settings and the nomination, as though the extension had
+    never run in this scene.
+
+  The room's phrasing points at the second. **It is the one genuinely irreversible control on the
+  surface** — undo does not reach metadata — so it wants a confirmation that names what goes, and it
+  is the one place "this cannot be undone" would be true.
+
 #### Cuts and moves
 
 - ~~The **ink colour picker** should move down with the other swatches, and the **ink opacity**
