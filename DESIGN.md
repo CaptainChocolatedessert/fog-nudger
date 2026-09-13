@@ -2439,11 +2439,11 @@ rename.
 
 **What a room should check first, in order** — each is something only a room can confirm:
 
-1. ~~**The ghost in Firefox.**~~ **Sits right under the handle** (room, 2026-09-10), so the 16px
-   size holds. **Still open: the ends of a track**, where a wrong inset would show and mid-track would
-   not. If it sits beside the handle there, `--thumb` in `workspace.html` is the number.
+1. ~~**The ghost in Firefox.**~~ **Closed (2026-09-13):** under the handle mid-track and at both
+   ends, which settles the size and the inset.
 2. ~~**A brush width with a wall edit outstanding.**~~ **Confirmed (2026-09-13):** no dialog.
-3. **The *Show* caption** has never been drawn — nothing proposes a layer outside a room.
+3. ~~**The *Show* caption**, never drawn outside a room.~~ **Confirmed (2026-09-13):** the caption
+   and the toggles work.
 4. **The ink colour row in View**, and View's Defaults putting all five colours back.
 
 **The largest thing** is still the fractured save-then-buttons workflow, a conversation and not a
@@ -2537,10 +2537,10 @@ agreement that came out of that.
   **Measured in Chromium**: the circle is 16px, vertically centred on the track, and at the far left
   exactly where a 16px thumb centres. The first attempt sized it in `rem` and came out 13px, because
   this surface's root text is 13px; the native thumb does not follow the root font.
-  **Confirmed in Firefox by a room (2026-09-10): "the ghost sits right under the handle"** — so
-  Firefox's own thumb is 16px too, and the size is right. What that does not yet establish is the
-  *inset*, which only shows near either end of a track; a wrong one is invisible mid-track. If the
-  ghost ever sits beside the handle at an end, `--thumb` in `workspace.html` is the number to change.
+  **Confirmed in Firefox by a room, both ways it can be wrong.** Under the handle mid-track
+  (2026-09-10), which settles the 16px size; under it at both ends of a track (2026-09-13), which
+  settles the inset — the half that is invisible anywhere but the ends. If it ever sits beside the
+  handle there, `--thumb` in `workspace.html` is the number to change.
 
 #### Legibility
 
@@ -2557,8 +2557,9 @@ agreement that came out of that.
   bare words with the purpose in a hover tooltip, and two of the words — *Ink* and *Walls* — are also
   rail sections, so the row read as navigation. It now leads with a caption, **Show**, styled like the
   tool strip's band captions: *Show — Ink · Rooms · Walls*. **Not seen on screen**: nothing proposes a
-  layer outside a room, so the row is empty there. If the caption is not enough, the next step would be
-  an eye glyph on each switch — a design change rather than a naming one.
+  layer outside a room, so the row was empty there. **Confirmed in a room (2026-09-13):** the caption
+  and the switches work. If it ever proves not to be enough, an eye glyph on each switch is the next
+  step — a design change rather than a naming one.
 - **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
   control that writes to it is in the left rail, so a message about a press arrives as far from the
   press as the window allows. This is what made three working buttons read as dead. Gating them

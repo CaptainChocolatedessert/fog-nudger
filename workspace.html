@@ -284,8 +284,9 @@
         **Pixels, not `rem`, and that was a measured mistake.** The first version said `1rem`, and
         this surface's root text size is 13px — so the ghost came out 13px against a 16px thumb and
         the inset used the wrong width. The native thumb is sized in CSS pixels and does not follow
-        the root font, so neither may this. Measured in Chromium on 2026-09-10; **not measured in
-        Firefox**, which is the browser this is actually used in.
+        the root font, so neither may this. Measured in Chromium on 2026-09-10, and **confirmed in a
+        room in Firefox on 2026-09-13** — under the handle mid-track, which settles the size, and
+        under it at both ends, which settles the inset. Those are the two ways this can be wrong.
 
         The vertical centring needs the margin on the track and not on the input: centring at 50% is
         only the handle's centre if the box is exactly the input's box.
