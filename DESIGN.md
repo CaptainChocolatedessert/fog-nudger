@@ -2378,11 +2378,29 @@ fog on the table is what the GM edited.
 modes. Placement is confirmed correct in all four corners, and rotation pivots about the bounding-box
 centre.
 
-**What is unproven is the thing the project exists to get right: whether the partition it finds is the
-one a GM wants.** It is now cheap to judge — the workspace draws it without touching the scene — and
-nobody has yet gone room by room and said whether these are the rooms they would have drawn. **A real
-session of map correction end to end is still the most informative thing that can happen to this
-project**, and it does not depend on anything below.
+### The partition has been judged, and it is good — 2026-09-13
+
+**The thing the project exists to get right has its first answer.** The user took a test map through
+the whole chain and reports it *"drawing good walls and partitions"*. Until this, the record said
+nobody had gone room by room and said whether these were the rooms they would have drawn; someone
+now has, and the answer was yes.
+
+**What it establishes, and what it does not.** One map, one GM, their own test map. It says the
+pipeline as it stands produces a partition a GM accepts on at least one real map — which is the first
+evidence of that in the project's life, and much more than the structural checks could ever give.
+It says nothing yet about the range of map *styles*: hatched stonework, a printed floor grid, a
+hand-drawn scan, a map whose walls are a texture rather than a line. Those are where the reading is
+expected to be hardest and none has been tried.
+
+**The corrections needed were for walls the map does not draw.** *"I have to insert some walls
+manually to finish it, but that's because they are not drawn on the map itself."* That is the design
+premise holding rather than failing: §1 says the output is a **proposal** a GM corrects, and ink that
+does not exist cannot be read. The interesting part is not that hand insertion was needed — it is
+**which tool the work was done with**, because drawing ink before the derive and drawing walls after
+it sit on opposite sides of the save, which is the seam the parked workflow conversation is about.
+
+**The most informative thing that can happen to this project is now a second map**, one whose style
+differs from the first.
 
 ### The surface redesign is built and unproven
 
