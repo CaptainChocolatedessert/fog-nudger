@@ -130,16 +130,32 @@ function apply(next: Tool): void {
   }
   setDrag(dragFor(next));
   requestPaintMode(next === "suppress" || next === "ink" || next === "gaps");
-  /*
-    A tool brings its own layer up, and never takes one down.
+  requireToolLayers();
+}
 
-    You cannot edit what you cannot see, so picking a wall tool has to guarantee the graph is drawn.
-    Adding only is what keeps this from re-creating the coupling the strip was built to remove: the
-    tool nudges, and whatever the GM switched on stays on.
-  */
+/**
+ * What the tool in hand needs on screen.
+ *
+ * **A tool brings its own layer up and never takes one down.** You cannot edit what you cannot see,
+ * so picking a wall tool has to guarantee the graph is drawn. Adding only is what keeps this from
+ * re-creating the coupling the strip was built to remove: the tool nudges, and whatever the GM
+ * switched on stays on.
+ *
+ * **Re-asserted whenever the drawer moves, which is the fix for a real defect** (room, 2026-09-14:
+ * *"when I click the wall tools, I don't see the walls drawn"*). `proposeLayers` **replaces** the
+ * proposal and `requireLayer` adds to it, so order decides the outcome — and arming a wall tool does
+ * both: it asks for the graph, and then, because Move, Draw and Erase have no controls, it clears
+ * the drawer, which proposes the empty set and takes the graph straight back down.
+ *
+ * Reordering that one call site would have fixed the symptom and left the trap. Re-asserting after
+ * every drawer change makes it order-independent: the drawer proposes, and the strip — which already
+ * hears about it — puts back what the hand needs.
+ */
+function requireToolLayers(): void {
+  const band = TOOLS.find((choice) => choice.id === tool)?.band;
   if (band === "walls") requireLayer("graph");
-  if (next === "suppress" || next === "ink") requireLayer("paint");
-  if (next === "gaps") requireLayer("gaps");
+  if (tool === "suppress" || tool === "ink") requireLayer("paint");
+  if (tool === "gaps") requireLayer("gaps");
 }
 
 /**
@@ -451,7 +467,11 @@ export function registerToolPalette(): void {
 
     No loop: this render anchors the drawer but never re-renders it.
   */
-  onStepChange(render);
+  onStepChange(() => {
+    // After the drawer has proposed, because it replaces the proposal and this adds to it.
+    requireToolLayers();
+    render();
+  });
   apply("pan");
   render();
 }
