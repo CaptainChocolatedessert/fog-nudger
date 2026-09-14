@@ -1931,6 +1931,8 @@ brush has been put down, because putting it down releases the working copies —
 when a GM looks at what they drew and wants it back. And a stroke that changed no pixels pushes
 nothing, so a click never fills the stack with entries that undo to the state they are already in.
 
+**Confirmed in a room (2026-09-13), the pair and both documents.**
+
 **The staleness rule is the part worth pinning, and it is where the tests are.** A snapshot describes
 the document as it was, and two events make it describe something else: a **derive** replaces the
 graph with a fresh function of the ink, and **loading another map** replaces it entirely. Restoring
@@ -2480,7 +2482,8 @@ actions are gated before the press, with the prune button naming the step that h
 becoming Draw and Erase on both layers, the panel dropping to two buttons, and the spur *limit*
 rename.
 
-**Closed at the desk on 2026-09-10, unattended, and none of it seen in a room:**
+**Closed at the desk on 2026-09-10, unattended.** All of it has since been through a room except the
+last two lines, which nobody has had reason to look at:
 
 - *Save the ink edits* is **Save painted strokes**, and its refusal says where a slider's change went.
 - **The slider ghost** — five faults fixed, now a grey circle the size of the handle.
@@ -2499,15 +2502,17 @@ rename.
 2. ~~**A brush width with a wall edit outstanding.**~~ **Confirmed (2026-09-13):** no dialog.
 3. ~~**The *Show* caption**, never drawn outside a room.~~ **Confirmed (2026-09-13):** the caption
    and the toggles work.
-4. **The ink colour row in View**, and View's Defaults putting all five colours back.
+4. **The ink colour row in View**, and View's Defaults putting all five colours back. The rows
+   themselves were seen when the presets were dropped; the **Defaults** button restoring all five is
+   the half nobody has pressed.
 
 **The largest thing** is still the fractured save-then-buttons workflow, a conversation and not a
 build, and it now has **two facts it did not have**: a slider release never replaces the stored graph
 (only a save does), and Prune and Straighten were undoable all along. Both are in its entry below.
 
 **Still parked, each needing a decision:** the state line's placement; the two button cuts, which wait
-on the workflow; the ink-width readouts; where undo and redo go (redo itself is answered — possible and
-small); the frame button's wording; per-colour opacity; and the 14px base size, which changes every
+on the workflow; the ink-width readouts; the frame button's wording; per-colour opacity; and the 14px
+base size, which changes every
 control's look.
 
 **One agreement, learned expensively:** do not edit the running modules while the user has a room
