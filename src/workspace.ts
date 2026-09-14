@@ -299,7 +299,7 @@ registerStepContent("view", renderSwatches, "bottom");
   the top against an *action* at the bottom, and these are two actions.
 */
 /*
-  **Make the outside a room**, at the foot of Walls (user, 2026-09-14).
+  **Add walls around the map edge**, at the foot of Walls (user, 2026-09-14).
 
   It was the last thing in Edit walls, which is gone. It belongs with the two sliders that shape
   the graph rather than in a group of its own: all three are things you do to the walls, and this

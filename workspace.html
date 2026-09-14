@@ -102,11 +102,13 @@
          painting over them — a poll, a heartbeat and a reserved band down one side. Owning the
          surface means the controls simply have a place on it, and the map is drawn in what is left.
          ---------------------------------------------------------------------------------------- */
+      /* `bottom` clears the bar, which spans the whole width now. Running underneath it would put
+         the last rows of a scrolled group behind opaque chrome. */
       #panel {
         position: fixed;
         top: 0;
         left: 0;
-        bottom: 0;
+        bottom: 2.6rem;
         width: 22rem;
         max-width: 42vw;
         box-sizing: border-box;
@@ -349,7 +351,7 @@
         position: fixed;
         top: 0;
         left: 22rem;
-        bottom: 0;
+        bottom: 2.6rem;
         width: 4rem;
         box-sizing: border-box;
         padding: 0.9rem 0.4rem;
@@ -717,19 +719,30 @@
          ---------------------------------------------------------------------------------------- */
       #bar {
         position: fixed;
-        bottom: 0.6rem;
-        right: 0.6rem;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: grid;
+        /*
+          Three tracks so the middle one is centred on the **window**, not on whatever is left of
+          it. A flex row with the message in it would push the buttons right by however long the
+          message happened to be, so they would drift as the surface talked.
+        */
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.4rem 0.7rem;
+        box-sizing: border-box;
+        background: rgba(16, 18, 36, 0.94);
+        border-top: 1px solid rgba(187, 153, 255, 0.25);
+        backdrop-filter: blur(6px);
+      }
+      /* The buttons themselves, in the middle track. */
+      #bar-actions {
+        grid-column: 2;
         display: flex;
         gap: 0.35rem;
         align-items: center;
-        padding: 0.35rem 0.45rem;
-        border-radius: 0.5rem;
-        background: rgba(16, 18, 36, 0.94);
-        border: 1px solid rgba(187, 153, 255, 0.25);
-        backdrop-filter: blur(6px);
-        /* Grows leftward from the right edge rather than spanning the window, which keeps it
-           clear of the rail without having to know how wide the rail is or whether it shows. */
-        max-width: calc(100vw - 1.2rem);
       }
       /*
         On a ground of its own, a chip no longer has to carry one to be legible over the map — so
@@ -774,7 +787,7 @@
         than something to read, and the whole name is in the title for the once it matters.
       */
       #map-name {
-        margin: 0 0.25rem 0 0.2rem;
+        margin: 0 0.25rem 0 0;
         max-width: 14rem;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -859,21 +872,22 @@
         not need to be: the slider's own readout says so, right beside the slider that did it.)
       */
       /*
-        Bottom **left**, under the rail, since 2026-09-14.
+        **Inside the bar**, in its left track, since the bar spans the bottom (2026-09-14).
 
-        It sat bottom-right of a full-screen window while every control that writes to it is in
-        the left rail, so a message about a press arrived as far from the press as the window
-        allows — which is what made three working buttons read as dead. Still a sibling of
-        `#panel` rather than a child: it has to stay visible with the controls hidden, or a slow
-        close looks like a hang.
+        It sat bottom-right of a full-screen window while every control that writes to it is on
+        the left — so a message about a press arrived as far from the press as the window allows,
+        which is what made three working buttons read as dead. A spanning bar settles it properly:
+        the message and the actions are one piece of furniture rather than two things that have to
+        be kept from colliding.
+
+        It is still **outside `#panel`**, which is the constraint that has not changed: it has to
+        stay visible with the controls hidden, or a slow close looks like a hang.
       */
       #state {
-        position: fixed;
-        bottom: 0.6rem;
-        left: 0.6rem;
-        padding: 0.35rem 0.6rem;
-        border-radius: 0.35rem;
-        background: rgba(16, 18, 36, 0.9);
+        grid-column: 1;
+        margin: 0;
+        padding: 0;
+        justify-self: start;
         font-family: ui-monospace, Consolas, monospace;
         font-size: 0.75rem;
         color: #9aa0c8;
@@ -886,11 +900,14 @@
           the window is; the outer one stops a narrow window producing a negative width, which CSS
           discards as invalid — leaving exactly the unbounded line this is here to prevent.
         */
-        /* Clear of the bar, which now shares this edge. Same shape of guard the panel used to
-           get: an inner bound that keeps the line off the chrome beside it, and an outer one so a
-           narrow window cannot produce a negative width — which CSS discards as invalid, leaving
-           exactly the unbounded line this is here to prevent. */
-        max-width: max(11rem, min(30rem, calc(100vw - 34rem)));
+        /* The grid track bounds it now, so the old clearance arithmetic is gone — it cannot
+           collide with the buttons, because it has a column of its own. What is left is a cap on
+           how much of that column a long answer may use: the point probe replies in whole
+           sentences, and an unbounded one would push the centre track off centre. */
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         text-align: left;
       }
       /*
@@ -899,11 +916,7 @@
         remain. `:has()` is the whole mechanism; where it is unsupported the line simply keeps
         the tighter cap, which is the safe direction.
       */
-      /* The rail's own footer room, so the last rows of a scrolled group are never left
-         underneath the line sitting over them. */
-      #panel-body {
-        padding-bottom: 4.2rem;
-      }
+
       #state.bad {
         color: #ff8080;
       }
@@ -978,26 +991,38 @@
         whatever tool is in hand.
       -->
       <div id="bar">
-        <p id="map-name" title="The map being traced">Loading…</p>
-        <div id="history-row">
-          <button class="history" id="undo" disabled title="Nothing to undo"></button>
-          <button class="history" id="redo" disabled title="Nothing to redo"></button>
-        </div>
         <!--
-          The commit, beside the way out, because it is the surface's whole purpose and was at the
-          foot of a section. Closing pushes too — this is the mid-session case, a change a table is
-          waiting on without giving up the surface.
+          The state line lives in the bar now that the bar spans the bottom.
+
+          It was a floating line in a corner, and the two of them sharing an edge meant arithmetic
+          to keep them from colliding. A track of its own settles it: the message and the actions
+          are one piece of furniture. Still outside `#panel`, which is the constraint that has not
+          changed — it must stay visible with the controls hidden or a slow close reads as a hang.
         -->
-        <button class="chip" id="push">Put on the map</button>
-        <span class="bar-split" aria-hidden="true"></span>
-        <button class="chip" id="fit" title="Fit the whole map">Fit</button>
-        <button class="chip" id="toggle-panel" title="Hide the controls" aria-pressed="true">Controls</button>
-        <button class="chip" id="close">Close (Esc)</button>
-        <button class="chip urgent" id="exit-anyway" hidden>Exit anyway</button>
+        <p id="state">Starting…</p>
+        <!-- The middle track, so the buttons are centred on the window rather than on whatever is
+             left of it after the message. -->
+        <div id="bar-actions">
+          <p id="map-name" title="The map being traced">Loading…</p>
+          <div id="history-row">
+            <button class="history" id="undo" disabled title="Nothing to undo"></button>
+            <button class="history" id="redo" disabled title="Nothing to redo"></button>
+          </div>
+          <!--
+            The commit, beside the way out, because it is the surface's whole purpose and was at
+            the foot of a section. Closing pushes too — this is the mid-session case, a change a
+            table is waiting on without giving up the surface.
+          -->
+          <button class="chip" id="push">Put on the map</button>
+          <span class="bar-split" aria-hidden="true"></span>
+          <button class="chip" id="fit" title="Fit the whole map">Fit</button>
+          <button class="chip" id="toggle-panel" title="Hide the controls" aria-pressed="true">Controls</button>
+          <button class="chip" id="close">Close (Esc)</button>
+          <button class="chip urgent" id="exit-anyway" hidden>Exit anyway</button>
+        </div>
       </div>
 
       <div id="working" aria-hidden="true"></div>
-      <p id="state">Starting…</p>
     </div>
 
     <script type="module" src="./src/workspace.ts"></script>

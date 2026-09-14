@@ -474,7 +474,7 @@ one and touching-the-border matches both.
 every map.** It has no polygon, so it drops out for free with nothing to identify.
 
 **The cost, stated:** a GM who *wants* the outside revealable has to say so, by drawing walls at the
-map's edge. That is one button — *Make the outside a room* (§5) — and it is an ordinary edit
+map's edge. That is one button — *Add walls around the map edge* (§5) — and it is an ordinary edit
 afterwards.
 
 ### What emits as a shape and what emits as a line — the bridge criterion
@@ -1301,7 +1301,7 @@ derive rather than from a button. What each is:
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
   vertices that actually go, since the junction where a stub meets its wall keeps its other walls and
   stays put.
-**Make the outside a room** (`addFrameWalls`) is the one button left at the foot of the editor —
+**Add walls around the map edge** (`addFrameWalls`) is the one button left, at the foot of Walls —
 four segments at the map's extent as **one closed run**, so the corners are shared vertices by
 construction. **It adds, so it asks nothing first**, which is also why it never needed the pair's
 ceremony and why it survives them. **A second press is refused rather than absorbed**: four segments laid on four existing
@@ -1863,9 +1863,15 @@ were restating in words.
 raising Sauvola's `k` finds *less* ink, and "sensitivity" suggests the opposite. That was right about
 the problem and wrong about the fix. The control is **Ink strictness** now, and a stricter threshold
 finding less ink needs no explaining. Likewise **Longest dead end to remove** for the spur limit,
-because *spur* is this document's vocabulary and not a GM's; and **Make the outside a room** for the
-frame button, which was *Wall the map's edge* — a mechanism, with the point left to four sentences
-underneath.
+because *spur* is this document's vocabulary and not a GM's.
+
+**The frame button is the one case where naming the point turned out to be wrong**, and it took
+three names to find out. *Wall the map's edge* was rejected as a mechanism with its point left to
+four sentences underneath; *Make the outside a room* named the point and was doubted twice in
+rooms; it is **Add walls around the map edge** now (user, 2026-09-14): *"The user may not think of
+that exterior in terms of a room."* The lesson is narrower than "name the point" — a point that
+is only one of several reasons a GM might press the button is not a name, it is a guess at their
+intent.
 
 Three things kept their text, and each for a reason that generalises:
 
@@ -2621,8 +2627,10 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
    save; what remains is the editor's, and the open question is whether it is needed at all now that
    closing pushes — a GM cannot see the result without leaving anyway. Parked deliberately.
 
-5. **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
-  *Create walls around map border* was offered as an alternative.
+5. ~~**Wording for the frame button.**~~ **Settled 2026-09-14** as *Add walls around the map
+  edge*, after *Make the outside a room* was doubted in a second room: the exterior is not
+  something a GM necessarily thinks of as a room, so the name was guessing at why they were
+  pressing it. §7a carries what that cost to learn.
 
 6. **Two visual changes that want a GM's eye before they land.** **Per-colour opacity**, which may not
    fit the design language — that is the conversation, and it is explicitly not to be built before it.

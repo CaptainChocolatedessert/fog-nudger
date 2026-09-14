@@ -61,7 +61,7 @@ export function renderFrameAction(body: HTMLElement): void {
     fogged for ever. Naming the outcome carries that in three words.
   */
   button.id = BUTTON_ID;
-  button.textContent = "Make the outside a room";
+  button.textContent = "Add walls around the map edge";
 
   const note = document.createElement("p");
   note.id = NOTE_ID;
