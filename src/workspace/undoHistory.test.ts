@@ -6,8 +6,15 @@
  * graph on one stack: that an entry is a **way back** rather than a document, that a failed restore
  * leaves the entry in place, and that anything changing what undo would do says so.
  *
- * Mutation-tested: seven mutations, seven caught — popping before the restore runs, not awaiting
- * it at all, the announcements dropped one at a time, and an empty stack claiming an undo.
+ * Mutation-tested, sixteen mutations and sixteen caught, in two rounds. The backward half: popping
+ * before the restore runs, not awaiting it at all, the announcements dropped one at a time, an empty
+ * stack claiming an undo. The forward half: a new act failing to abandon the forward history, undo
+ * not offering the act to redo, redo pushed back through the front door so it cleared the entries
+ * behind it, redo popped before its restore, a clear leaving one stack behind, and an act with no way
+ * forward offered anyway.
+ *
+ * **Two of those survived their first pass**, and both because a test was weaker than its name: one
+ * never awaited the undo it was clearing after, so it passed against a clear that emptied one stack.
  *
  * Module state is a singleton, so every case clears first — the surface has exactly one stack and
  * pretending otherwise here would test something that does not exist.
@@ -17,7 +24,18 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearUndo, onUndoChange, pushUndo, undoDepth, undoLabel, undoLast } from "./undoHistory";
+import {
+  clearUndo,
+  onUndoChange,
+  pushUndo,
+  redoDepth,
+  redoLabel,
+  redoLast,
+  undoDepth,
+  undoLabel,
+  undoLast,
+  type Restore,
+} from "./undoHistory";
 
 beforeEach(() => {
   clearUndo();
@@ -126,5 +144,154 @@ describe("the shared undo stack", () => {
     for (let i = 0; i < 25; i += 1) pushUndo(`edit ${i}`, () => {});
     expect(undoDepth()).toBe(20);
     expect(undoLabel()).toBe("edit 24");
+  });
+});
+
+describe("going forward again", () => {
+  /**
+   * A step that moves a value and hands back the step that moves it back.
+   *
+   * The shape every real owner has: a graph restore writes the old graph and returns one that writes
+   * what it replaced; a paint restore does the same with a snapshot. Modelled here with a box, so the
+   * test can say *where the document ended up* rather than only which closure ran.
+   */
+  function step(box: { value: string }, to: string): Restore {
+    return function move(): Restore {
+      const leaving = box.value;
+      box.value = to;
+      return step(box, leaving);
+    };
+  }
+
+  it("offers nothing to redo until something has been undone", () => {
+    expect(redoLabel()).toBeNull();
+    pushUndo("drawing added ink", () => {});
+    expect(redoLabel()).toBeNull();
+  });
+
+  it("takes an undone act forward again, and leaves it undoable", async () => {
+    const box = { value: "after" };
+    pushUndo("drawing added ink", step(box, "before"));
+
+    await undoLast();
+    expect(box.value).toBe("before");
+    expect(redoLabel()).toBe("drawing added ink");
+
+    expect(await redoLast()).toBe("drawing added ink");
+    expect(box.value).toBe("after");
+    // Back on the undo stack rather than consumed, so the pair can be walked in both directions.
+    expect(undoLabel()).toBe("drawing added ink");
+    expect(redoLabel()).toBeNull();
+  });
+
+  it("walks a run of acts back and forward in order", async () => {
+    const box = { value: "third" };
+    pushUndo("first", step(box, "start"));
+    pushUndo("second", step(box, "first"));
+    pushUndo("third", step(box, "second"));
+
+    await undoLast();
+    await undoLast();
+    expect(box.value).toBe("first");
+    expect(redoDepth()).toBe(2);
+
+    await redoLast();
+    expect(box.value).toBe("second");
+    await redoLast();
+    expect(box.value).toBe("third");
+    expect(redoDepth()).toBe(0);
+    expect(undoDepth()).toBe(3);
+  });
+
+  it("abandons the forward history when a new act happens", async () => {
+    /*
+      The ordinary rule, and worth pinning because the alternative is worse than it sounds: keeping it
+      would offer to redo an act on top of a document that has moved since, from a snapshot that no
+      longer follows from anything on screen.
+    */
+    const box = { value: "after" };
+    pushUndo("drawing added ink", step(box, "before"));
+    await undoLast();
+    expect(redoDepth()).toBe(1);
+
+    pushUndo("erasing a wall", () => {});
+    expect(redoDepth()).toBe(0);
+    expect(redoLabel()).toBeNull();
+  });
+
+  it("does not abandon the rest of the forward history when redoing", async () => {
+    // A redo is not a new act. Putting it back through the front door would clear the entries behind
+    // it, so redoing one of three would silently lose the other two.
+    const box = { value: "third" };
+    pushUndo("first", step(box, "start"));
+    pushUndo("second", step(box, "first"));
+    pushUndo("third", step(box, "second"));
+    await undoLast();
+    await undoLast();
+    await undoLast();
+    expect(redoDepth()).toBe(3);
+
+    await redoLast();
+    expect(redoDepth()).toBe(2);
+  });
+
+  it("keeps the entry when going forward fails", async () => {
+    const box = { value: "after" };
+    pushUndo("drawing added ink", step(box, "before"));
+    await undoLast();
+
+    // Replace the forward step with one that refuses, the way a scene write can.
+    clearUndo();
+    pushUndo("erasing a wall", () => () => {
+      throw new Error("the scene refused the write");
+    });
+    await undoLast();
+
+    await expect(redoLast()).rejects.toThrow("the scene refused the write");
+    expect(redoLabel()).toBe("erasing a wall");
+    expect(redoDepth()).toBe(1);
+  });
+
+  it("waits for a forward step that takes time", async () => {
+    // The mirror of undo's gate: popped only once the restore has finished, so a second press cannot
+    // start against a document the first has not put back.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    pushUndo("pruning the dead ends", () => async () => {
+      await gate;
+    });
+    await undoLast();
+
+    const redoing = redoLast();
+    expect(redoDepth()).toBe(1);
+    release();
+    expect(await redoing).toBe("pruning the dead ends");
+    expect(redoDepth()).toBe(0);
+  });
+
+  it("forgets the forward history when the documents are replaced", async () => {
+    // Saving the derived walls clears both stacks: a forward step describes a graph the save has just
+    // replaced, which is the same reason the backward ones go.
+    //
+    // The undo is **awaited**: unawaited, the forward step had not been pushed yet when the clear
+    // ran, so this passed against a clear that only emptied one stack.
+    pushUndo("drawing added ink", () => () => {});
+    await undoLast();
+    expect(redoDepth()).toBe(1);
+
+    clearUndo();
+    expect(redoLabel()).toBeNull();
+    expect(redoDepth()).toBe(0);
+  });
+
+  it("does not offer an act that cannot be gone forward into", async () => {
+    // A restore returning nothing means its owner could not snapshot what it was replacing — the
+    // paint half says so when there is no layer in hand. Offering it would be a button that declines.
+    pushUndo("drawing added ink", () => {});
+    await undoLast();
+    expect(redoLabel()).toBeNull();
+    expect(redoDepth()).toBe(0);
   });
 });

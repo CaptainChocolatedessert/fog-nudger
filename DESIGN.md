@@ -2807,36 +2807,27 @@ agreement that came out of that.
   **Do not start building on this.** It touches the stage boundary, which is §3's core, and the two
   cuts already parked (*Put the walls on the map*, *Put on the map*) are downstream of whatever it
   decides.
-- **Where undo and redo go.** **Undo now covers the ink as well as the graph (2026-09-13)** — see §5.
-  What is left of this entry is placement, and a room's proposal: undo and redo as tools in a new
-  section below Walls.
+- ~~**Where undo and redo go**, and whether redo is possible.~~ **Both done (2026-09-13).** Undo covers
+  the ink as well as the graph (§5), **redo is built**, and the pair sits in the pinned rail head above
+  the hand-edit count.
 
-  **The grouping is right and the strip is the wrong home.** Undo sits in the chrome bar beside Fit,
-  Controls and Close, which are all about the *surface*; undo acts on the **document**, so it is in
-  the wrong company. But every button in the strip is a **mode** — picked, held, and shown by a
-  pressed state — where undo is momentary, and the machinery says the same: a tool declares the drag
-  it binds, whether it opens paint mode, and what the pinned hint says while it is *in hand*. Undo
-  would need a special case through each, which is usually the sign the category is wrong.
+  **Not the tool strip**, which the room proposed first: every button there is a *mode*, picked and
+  held and shown by a pressed state, where these are momentary — one list holding both would make that
+  highlight mean two things. The machinery agreed: a tool declares the drag it binds, whether it opens
+  paint mode, and what the pinned hint says while it is *in hand*, and undo answers none of them.
+  **Not the chrome bar** either, where undo used to be: that is Fit, Controls and Close, which are
+  about the *surface*. The head is where the **hand-edit count** already sat with nothing owning it —
+  its own comment said it "belongs to the document" and should move to whatever owns that. These are
+  that owner, so the count and the way back from it are one block.
 
-  **Suggested instead: the pinned rail head**, beside the hand-edit count that already lives there —
-  the two would form one block, the count of edits and the way back from them. It never scrolls or
-  collapses, it takes the curved-arrow glyphs the room asked for, and the edit count's own comment
-  already says it "is not a property of the tool — it belongs to the document" and should move to
-  whatever owns that. Nothing owns it yet; undo and redo arriving would.
+  **Redo is the same stack read the other way.** A restore hands back the way to the state it just
+  left, so the two stacks only ever trade entries — which is what makes them symmetrical rather than
+  two implementations that have to agree. A new act abandons the forward history; a redo does not.
+  **Ctrl+Shift+Z**, which was free because the undo handler had always refused Shift rather than
+  ignoring it.
 
-  **Note that the room's own next question undercuts the placement**: undo covering ink as well as
-  walls means "below Walls" is no longer its scope.
-
-  **Redo is possible and small — answered from the code, not built (2026-09-10).**
-  Undo is snapshot-based: each wall edit and each of the three wall actions pushes the pre-edit graph
-  onto a stack twenty deep (`EditHistory`, pure and tested), and undo writes a snapshot back to the
-  scene. Redo is the usual second stack — undo parks the current graph on it before restoring, redo
-  takes it back, any fresh edit clears it — at one scene write per step, the same as undo. Snapshots
-  already carry the label a button would say. **Ctrl+Shift+Z is free**: the Ctrl+Z handler refuses
-  Shift explicitly. Its limits would be undo's: it clears on a save from Walls and on a map change,
-  and it would not cover painted strokes, which have their own Discard and Clear. **What is left to
-  decide is where the two go**, which is the design half of this entry.
-- ~~**`editSimplifyFraction` is declared `read` stage, and that looks wrong.**~~ **Settled from the code
+  Sixteen mutations, sixteen caught, in two rounds — and two of those survived their first pass because
+  a test was weaker than its name.- ~~**`editSimplifyFraction` is declared `read` stage, and that looks wrong.**~~ **Settled from the code
   and fixed (2026-09-10), and it was five controls, not one.** The discard prompt read a parameter's
   stage and never its kind, so it fired for every `read`-filed control — including both brush widths,
   both gap sliders and the editor's straighten slider, all of which are `tool` kind and re-read
@@ -3086,7 +3077,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
   untouched**) · `paintControls.ts` (the tool in hand, drawn into the **pinned head**, plus the step's own Save) · `paintState.ts` · `gapSearch.ts` · `wallTools.ts` (only the
   sentence shown when no graph is saved)
-- **Acting on the document** — `undoAction.ts` (the button and Ctrl+Z) · `undoHistory.ts` (**the one
+- **Acting on the document** — `undoAction.ts` (the undo/redo pair in the rail head, and their
+  keystrokes) · `undoHistory.ts` (**the one
   stack, for the graph and the painted ink both**: entries are labelled closures, so it never learns
   what it is restoring — pure and tested) · `editHistory.ts` (the bounded stack under it, pure and
   tested) · `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`

@@ -48,10 +48,28 @@ import { EditHistory } from "./editHistory";
  */
 const DEPTH = 20;
 
-/** Puts one document back as it was. May write to the scene, so it may be slow. */
-export type Restore = () => Promise<void> | void;
+/**
+ * Puts one document back as it was, and hands back the way to the state it just left.
+ *
+ * **That return value is the whole of redo.** An owner is the only thing that knows how to snapshot
+ * its own document, so rather than the stack learning two tricks per kind of edit, a restore takes
+ * its own snapshot on the way past and returns a restore for it. Undo pushes what comes back onto the
+ * redo stack; redo does the same in reverse, which is what makes the two symmetrical rather than two
+ * implementations that have to agree.
+ *
+ * Returning nothing means this act cannot be gone forward into again — the paint half says so when
+ * there is no layer to snapshot — and the entry is simply not offered.
+ */
+export type Restore = () => Promise<Restore | void> | Restore | void;
 
 const history = new EditHistory<Restore>(DEPTH);
+/**
+ * The acts undone, newest last, waiting to be done again.
+ *
+ * The same depth, because the two can only trade entries: every redo entry came off the undo stack
+ * and goes back onto it when taken.
+ */
+const redo = new EditHistory<Restore>(DEPTH);
 const listeners: (() => void)[] = [];
 
 function announce(): void {
@@ -77,6 +95,13 @@ export function onUndoChange(listener: () => void): void {
  */
 export function pushUndo(label: string, restore: Restore): void {
   history.push(restore, label);
+  /*
+    A new act abandons the forward history, which is the ordinary rule everywhere and is worth stating
+    because the alternative is worse than it sounds: keeping it would offer to redo an act on top of a
+    document that has moved since, and the snapshot it holds describes a state that no longer follows
+    from anything on screen.
+  */
+  redo.clear();
   announce();
 }
 
@@ -96,8 +121,33 @@ export async function undoLast(): Promise<string | null> {
   const entry = history.peek();
   if (!entry) return null;
 
-  await entry.document();
+  const forward = await entry.document();
   history.pop();
+  if (forward) redo.push(forward, entry.label);
+  announce();
+  return entry.label;
+}
+
+/** What redoing would do again, or `null` when there is nothing. */
+export function redoLabel(): string | null {
+  return redo.peek()?.label ?? null;
+}
+
+/**
+ * Do the last undone act again.
+ *
+ * The mirror of `undoLast`, down to the failure rule: the entry stays put unless the restore returns,
+ * so a refused scene write leaves something to try again rather than losing the way forward. What
+ * comes back goes onto the **undo** stack directly rather than through `pushUndo`, because this is
+ * not a new act and must not abandon the rest of the forward history.
+ */
+export async function redoLast(): Promise<string | null> {
+  const entry = redo.peek();
+  if (!entry) return null;
+
+  const back = await entry.document();
+  redo.pop();
+  if (back) history.push(back, entry.label);
   announce();
   return entry.label;
 }
@@ -112,10 +162,16 @@ export async function undoLast(): Promise<string | null> {
  */
 export function clearUndo(): void {
   history.clear();
+  redo.clear();
   announce();
 }
 
 /** How many acts could be taken back. */
 export function undoDepth(): number {
   return history.size;
+}
+
+/** How many acts could be done again. */
+export function redoDepth(): number {
+  return redo.size;
 }

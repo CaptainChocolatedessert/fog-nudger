@@ -513,6 +513,47 @@
         color: #e8e9f5;
       }
 
+      /*
+        Undo and redo, as a pair, above the count of what they act on.
+
+        Sized and coloured like the tool strip's buttons rather than like the chip they replaced: they
+        are glyph buttons on a dark ground, and the surface already has one look for that. Hidden
+        entirely when both are dead, so a rail that has never been edited carries no furniture — the
+        `:disabled` pair is the ordinary state for the first minute of a session.
+      */
+      #history-row {
+        display: flex;
+        gap: 0.25rem;
+        margin: 0 0 0.6rem;
+      }
+      button.history {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.9rem;
+        padding: 0.25rem 0;
+        border-radius: 0.3rem;
+        border: 1px solid rgba(187, 153, 255, 0.3);
+        background: transparent;
+        color: #c2c7e4;
+        cursor: pointer;
+      }
+      button.history svg {
+        width: 1.1rem;
+        height: 1.1rem;
+        flex: none;
+      }
+      button.history:hover:not(:disabled) {
+        background: rgba(187, 153, 255, 0.14);
+        color: #e8e9f5;
+      }
+      /* The same 0.65 the tool strip and the locked headers use, which is the one value for
+         "inactive" on this surface and is measured against the 3:1 floor. */
+      button.history:disabled {
+        opacity: 0.65;
+        cursor: default;
+      }
+
       #edit-count {
         margin: 0 0 0.9rem;
         padding: 0.35rem 0.6rem;
@@ -799,6 +840,24 @@
           -->
           <div id="tool-controls"></div>
           <div id="layer-row"></div>
+          <!--
+            The document's own history, and the count of what is in it.
+
+            Here rather than in the tool strip, which a room proposed: every button there is a *mode*,
+            picked and held and shown by a pressed state, where these are momentary. Mixing the two
+            would make that highlight mean two things — and a tool declares the drag it binds, whether
+            it opens paint mode, and what the pinned hint says while it is in hand, none of which undo
+            has an answer for.
+
+            Here rather than the bar at the top right, where undo used to sit: that bar is Fit,
+            Controls and Close, which are about the *surface*. Undo acts on the document, and the
+            count of hand edits was already here with nothing owning it — its own comment said it
+            "belongs to the document" and should move to whatever owns that. These are that owner.
+          -->
+          <div id="history-row">
+            <button class="history" id="undo" disabled title="Nothing to undo"></button>
+            <button class="history" id="redo" disabled title="Nothing to redo"></button>
+          </div>
           <p id="edit-count"></p>
         </div>
 
@@ -817,7 +876,8 @@
       <div id="tools"></div>
 
       <div id="bar">
-        <button class="chip" id="undo" disabled title="Nothing to undo">Undo</button>
+        <!-- Undo moved to the rail head on 2026-09-13, beside the edit count it acts on. What is
+             left in this bar is the surface: how you are looking at it, and how you leave. -->
         <button class="chip" id="fit" title="Fit the whole map">Fit</button>
         <button class="chip" id="toggle-panel" title="Hide the controls" aria-pressed="true">Controls</button>
         <button class="chip" id="close">Close (Esc)</button>

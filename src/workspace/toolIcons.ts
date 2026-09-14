@@ -1,5 +1,5 @@
 /**
- * A glyph per tool, drawn here rather than fetched.
+ * The surface's glyphs, drawn here rather than fetched.
  *
  * ## Why not an icon font
  *
@@ -10,7 +10,14 @@
  * where every gesture on this surface is chosen — an unreadable one is not a degraded surface, it is
  * an unusable one.
  *
- * Seven inline paths cost nothing, need no network, and cannot half-arrive.
+ * A handful of inline paths cost nothing, need no network, and cannot half-arrive.
+ *
+ * ## Not only tools
+ *
+ * Most of these are tools, and the file is named for them. **Undo and redo are not** — they are
+ * momentary acts rather than modes, which is exactly why they are *not* in the tool strip — but they
+ * want the same 24×24 house style and the same guarantee about arriving, so they are drawn here
+ * rather than in a second place with a second set of conventions to keep in step.
  *
  * ## The house style, matched exactly
  *
@@ -42,6 +49,10 @@ const ICONS: Readonly<Record<string, string>> = {
   move: '<circle cx="12" cy="12" r="2.4" /><path d="M12 3.4v3.2M12 17.4v3.2M3.4 12h3.2M17.4 12h3.2" /><path d="M10.6 4.8 12 3.4l1.4 1.4M10.6 19.2 12 20.6l1.4-1.4M4.8 10.6 3.4 12l1.4 1.4M19.2 10.6 20.6 12l-1.4 1.4" />',
   // Two ends joined, which is what drawing a wall is.
   draw: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" />',
+  // A curved arrow turning back on itself. The pair is mirrored rather than rotated, so undo and
+  // redo read as opposites at a glance rather than as the same shape at two angles.
+  undo: '<path d="M4.5 9.5h9a5.5 5.5 0 0 1 0 11H8" /><path d="M8.2 5.2 3.9 9.5l4.3 4.3" />',
+  redo: '<path d="M19.5 9.5h-9a5.5 5.5 0 0 0 0 11H16" /><path d="M15.8 5.2l4.3 4.3-4.3 4.3" />',
   // The same wall, struck out.
   erase: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" stroke-dasharray="2.4 2.2" /><path d="M8.4 8.4l7.2 7.2M15.6 8.4l-7.2 7.2" />',
 };

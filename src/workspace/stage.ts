@@ -31,7 +31,7 @@
 import { devLog } from "../devlog";
 import { readWallGraph, writeWallGraph } from "../wallGraphStore";
 import type { WallGraph } from "../trace/wallGraph";
-import { clearUndo, pushUndo } from "./undoHistory";
+import { clearUndo, pushUndo, type Restore } from "./undoHistory";
 
 let saved: WallGraph | null = null;
 const listeners: (() => void)[] = [];
@@ -87,13 +87,19 @@ export function handEdits(): number {
  * **The count comes down with it**, which is the whole point of counting rather than latching a flag:
  * undoing every edit returns it to zero, at which point re-deriving is free again and stops asking.
  */
-async function restoreGraph(before: WallGraph): Promise<void> {
-  if (!mapId) return;
-  await writeWallGraph(mapId, before);
-  saved = before;
-  edits = Math.max(0, edits - 1);
-  announce();
-  devLog("info", `stage: undid a wall edit — ${edits} hand edits left`);
+function restoreGraph(next: WallGraph, countDelta: number): Restore {
+  return async () => {
+    if (!mapId) return;
+    const leaving = saved;
+    await writeWallGraph(mapId, next);
+    saved = next;
+    edits = Math.max(0, edits + countDelta);
+    announce();
+    devLog("info", `stage: a wall edit was ${countDelta < 0 ? "undone" : "redone"} — ${edits} left`);
+    // The way back to where we just were, which is what redo takes — and which carries the opposite
+    // sign, so going forward and back again lands the count where it started rather than drifting.
+    return leaving ? restoreGraph(leaving, -countDelta) : undefined;
+  };
 }
 
 /**
@@ -179,7 +185,7 @@ export async function saveEditedWalls(graph: WallGraph, label: string): Promise<
     The store throws where the settings reader swallows, and the reason applies here too: a history
     entry for an edit the scene never took would offer to restore a state that was already current.
   */
-  if (before) pushUndo(label, () => restoreGraph(before));
+  if (before) pushUndo(label, restoreGraph(before, -1));
   saved = graph;
   edits += 1;
   announce();

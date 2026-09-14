@@ -57,7 +57,7 @@ import {
   type PaintTool,
   type PaintVerb,
 } from "./paintGesture";
-import { pushUndo } from "./undoHistory";
+import { pushUndo, type Restore } from "./undoHistory";
 import {
   anyUnsavedPaint,
   beginPaint,
@@ -199,7 +199,12 @@ let strokeStart: { readonly kind: PaintKind; readonly snapshot: string } | null 
  * only what we lay over it has.
  */
 export function rememberPaint(kind: PaintKind, snapshot: string, label: string): void {
-  pushUndo(label, () => {
+  pushUndo(label, paintStep(kind, snapshot));
+}
+
+/** One step of a layer's history, which hands back the step that reverses it. */
+function paintStep(kind: PaintKind, snapshot: string): Restore {
+  return () => {
     /*
       The mode may have closed since, and usually has: putting the brush down writes both layers and
       lets the working copies go, which is exactly when a GM looks at what they drew and wants it
@@ -210,6 +215,8 @@ export function rememberPaint(kind: PaintKind, snapshot: string, label: string):
       "Undo drawing added ink" and silently declines.
     */
     if (!paintModeOpen() && !beginPaint()) return;
+    // Taken before the restore, so redo has the state this is about to replace.
+    const leaving = snapshotPaint(kind);
     if (!restorePaint(kind, snapshot)) return;
     const layer = workingLayer(kind);
     // The whole layer, because a snapshot says nothing about which part of it moved — where a stroke
@@ -220,7 +227,8 @@ export function rememberPaint(kind: PaintKind, snapshot: string, label: string):
     gapsChanged();
     requestRecompose();
     invalidate();
-  });
+    return leaving === null ? undefined : paintStep(kind, leaving);
+  };
 }
 
 function start(point: MapPoint): boolean {
