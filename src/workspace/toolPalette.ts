@@ -33,7 +33,7 @@
  */
 
 import { STEPS, TOOLS, toolGroups, type Drag, type ToolChoice } from "../steps";
-import { anchorDrawer, currentPanel, openPanel, openToolDrawer } from "./accordion";
+import { anchorDrawer, currentPanel, onStepChange, openPanel, openToolDrawer } from "./accordion";
 import { stepIsMarked, wallsMark } from "./wallsMark";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
@@ -366,6 +366,21 @@ export function registerToolPalette(): void {
     does nothing.
   */
   onStageChange(render);
+  /*
+    And whenever the drawer changes, because the strip draws which drawer is open.
+
+    **Two symptoms, one cause, both reported from a room (2026-09-14):** the workspace opened with
+    Map highlighted while the Ink drawer was showing, and arming Add ink left Ink's settings button
+    highlighted beside it. Opening a drawer re-rendered the *drawer* and nothing told the strip, so
+    its pressed states were whatever they had been the last time something else redrew it.
+
+    Subscribing is the fix rather than re-rendering at each call site, because the drawer moves from
+    places the strip knows nothing about — `advanceTo` opens Ink at start-up when the scene turns out
+    to have a map, which is exactly the first symptom.
+
+    No loop: this render anchors the drawer but never re-renders it.
+  */
+  onStepChange(render);
   apply("pan");
   render();
 }
