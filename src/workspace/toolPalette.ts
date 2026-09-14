@@ -33,7 +33,14 @@
  */
 
 import { STEPS, TOOLS, toolGroups, type Drag, type ToolChoice } from "../steps";
-import { anchorDrawer, currentPanel, onStepChange, openPanel, openToolDrawer } from "./drawer";
+import {
+  currentPanel,
+  currentToolDrawer,
+  onStepChange,
+  openPanel,
+  openToolDrawer,
+  setDrawerTop,
+} from "./drawer";
 import { stepIsMarked, wallsMark } from "./wallsMark";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
@@ -160,6 +167,56 @@ function usable(choice: ToolChoice): boolean {
 function toolHasControls(id: Tool): boolean {
   return STEPS.some((step) => toolGroups(step).some((group) => group.tool === id));
 }
+
+/**
+ * Put the drawer level with the button that opened it.
+ *
+ * **Here rather than in the drawer**, because this module is the one that knows where its buttons
+ * are: the bands carry rules between them, groups hold different numbers of verbs, and a locked
+ * group still takes its row. Nothing derived from the declaration order would survive a tool moving.
+ *
+ * The button is found by **what it opens** rather than by what looks pressed — two buttons carry the
+ * pressed state at once, which is the whole point of two selection groups.
+ *
+ * **Clamped at both ends.** Never above the window's own margin, and never so low that the drawer
+ * has no room left between the anchor and the bar; past that it stops following the button downward.
+ *
+ * **And again one frame later**, because a measurement taken in the same tick as a render can be
+ * reading a layout that has not finished. Caught at start-up: the drawer anchored at 10px while its
+ * button sat at 82, with the arithmetic correct throughout — the strip simply had not laid out when
+ * it was asked. Guarded to one pending frame, so a burst of renders costs one re-measure.
+ */
+function anchorDrawer(): void {
+  place();
+  if (pendingAnchor) cancelAnimationFrame(pendingAnchor);
+  pendingAnchor = requestAnimationFrame(() => {
+    pendingAnchor = 0;
+    place();
+  });
+}
+
+let pendingAnchor = 0;
+
+function place(): void {
+  const opens = currentPanel() ? `params:${currentPanel()}` : `tool:${currentToolDrawer() ?? ""}`;
+  const opener = document.querySelector(`#tools button[data-opens="${opens}"]`);
+  if (!(opener instanceof HTMLElement)) return;
+
+  const margin = 10;
+  /** The bar plus the gap the drawer keeps off it. */
+  const barAndGap = 58;
+  /** Enough drawer left to be worth opening: a title and a few rows. */
+  const leastRoom = 190;
+  const lowest = Math.max(margin, window.innerHeight - barAndGap - leastRoom);
+  setDrawerTop(Math.min(Math.max(opener.getBoundingClientRect().top, margin), lowest));
+}
+
+/*
+  The clamp is against the window, so the window changing moves it. Without this, shrinking the
+  height leaves a drawer anchored below where its own floor now is — a title with a scrollbar under
+  it, and no press to put it right.
+*/
+window.addEventListener("resize", place);
 
 export function setTool(next: Tool): void {
   apply(next);
@@ -345,8 +402,6 @@ export function render(): void {
       addTools(step.id as ToolChoice["band"]);
     }
 
-    // The buttons have just moved, so whatever the drawer was level with may not be there any
-    // more -- a group becoming locked or usable changes the height of the column above it.
     anchorDrawer();
   }
 

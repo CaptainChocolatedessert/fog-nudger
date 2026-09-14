@@ -41,8 +41,8 @@ import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
 import {
-  onStepOpen,
-  registerHeadContent,
+  onStepChange,
+  registerToolContent,
   registerStepContent,
   renderPanel,
 } from "./workspace/drawer";
@@ -189,7 +189,8 @@ registerPaintTool();
   In the editor it is a walk of a graph already in hand, which is cheap enough that the laziness
   costs nothing there.
 */
-onStepOpen("walls", (open) => watchRegions("walls", open));
+// One drawer means one value, so the question is simply which group has it.
+onStepChange((step) => watchRegions("walls", step === "walls"));
 /*
   The paint mode follows the **tool**, not a heading, and `toolPalette` is where that happens.
 
@@ -230,7 +231,7 @@ registerStepContent("ink", renderInkSave, "bottom");
   to the bottom, all at once. The head cannot be scrolled past or collapsed, and it is where the tool
   hint already sits for the same reason.
 */
-registerHeadContent(renderToolControls);
+registerToolContent(renderToolControls);
 /*
   The rail redraws when the tool changes, which it did not until now.
 

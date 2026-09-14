@@ -2927,8 +2927,8 @@ read it before touching any parameter. Then `controls.ts` (every control a GM ca
 only. There is no `mode.ts` — the two workspaces merged, and nothing branches on which one you are in.
 
 - **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`,
-  `whileWorking`) · `drawer.ts` (**the drawer**: which group's settings or which tool's controls are
-  showing, and anchoring it level with the button that opened it) · `reading.ts` (the mask request cycle,
+  `whileWorking`) · `drawer.ts` (**the drawer**: which group's settings *or* which tool's controls are
+  showing — never both — and rendering that one thing) · `reading.ts` (the mask request cycle,
   subscribed to by the layers) · `regions.ts` (the lazy derive cycle, and `showingSaved` — the one
   predicate deciding which graph is on screen) · `stage.ts` (the stored graph, the hand-edit count and
   undo)
@@ -2938,7 +2938,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
   pickers) · `graphScale.ts` ·
   `seedSimplify.ts`
-- **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag) ·
+- **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag, and
+  **anchors the drawer**, because it is the module that knows where its own buttons are) ·
   `toolIcons.ts` (seven inline glyphs) · `wallEdit.ts` and `paintTool.ts` (the pointer events) ·
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign

@@ -85,7 +85,7 @@ type Drawer =
 let drawer: Drawer | null = { kind: "params", step: workspaceSteps()[0]?.id ?? "map" };
 
 /** Which tool's controls the drawer is showing, if it is showing a tool's at all. */
-function currentToolDrawer(): string | null {
+export function currentToolDrawer(): string | null {
   return drawer?.kind === "tool" ? drawer.tool : null;
 }
 
@@ -104,80 +104,24 @@ export function openToolDrawer(tool: string): void {
 }
 
 /**
- * Put the drawer level with the button that opened it.
+ * Put the drawer's top at a given y, in window coordinates.
  *
- * **The anchor is read off the strip rather than computed from the group's index**, because the
- * strip's own layout decides where a button lands: the bands have rules between them, the verbs
- * under a group vary in number, and a locked group still takes its row. Anything derived from the
- * declaration order would be a second opinion about where a button is, and it would be wrong the
- * first time a tool moved.
+ * **The strip works this out, not this module.** The drawer sits level with the button that opened
+ * it, and *where that button is* is a fact about the strip's own layout — the bands have rules
+ * between them, groups carry different numbers of verbs, and a locked group still takes its row.
  *
- * **Clamped at both ends.** Never above the window's own margin, and never so low that the drawer
- * has no room left between the anchor and the bar — a group opened from the bottom of the strip
- * would otherwise be a title and a scrollbar. The floor is generous enough to hold a few rows, and
- * past it the drawer simply stops following the button downward.
+ * It used to reach across and find the button itself, with a CSS selector naming markup another
+ * module writes. That is a contract nothing typechecks, and it broke twice in one afternoon: once
+ * when a class it named stopped existing, and once when it matched the armed verb instead of the
+ * open group. Neither threw — the drawer just fell silently to the top of the window. Being *told* a
+ * number cannot fail that way.
  *
- * Called from both renders, because either can happen without the other: a settings arrival rebuilds
- * the drawer with the strip untouched, and a tool change rebuilds the strip with the drawer as it
- * was.
+ * Every drawer change reaches the strip already: `renderPanel` announces, the strip redraws, and it
+ * sets this on the way past. So nothing here has to ask, and there is no second path to keep in step.
  */
-export function anchorDrawer(): void {
-  place();
-  /*
-    And again one frame later, because **a measurement taken in the same tick as a render can be
-    reading a layout that has not finished**. Caught at start-up: the drawer anchored at 10px while
-    its button sat at 82, and the arithmetic was correct throughout — the strip simply had not laid
-    out yet when it was asked. The same trap the operating notes record for caption widths, one
-    property over.
-
-    Guarded to one pending frame, so a burst of renders costs one re-measure rather than a queue.
-  */
-  if (pendingAnchor) cancelAnimationFrame(pendingAnchor);
-  pendingAnchor = requestAnimationFrame(() => {
-    pendingAnchor = 0;
-    place();
-  });
+export function setDrawerTop(top: number): void {
+  document.getElementById("panel")?.style.setProperty("--drawer-top", `${Math.round(top)}px`);
 }
-
-let pendingAnchor = 0;
-
-function place(): void {
-  const panel = document.getElementById("panel");
-  if (!panel) return;
-  /*
-    The button is found by **what it opens**, not by what looks pressed.
-
-    Two buttons carry the pressed state at once — the armed verb and the open group — which is the
-    whole point of two selection groups, and it makes "the pressed one" meaningless here. Each button
-    stamps a `data-opens` naming its drawer instead, so this asks for the one that opened *this*.
-
-    Both wrong versions of this shipped for a minute and neither threw: first the selector named a
-    class that had stopped existing, then it matched the armed verb instead of the open group. Both
-    times the drawer quietly fell back to the top of the window. **A selector is a dependency on
-    markup that nothing typechecks**, which is why this one is now derived from the same value that
-    decides what is drawn.
-  */
-  if (drawer === null) return;
-  const opens = drawer.kind === "params" ? `params:${drawer.step}` : `tool:${drawer.tool}`;
-  const opener = document.querySelector(`#tools button[data-opens="${opens}"]`);
-  if (!(opener instanceof HTMLElement)) return;
-
-  const margin = 10;
-  /** The bar plus the gap the drawer keeps off it. */
-  const barAndGap = 58;
-  /** Enough drawer left to be worth opening: a title and a few rows. */
-  const leastRoom = 190;
-  const lowest = Math.max(margin, window.innerHeight - barAndGap - leastRoom);
-  const top = Math.min(Math.max(opener.getBoundingClientRect().top, margin), lowest);
-  panel.style.setProperty("--drawer-top", `${Math.round(top)}px`);
-}
-
-/*
-  The clamp is against the window, so the window changing moves it. Without this, shrinking the
-  height leaves a drawer anchored below where its own floor now is — a title with a scrollbar under
-  it, and no press to put it right.
-*/
-window.addEventListener("resize", place);
 
 /** Which group's settings the drawer is showing, if it is showing settings at all. */
 export function currentPanel(): StepId | null {
@@ -274,10 +218,16 @@ export function registerStepContent(
  * every readout painter on each rebuild, so a row built outside that pass would keep its element and
  * lose its painter — a slider whose number silently stops moving.
  */
-const headContent: Render[] = [];
+const toolContent: Render[] = [];
 
-export function registerHeadContent(render: Render): void {
-  headContent.push(render);
+/**
+ * Register what the tool in hand draws, which the drawer shows in place of a group's controls.
+ *
+ * **Registered rather than imported**, because the module that draws it imports this one and a
+ * direct call would be a cycle. One caller, and avoiding that cycle is the whole reason it exists.
+ */
+export function registerToolContent(render: Render): void {
+  toolContent.push(render);
 }
 
 /**
@@ -398,11 +348,15 @@ function defaultsButton(step: Step): HTMLElement {
  * case: it costs the better part of a second and is visible in exactly one step, so it runs on entry
  * rather than on every change everywhere.
  */
-const openListeners: { readonly id: StepId; readonly changed: (open: boolean) => void }[] = [];
+/*
+  `onStepOpen` was here and is gone (review, 2026-09-14).
 
-export function onStepOpen(id: StepId, changed: (open: boolean) => void): void {
-  openListeners.push({ id, changed });
-}
+  It told one subscriber when one *named* group opened or closed, and it existed because several
+  groups could be open at once — so "is Walls showing" could not be read off a single value and had
+  to be tracked per group. With one drawer there is a single value, and `onStepChange` carries it.
+  The one caller asks the question it actually has: is the group that draws the partition the one
+  open.
+*/
 
 /**
  * Told which step is open, rather than whether one particular step is.
@@ -466,7 +420,6 @@ function applyOpenStep(): void {
   const step = panelSteps().find((candidate) => candidate.id === owner) ?? null;
   // Proposed rather than set: the GM's own toggles subtract from this, and a tool may add to it.
   proposeLayers([...(step?.layers ?? [])]);
-  for (const listener of openListeners) listener.changed(currentPanel() === listener.id);
   for (const listener of stepListeners) listener(step?.id ?? null);
   invalidate();
 }
@@ -490,12 +443,12 @@ export function renderPanel(): void {
   */
   forgetGraphScale();
 
-  // The pinned head, inside this pass so its rows get their painters from the same `resetHints`
-  // above. Empty whenever nothing is in hand, and the stylesheet collapses it then.
-  const head = document.getElementById("tool-controls");
-  if (head) {
-    head.replaceChildren();
-    for (const render of headContent) render(head);
+  // The tool in hand, inside this pass so its rows get their painters from the same `resetHints`
+  // above. Empty whenever nothing is in hand, and hidden below whenever a group has the drawer.
+  const toolBody = document.getElementById("tool-controls");
+  if (toolBody) {
+    toolBody.replaceChildren();
+    for (const render of toolContent) render(toolBody);
   }
 
   /*
@@ -544,9 +497,6 @@ export function renderPanel(): void {
   if (toolRows) toolRows.hidden = tool === null;
 
   document.getElementById("panel")?.classList.toggle("shut", drawer === null);
-  // After the body exists, so a drawer that has just grown or shrunk is clamped against what
-  // it actually holds rather than against what it held a moment ago.
-  anchorDrawer();
 
   applyOpenStep();
 }
