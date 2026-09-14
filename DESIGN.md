@@ -1266,13 +1266,25 @@ point.
 **A release ends the gesture, not the hovering**, so the hint persists over the vertex the pointer is
 still on — the dragged one, or the one it was folded into.
 
-### The one-shot operations
+### Straightening, pruning, and the one button left
 
-Three buttons at the foot of the editor, each an operation on the graph as it stands. **They replay
-nothing**, which is why they are coherent: the GM's edits are already inside the
-thing being transformed.
+**Straightening and pruning are single live sliders, applied on every derive — 2026-09-14.** They
+were a slider each under Walls *and* a button each in the editor, and crossing the save turned one
+into the other without saying so. There is one control each now, and changing either regenerates the
+walls like any reading change: the mark says the graph holds work of yours, the dialog prices it, and
+`editSimplifyFraction` is gone.
 
-- **Straighten the walls** (`simplifyWalls`) — Douglas–Peucker **per wall run**, which is what makes
+**What made the editor's copies necessary went with the save button.** Before the save the graph was
+a derivation and turning a slider down put the detail straight back; after it the graph was the
+document with nothing to re-derive it from, so a slider that pruned on release would have destroyed
+work on a gesture as small as brushing the track. One surface, one rule, and the ratchet is gone with
+them: turning either slider back down puts the detail back, because a derivation is not spent by
+being redone.
+
+**`simplifyWalls` and `pruneWallGraph` are unchanged and still do the work**, now from inside the
+derive rather than from a button. What each is:
+
+- **Straightening** (`simplifyWalls`) — Douglas–Peucker **per wall run**, which is what makes
   junctions safe without special-casing them: a run's ends are junctions or free ends by construction,
   and the fitter keeps both ends of what it is handed. **The collapse guard applies to CLOSED runs
   only** — an open wall is safe at any tolerance, since the worst it becomes is one straight segment
@@ -1289,9 +1301,10 @@ thing being transformed.
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
   vertices that actually go, since the junction where a stub meets its wall keeps its other walls and
   stays put.
-- **Make the outside a room** (`addFrameWalls`) — four segments at the map's extent as **one closed run**,
-  so the corners are shared vertices by construction. **It adds, so it asks nothing first**, unlike the
-  two above. **A second press is refused rather than absorbed**: four segments laid on four existing
+**Make the outside a room** (`addFrameWalls`) is the one button left at the foot of the editor —
+four segments at the map's extent as **one closed run**, so the corners are shared vertices by
+construction. **It adds, so it asks nothing first**, which is also why it never needed the pair's
+ceremony and why it survives them. **A second press is refused rather than absorbed**: four segments laid on four existing
   ones are collinear overlaps, which splitting cannot separate and which make Euler's identity fail —
   corrupt with nothing to see until the next traversal. **The already-framed test is strict on
   purpose**: a segment must lie *along* an edge, not merely touch it, because a single wall drawn
@@ -1356,14 +1369,12 @@ Three details that were each learned the hard way:
 **A release that did not move the handle writes nothing.** With a moving top, `fromSlider(toSlider(v))`
 is no longer exactly `v`, so a drag away and back would otherwise rewrite the setting.
 
-**Two keys, not one, for simplification** — `simplifyFraction` in the ink mode and `editSimplifyFraction`
-in the editor — and that is forced rather than chosen. They need different defaults, which is what says
-they are different settings: the ink mode's is a *fitting parameter* re-applied on every derive, so a
-sane non-zero start is what stops a fresh map producing a graph too large to write, while the editor's
-deletes vertices that do not come back and must not arrive holding a proposal to destroy detail.
-
-**The cost of both tools, stated: it is a ratchet.** You can always simplify further or prune more; you
-can never get detail back without regenerating.
+**One key for simplification, since 2026-09-14.** There were two — `simplifyFraction` and
+`editSimplifyFraction` — on the argument that different defaults is what says two things are
+different settings. That was true while the editor applied its own by a button against a document
+with nothing behind it. With one live slider the ink mode's answer is the only one: a *fitting
+parameter*, re-applied on every derive, whose sane non-zero start is what stops a fresh map producing
+a graph too large to write.
 
 **A stated gap: the default is a fixed fraction, and that is less map-independent than an ink width.**
 4e-4 of the map is 1.3px on a 3300px map and 0.30px on a smaller one — sub-pixel, so very nearly no
@@ -2193,7 +2204,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**839 tests across 59 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**842 tests across 59 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2531,8 +2542,8 @@ the most informative thing that can happen to this project.
 
 ### Where to pick this up
 
-**Everything the rooms found is fixed.** What is left is six decisions rather than six jobs, and the
-first of them carries three of the others.
+**Everything the rooms found is fixed.** Six decisions were open; the first is **answered and built**
+(below), which settles two of the three that waited on it.
 
 **The one check nobody has run:** View's **Defaults** restoring all five colours. The rows themselves
 have been looked at; that button has not been pressed.
@@ -2542,62 +2553,53 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
 
 ### The decisions, in the order to take them
 
-1. **The fractured save-then-buttons workflow.** The largest, and **three of the others wait on
-   it** — the two *put on the map* cuts below, and whether Prune and Straighten keep their buttons
-   at all.
+1. ~~**The fractured save-then-buttons workflow.**~~ **Answered and built on 2026-09-14.** It was the
+  largest, and three of the others waited on it.
 
-  **What a GM currently does.** Tune the reading in **Walls**, where straightening and pruning are
-  live sliders re-applied on every derive and costing nothing to sweep. Press **Put the walls on the
-  map**. Then, in **Edit walls**, straighten and prune *again* — through a different slider, a button
-  each, and a confirmation each, now deleting things that do not come back.
+  **What it was.** The graph was a *derivation* before the save and the *document* after it, so
+  straightening and pruning changed from free live sliders into buttons with confirmations —
+  through a second setting in straightening's case — and the operation a GM had just spent time
+  tuning was offered to them again as though it had not happened. The seam was crossed by a button
+  called *Put the walls on the map*, and closing without pressing it committed nothing.
 
-  **What makes it feel like two tools rather than one.** Straightening has **two settings**
-  (`simplifyFraction` and `editSimplifyFraction`) that mean the same thing on opposite terms. Pruning
-  has **one** setting applied two ways, with its slider in Walls and its button in Edit walls.
-  Crossing the save changes a slider into a slider-plus-button without saying so, and the operation
-  a GM just spent time tuning is offered to them again as though it had not happened.
+  **What answered it: the seam is not a place, so it stopped being one.** There is no save button.
+  The wall tools act on the graph that is **drawn**, so a map that has been read can be edited
+  immediately, and the first edit that changes something adopts the derivation as the document —
+  because that is the moment a document becomes necessary. Closing commits and pushes.
 
-  **The existing justification, which is real and is not obviously worth the cost.** Before the save
-  the graph is a **derivation** — rebuilt from the reading on every change, so turning a slider down
-  puts the detail straight back and nothing is risked. After it the graph is the **document**, with
-  nothing to re-derive it from, so the same slider on release would silently delete hand-drawn walls
-  on a gesture as small as brushing the track. The button is what makes the destruction deliberate.
+  Straightening and pruning are one live slider each. Changing either regenerates the walls exactly
+  as a threshold does, which leaves the surface with **one rule instead of two shapes**: *anything
+  that regenerates the walls discards what you edited into them.*
 
-  **What the conversation has to settle.** Whether the two halves can be one thing — and if they
-  cannot, whether the seam can at least be *stated* rather than left to be discovered. Some threads
-  worth pulling: does the editor need its own straighten and prune at all, given the ink mode already
-  offers both on free terms and a GM who wanted more could go back and re-save? Could undo carry the
-  risk instead of a confirmation, now that it exists? **It already does, for two of the three** — see
-  below. Is "save" the wrong shape for the crossing —
-  the room also asked whether **Put the walls on the map** should still exist at all, which is the
-  same seam seen from the other side.
+  **The irreversibility is priced where it costs something.** A mark on the groups whose controls
+  rebuild the walls, whenever the graph is no longer what the trace derived; a line inside those
+  groups saying what the mark means; and the dialog at the release that actually destroys. Marker at
+  the navigation, dialog at the mutation — a dialog on *opening* a group would ask the question every
+  time a GM went to look at a number, which is how someone learns to dismiss the one warning that
+  matters.
 
-  **One fact for this conversation, established from the code on 2026-09-10.** A slider release
-  **never** replaces the stored graph. The only thing that does is *Put the walls on the map*, which
-  confirms separately — and §5 already says so: *"only the two save buttons … replace what is
-  stored."* Even a genuine re-read rebuilds the ink and a background derivation, while
-  `showingSaved()` keeps the edited graph on screen as long as there are hand edits. So the discard
-  prompt still attached to the five ink-reading sliders warns of a loss that happens only **if and
-  when the GM later saves**, and says *"the graph that replaces them is a fresh reading"* about a
-  moment in which nothing is replaced. It was left alone deliberately: whether a warning belongs at
-  the slider, at the save, or both is exactly the seam this entry is about.
+  **Consent is the document being thrown away**, not a flag recording that consent was given. With
+  nothing stored the derive is free to run and the push adopts what it produces, which is the state a
+  map that has never been edited is already in — so there is one path rather than a consented one
+  beside it.
 
-  **Which side a room actually worked on (user, 2026-09-13):** the missing walls were inserted **on
-  the graph side**, in the editor after saving — *"but it could go either way depending on the task."*
-  So the editor's tools are not redundant, and the seam is not one a GM crosses once: the answer to
-  "which half does the correcting" is *both, depending on what is wrong*. Any design that makes one
-  side the ending is wrong about how the work goes.
+  **Three costs, stated.**
 
-  **A second fact: Prune and Straighten are undoable.** Both save through the same path as every hand
-  edit, so both sit on the undo history. The button-plus-confirmation shape the editor gives them
-  guards a permanence that no longer exists — which answers the "could undo carry the risk" thread for
-  these two, and makes the case for their separate buttons thinner than it was argued. **What undo
-  does not cover** is the save from Walls: it clears the history, so replacing the stored graph remains
-  the one step with no way back.
+  - **You can no longer tidy a graph you have already hand-edited.** Draw three walls, then decide to
+    prune hairs, and the three walls go with it. The sliders are free until the first edit, which
+    matches the order the work naturally goes in — pruning and straightening clean up trace
+    artefacts, hand edits add what the trace could not find — but it is a real loss against what the
+    editor's buttons allowed.
+  - **A slider release does not commit.** A scene write is the better part of a second, so between a
+    derive and a push the stored document is deliberately behind what is drawn. `commitDerivation`
+    closes that gap before anything reaches the scene.
+  - **It is unproven.** None of it has been in a room. Every behavioural change here is in the
+    surface, which has no coverage by construction.
 
-  **Do not start building on this.** It touches the stage boundary, which is §3's core, and the two
-  cuts already parked (*Put the walls on the map*, *Put on the map*) are downstream of whatever it
-  decides.
+  **What is still open from this** is the **delta view** — drawing what would go in amber and what
+  would arrive in cyan at the moment a regenerate is offered. `trace/wallGraphDiff.ts` computes it
+  and nothing draws it yet, so today the dialog names the price in words where it should be showing
+  it on the map.
 
 2. **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
   control that writes to it is in the left rail, so a message about a press arrives as far from the
@@ -2610,9 +2612,9 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   is needed to say how many pixels something is, make **pixels the unit the slider reports on the
   right** instead.
 
-4. **The two *put on the map* buttons**, which wait on the first decision. A room's reaction to
-   **Put the walls on the map** was that it no longer makes sense; **Put on the map** in Edit walls is
-   the same question from the other side.
+4. **The one *put on the map* button that is left.** *Put the walls on the map* is deleted with the
+   save; what remains is the editor's, and the open question is whether it is needed at all now that
+   closing pushes — a GM cannot see the result without leaving anyway. Parked deliberately.
 
 5. **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
   *Create walls around map border* was offered as an alternative.
