@@ -54,10 +54,11 @@ import { describeError } from "../describeError";
 import { pushToFog, pushWouldChange, requestPushStop } from "../emit/emitRegions";
 import { readNominatedMapId } from "../map/mapImage";
 import { encodeWallGraph } from "../trace/wallGraph";
+import { graphsDiffer } from "../trace/wallGraphDiff";
 import { paintRevision } from "../trace/inkPaint";
 import { confirmAction } from "../confirmDialog";
 import { currentRegions, currentWalls, previewGraph } from "./regions";
-import { saveDerivedWalls, wallGraph } from "./stage";
+import { saveDerivedWalls, wallGraph, wallsEdited } from "./stage";
 import { controlsLive } from "./settingRows";
 import { currentPaint } from "./paintState";
 import { currentSettings, persistSettings } from "./settingsState";
@@ -89,6 +90,50 @@ async function fingerprint(): Promise<string> {
 }
 
 /**
+ * Bring the stored document up to the derivation on screen, unless the GM has edited it.
+ *
+ * **This is where the save button went.** Nothing commits on a slider release — a scene write is the
+ * better part of a second and sweeping a threshold would pay it on every notch — so between a derive
+ * and a push the document is deliberately behind what is drawn. The two moments that close that gap
+ * are a hand edit, which adopts what it was applied to, and this, which runs before anything is
+ * written to the scene.
+ *
+ * Three ways to do nothing, and they are all the safe direction. **A graph carrying hand edits wins
+ * outright**, because the derivation is not what the GM has. **No derivation** leaves whatever is
+ * stored, which is what a workspace opened and closed without looking at the walls should do. And a
+ * document that already equals the derivation is not rewritten, since a metadata write that changes
+ * nothing is a second a GM waits for no reason.
+ *
+ * Returns false when it could not commit, which means the push must not go ahead: emitting from a
+ * document the scene disagrees with is how a stale set of walls reaches a table.
+ */
+async function commitDerivation(): Promise<boolean> {
+  if (wallsEdited()) return true;
+
+  const derived = previewGraph();
+  if (!derived) {
+    if (!wallGraph()) {
+      devLog("info", "workspace: nothing derived and nothing stored, so there is nothing to push");
+      return false;
+    }
+    return true;
+  }
+
+  if (!graphsDiffer(wallGraph(), derived)) return true;
+
+  try {
+    await saveDerivedWalls(derived);
+    return true;
+  } catch (error) {
+    const detail = describeError(error);
+    say(`could not save the walls: ${detail}`, "bad");
+    devLog("error", "workspace: committing the derivation failed", detail);
+    console.error("Fog Nudger — committing the derivation failed", error);
+    return false;
+  }
+}
+
+/**
  * Push, unless the scene already holds exactly this. Called on the way out, and **awaited**.
  *
  * The shell keeps the sheet up until this resolves, so the seconds a large map takes are seconds a
@@ -102,36 +147,7 @@ async function fingerprint(): Promise<string> {
  */
 export async function pushOnClose(): Promise<void> {
   if (!controlsLive()) return;
-  /*
-    Closing commits, and that is the change the save button's removal turns on.
-
-    It used to return here: a derivation wrote nothing on the way out, on the argument that pushing
-    it would commit walls the GM never asked to commit, possibly over ones they spent an evening
-    editing. That argument was about the *save button* — it existed, so leaving without pressing it
-    meant something. With no button, the same behaviour is simply a GM tuning for twenty minutes,
-    pressing Escape and getting nothing, which §7a already named as the thing to fix.
-
-    It is safe for the reason the old one was not: the derivation can only be what is **on screen**,
-    and a graph carrying hand edits keeps the screen, so there is no state in which this adopts a
-    derivation over work the GM can see. Nothing is committed over: `saveDerivedWalls` is reached
-    only when there is no document at all.
-  */
-  if (!wallGraph()) {
-    const derived = previewGraph();
-    if (!derived) {
-      devLog("info", "workspace: closing with nothing derived, so there is nothing to commit");
-      return;
-    }
-    try {
-      await saveDerivedWalls(derived);
-    } catch (error) {
-      const detail = describeError(error);
-      say(`could not save the walls: ${detail}`, "bad");
-      devLog("error", "workspace: committing the derivation on close failed", detail);
-      console.error("Fog Nudger — committing the derivation on close failed", error);
-      return;
-    }
-  }
+  if (!(await commitDerivation())) return;
   const mark = await fingerprint();
   if (!pushWouldChange(mark)) {
     devLog("info", "workspace: closing with nothing to push — the scene already says this");
@@ -165,6 +181,9 @@ export async function pushOnClose(): Promise<void> {
  */
 export async function pushCurrent(): Promise<boolean> {
   await persistSettings();
+  // Same gap the close path closes, and for the same reason: the scene must be written from the
+  // document, and between a derive and a push the document is deliberately behind what is drawn.
+  if (!(await commitDerivation())) return false;
   const mark = await fingerprint();
 
   /*

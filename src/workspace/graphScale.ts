@@ -108,19 +108,9 @@ export function onGraphScale(tell: () => void): void {
 export function graphScaleTop(name: SettingName): number | null {
   if (tops === null && latest !== null) tops = measure(latest);
   if (tops === null) return null;
-  /*
-    Both simplification keys take the same measurement, because they are the same quantity.
-
-    The ink mode's and the editor's differ in their default and in what applying them costs, not in
-    what a given number means — so a GM who learned where on the track their map wants to sit does not
-    have to learn it twice.
-  */
+  // One simplification key since 2026-09-14; the editor's second copy is gone with its button.
   const top =
-    name === "spurPruneFraction"
-      ? tops.spur
-      : name === "simplifyFraction" || name === "editSimplifyFraction"
-        ? tops.bend
-        : 0;
+    name === "spurPruneFraction" ? tops.spur : name === "simplifyFraction" ? tops.bend : 0;
   return top > 0 ? top : null;
 }
 

@@ -30,6 +30,7 @@
 
 import { devLog } from "../devlog";
 import {
+  clearWallGraph,
   readWallGraph,
   writeCommittedWalls,
   writeDerivedWalls,
@@ -180,6 +181,31 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
   clearUndo();
   announce();
   return { corrupt };
+}
+
+/**
+ * Throw the stored graph away, because the GM has agreed to regenerate it.
+ *
+ * **This is what consent looks like**, and it is deliberately the whole document rather than a flag
+ * saying consent was given. A flag is a second statement of the same fact and can disagree with it;
+ * an absent graph cannot. With nothing stored, the derive is free to run, what it produces takes the
+ * screen, and the push adopts it — which is exactly the state a map that has never been edited is in.
+ *
+ * **It does not restore the base**, which was the other candidate. The base is the derivation these
+ * edits were made *on*, produced by settings the GM has just changed — so putting it back would show
+ * them a graph that answers neither the old question nor the new one.
+ *
+ * The undo stack goes too, on the rule it already followed: its snapshots describe a document that is
+ * no longer on screen.
+ */
+export async function discardWalls(): Promise<void> {
+  await clearWallGraph();
+  saved = null;
+  base = null;
+  edits = 0;
+  clearUndo();
+  announce();
+  devLog("info", "stage: the stored walls were discarded so the reading can be derived again");
 }
 
 /**

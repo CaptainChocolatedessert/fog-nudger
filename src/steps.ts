@@ -543,9 +543,6 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
   */
   spurPruneFraction: "walls",
   simplifyFraction: "walls",
-  // The editor's own, and a second key rather than a second home for the one above: the two need
-  // different defaults, which is what says they are different settings. `settings.ts` carries why.
-  editSimplifyFraction: "edit",
   /*
     How the partition is drawn, in the group that is never entered.
 

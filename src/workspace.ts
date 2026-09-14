@@ -56,8 +56,6 @@ import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSimplifySeed } from "./workspace/seedSimplify";
-import { refreshPruneAction, renderPruneAction } from "./workspace/pruneAction";
-import { refreshSimplifyAction, renderSimplifyAction } from "./workspace/simplifyAction";
 import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/colourRows";
@@ -252,16 +250,14 @@ onToolChange(() => renderPanel());
   has to tell them.
 
   At module scope rather than inside the step body that draws them: that body is rebuilt on every
-  accordion click, and a subscription there would add three listeners per click. Each refresh looks
-  its button up by id and does nothing when the step is closed, which is the same shape the readout
+  accordion click, and a subscription there would add a listener per click. The refresh looks its
+  button up by id and does nothing when the step is closed, which is the same shape the readout
   painters use.
 
   A graph arriving is the other thing that lifts these, and that path is already covered --
   `onStageChange` rebuilds the whole rail.
 */
 onSettingCommitted(() => {
-  refreshSimplifyAction();
-  refreshPruneAction();
   refreshFrameAction();
 });
 /*
@@ -309,19 +305,15 @@ registerStepContent(
   "edit",
   (body) => {
     /*
-      Straighten, then prune, then push — which is the order they are reached rather than an
-      arbitrary one. Both operations change the document and pushing writes it, so the two that can
-      alter what is on screen come before the one that commits it, and both sit below the sliders
-      that decide what they would do.
-    */
-    renderSimplifyAction(body);
-    renderPruneAction(body);
-    /*
-      Framing sits after the two that remove and before the one that writes.
+      Framing, then push. **Straighten and Prune were here and are gone** (2026-09-14): each was a
+      button plus a confirmation applying a number the GM had already tuned on a slider two sections
+      up, through a *second* key in straighten's case. One control each now, live under Walls, and
+      what used to make the editor's copy necessary — that the stored graph had nothing to re-derive
+      it from — is priced by the mark and the dialog instead.
 
-      It is the only one of the three that *adds*, so it reads as a different kind of act — and it is
-      the last thing worth doing to the document before putting it on the map, since what it changes
-      is whether the outside is somewhere the party can go.
+      What is left here adds rather than removes, which is why it never needed the pair's ceremony:
+      it is the last thing worth doing to the document before putting it on the map, since what it
+      changes is whether the outside is somewhere the party can go.
     */
     renderFrameAction(body);
     renderPushAction(body);

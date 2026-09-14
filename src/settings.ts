@@ -186,23 +186,20 @@ export interface TraceSettings {
    * move together, and what is left is a corner cut across a doorway, which is visible.
    */
   readonly simplifyFraction: number;
-  /**
-   * The editor's own simplification tolerance, **as a fraction of the map**. Off by default.
-   *
-   * ## Why this is a second key rather than the one above
-   *
-   * They are not the same setting, and the giveaway is that they need different defaults — which one
-   * key cannot have.
-   *
-   * In the ink mode the tolerance is a **fitting parameter**: the graph is re-derived from the
-   * reading whenever anything moves, so turning it down puts the detail straight back, and starting
-   * at a sane non-zero value is what stops a fresh map producing a graph too large to write.
-   *
-   * Here the graph **is** the document. There is nothing to re-derive it from, so a vertex dropped is
-   * gone — including one the GM placed by hand. So it is a number a **button** applies once, and it
-   * starts at off, because opening the editor must not propose destroying detail.
-   */
-  readonly editSimplifyFraction: number;
+  /*
+    `editSimplifyFraction` was here, and it went when straightening became one control (2026-09-14).
+
+    There were two straighten settings meaning the same thing on opposite terms: this one applied
+    once by a button in the editor, and `simplifyFraction` above re-applied on every derive. The
+    justification was real — before the save the graph was a derivation and turning the slider down
+    put the detail back, after it the graph was the document and nothing could — and it stopped being
+    real when both halves became one surface with one rule: **anything that regenerates the walls
+    discards your wall edits, and the mark says so.**
+
+    **Removed rather than defaulted to zero**, for the reason `inkOpacity` was: a stored non-zero
+    value with no control left would sit in the settings for ever, reported in the log, meaning
+    nothing. With the key gone the normaliser drops it.
+  */
 }
 
 export interface ReviewSettings {
@@ -345,7 +342,6 @@ export const DEFAULT_SETTINGS: Settings = {
     // Off. The editor's copy deletes vertices the map cannot give back — Undo can, which this used
     // to deny — so opening the editor must not arrive holding a proposal to destroy detail. The same
     // reasoning keeps pruning at zero.
-    editSimplifyFraction: 0,
   },
   review: {
     fillOpacity: 0.22,
@@ -421,7 +417,6 @@ export const SETTING_LIMITS = {
   simplifyFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   // The same track as the ink mode's, because it is the same quantity measured the same way. What
   // differs is the default and what applying it costs, both of which live elsewhere.
-  editSimplifyFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   fillOpacity: { min: 0, max: 1, step: 0.02 },
   strokeSquares: { min: 0, max: 0.3, step: 0.01 },
   // Runs past a doorway on purpose, like the two filters above it: at the top end whole doorways
@@ -522,19 +517,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   suppressBrushPx: "read",
   inkBrushPx: "read",
   simplifyFraction: "derive",
-  /*
-    Nominally `read`, and the honest note is that the cascade does not describe it at all.
-
-    The three stages are about what a change destroys **in the ink pipeline**, and this control acts
-    on a document that pipeline is not deriving. The mapping has to be total, so it takes the same
-    answer the editor's other control does.
-
-    **This used to say "nothing reads it", and something did.** A `tool` kind never reaches the
-    fingerprints or the recompute cascade — but the discard prompt read the stage and not the kind, so
-    with wall edits outstanding this slider offered to re-read the map and discard them. It does
-    neither. The prompt asks `rereadsTheMap` now, which excludes every `tool` kind by construction.
-  */
-  editSimplifyFraction: "read",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
 };
@@ -608,15 +590,6 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   suppressBrushPx: "tool",
   inkBrushPx: "tool",
   simplifyFraction: "pipeline",
-  /*
-    `tool`, and it is the kind doing real work rather than a label.
-
-    `PARAMETER_KIND` asks what a change *recomputes*, and the answer here is nothing at all: the
-    number sits there until a button is pressed. That keeps it out of both fingerprints, which
-    `readingParameters` enforces by filtering to `pipeline` — so this cannot cost a re-read however it
-    is moved.
-  */
-  editSimplifyFraction: "tool",
   fillOpacity: "display",
   strokeSquares: "display",
 };
@@ -768,6 +741,28 @@ export function isSkeletonOnly(name: SettingName): boolean {
  * A pipeline parameter of the reading stage, less the graph-only ones: pruning re-applies to a graph
  * already in hand and never goes near the map.
  */
+/**
+ * Whether changing this replaces the wall graph, and so discards anything edited into it by hand.
+ *
+ * **Every pipeline parameter, which is a wider net than `rereadsTheMap`** — that one asks whether the
+ * expensive first half runs again, which is a question about *cost*. This asks what a change
+ * **destroys**, and the answer is the same for all of them: the graph is a pure function of the ink
+ * and these numbers, so moving any of them produces a new one and the old one's hand edits are not in
+ * it.
+ *
+ * It covers the two wall controls as well as the five ink ones, which is the point. Straightening and
+ * pruning used to be exempt because the editor applied them through buttons of their own against the
+ * stored document; with one control each, live, they regenerate like everything else and have to be
+ * priced the same way.
+ *
+ * Also covers the ink **brushes**, whose strokes are pipeline inputs rather than parameters —
+ * `settingRows` prices the sliders and `paintTool` prices a stroke, but the rule they share is this
+ * one.
+ */
+export function regeneratesWalls(name: SettingName): boolean {
+  return PARAMETER_KIND[name] === "pipeline";
+}
+
 export function rereadsTheMap(name: SettingName): boolean {
   return PARAMETER_KIND[name] === "pipeline" && PARAMETER_STAGE[name] === "read" && !isSkeletonOnly(name);
 }
@@ -847,11 +842,6 @@ export function normaliseSettings(raw: unknown): Settings {
         t.spurPruneFraction,
       ),
       simplifyFraction: clamp(trace.simplifyFraction, "simplifyFraction", t.simplifyFraction),
-      editSimplifyFraction: clamp(
-        trace.editSimplifyFraction,
-        "editSimplifyFraction",
-        t.editSimplifyFraction,
-      ),
     },
     review: {
       fillOpacity: clamp(review.fillOpacity, "fillOpacity", r.fillOpacity),
@@ -908,11 +898,7 @@ export function describeSettings(settings: Settings): string {
     // Spur pruning belongs in the summary more than most: it is the one control here that can erode
     // the entire graph at its top end, and it went missing when the smallest-room term was removed.
     `prune ${trace.spurPruneFraction.toExponential(2)} of the map, ` +
-    `simplify ${trace.simplifyFraction.toExponential(2)} of the map` +
-    (trace.editSimplifyFraction > 0
-      ? `, editor simplify ${trace.editSimplifyFraction.toExponential(2)}`
-      : "") +
-    `; ` +
+    `simplify ${trace.simplifyFraction.toExponential(2)} of the map; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")

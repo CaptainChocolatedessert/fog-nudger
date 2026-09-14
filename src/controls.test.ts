@@ -115,14 +115,13 @@ describe("readouts that depend on a measurement", () => {
     serves. The rendering itself is `settingRows`; what belongs here is that the declaration asks.
   */
   it("asks for a position readout on every control stored as a map fraction", () => {
-    const editSimplify = CONTROLS.find((control) => control.name === "editSimplifyFraction")!;
-    for (const control of [spurs, simplify, editSimplify]) {
+    for (const control of [spurs, simplify]) {
       expect(control.readout, control.name).toBe("position");
     }
   });
 
   it("leaves every other control to the shared formatter", () => {
-    const byPosition = new Set(["spurPruneFraction", "simplifyFraction", "editSimplifyFraction"]);
+    const byPosition = new Set(["spurPruneFraction", "simplifyFraction"]);
     for (const control of CONTROLS) {
       if (byPosition.has(control.name)) continue;
       expect(control.readout, control.name).toBeUndefined();

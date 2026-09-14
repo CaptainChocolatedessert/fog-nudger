@@ -64,7 +64,7 @@ import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
 import { currentSettings, markApplied, markParametersApplied } from "./settingsState";
 import { invalidate, isClosing, say, whileWorking } from "./shell";
-import { handEdits, wallGraph } from "./stage";
+import { wallGraph, wallsEdited } from "./stage";
 
 /**
  * The least a partition painter needs, so the two stages can supply it from different shapes.
@@ -156,7 +156,23 @@ export function previewGraph(): WallGraph | null {
  * the threshold moves, which is where a merge is actually visible.
  */
 export function showingSaved(): boolean {
-  return wallGraph() !== null && (handEdits() > 0 || !derivation);
+  return wallsEdited() || (wallGraph() !== null && !derivation);
+}
+
+/**
+ * Whether deriving is worth doing at all, which is **not** the same question as which graph is drawn.
+ *
+ * They were one predicate and that was wrong under one surface. A graph carrying hand edits must not
+ * be re-derived over — that part is shared — but `showingSaved` is also true whenever nothing has
+ * been derived *yet*, which is how a saved map opens showing its walls immediately. Gating the derive
+ * on that meant a stored graph suppressed the trace for ever: invalidating set `derivation` to null,
+ * which made the predicate true again, which skipped the derive that would have set it.
+ *
+ * Harmless while a save button existed, because the stored graph was only ever something the GM had
+ * deliberately committed. Fatal once the sliders are the thing that regenerates.
+ */
+function derivingWouldDestroyEdits(): boolean {
+  return wallsEdited();
 }
 
 /**
@@ -402,7 +418,7 @@ async function derive(): Promise<void> {
     Walking the wall graph needs no reading and no fitting, so it happens here and now rather than
     through the async cycle below.
   */
-  if (showingSaved()) {
+  if (derivingWouldDestroyEdits()) {
     const graph = wallGraph();
     if (graph) derivePartition(graph);
     else clearPartition();

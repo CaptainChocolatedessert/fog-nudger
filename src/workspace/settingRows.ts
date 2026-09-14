@@ -15,6 +15,7 @@ import {
   isSkeletonOnly,
   PARAMETER_KIND,
   readParameter,
+  regeneratesWalls,
   rereadsTheMap,
   SETTING_LIMITS,
   writeParameter,
@@ -37,7 +38,8 @@ import { invalidateRegions, repruneRegions } from "./regions";
 import { appliedSettings, currentSettings, persistSettings, setSettings } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 import { confirmAction } from "../confirmDialog";
-import { handEdits } from "./stage";
+import { describeError } from "../describeError";
+import { discardWalls, wallsEdited } from "./stage";
 
 /**
  * The track a control's slider runs over.
@@ -161,17 +163,16 @@ async function confirmDiscard(
   limits: Parameters<typeof fromSlider>[1],
   scale: Parameters<typeof fromSlider>[2],
 ): Promise<void> {
-  const count = handEdits();
   const ok = await confirmAction({
-    title: `Re-read the map, discarding ${count} wall ${count === 1 ? "edit" : "edits"}?`,
+    title: "Generate the walls again, discarding your changes to them?",
     body: [
-      `${control.label} decides what counts as ink, so changing it derives the walls again from the ` +
-        "map. The graph that replaces them is a fresh reading, and anything you moved, drew or " +
-        "erased by hand is not in it.",
+      `${control.label} is one of the settings the walls are derived from, so changing it builds ` +
+        "them again from the map. Anything you moved, drew or erased by hand is not in what replaces " +
+        "them, and it cannot be undone afterwards.",
       "The ink you painted is safe: suppression and added ink are inputs to the reading, so they " +
         "survive it. Only changes made to the walls themselves go.",
     ],
-    confirmLabel: "Re-read and discard",
+    confirmLabel: "Generate them again",
     destructive: true,
   });
 
@@ -179,6 +180,27 @@ async function confirmDiscard(
     input.value = String(previous);
     restore(previous);
     say("kept your wall edits — the setting is unchanged");
+    return;
+  }
+
+  /*
+    Consent is the document being thrown away, rather than a flag saying consent was given.
+
+    With nothing stored, the derive is free to run, what it produces takes the screen, and the push
+    adopts it — which is the state a map that has never been edited is already in, so there is one
+    path rather than a consented one beside it. `stage.ts` says why the base is not restored instead.
+
+    **Awaited before the setting is written.** A failed clear must leave the GM's walls and their
+    slider both where they were, rather than a setting that has moved against a document that has not.
+  */
+  try {
+    await discardWalls();
+  } catch (error) {
+    input.value = String(previous);
+    restore(previous);
+    const detail = describeError(error);
+    say(`could not discard the walls, so nothing changed: ${detail}`, "bad");
+    console.error("Fog Nudger — discarding the walls failed", error);
     return;
   }
 
@@ -432,9 +454,15 @@ export function settingRow(control: Control): HTMLElement {
     */
     const previous = placed;
     placed = position;
-    // Only a change that re-reads the map, which is the prompt's own premise — "decides what counts
-    // as ink". It read the stage alone, and fired for five controls that re-read nothing.
-    const destroys = rereadsTheMap(control.name) && handEdits() > 0;
+    /*
+      Every control that regenerates the walls, not only the ones that re-read the map.
+
+      It asked `rereadsTheMap` before, which is a question about **cost** — does the expensive first
+      half run again. What the prompt is about is what a change **destroys**, and straightening and
+      pruning destroy exactly as much as a threshold does now that each is one live slider rather than
+      a slider here and a button in the editor.
+    */
+    const destroys = regeneratesWalls(control.name) && wallsEdited();
     if (destroys) {
       setPendingEdit(false);
       void confirmDiscard(

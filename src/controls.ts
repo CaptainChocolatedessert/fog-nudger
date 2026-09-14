@@ -268,18 +268,9 @@ export const CONTROLS: readonly Control[] = [
     name: "simplifyFraction",
     label: "Straightening",
     scale: "log",
-    // No warning needed, unlike its namesake in the editor: this one is part of the derive, so
-    // moving it back re-reads the map and the detail comes with it.
-    hint: "",
-    readout: "position",
-    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
-  },
-  {
-    name: "editSimplifyFraction",
-    label: "Straighten walls",
-    scale: "log",
-    // The irreversibility is stated once, in the note under the button that does it — which is also
-    // the only thing that acts on this number.
+    // The editor had a second copy of this, applied once by a button. One control now: it is part of
+    // the derive, so turning it back down puts the detail straight back — and the price of a derive
+    // when the walls carry hand edits is priced by the mark and the dialog, not by a note here.
     hint: "",
     readout: "position",
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
