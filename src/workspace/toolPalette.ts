@@ -32,8 +32,8 @@
  * giving it a button costs one row and removes a piece of folklore.
  */
 
-import { STEPS, TOOLS, type Drag, type ToolChoice } from "../steps";
-import { anchorDrawer, currentPanel, openPanel, togglePanel } from "./accordion";
+import { STEPS, TOOLS, toolGroups, type Drag, type ToolChoice } from "../steps";
+import { anchorDrawer, currentPanel, openToolDrawer, togglePanel } from "./accordion";
 import { stepIsMarked, wallsMark } from "./wallsMark";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
@@ -151,23 +151,28 @@ function usable(choice: ToolChoice): boolean {
   return mapChosen();
 }
 
+/**
+ * Whether a tool has controls of its own, and therefore a drawer of its own.
+ *
+ * Asked of the declarations rather than listed here, so a tool acquiring its first setting gets a
+ * drawer without anything else being told. `steps.ts` is where a group names the tool it belongs to.
+ */
+function toolHasControls(id: Tool): boolean {
+  return STEPS.some((step) => toolGroups(step).some((group) => group.tool === id));
+}
+
 export function setTool(next: Tool): void {
   apply(next);
   /*
-    A tool that has controls has to be able to show them.
+    A tool with controls takes the drawer; a tool without one leaves it alone.
 
-    The brushes and the gap finder each carry settings, and those are drawn into the drawer's pinned
-    head — so arming one while the drawer is shut would leave a GM holding a brush with no way to see
-    how wide it is. Opening the group the tool belongs to is the smallest thing that cannot happen.
-
-    **Only when nothing is open**, so it never takes a group away from a GM who is reading one: a tool
-    may turn a thing on and may never turn one off, which is the same rule the layers follow.
-
-    The tool's controls are drawn at the top of the drawer's body, so opening the group its band
-    names is exactly "show me what is in my hand" rather than a guess about where to look.
+    The brushes and the gap finder each carry settings, so picking one up shows exactly those and
+    nothing else — the group's own sliders are a different subject and have their own button. Move,
+    Draw, Erase and Pan have nothing to show, and taking the drawer away in order to show nothing
+    would be worse than not taking it: it is what lets a GM read the wall settings while drawing
+    walls.
   */
-  const band = TOOLS.find((choice) => choice.id === next)?.band;
-  if (band === "ink" && currentPanel() === null) openPanel("ink");
+  if (toolHasControls(next)) openToolDrawer(next);
   render();
   for (const listener of listeners) listener(next);
   invalidate();
@@ -252,10 +257,32 @@ export function render(): void {
         // `aria-pressed` carries the selected look and the meaning together, rather than a class
         // saying the same thing beside it.
         button.setAttribute("aria-pressed", String(choice.id === active));
+        // What this button opens, so the drawer can find the button it belongs to without
+        // guessing from the pressed state — which two buttons carry at once.
+        button.dataset.opens = `tool:${choice.id}`;
         button.disabled = !usable(choice);
         button.addEventListener("click", () => setTool(choice.id as Tool));
         strip.append(button);
       }
+    };
+
+    /*
+      A group is a **label** and a row of glyphs, and every button in the column is a glyph.
+
+      The group's name was the button that opened its settings, and it should not have been (user,
+      2026-09-14): *"The text label 'Ink' can just be a label, not a button."* A name is what the band
+      **is**; the settings behind it are one of the things in it, beside the tools. So the name went
+      back to being a caption and the settings got a glyph of their own — sliders, because that is
+      what is behind it.
+
+      What that buys beyond tidiness: every press in this column now opens a drawer belonging to the
+      thing pressed. There is no press that means "show me several things at once".
+    */
+    const caption = (text: string): void => {
+      const label = document.createElement("p");
+      label.className = "tool-band";
+      label.textContent = text;
+      strip.append(label);
     };
 
     const rule = (): void => {
@@ -264,31 +291,35 @@ export function render(): void {
       strip.append(line);
     };
 
-    // Look first: the resting state, and the one group with no controls of its own to read.
-    const look = document.createElement("p");
-    look.className = "tool-band";
-    look.textContent = BAND_LABELS.navigate;
-    strip.append(look);
+    caption(BAND_LABELS.navigate);
     addTools("navigate");
 
     for (const step of STEPS) {
       rule();
+      caption(step.title);
 
-      const opener = document.createElement("button");
-      opener.type = "button";
-      opener.className = "tool-band panel";
-      opener.textContent = step.title;
-      opener.setAttribute("aria-pressed", String(currentPanel() === step.id));
       /*
-        The same gate the drawer applies, said here because this is where the press lands. A group
-        offered over a map that does not exist is a control that lies.
+        The group's own settings.
+
+        Gated exactly as its tools are, and for the same reason: a group offered over a map that does
+        not exist is a control that lies. Map is the one that is never gated, because choosing a map
+        is how the gate opens.
       */
       const shut = step.id !== "map" && !mapChosen();
+      const opener = document.createElement("button");
+      opener.type = "button";
+      opener.className = "tool params";
+      const glyph = toolIcon(step.id === "ink" || step.id === "walls" ? "params" : step.id);
+      if (glyph) opener.append(glyph);
+      const name = step.id === "map" ? "Choose the map" : `${step.title} settings`;
+      opener.title = shut ? "Choose a map first" : name;
+      opener.setAttribute("aria-label", name);
+      opener.setAttribute("aria-pressed", String(currentPanel() === step.id));
+      opener.dataset.opens = `params:${step.id}`;
       opener.disabled = shut;
-      if (shut) opener.title = "Choose a map first";
       /*
-        The mark moves here with the header it used to ride on. Its whole job is to be seen *before*
-        anything is opened, and the strip is now the only thing always on screen that names a group.
+        The mark rides here, on the settings that would do the destroying, rather than on the group's
+        name — a caption cannot be pressed, and what the mark is warning about is a press.
       */
       if (stepIsMarked(step.id)) {
         opener.append(wallsMark());
@@ -297,7 +328,7 @@ export function render(): void {
       }
       opener.addEventListener("click", () => {
         togglePanel(step.id);
-        // The user's rule: reading a group puts the verb down. See this module's own notes.
+        // The user's rule: reading a group's settings puts the verb down. See this module's notes.
         setTool("pan");
       });
       strip.append(opener);

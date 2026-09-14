@@ -51,6 +51,21 @@ const ICONS: Readonly<Record<string, string>> = {
   draw: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" />',
   // A curved arrow turning back on itself. The pair is mirrored rather than rotated, so undo and
   // redo read as opposites at a glance rather than as the same shape at two angles.
+  /*
+    A group's own settings, and the one glyph here that opens something rather than doing
+    something.
+
+    Sliders, because that is what is behind it and because it is the one picture nobody has to be
+    taught. It is drawn for **Ink** and **Walls**, whose groups are a column of them.
+  */
+  params:
+    '<path d="M4 7h10M18 7h2" /><path d="M4 12h3M11 12h9" /><path d="M4 17h8M16 17h4" /><circle cx="16" cy="7" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="14" cy="17" r="2" />',
+  // Which image is being traced: a picture with a horizon in it, rather than sliders, because
+  // what is behind it is a list of images and not a column of numbers.
+  map: '<rect x="3.2" y="5" width="17.6" height="14" rx="2" /><path d="M3.2 15.5 8 11l4 3.5 3-2.5 5.8 4.5" /><circle cx="8.4" cy="9" r="1.4" />',
+  // What is drawn, and how it looks. An eye: the one group that changes nothing about the
+  // document and only what you can see of it.
+  view: '<path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12z" /><circle cx="12" cy="12" r="3" />',
   undo: '<path d="M4.5 9.5h9a5.5 5.5 0 0 1 0 11H8" /><path d="M8.2 5.2 3.9 9.5l4.3 4.3" />',
   redo: '<path d="M19.5 9.5h-9a5.5 5.5 0 0 0 0 11H16" /><path d="M15.8 5.2l4.3 4.3-4.3 4.3" />',
   // The same wall, struck out.

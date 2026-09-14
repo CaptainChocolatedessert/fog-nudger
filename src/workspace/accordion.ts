@@ -45,6 +45,7 @@ import {
   resetStep,
   STEPS,
   stepParameters,
+  TOOLS,
   ungroupedControls,
   workspaceSteps,
   type Step,
@@ -79,7 +80,37 @@ import { stepIsMarked, wallsNotice } from "./wallsMark";
  * **The cost, stated:** two groups can no longer be read side by side. The live counts moved to the
  * bar to cover the main case, and comparing two sets of numbers at once is gone.
  */
-let openStep: StepId | null = workspaceSteps()[0]?.id ?? null;
+/**
+ * What the drawer is showing: a group's settings, or one tool's own controls.
+ *
+ * **Two kinds, never both** (user, 2026-09-14): *"We don't need to see the general ink parameters
+ * with them; it's a drawer just for that tool."* Holding a brush and reading the threshold that
+ * decided what the ink is are different moments, and a drawer serving both served neither.
+ */
+type Drawer =
+  | { readonly kind: "params"; readonly step: StepId }
+  | { readonly kind: "tool"; readonly tool: string };
+
+let drawer: Drawer | null = { kind: "params", step: workspaceSteps()[0]?.id ?? "map" };
+
+/** Which tool's controls the drawer is showing, if it is showing a tool's at all. */
+export function currentToolDrawer(): string | null {
+  return drawer?.kind === "tool" ? drawer.tool : null;
+}
+
+/**
+ * Show one tool's own controls, or close the drawer if they are already showing.
+ *
+ * **Only tools that have controls call this.** A verb with nothing to show — Move, Draw, Erase,
+ * Pan — leaves the drawer exactly as it found it, which is what lets a GM read the wall settings
+ * while drawing walls. Taking the drawer away in order to say nothing would be worse than not
+ * taking it.
+ */
+export function openToolDrawer(tool: string): void {
+  drawer = currentToolDrawer() === tool ? null : { kind: "tool", tool };
+  touched = true;
+  renderPanel();
+}
 
 /**
  * Put the drawer level with the button that opened it.
@@ -122,7 +153,22 @@ let pendingAnchor = 0;
 function place(): void {
   const panel = document.getElementById("panel");
   if (!panel) return;
-  const opener = document.querySelector('#tools button.tool-band[aria-pressed="true"]');
+  /*
+    The button is found by **what it opens**, not by what looks pressed.
+
+    Two buttons carry the pressed state at once — the armed verb and the open group — which is the
+    whole point of two selection groups, and it makes "the pressed one" meaningless here. Each button
+    stamps a `data-opens` naming its drawer instead, so this asks for the one that opened *this*.
+
+    Both wrong versions of this shipped for a minute and neither threw: first the selector named a
+    class that had stopped existing, then it matched the armed verb instead of the open group. Both
+    times the drawer quietly fell back to the top of the window. **A selector is a dependency on
+    markup that nothing typechecks**, which is why this one is now derived from the same value that
+    decides what is drawn.
+  */
+  if (drawer === null) return;
+  const opens = drawer.kind === "params" ? `params:${drawer.step}` : `tool:${drawer.tool}`;
+  const opener = document.querySelector(`#tools button[data-opens="${opens}"]`);
   if (!(opener instanceof HTMLElement)) return;
 
   const margin = 10;
@@ -142,9 +188,9 @@ function place(): void {
 */
 window.addEventListener("resize", place);
 
-/** Which group the drawer is showing. */
+/** Which group's settings the drawer is showing, if it is showing settings at all. */
 export function currentPanel(): StepId | null {
-  return openStep;
+  return drawer?.kind === "params" ? drawer.step : null;
 }
 
 /**
@@ -156,14 +202,14 @@ export function currentPanel(): StepId | null {
  * canvas clear.
  */
 export function openPanel(id: StepId | null): void {
-  openStep = id;
+  drawer = id === null ? null : { kind: "params", step: id };
   touched = true;
   renderPanel();
 }
 
-/** Open a group, or close it if it is the one already showing. */
+/** Open a group's settings, or close the drawer if they are the ones already showing. */
 export function togglePanel(id: StepId): void {
-  openPanel(openStep === id ? null : id);
+  openPanel(currentPanel() === id ? null : id);
 }
 
 /**
@@ -257,8 +303,8 @@ export function registerHeadContent(render: Render): void {
  * can mean.
  */
 export function advanceTo(id: StepId): void {
-  if (touched || openStep === id) return;
-  openStep = id;
+  if (touched || currentPanel() === id) return;
+  drawer = { kind: "params", step: id };
   renderPanel();
 }
 
@@ -411,11 +457,27 @@ function panelSteps(): readonly Step[] {
   return STEPS;
 }
 
+/** The group a tool belongs to, which is the group whose layers it wants drawn. */
+function bandOf(tool: string): StepId | null {
+  const band = TOOLS.find((choice) => choice.id === tool)?.band;
+  return band === undefined || band === "navigate" ? null : (band as StepId);
+}
+
 function applyOpenStep(): void {
-  const step = panelSteps().find((candidate) => candidate.id === openStep) ?? null;
+  /*
+    A tool's drawer proposes **its group's** layers rather than none.
+
+    What a brush acts on is the same picture the group describes, so taking the layers away the
+    moment the GM picked the brush up would blank the thing they are about to paint on. The tool also
+    asks for its own layer in `apply`, and the two compose: the group proposes, the tool adds, and
+    the GM's switches subtract.
+  */
+  const owner =
+    drawer === null ? null : drawer.kind === "params" ? drawer.step : bandOf(drawer.tool);
+  const step = panelSteps().find((candidate) => candidate.id === owner) ?? null;
   // Proposed rather than set: the GM's own toggles subtract from this, and a tool may add to it.
   proposeLayers([...(step?.layers ?? [])]);
-  for (const listener of openListeners) listener.changed(openStep === listener.id);
+  for (const listener of openListeners) listener.changed(currentPanel() === listener.id);
   for (const listener of stepListeners) listener(step?.id ?? null);
   invalidate();
 }
@@ -457,28 +519,42 @@ export function renderPanel(): void {
   */
   const title = document.getElementById("mode-name");
   const container = document.getElementById("steps");
-  const step = panelSteps().find((candidate) => candidate.id === openStep) ?? null;
+  const hint = document.getElementById("tool-hint");
+  const toolRows = document.getElementById("tool-controls");
 
   /*
     A locked group cannot be the open one.
 
     Checked here rather than at the press, because the lock can arrive *after* it was opened:
-    nominating a different map drops the surface back to having no picture. Leaving the GM inside a
-    group that has just become unreachable would show its layers over nothing.
+    nominating a different map drops the surface back to having no picture.
   */
-  if (step && locked(step)) {
-    openStep = "map";
+  const opened = currentPanel();
+  if (opened) {
+    const step = panelSteps().find((candidate) => candidate.id === opened);
+    if (step && locked(step)) drawer = { kind: "params", step: "map" };
   }
 
-  const showing = panelSteps().find((candidate) => candidate.id === openStep) ?? null;
-  if (title) title.textContent = showing?.title ?? "";
+  const step = panelSteps().find((candidate) => candidate.id === currentPanel()) ?? null;
+  const tool = TOOLS.find((choice) => choice.id === currentToolDrawer()) ?? null;
+
+  if (title) title.textContent = step?.title ?? tool?.label ?? "";
+
+  /*
+    One of the two, never both.
+
+    The drawer held a tool's controls *and* the open group's settings, which was the in-between state
+    a room reported. What is in your hand and what decided the ink underneath it are different
+    subjects, and showing them together meant neither got the drawer to itself.
+  */
   if (container) {
     container.replaceChildren();
-    if (showing) container.append(stepBody(showing));
+    if (step) container.append(stepBody(step));
+    container.hidden = step === null;
   }
-  // Nothing open is a coherent state and the whole drawer goes with it, so the map is plainly
-  // visible. The strip stays: it is how the drawer comes back.
-  document.getElementById("panel")?.classList.toggle("shut", showing === null);
+  if (hint) hint.hidden = tool === null;
+  if (toolRows) toolRows.hidden = tool === null;
+
+  document.getElementById("panel")?.classList.toggle("shut", drawer === null);
   // After the body exists, so a drawer that has just grown or shrunk is clamped against what
   // it actually holds rather than against what it held a moment ago.
   anchorDrawer();
