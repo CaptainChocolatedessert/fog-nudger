@@ -1,41 +1,45 @@
 /**
- * The steps as an exclusive accordion, and the persistent View group under them.
+ * The drawer: the controls of whichever thing in the strip was last pressed.
  *
- * ## Why an accordion rather than a row of tabs — user, 2026-08-29
+ * ## What it is
  *
- * The design record said tabs, on the argument that collapsing sections **imply two can be open at
- * once**, which would be a lie: you cannot paint suppression and place a door with the same gesture.
- * That objection is to a *non-exclusive* accordion. Enforce exclusivity and it evaporates, and two
- * advantages arrive with it:
+ * One slot beside the tool strip, showing either a **group's settings** or **one tool's own
+ * controls**, and level with the button that opened it. Pressing that button again closes it, which
+ * leaves the map plain — on a surface whose whole job is looking at a map, that is the state it most
+ * needs.
  *
- * - **The ordering stays legible.** Every step's header is on screen in sequence, so where a step
- *   sits in the cascade is a shape rather than something to remember. A tab strip flattens the order
- *   into a row, and six tabs in a 22rem column would wrap or shrink to abbreviations.
- * - **A tall narrow column is what vertical stacking is good at.**
+ * ## Why it is not the accordion it replaced — 2026-09-14
  *
- * The property the tab strip was chosen to guarantee is kept exactly: **at most** one open step, one
- * set of layers on the canvas, one meaning for a drag.
+ * This file was a rail of expanded groups, and before that an *exclusive* accordion. Both shapes are
+ * gone and the reasoning is worth keeping, because the exclusivity here looks like the old one and
+ * is a different thing.
  *
- * ## Clicking the open header closes it — user, 2026-09-05
+ * The accordion was exclusive because **a step bound the drag**: two open steps would have been two
+ * meanings for one press. That made it a navigator and a mode selector at once, which want opposite
+ * behaviour — navigation cheap and non-exclusive, a mode exactly one thing — and every escape it
+ * grew (the nothing-open state, the no-tool state, Ctrl-to-pan) was patching the seam between them.
+ * The tool palette took the verb, so the rail stopped forcing anything shut.
  *
- * "At most" rather than "exactly", which is the one thing an accordion can do that a tab strip
- * cannot. A tab strip has no closed state at all, and neither did this: some step was always open,
- * so its layers were always on the map and its controls always over part of it. On a surface whose
- * whole job is looking at a map, being unable to see the map plainly is the state it most needed and
- * did not have.
+ * **The drawer is exclusive because there is one slot**, which costs nothing the rail was paying:
+ * every group is one press away in the strip rather than a scroll away in a column, and what a drag
+ * means is still chosen somewhere else entirely.
  *
- * Nothing open is a coherent mode rather than a gap: no layers, and a plain drag pans. Every listener
- * is told, which is also how a paint mode in progress is finished and written rather than abandoned.
+ * **Two costs, stated.** Two groups cannot be read side by side — the live counts moved to the bar
+ * to cover the main case. And a group's controls are behind a press rather than a scroll, which is
+ * cheaper to reach and easier to forget is there.
  *
- * **The cost, stated rather than argued away:** an accordion header is a weaker "you are here" than
- * a selected tab, and a mis-click collapses what you were working in. The open header is styled
- * distinctly to answer the first; nothing answers the second except that reopening is one click.
+ * ## Only what is showing is built
  *
- * ## Everything is rendered, and the closed steps are hidden
+ * The rail built every group and hid the closed ones, so a reading that landed could refresh every
+ * readout rather than only the visible ones. The drawer builds one, and the hint painters are reset
+ * and re-registered with it — which is why `resetHints` runs at the top of every render here.
  *
- * Rather than building only the open step. The rows of a closed step keep their hint painters, so a
- * reading that lands refreshes every readout rather than only the visible ones — and reopening a
- * step is a class change instead of a rebuild.
+ * ## What this file does not own
+ *
+ * **Which button is pressed**, which is the strip's; it is told to redraw through `onStepChange`.
+ * And **the verb**, which is `toolPalette.ts`'s. Both were this file's once, and the whole point of
+ * the redesign was that switching what you read and switching what your drag does stopped being the
+ * same gesture.
  */
 
 import {
@@ -65,20 +69,7 @@ import { stepIsMarked, wallsNotice } from "./wallsMark";
  * Not stored in the scene: it is where the GM is looking, not a setting, and a workspace that
  * reopened where you left it last session would be guessing.
  *
- * ## One at a time, and that is not the old exclusivity coming back
- *
- * The accordion was exclusive because a step **bound the drag**, so two open steps were two
- * meanings for one press. That reason went when the tool palette took the verb, and exclusivity
- * went with it — correctly, because forcing one group shut to open another made the commonest
- * move in the whole job expensive.
- *
- * What is exclusive now is a **drawer**, which is a different thing: the groups all live in the
- * strip and are one click apart from each other, so opening Ink over Walls costs the same as
- * scrolling to it did and takes no vertical room from anything. Switching what you are reading and
- * switching what your drag does are still separate gestures, which was the whole of the complaint.
- *
- * **The cost, stated:** two groups can no longer be read side by side. The live counts moved to the
- * bar to cover the main case, and comparing two sets of numbers at once is gone.
+ * One at a time; this module's header says why that is not the old exclusivity returning.
  */
 /**
  * What the drawer is showing: a group's settings, or one tool's own controls.
@@ -94,7 +85,7 @@ type Drawer =
 let drawer: Drawer | null = { kind: "params", step: workspaceSteps()[0]?.id ?? "map" };
 
 /** Which tool's controls the drawer is showing, if it is showing a tool's at all. */
-export function currentToolDrawer(): string | null {
+function currentToolDrawer(): string | null {
   return drawer?.kind === "tool" ? drawer.tool : null;
 }
 
@@ -222,13 +213,9 @@ export function openPanel(id: StepId | null): void {
  * picture that is not there — the ink of nothing, the walls of nothing — so they are disabled rather
  * than opened onto a blank canvas with sliders over it.
  *
- * Disabled rather than hidden, so the shape of what is coming is visible from the first frame. That
- * is the same choice the accordion makes everywhere: the order is the cascade, and a cascade with
- * its later half missing does not teach it.
- *
- * **Edit walls is behind the gate too, since the merge.** It used to be on a page with no gate at
- * all, and its own body still says when there is no *graph* — a different sentence from "choose a
- * map", and the one that belongs once there is a picture to edit against.
+ * Disabled rather than hidden, so the shape of what is coming is visible from the first frame — the
+ * order is the cascade, and a cascade with its later half missing does not teach it. The strip
+ * states the same gate on the same groups, because that is where the press lands.
  */
 function locked(step: Step): boolean {
   return step.id !== "map" && !mapChosen();

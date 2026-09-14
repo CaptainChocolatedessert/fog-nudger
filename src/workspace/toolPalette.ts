@@ -33,7 +33,7 @@
  */
 
 import { STEPS, TOOLS, toolGroups, type Drag, type ToolChoice } from "../steps";
-import { anchorDrawer, currentPanel, onStepChange, openPanel, openToolDrawer } from "./accordion";
+import { anchorDrawer, currentPanel, onStepChange, openPanel, openToolDrawer } from "./drawer";
 import { stepIsMarked, wallsMark } from "./wallsMark";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";

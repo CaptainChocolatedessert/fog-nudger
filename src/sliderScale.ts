@@ -139,8 +139,9 @@ export function fromSlider(position: number, limits: ScaleLimits, scale: Scale):
 /**
  * A track position as one to a hundred, for a control whose own unit means nothing to a GM.
  *
- * Three controls store a fraction of the map — the only unit the ink mode and the wall editor can
- * both speak — and no spelling of that is a number anybody can hold on to (user, 2026-09-07: *"an
+ * Two controls store a fraction of the map — the unit that outlives the raster, which is what a
+ * value re-applied on every derive has to do — and no spelling of that is a number anybody can
+ * hold on to (user, 2026-09-07: *"an
  * arbitrary large number and log scale don't make sense to the user"*). What the readout is for is
  * **remembering a setting so you can go back to it**, and where the handle sits serves that.
  *

@@ -32,7 +32,7 @@
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
 import { STEPS, groupControls, toolGroups } from "../steps";
 import { confirmAction } from "../confirmDialog";
-import { renderPanel } from "./accordion";
+import { renderPanel } from "./drawer";
 import { brushKind } from "./paintGesture";
 import {
   anyUnsavedPaint,
@@ -79,7 +79,7 @@ function inkStep(): (typeof STEPS)[number] | undefined {
  *
  * The head is where a tool's things already lived — the hint sits there because a tool's controls
  * "may be collapsed while the tool is still in hand", which is the same argument one step short of
- * its conclusion. `accordion.ts` states the rule this settles: the body is about the map, the head
+ * its conclusion. `drawer.ts` states the rule this settles: the body is about the map, the head
  * is about the hand.
  *
  * **Everything the tool owns comes**, the verb and the actions as well as the width, rather than

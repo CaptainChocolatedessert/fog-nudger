@@ -65,10 +65,10 @@ export type StepId = "map" | "ink" | "walls" | "view";
 /**
  * What the canvas can draw over the map.
  *
- * A step declares which of these it shows, and they legitimately differ: Ink paints the binary mask,
- * Walls paints coloured faces and the centrelines that bound them over it, and Edit walls paints the
- * same faces under the graph with no mask at all. Nothing is drawn "because it exists" — a layer is
- * on screen because the step the GM is in is about it.
+ * A group declares which of these it shows, and they legitimately differ: Ink paints the binary
+ * mask, Walls paints coloured faces and the centrelines that bound them over it, and Map paints
+ * nothing, because its question is which image rather than what was read from it. Nothing is drawn
+ * "because it exists" — a layer is on screen because the drawer open over it is about it.
  *
  * `regions` is the one drawn in **two** steps, which is what dissolving the Regions step means: the
  * partition is a consequence of a graph rather than a subject of its own, so it is drawn wherever a
@@ -253,12 +253,13 @@ export interface Step {
   /** Sub-headings, for controls that need their own explanation inside a step. */
   readonly groups?: readonly StepGroup[];
   /**
-   * A persistent group is never *entered*: it sits outside the accordion and is always available.
+   * Kept out of the numbered cascade, because it is not a stage of the work.
    *
-   * There is exactly one, and the argument for it is the one already made for putting the overlay's
-   * opacity beside the reading controls: navigating away from the thing you are tuning in order to
-   * recolour it is absurd, so view controls must never be somewhere you go. It carries a step's
-   * shape because the rendering is identical; what makes it different is that it has no mode.
+   * There is exactly one — View — and the flag meant more than this: a persistent group sat
+   * outside the accordion and was always on screen, which was the answer to a control describing a
+   * layer that two steps drew. **The drawer retired that half** (2026-09-14): every group is one
+   * press away in the strip, so nothing is special about being reachable. What is left is the
+   * ordering — Map, Ink and Walls are the cascade and View is not part of it.
    */
   readonly persistent?: true;
   /*
@@ -270,16 +271,16 @@ export interface Step {
 }
 
 /**
- * The steps, in the order the GM meets them.
+ * The groups, in the order the GM meets them.
  *
- * The order is the cascade made visible — which is the whole reason these are an **exclusive
- * accordion** rather than a row of tabs (user, 2026-08-29). Every header stays on screen in
- * sequence, so where a step sits in the chain is a shape rather than something to remember, and a
- * tall narrow column is what vertical stacking is good at. The recorded objection to collapsing
- * sections was that they *imply* two can be open at once, which would be a lie — you cannot paint
- * suppression and place a door with the same gesture. Enforcing exclusivity removes the implication
- * and keeps the property the tab strip was chosen to guarantee: one open step, one set of layers,
- * one meaning for a drag.
+ * **The order is the cascade made visible, and the tool strip is what makes it visible now** — one
+ * column, each group's name above the tools that act on it, so where a group sits in the chain is
+ * a shape rather than something to remember. That job belonged to an accordion of headers and then
+ * to a scrolling rail; the drawer took both, and the ordering survived every change because it was
+ * never really the accordion's doing. It is a column's.
+ *
+ * What the order *is*: read a map, decide what counts as ink on it, shape the walls that come out.
+ * View is last and outside it, because it changes nothing about the document.
  */
 export const STEPS: readonly Step[] = [
   {
@@ -435,8 +436,9 @@ export const STEPS: readonly Step[] = [
 
     Its question -- are these the rooms I would have drawn -- has not gone anywhere; what went is the
     idea that answering it is a place you travel to. The partition is drawn wherever a graph is
-    drawn, which is Walls and Edit walls, so a step whose whole content was that one layer had
-    nothing left the two steps either side of it were not already showing.
+    drawn, so a step whose whole content was that one layer had nothing left that the groups either
+    side of it were not already showing. (Edit walls went the same way on 2026-09-14, for the same
+    reason one step further on.)
 
     Where its three controls went, and why each landed where it did:
 
@@ -518,8 +520,9 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
 
     So it lives with the other derive-time control. Turning it up re-prunes on the next derive and
     turning it back down puts the walls back, because a derivation is not destroyed by being redone.
-    The **button** in Edit walls spends the same number destructively, which is what you need once
-    there are hand edits and re-deriving is no longer free.
+    There was a **button** in Edit walls spending the same number destructively, which is what you
+    needed while the stored graph had nothing to re-derive it from. One live slider now: changing
+    it regenerates the walls like any reading change, and the mark and the prompt price that.
   */
   spurPruneFraction: "walls",
   simplifyFraction: "walls",
@@ -594,12 +597,11 @@ export function resetStep(settings: Settings, id: StepId): Settings {
 }
 
 /**
- * The steps this mode puts in its accordion: its own, minus the persistent View group.
+ * The groups of the cascade: everything but View.
  *
- * Two filters rather than one, and they mean different things. `persistent` is about *how* a group
- * is rendered — outside the accordion, never entered. `modes` is about which surface it is on at
- * all. A step could in principle be persistent in one mode and absent from the other; nothing is
- * today, and the two are kept separate so that stays possible.
+ * **Not the same list the strip draws**, which is every group including View — `panelSteps` in
+ * `drawer.ts` is that one. What this answers is *where does the work start*, which is why the
+ * drawer opens on the first of these and why the map gate is stated against them.
  */
 export function workspaceSteps(): readonly Step[] {
   return STEPS.filter((step) => !step.persistent);

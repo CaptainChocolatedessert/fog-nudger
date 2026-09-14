@@ -4,7 +4,7 @@
  * ## Why the top is not a constant
  *
  * Spur pruning and edge simplification are both denominated in fractions of the map, because that is
- * the only unit the ink mode and the wall editor can both speak — the editor has no raster and no
+ * the unit that outlives the raster, which a value re-applied on every derive has to — a graph has no raster and no
  * ink width, so anything measured off the reading is unavailable to it.
  *
  * A fraction of the map is honest and it is a terrible thing to put a fixed ceiling on. Two maps of
@@ -29,7 +29,7 @@
  *
  * ## Measured once per opening, not once per derive
  *
- * The tops are forgotten when the accordion rebuilds — which is every header click, so in practice
+ * The tops are forgotten when the drawer rebuilds — which is every press in the strip, so in practice
  * when the step is opened — and taken from the first graph seen after that. A re-measurement on
  * every derive would reintroduce the chase from the other end: raising the tolerance flattens the
  * bends, which would lower the top, which would move the handle the GM had just let go of.
@@ -37,7 +37,7 @@
  * > *"that's fine for it to be relative each time you start the tool"* — user, 2026-09-06
  *
  * **A re-measured top moves the handle, never the value.** The stored setting is the absolute
- * tolerance, because the ink mode's settings are durable inputs a re-run has to reproduce — storing
+ * tolerance, because the reading's settings are durable inputs a re-run has to reproduce — storing
  * "40% of an observed range" would make the emitted fog depend on a measurement taken at the moment
  * a slider was released.
  *
@@ -108,7 +108,7 @@ export function onGraphScale(tell: () => void): void {
 export function graphScaleTop(name: SettingName): number | null {
   if (tops === null && latest !== null) tops = measure(latest);
   if (tops === null) return null;
-  // One simplification key since 2026-09-14; the editor's second copy is gone with its button.
+  // One simplification key since 2026-09-14; the second copy went with the button that applied it.
   const top =
     name === "spurPruneFraction" ? tops.spur : name === "simplifyFraction" ? tops.bend : 0;
   return top > 0 ? top : null;

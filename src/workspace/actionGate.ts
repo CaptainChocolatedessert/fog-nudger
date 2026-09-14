@@ -24,7 +24,7 @@
  *   buttons would be noise saying nothing the first did not.
  * - **A limit at zero** is per-action and nothing else says it, so each carries its own line — and
  *   that line is where the prune limit's slider gets named, since the slider lives in **Walls** and
- *   the button is in **Edit walls**. Naming it is what a second handle would otherwise have been
+ *   the button was in **Edit walls**, a group that no longer exists. Naming it is what a second handle would otherwise have been
  *   for, and a second handle is forbidden: two sliders on one setting, both reachable at once on a
  *   rail that no longer forces a section shut, disagree the moment either moves.
  */

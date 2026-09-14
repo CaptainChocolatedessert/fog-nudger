@@ -197,11 +197,11 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
  *
  * **The walls go too, and that is the user's answer to where discarding lives** (2026-09-05: *"the
  * panel has a way to clear objects that we own. the workspace doesn't need to provide that."*). The
- * wall editor therefore has no discard of its own — replacing the graph is what the ink mode's save
- * does, and removing it altogether is this.
+ * workspace therefore has no discard of its own — what it has is a prompt that replaces the graph
+ * when a setting would rebuild it, and removing the walls altogether is this.
  *
- * Without it the two halves would disagree: the fog would go and the next save from either workspace
- * would put the same walls straight back, which is a "remove" that does not remove.
+ * Without it the two halves would disagree: the fog would go and the next push would put the same
+ * walls straight back, which is a "remove" that does not remove.
  */
 async function removeEverythingOfOurs(): Promise<string> {
   const message = await removeOurs();

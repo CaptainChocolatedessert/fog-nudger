@@ -44,51 +44,31 @@ let saved: WallGraph | null = null;
 let base: WallGraph | null = null;
 const listeners: (() => void)[] = [];
 
-/**
- * How many hand edits the graph in hand carries since it was last derived.
- *
- * **The irreversibility of this project, as a number rather than as a place.** Re-deriving destroys
- * hand edits — that is real and not fixable — but it only *costs* anything when there are some. The
- * old surface priced it as a boundary between two modes and charged the ceremony whether or not
- * anything was at stake; this is the same fact stated so it can be checked.
- *
- * The two save paths already distinguish the cases exactly: a derive replaces the graph wholesale
- * and resets this, an edit adds to it. Nothing else needs to know.
- *
- * **In memory only, and the cost is stated.** A graph loaded from the scene starts at zero, because
- * nothing stored says whether it was edited — so within a session the count is exact, and across one
- * the guard is the save confirmation, which names what it would replace. Storing it would be a
- * second fact beside the graph that can disagree with it, and the format has no room for one without
- * a version bump.
- */
-let edits = 0;
+/*
+  `handEdits` and `derivedBase` were here, and both went in the review of 2026-09-14.
 
-/** How many hand edits the graph carries. Zero means re-deriving costs nothing. */
-export function handEdits(): number {
-  return edits;
-}
+  The **count** was how this file priced a re-derive: a number the surface showed, and the thing the
+  discard prompt asked. `wallsEdited` replaced every read of it — comparing the document against the
+  trace that made it answers the same question from two things that are both in the scene, where the
+  count lived in memory and so could not survive a session. Once the last reader went the count was a
+  second statement of a fact the graphs already carry, which is the arrangement this file's own
+  header warns about.
+
+  `derivedBase` was the accessor the delta drawing will want. It has no caller yet, and one line is
+  cheaper to write again than to keep explaining.
+*/
 
 /**
- * The graph as the trace last derived it, kept so the surface can say what the GM changed.
+ * Whether the graph in hand still is what the trace derived.
  *
- * `null` when there is nothing to compare against — no graph, a graph from a build that kept no
- * base, or one saved against another map. Every caller treats those alike, which is why they are one
- * value rather than three states.
- */
-export function derivedBase(): WallGraph | null {
-  return base;
-}
-
-/**
- * Whether the graph in hand still is what the trace derived. **The question the rail's mark asks.**
+ * **The one question this surface asks about hand editing**, and three things read it: the mark on
+ * the groups whose controls would rebuild the walls, the prompt that prices a rebuild, and the
+ * predicate deciding which graph is on screen. One answer for all three is the point — they
+ * disagreeing is a defect this project has already paid for.
  *
- * This is the count's replacement, and it is better in the one way that matters: both sides are in
- * the scene, so the answer survives closing the workspace. The count is in memory, so a GM returning
- * to a map they edited last week opened at zero and got no mark at all — the one case where the
- * signal was silent precisely when it was needed.
- *
- * It stays beside the count rather than replacing it outright, because `showingSaved` reads the
- * count to decide which graph is on screen and that is a separate question with its own timing.
+ * It is a comparison rather than a count, and both sides are in the scene, so it is still true when
+ * the GM comes back tomorrow. A count could not be: it lived in memory, so a map edited last week
+ * opened at zero and wore no mark at exactly the moment one was most needed.
  */
 export function wallsEdited(): boolean {
   return graphsDiffer(base, saved);
@@ -107,9 +87,8 @@ export function wallsEdited(): boolean {
   replaces it wholesale, so keeping the old one costs almost nothing and cannot disagree with what an
   inverse would have reconstructed.
 
-  What this file still owns is the **count**: `edits` is wall edits and nothing else, because what it
-  prices is a re-derive replacing the graph. A stroke does not enter it, which is why the restore
-  below decrements and a paint restore does not.
+  What this file owns is the graph and the base beside it. **Whether the GM has edited is derived
+  from those two rather than counted**, so there is no second number that can disagree with them.
 */
 
 /**
@@ -118,21 +97,20 @@ export function wallsEdited(): boolean {
  * Handed to `undoHistory` as the way back from a wall edit. Writes to the scene like any other edit,
  * because the graph is stored there — undo is a change to the document rather than a view of it.
  *
- * **The count comes down with it**, which is the whole point of counting rather than latching a flag:
- * undoing every edit returns it to zero, at which point re-deriving is free again and stops asking.
+ * **Undoing every edit puts the mark out by itself**, with nothing here to decrement: once the graph
+ * matches the base again `wallsEdited` simply says no. That is what the comparison buys over a
+ * counter — there is no running total to keep honest across undo and redo.
  */
-function restoreGraph(next: WallGraph, countDelta: number): Restore {
+function restoreGraph(next: WallGraph): Restore {
   return async () => {
     if (!mapId) return;
     const leaving = saved;
     await writeWallGraph(mapId, next);
     saved = next;
-    edits = Math.max(0, edits + countDelta);
     announce();
-    devLog("info", `stage: a wall edit was ${countDelta < 0 ? "undone" : "redone"} — ${edits} left`);
-    // The way back to where we just were, which is what redo takes — and which carries the opposite
-    // sign, so going forward and back again lands the count where it started rather than drifting.
-    return leaving ? restoreGraph(leaving, -countDelta) : undefined;
+    devLog("info", "stage: a wall edit was put back");
+    // The way back to where we just were, which is what redo takes.
+    return leaving ? restoreGraph(leaving) : undefined;
   };
 }
 
@@ -175,7 +153,6 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
   const { graph, base: storedBase, corrupt } = await readWallGraph(forMap);
   saved = graph;
   base = storedBase;
-  edits = 0;
   // A different map's history describes a different document. Fractions of *a* map say nothing about
   // which, so restoring one here would put one map's walls onto another.
   clearUndo();
@@ -202,7 +179,6 @@ export async function discardWalls(): Promise<void> {
   await clearWallGraph();
   saved = null;
   base = null;
-  edits = 0;
   clearUndo();
   announce();
   devLog("info", "stage: the stored walls were discarded so the reading can be derived again");
@@ -225,7 +201,6 @@ export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
   // new one is a pure function of the ink again. The history goes with it: those snapshots describe
   // a graph that is no longer on screen, and restoring one would put back walls derived from ink the
   // GM has since changed.
-  edits = 0;
   clearUndo();
   announce();
   devLog("info", `stage: saved — ${graph.nodes.length} nodes, ${graph.edges.length} segments`);
@@ -271,9 +246,8 @@ export async function saveEditedWalls(
     The store throws where the settings reader swallows, and the reason applies here too: a history
     entry for an edit the scene never took would offer to restore a state that was already current.
   */
-  if (before) pushUndo(label, restoreGraph(before, -1));
+  if (before) pushUndo(label, restoreGraph(before));
   saved = graph;
-  edits += 1;
   announce();
 }
 

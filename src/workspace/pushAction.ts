@@ -179,7 +179,7 @@ export async function pushOnClose(): Promise<void> {
  * there on release without waiting, so pushing a moment after letting go of one would otherwise emit
  * the value before it.
  */
-export async function pushCurrent(): Promise<boolean> {
+async function pushCurrent(): Promise<boolean> {
   await persistSettings();
   // Same gap the close path closes, and for the same reason: the scene must be written from the
   // document, and between a derive and a push the document is deliberately behind what is drawn.

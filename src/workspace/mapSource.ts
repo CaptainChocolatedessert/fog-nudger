@@ -27,7 +27,7 @@
  */
 
 import { devLog } from "../devlog";
-import { advanceTo, renderPanel } from "./accordion";
+import { advanceTo, renderPanel } from "./drawer";
 import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
 import { loadStage } from "./stage";
@@ -38,7 +38,7 @@ import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
  *
  * `opening` moves the GM to the ink step when a map is already chosen — the common case, where they
  * came here to look at ink and the map question is already answered. It does nothing once the GM has
- * touched the accordion themselves, and nothing at all when there is no map, which leaves them in
+ * touched the drawer themselves, and nothing at all when there is no map, which leaves them in
  * the one step that can do something about that.
  */
 /**

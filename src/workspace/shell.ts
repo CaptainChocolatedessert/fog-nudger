@@ -906,17 +906,14 @@ async function close(): Promise<void> {
   });
 }
 
-/**
- * Leave, from something other than the close button.
- *
- * The hand-off between the two modes is the one caller: finishing in the ink mode opens the editor
- * and then closes this page. It goes through the same `close` as Escape does, so the close action
- * and the exit hatch behave identically however leaving was asked for — the alternative would be a
- * second way out that the fourth exit does not cover.
- */
-export async function closeWorkspace(): Promise<void> {
-  await close();
-}
+/*
+  `closeWorkspace` was here and is gone (review, 2026-09-14).
+
+  Its own doc named its only caller: *"the hand-off between the two modes — finishing in the ink mode
+  opens the editor and then closes this page."* The modes merged, the hand-off went with them, and
+  the export outlived both by describing a route nothing takes. Escape and the close button reach
+  `close` directly.
+*/
 
 /**
  * The escape hatch, armed only while a close is waiting on a write.

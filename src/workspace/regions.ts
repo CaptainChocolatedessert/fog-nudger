@@ -4,12 +4,10 @@
  * ## Why this is not the reading cycle again
  *
  * It has the same shape — ask, blank, publish, drop a superseded answer — but a different rule about
- * *when*. A reading is what every stage-one step is looking at, so it runs whenever a stage-one
- * control moves. The partition is looked at in two steps — Walls, with the centrelines over it, and
- * Edit walls, with the wall graph over it — and deriving it costs the better part of a second on
- * top of a cached mask. So it runs
- * **lazily**: on entering one of those steps, and on a change while one is open. Anywhere else, a
- * change only marks it stale.
+ * *when*. A reading is what the ink controls are looking at, so it runs whenever one of them moves.
+ * The partition costs the better part of a second on top of a cached mask, so it runs **lazily**:
+ * when the group that draws it is open, and on a change while it is. Anywhere else a change only
+ * marks it stale.
  *
  * That is the cascade the three stages already declare, spent rather than merely described: reading
  * destroys deriving, so a new mask invalidates this — but invalidating is free and recomputing is
@@ -260,12 +258,13 @@ export function invalidateRegions(): void {
 }
 
 /**
- * Which of the steps that draw the partition are open.
+ * Which of the groups that draw the partition are open.
  *
- * A set rather than a flag because **two** steps draw it now — Walls and Edit walls, which is what
- * dissolving the Regions step means: the partition is drawn wherever a graph is drawn. The accordion is exclusive so only one can be open, but every listener is told on
- * every change, one true and the rest false, and the order they are told in is not ours to depend
- * on. A flag would be set by one listener and cleared by the other.
+ * **A set rather than a flag, and it is down to one member.** Two groups drew the partition — Walls
+ * and Edit walls — until Edit walls was deleted, and the set is kept because the reason for it was
+ * never the count: every listener is told on every change, one true and the rest false, and the
+ * order they are told in is not ours to depend on. A flag would be set by one listener and cleared
+ * by the other.
  */
 const lookers = new Set<StepId>();
 
@@ -387,8 +386,8 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
  * the workspace — so the caller never has to know which of the two it is asking for.
  */
 export function repruneRegions(): void {
-  // Nothing to re-prune against: what is on screen is the stored document, and the limit reaches it
-  // through the button in Edit walls rather than by re-deriving.
+  // Nothing to re-prune against: what is on screen is the GM's own graph, which a limit does not
+  // reach — changing one regenerates the walls, and that is priced by the mark and the prompt.
   //
   // Recorded as applied all the same, because nothing on screen is waiting for it — the picture is
   // the stored document and will never show this value. Left unrecorded, the slider's ghost marked a

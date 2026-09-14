@@ -45,7 +45,7 @@ import {
   registerHeadContent,
   registerStepContent,
   renderPanel,
-} from "./workspace/accordion";
+} from "./workspace/drawer";
 import { applyPalette } from "./workspace/palette";
 import { registerLayerRow } from "./workspace/layerRow";
 import { onToolChange, registerToolPalette } from "./workspace/toolPalette";

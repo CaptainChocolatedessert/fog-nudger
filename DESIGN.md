@@ -70,20 +70,28 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **sliver** | a cycle enclosing no lattice point — sub-pixel, an artefact of junction clusters. |
 | **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink* — a place the drawing failed to close a wall. What merges two rooms. **Not a doorway**, which is a real opening and the tool's known false positive. |
 
-### The stages, and the two words for them
+### The stages — and the surface words for them are **retired**
 
-**"Stage one" and "the ink mode" are the same thing**, and so are "stage two" and "the wall editor".
-The first pair is the *architecture* word — which side of the handover you are on — and the second is the *surface*
-word, which is what a GM sees. Both are used; they are not two concepts.
+**Stage one and stage two are the two halves of the pipeline**, either side of the handover where
+the pixels stop being needed. They are architecture words and they are still exact.
 
-**Do not confuse either with the three cascade stages** (`read` / `derive` / `adjust`), which are
-about what a settings change **destroys**. Those are a property of a parameter, not a place.
+> **"The ink mode" and "the wall editor" are gone (2026-09-14) and should not be used.** They were
+> the *surface* words for the same two halves, from when each was its own page. There is one
+> surface now, so naming a stage as a place a GM goes is describing something that does not exist —
+> and it misleads in a specific way, because a GM moves between the two halves freely and
+> continuously rather than travelling to either.
 
-| | stage one — the ink mode | stage two — the wall editor |
+**Do not confuse the stages with the three cascade stages** (`read` / `derive` / `adjust`), which
+are about what a settings change **destroys**. Those are a property of a parameter, not a place.
+
+| | stage one | stage two |
 |---|---|---|
 | works on | the map image | the wall graph |
-| re-derives? | yes, on every change | **never** |
-| what a save does | writes the document, then pushes | pushes |
+| re-derives? | yes, whenever a setting that feeds it moves | **never** |
+| where the GM meets it | the Ink group and its brushes | the wall tools, and the Walls group |
+
+**There is no save between them.** The first hand edit adopts the derivation as the document,
+because that is the moment a document is needed; §6 has the whole of it.
 
 ### The checks
 
@@ -1492,9 +1500,12 @@ zero. That is the gap the warning stands in for.
 
 ## 7. The surfaces
 
-> **This section describes the surface before the redesign, and parts of it are already superseded —
-> see
-> [§7a](#7a-the-surface-redesign--built-and-judged). Read that before changing anything here.**
+> **This section is a historical record.** It describes the surface as two modes with an exclusive
+> accordion, and **none of that exists**: the modes merged, the accordion became a rail, the rail
+> became a drawer off the tool strip, and the save button between the stages was deleted. It is
+> kept because the reasoning in it is what each later shape had to answer — read
+> [§7a](#7a-the-surface-redesign--built-and-judged) for what is true, and treat every "is" below as
+> a "was".
 
 **One page, two modes**, chosen by `?mode=` on the URL and by which of two panel buttons opened it.
 The shell, the accordion, the map loading, the transform and every layer are shared; `steps.ts` gives
@@ -2916,12 +2927,13 @@ read it before touching any parameter. Then `controls.ts` (every control a GM ca
 only. There is no `mode.ts` — the two workspaces merged, and nothing branches on which one you are in.
 
 - **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`,
-  `whileWorking`) · `accordion.ts` (the rail, non-exclusive) · `reading.ts` (the mask request cycle,
+  `whileWorking`) · `drawer.ts` (**the drawer**: which group's settings or which tool's controls are
+  showing, and anchoring it level with the button that opened it) · `reading.ts` (the mask request cycle,
   subscribed to by the layers) · `regions.ts` (the lazy derive cycle, and `showingSaved` — the one
   predicate deciding which graph is on screen) · `stage.ts` (the stored graph, the hand-edit count and
   undo)
-- **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `saveAction.ts` ·
-  `workspaceControl.ts`
+- **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` (the bar's commit, the close
+  hook, and `commitDerivation` — **where the save button went**) · `workspaceControl.ts`
 - **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `settingsState.ts`
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
   pickers) · `graphScale.ts` ·
@@ -2930,17 +2942,18 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `toolIcons.ts` (seven inline glyphs) · `wallEdit.ts` and `paintTool.ts` (the pointer events) ·
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
-  untouched**) · `paintControls.ts` (the tool in hand, drawn into the **pinned head**, plus the step's own Save) · `paintState.ts` · `gapSearch.ts` · `wallTools.ts` (only the
-  sentence shown when no graph is saved)
+  untouched**) · `paintControls.ts` (the tool in hand, drawn into **its own drawer**) ·
+  `paintState.ts` · `gapSearch.ts`
 - **Acting on the document** — `undoAction.ts` (the undo/redo pair in the rail head, and their
   keystrokes) · `undoHistory.ts` (**the one
   stack, for the graph and the painted ink both**: entries are labelled closures, so it never learns
   what it is restoring — pure and tested) · `editHistory.ts` (the bounded stack under it, pure and
-  tested) · `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts` · `actionGate.ts` (**why a wall
-  action cannot act, decided before the press**: no saved graph, or its own limit at zero — pure and
-  tested, and the one place the prune slider's step is named from the button that spends it)
-- **What is drawn** — `layerToggles.ts` (pure and tested: groups propose, the GM disposes, a tool may
-  only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
+  tested) · `frameAction.ts` (the one wall action left; straighten and prune became live sliders) ·
+  `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
+  own limit at zero — pure and tested)
+- **What is drawn** — `wallsMark.ts` (the mark on the groups whose controls would rebuild edited
+  walls, and the line inside them saying what it means) · `layerToggles.ts` (pure and tested: groups
+  propose, the GM disposes, a tool may only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
   the values and is pure)
 - **Layers** — `layers/ink.ts` · `layers/paint.ts` (repainting only the rectangle a stroke changed) ·
   `layers/gaps.ts` (proposals, ringed) · `layers/regions.ts` (the partition as vector paths) ·

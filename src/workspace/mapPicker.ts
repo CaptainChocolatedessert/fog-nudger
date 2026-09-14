@@ -47,7 +47,7 @@ let live = false;
 /**
  * The last answer the scene gave, kept so a rebuild can draw it immediately.
  *
- * The accordion rebuilds **every** step's body on every `renderPanel()` — which is every header
+ * The drawer rebuilds the open group's body on every `renderPanel()` — which is every press
  * click and every Defaults press — and that is deliberate and earns its keep elsewhere. The cost
  * lands here alone, because this is the one step whose body is a query rather than a set of numbers:
  * without this the list reverted to "Waiting for the scene…" and fired a fresh `listMapImages()`

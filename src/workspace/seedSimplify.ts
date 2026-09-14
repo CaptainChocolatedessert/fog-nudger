@@ -41,7 +41,7 @@ import {
   seededSimplifyFraction,
   writeParameter,
 } from "../settings";
-import { renderPanel } from "./accordion";
+import { renderPanel } from "./drawer";
 import { onReading } from "./reading";
 import { invalidateRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
