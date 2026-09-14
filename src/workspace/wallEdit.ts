@@ -56,25 +56,15 @@ import {
   type DrawPoint,
   type Grab,
 } from "./dragGesture";
-import { previewGraph, showingSaved } from "./regions";
+import { editableGraph } from "./regions";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
-import { wallGraph, saveEditedWalls } from "./stage";
+import { saveEditedWalls } from "./stage";
 
-/**
- * The graph the GM is looking at, which is the one their tools have to act on.
- *
- * **This is what removes the save step.** The tools read the stored document before, so a map that
- * had never been saved offered three wall tools that did nothing and a sentence telling the GM to go
- * and save first. There is nothing to save first now: what is drawn is what a press acts on, and the
- * first press that changes something is what makes a document out of it.
- *
- * `showingSaved` is the same predicate the partition and the wall layer read, which is deliberate —
- * the tools acting on a graph other than the drawn one is the defect this project has already paid
- * for once, when the ink mode previewed one face derivation and emitted another.
- */
-function editableGraph(): WallGraph | null {
-  return showingSaved() ? wallGraph() : previewGraph();
-}
+/*
+  `editableGraph` lives in `regions.ts`. The tool strip needs the same answer to decide whether to
+  offer these tools at all, and two copies of "which graph is on screen" is exactly the pair this
+  project has already been bitten by.
+*/
 
 /** Which verb a press means. */
 export type WallTool = "move" | "draw" | "erase";

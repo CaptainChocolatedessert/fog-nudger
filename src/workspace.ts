@@ -69,7 +69,6 @@ import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./w
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { onSettingCommitted, refreshHints, setControlsLive } from "./workspace/settingRows";
 import { registerWallEdit } from "./workspace/wallEdit";
-import { renderWallTools } from "./workspace/wallTools";
 import { onStageChange } from "./workspace/stage";
 import { loadSettings, onApplied, onSettingsWriteFailure } from "./workspace/settingsState";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
@@ -191,7 +190,6 @@ registerPaintTool();
   costs nothing there.
 */
 onStepOpen("walls", (open) => watchRegions("walls", open));
-onStepOpen("edit", (open) => watchRegions("edit", open));
 /*
   The paint mode follows the **tool**, not a heading, and `toolPalette` is where that happens.
 
@@ -292,7 +290,6 @@ registerStepContent("view", renderSwatches, "bottom");
   not having pressed it.
 */
 // What you do with the walls, above the button that writes them.
-registerStepContent("edit", renderWallTools);
 /*
   Two actions at the foot of the editor, in the order they are reached.
 
@@ -301,31 +298,15 @@ registerStepContent("edit", renderWallTools);
   exists at all. One render rather than a third slot: what wanted separate slots was a *picker* at
   the top against an *action* at the bottom, and these are two actions.
 */
-registerStepContent(
-  "edit",
-  (body) => {
-    /*
-      Framing, then push. **Straighten and Prune were here and are gone** (2026-09-14): each was a
-      button plus a confirmation applying a number the GM had already tuned on a slider two sections
-      up, through a *second* key in straighten's case. One control each now, live under Walls, and
-      what used to make the editor's copy necessary — that the stored graph had nothing to re-derive
-      it from — is priced by the mark and the dialog instead.
-
-      What is left here adds rather than removes, which is why it never needed the pair's ceremony:
-      it is the last thing worth doing to the document before putting it on the map, since what it
-      changes is whether the outside is somewhere the party can go.
-    */
-    renderFrameAction(body);
-  },
-  "bottom",
-);
-
 /*
-  The commit lives in the bar now, so it is bound once rather than rendered into a section.
+  **Make the outside a room**, at the foot of Walls (user, 2026-09-14).
 
-  It was at the foot of Edit walls, which meant the one action the whole surface exists for was
-  reachable only while that group happened to be open.
+  It was the last thing in Edit walls, which is gone. It belongs with the two sliders that shape
+  the graph rather than in a group of its own: all three are things you do to the walls, and this
+  is the one that *adds*, which is why it is a deliberate press where they are live.
 */
+registerStepContent("walls", renderFrameAction, "bottom");
+
 renderPushAction();
 
 /*

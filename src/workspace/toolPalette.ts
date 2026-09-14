@@ -39,7 +39,8 @@ import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { requireLayer } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
-import { onStageChange, wallGraph } from "./stage";
+import { editableGraph } from "./regions";
+import { onStageChange } from "./stage";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
 
@@ -141,7 +142,10 @@ function apply(next: Tool): void {
  */
 function usable(choice: ToolChoice): boolean {
   if (choice.band === "navigate") return true;
-  if (choice.band === "walls") return wallGraph() !== null;
+  // Whatever is **drawn**, not whatever is stored. A map that has been read but never edited has
+  // walls on screen and every one of them is editable; asking for a stored graph greyed all three
+  // tools out in exactly that state.
+  if (choice.band === "walls") return editableGraph() !== null;
   return mapChosen();
 }
 

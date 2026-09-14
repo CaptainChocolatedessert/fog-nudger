@@ -140,6 +140,23 @@ export function previewGraph(): WallGraph | null {
 }
 
 /**
+ * The graph the GM is looking at, which is the one the wall tools act on.
+ *
+ * **Here rather than in `wallEdit.ts`, because two callers need it and they must agree.** The
+ * tools edit what is drawn; the tool strip decides whether to offer them at all. Asking that
+ * second question of the *stored* graph was a real defect for a morning: on a map that had been
+ * read but never edited the walls were on screen and editable, and all three wall tools were
+ * greyed out.
+ *
+ * It reads `showingSaved` for the same reason everything else does — the tools acting on a graph
+ * other than the drawn one is the defect this project has already paid for once, when the ink
+ * mode previewed one face derivation and emitted another.
+ */
+export function editableGraph(): WallGraph | null {
+  return showingSaved() ? wallGraph() : preview;
+}
+
+/**
  * Whether what is on screen is the **saved** graph rather than a fresh derivation.
  *
  * The one predicate, read by the partition here and by the layer that draws the walls, because the

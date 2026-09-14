@@ -52,7 +52,15 @@ import {
  * partition is no longer somewhere a GM goes. `view` is not one of the six: it is the persistent
  * group, which is a step's shape without a mode.
  */
-export type StepId = "map" | "ink" | "walls" | "edit" | "view";
+/*
+  `edit` was here and is gone (user, 2026-09-14): *"Edit walls can disappear."*
+
+  It emptied out rather than being cut. Its tool picker went to the strip, its straighten and prune
+  buttons went when each became one live slider, and its push went to the bar — leaving a group
+  whose entire content was one button that adds four walls. What a step owns is a set of layers and
+  a meaning for a drag, and by the end it owned neither that Walls did not.
+*/
+export type StepId = "map" | "ink" | "walls" | "view";
 
 /**
  * What the canvas can draw over the map.
@@ -421,35 +429,6 @@ export const STEPS: readonly Step[] = [
       announces itself, and finding it means running the Gaps tool one step up.
     */
     layers: ["ink", "paint", "regions", "graph"],
-  },
-  {
-    id: "edit",
-    title: "Edit walls",
-    blurb: "",
-    /*
-      The partition under the graph, which is the one pairing that answers this step's question.
-
-      Same pairing as the Walls step in the other mode, and for the same reason: what a GM is
-      deciding here is not where a line *is* but what moving it would do, and what it does is change
-      which rooms exist. The rooms are the consequence, so they are drawn under the cause. What
-      differs is that here the graph carries a handle at every point, because here it can be grabbed.
-
-      **What is NOT here is the ink.** This mode never reads the map, so a mask drawn underneath
-      would invite a comparison against a picture that is not the source of anything on screen.
-
-      They do not compete for the same ink either. The partition is fills and outlines in six cycling
-      colours; the graph is one colour and a dot at every point.
-    */
-    layers: ["regions", "graph"],
-    /*
-      The one step that takes the plain drag for something other than panning without being a brush.
-
-      It is not all-or-nothing, which is what makes it liveable: two of the three tools take the
-      gesture only when there is something under the press, so panning by dragging empty map still
-      works and Ctrl still pans anywhere. That matters more here than under a brush -- editing a
-      graph is mostly looking, and a mode that took every drag would make the looking part awkward to
-      pay for the editing.
-    */
   },
   /*
     The Regions step was here, and it is GONE (user, 2026-09-05).

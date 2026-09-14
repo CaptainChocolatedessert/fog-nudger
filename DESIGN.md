@@ -1501,7 +1501,7 @@ The shell, the accordion, the map loading, the transform and every layer are sha
 every step a `modes` field.
 
 - **Ink mode** — *Map*, *Ink*, *Walls*.
-- **Wall editor** — *Edit walls*.
+- **Wall editor** — *Edit walls*. (The group is deleted; §7a and §10 carry where its contents went.)
 - **View**, a persistent group in both, outside the accordion and never entered.
 
 ### Why the workspace is a full-screen modal
@@ -1592,9 +1592,14 @@ an edge mark.
 - **Walls** — spur pruning and edge smoothing, drawing the **fitted graph** over the partition over the
   ink. The last thing the ink mode shows and the first thing the editor shows are one picture, because
   both come from the same build.
-- **Edit walls** — the tool picker, the three one-shot buttons, and the graph over the partition. With
-  no saved graph it says where walls come from rather than offering three buttons that would do
-  nothing.
+- **Edit walls — gone (user, 2026-09-14):** *"Edit walls can disappear."* It emptied out rather
+  than being cut. Its tool picker went to the strip, its straighten and prune buttons went when
+  each became one live slider, and its push went to the bar — leaving a group whose whole content
+  was one button that adds four walls. That button is at the foot of **Walls** now, with the two
+  sliders that shape the same graph.
+
+  **The rail and the tool strip now agree one for one** — Look, Ink, Walls — which was not
+  designed and is worth keeping.
 - **View** — preview fill and outline. A control describing a layer that *two* steps draw cannot live
   with "its" step, and a group that is never entered answers that objection rather than reintroducing
   it.
@@ -1950,7 +1955,7 @@ is actually visible.**
 **One handle per setting.** The spur limit was declared in both wall groups while they were separate
 pages, so a GM would not have to find a limit twice — safe only because one page was on screen at a
 time. On one page it would be two sliders writing one setting. It lives with the other derive-time
-control now; the button in Edit walls spends the same number destructively, which is what you need
+control now; the button in Edit walls spent the same number destructively, which is what you needed
 once re-deriving is no longer free.
 
 ### Undo becomes load-bearing
@@ -2633,10 +2638,11 @@ texture rather than line. Everything above is refinement; that is where the next
 Four constraints a later change could break without noticing. Each is enforced somewhere in the code;
 these are here so the reason survives the enforcement.
 
-- **The prune limit's slider is in Walls and its button is in Edit walls, and it must not be declared
-  to both.** The rail no longer forces a section shut, so two handles on one setting would be
-  reachable at once and would disagree the moment either moved. `steps.test.ts` pins it; the button
-  names its slider's step instead.
+- ~~**The prune limit's slider is in Walls and its button is in Edit walls.**~~ **Retired
+  2026-09-14**, and it is worth knowing why rather than only that it went: the rule existed to stop
+  one setting growing two handles across two groups, and the button that was the second half of it
+  no longer exists. What it was protecting is still true and is now structural — one live slider,
+  one handle, and nothing else to declare it to.
 - **A control offered where its presses do nothing is a control that lies.** The tool strip always
   obeyed this; the wall actions did not, and answered a press by writing to a state line in the
   opposite corner of the window. Gate before the press, and say why the gate is down.
