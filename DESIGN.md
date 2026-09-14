@@ -2264,7 +2264,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**842 tests across 59 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**848 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2290,6 +2290,11 @@ invisible. It costs almost nothing to keep.
 - **Treat a clean diagnostic as evidence about the diagnostic** until it has failed at least once. A
   coverage line once reported "0.00% bare" on a map with visible bare patches — and was believed
   twice, and used to reject the correct answer.
+- **A string crossing from a module to a page is a contract nothing typechecks.** Element ids and CSS
+  selectors return `null` when the markup moves under them, every call site guards, and the symptom
+  is a control that silently is not there. `elementIds.test.ts` checks every literal `getElementById`
+  against the page that hosts it; a selector built from a template is still unguarded, and the answer
+  there is structural — do not reach across a module boundary with one.
 - **Diagnostics that fire unconditionally are worth their noise.** One that only fires when something
   is known to be wrong cannot distinguish "fine" from "never ran".
 - **Say what a check *is* the first time it comes up.** None of them is self-explanatory, and an
