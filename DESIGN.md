@@ -2820,7 +2820,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   keystrokes) · `undoHistory.ts` (**the one
   stack, for the graph and the painted ink both**: entries are labelled closures, so it never learns
   what it is restoring — pure and tested) · `editHistory.ts` (the bounded stack under it, pure and
-  tested) · `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`
+  tested) · `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts` · `actionGate.ts` (**why a wall
+  action cannot act, decided before the press**: no saved graph, or its own limit at zero — pure and
+  tested, and the one place the prune slider's step is named from the button that spends it)
 - **What is drawn** — `layerToggles.ts` (pure and tested: groups propose, the GM disposes, a tool may
   only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
   the values and is pure)
