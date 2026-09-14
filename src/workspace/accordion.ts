@@ -56,27 +56,53 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
 import { proposeLayers } from "./layerToggles";
-import { stepIsMarked, wallsMark, wallsNotice } from "./wallsMark";
+import { stepIsMarked, wallsNotice } from "./wallsMark";
 
 /**
- * Which groups are expanded. Several may be, and none is a legitimate state.
+ * Which group is in the drawer, or `null` for none.
  *
  * Not stored in the scene: it is where the GM is looking, not a setting, and a workspace that
  * reopened where you left it last session would be guessing.
  *
- * **Exclusivity went when the tool palette took the drag** (user, 2026-09-08). It was never wanted
- * for its own sake — it was there because a step bound the gesture, so two open steps would have
- * been two meanings for one press. With the verb chosen elsewhere a heading decides nothing but what
- * is on screen, and forcing one closed to open another was making the commonest move in the whole
- * job expensive: look at the rooms, spot a merged one, go back to the ink, look again.
+ * ## One at a time, and that is not the old exclusivity coming back
  *
- * It starts with the first group expanded, which is the only honest place to be before anything is
- * known about the scene, and the one that can do something about there being no map.
+ * The accordion was exclusive because a step **bound the drag**, so two open steps were two
+ * meanings for one press. That reason went when the tool palette took the verb, and exclusivity
+ * went with it — correctly, because forcing one group shut to open another made the commonest
+ * move in the whole job expensive.
+ *
+ * What is exclusive now is a **drawer**, which is a different thing: the groups all live in the
+ * strip and are one click apart from each other, so opening Ink over Walls costs the same as
+ * scrolling to it did and takes no vertical room from anything. Switching what you are reading and
+ * switching what your drag does are still separate gestures, which was the whole of the complaint.
+ *
+ * **The cost, stated:** two groups can no longer be read side by side. The live counts moved to the
+ * bar to cover the main case, and comparing two sets of numbers at once is gone.
  */
-const open = new Set<StepId>();
-{
-  const first = workspaceSteps()[0]?.id;
-  if (first) open.add(first);
+let openStep: StepId | null = workspaceSteps()[0]?.id ?? null;
+
+/** Which group the drawer is showing. */
+export function currentPanel(): StepId | null {
+  return openStep;
+}
+
+/**
+ * Show a group in the drawer, or close it with `null`.
+ *
+ * **Closing is a state the surface needs, not an accident.** On a surface whose whole job is
+ * looking at a map, being unable to see the map plainly was the thing it most needed and did not
+ * have — so pressing the open group's own button in the strip shuts the drawer and leaves the
+ * canvas clear.
+ */
+export function openPanel(id: StepId | null): void {
+  openStep = id;
+  touched = true;
+  renderPanel();
+}
+
+/** Open a group, or close it if it is the one already showing. */
+export function togglePanel(id: StepId): void {
+  openPanel(openStep === id ? null : id);
 }
 
 /**
@@ -159,18 +185,19 @@ export function registerHeadContent(render: Render): void {
 }
 
 /**
- * Expand a group at start-up, unless the GM has already chosen for themselves.
+ * Open a group at start-up, unless the GM has already chosen for themselves.
  *
- * **`touched` covers collapsing as well as expanding**, which is what stops start-up reopening a
- * group the GM has just shut. It is set by any header click, and a click that closes is still a
- * choice about what to look at.
+ * **`touched` covers closing as well as opening**, which is what stops start-up reopening a drawer
+ * the GM has just shut. Any press in the strip sets it, and a press that closes is still a choice
+ * about what to look at.
  *
- * It only ever *adds*, now that several groups can be expanded: moving the GM on when a map turns
- * out to be chosen should not take away whatever else they were reading.
+ * It **replaces** what is showing rather than adding to it, which is the drawer's doing: there is
+ * one slot, so moving the GM on from Map when a map turns out to be chosen is the whole of what this
+ * can mean.
  */
 export function advanceTo(id: StepId): void {
-  if (touched || open.has(id)) return;
-  open.add(id);
+  if (touched || openStep === id) return;
+  openStep = id;
   renderPanel();
 }
 
@@ -311,12 +338,24 @@ export function onStepChange(listener: (step: StepId | null) => void): void {
  * one press. With nothing expanded there are simply no layers, which stays a coherent state — the
  * map, and nothing of ours on top of it.
  */
+/**
+ * Every group the strip can open, **including View**.
+ *
+ * View was a persistent group rendered on its own below the rail and never entered, which was the
+ * answer to a control describing a layer that two steps drew. Under the drawer there is nothing for
+ * it to be persistent *against*: every group is one click away in the strip, so the thing that made
+ * View special is now true of all of them.
+ */
+function panelSteps(): readonly Step[] {
+  return STEPS;
+}
+
 function applyOpenStep(): void {
-  const steps = workspaceSteps().filter((step) => open.has(step.id));
+  const step = panelSteps().find((candidate) => candidate.id === openStep) ?? null;
   // Proposed rather than set: the GM's own toggles subtract from this, and a tool may add to it.
-  proposeLayers([...new Set(steps.flatMap((step) => step.layers))]);
-  for (const listener of openListeners) listener.changed(open.has(listener.id));
-  for (const listener of stepListeners) listener(steps[steps.length - 1]?.id ?? null);
+  proposeLayers([...(step?.layers ?? [])]);
+  for (const listener of openListeners) listener.changed(openStep === listener.id);
+  for (const listener of stepListeners) listener(step?.id ?? null);
   invalidate();
 }
 
@@ -347,104 +386,38 @@ export function renderPanel(): void {
     for (const render of headContent) render(head);
   }
 
+  /*
+    The drawer: the open group's body, and nothing else.
+
+    The headers went to the strip, where they are the group's own button. A header here *and* a
+    button there would be two handles on one piece of state, which is the shape of defect this
+    project keeps finding; and the strip is where the GM already is, because it is where the verbs
+    are.
+  */
+  const title = document.getElementById("mode-name");
   const container = document.getElementById("steps");
-  if (container) {
-    container.replaceChildren();
-    /*
-      A locked step cannot be the open one.
-
-      Checked here rather than at the click, because the lock can arrive *after* the step was opened:
-      nominating a different map drops the surface back to having no picture. Leaving the GM inside a
-      step that has just become unreachable would show its layers over nothing and leave its header
-      unable to close it.
-    */
-    for (const step of workspaceSteps()) {
-      if (locked(step)) open.delete(step.id);
-    }
-
-    for (const step of workspaceSteps()) {
-      const shut = locked(step);
-      const section = document.createElement("section");
-      section.className = "step";
-      if (open.has(step.id)) section.classList.add("open");
-      if (shut) section.classList.add("locked");
-
-      const header = document.createElement("button");
-      header.type = "button";
-      header.className = "step-header";
-      header.textContent = step.title;
-      /*
-        The mark rides on the header rather than inside the group, because its whole job is to be
-        seen *before* anything is opened or touched. `wallsMark.ts` says why it is a wall glyph and
-        not a count, a dot or a lock.
-      */
-      if (stepIsMarked(step.id)) {
-        header.append(wallsMark());
-        header.classList.add("marked");
-        header.title = "These walls hold changes of yours";
-      }
-      header.disabled = shut;
-      if (shut) header.title = "Choose a map first";
-      header.setAttribute("aria-expanded", String(open.has(step.id)));
-      header.addEventListener("click", () => {
-        // A plain toggle. Nothing else closes, which is the point: reading the ink controls and the
-        // wall controls at the same time is the ordinary case rather than a thing to pay for.
-        if (open.has(step.id)) open.delete(step.id);
-        else open.add(step.id);
-        touched = true;
-        renderPanel();
-      });
-
-      section.append(header, stepBody(step));
-      container.append(section);
-    }
-  }
+  const step = panelSteps().find((candidate) => candidate.id === openStep) ?? null;
 
   /*
-    The persistent group, which is drawn whenever one is declared and is no longer empty.
+    A locked group cannot be the open one.
 
-    It held nothing between 2026-08-29 and the dissolving of the Regions step: every display
-    parameter had moved to the step that draws its layer, and this rendered a heading over nothing.
-    What refilled it is the partition acquiring a *second* step that draws it — the rule "a display
-    control lives with its layer" cannot name one step when two show the same thing, and the group
-    that is never entered is the answer rather than a tie-break between them.
-
-    It gets a Defaults of its own for the same reason every step with controls does. It is the one
-    place that rule could have been missed, because for a while there was nothing here to reset.
+    Checked here rather than at the press, because the lock can arrive *after* it was opened:
+    nominating a different map drops the surface back to having no picture. Leaving the GM inside a
+    group that has just become unreachable would show its layers over nothing.
   */
-  const view = document.getElementById("view-group");
-  const persistent = STEPS.find((step) => step.persistent);
-  if (view && persistent) {
-    view.replaceChildren();
-    const heading = document.createElement("h2");
-    heading.textContent = persistent.title;
-    const blurb = document.createElement("p");
-    blurb.className = "sub";
-    blurb.innerHTML = persistent.blurb;
-    view.append(heading, blurb);
-
-    content.get(persistent.id)?.top?.(view);
-
-    for (const control of ungroupedControls(persistent)) {
-      view.append(settingRow(control));
-    }
-
-    /*
-      The bottom slot, which this used to drop on the floor.
-
-      Only the top one was rendered, so `registerStepContent("view", …, "bottom")` registered content
-      nothing ever drew — silently, because a slot that is never read looks exactly like a slot with
-      nothing in it. The step bodies have always honoured both.
-
-      Before Defaults, for the reason the step bodies put it there: Defaults restores everything above
-      it, so it is a footer rather than a divider, and content past it reads as furniture. A room
-      found that once already, when the ink tools were rendered after it and a GM reported not being
-      able to find them.
-    */
-    content.get(persistent.id)?.bottom?.(view);
-
-    if (stepParameters(persistent.id).length > 0) view.append(defaultsButton(persistent));
+  if (step && locked(step)) {
+    openStep = "map";
   }
+
+  const showing = panelSteps().find((candidate) => candidate.id === openStep) ?? null;
+  if (title) title.textContent = showing?.title ?? "";
+  if (container) {
+    container.replaceChildren();
+    if (showing) container.append(stepBody(showing));
+  }
+  // Nothing open is a coherent state and the whole drawer goes with it, so the map is plainly
+  // visible. The strip stays: it is how the drawer comes back.
+  document.getElementById("panel")?.classList.toggle("shut", showing === null);
 
   applyOpenStep();
 }

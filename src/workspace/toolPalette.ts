@@ -33,6 +33,8 @@
  */
 
 import { STEPS, TOOLS, type Drag, type ToolChoice } from "../steps";
+import { currentPanel, openPanel, togglePanel } from "./accordion";
+import { stepIsMarked, wallsMark } from "./wallsMark";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
@@ -151,6 +153,21 @@ function usable(choice: ToolChoice): boolean {
 
 export function setTool(next: Tool): void {
   apply(next);
+  /*
+    A tool that has controls has to be able to show them.
+
+    The brushes and the gap finder each carry settings, and those are drawn into the drawer's pinned
+    head — so arming one while the drawer is shut would leave a GM holding a brush with no way to see
+    how wide it is. Opening the group the tool belongs to is the smallest thing that cannot happen.
+
+    **Only when nothing is open**, so it never takes a group away from a GM who is reading one: a tool
+    may turn a thing on and may never turn one off, which is the same rule the layers follow.
+
+    Interim. When a tool's controls move out of the pinned head and into the drawer as their own
+    content, this becomes "show your own controls" and stops being a guess about which group to open.
+  */
+  const band = TOOLS.find((choice) => choice.id === next)?.band;
+  if (band === "ink" && currentPanel() === null) openPanel("ink");
   render();
   for (const listener of listeners) listener(next);
   invalidate();
@@ -169,70 +186,126 @@ const BAND_LABELS: Readonly<Record<ToolChoice["band"], string>> = {
  * non-exclusive rail those controls may be collapsed while the tool is still in hand. What a press
  * will do must not depend on which headings happen to be expanded.
  */
+/**
+ * The strip: one column holding both kinds of button, in two exclusion groups.
+ *
+ * ## Why two kinds in one column
+ *
+ * Borrowed from Procreate, which mixes drag-modes with panel-openers in one strip and is not read as
+ * a category error — because tapping *Adjustments* does not put your brush down. That is the whole
+ * of what makes it work, and it is a rule rather than an accident: **a panel and a verb are selected
+ * independently.** One drawer is open at a time and one verb is armed at a time, and neither
+ * selection disturbs the other.
+ *
+ * With one exception, and it is the user's (2026-09-14): **opening a panel puts the verb back to
+ * Pan.** The verbs here are little fixes rather than the main event — the parameters are — so a GM
+ * who has gone to read a group is almost certainly about to look around rather than to keep
+ * painting, and an armed brush under a panel is a press waiting to happen. It also settles the
+ * collision cleanly: a tool's own controls and a group's controls can never both want the drawer.
+ *
+ * ## The two kinds have to look different
+ *
+ * Two things highlighted at once is the cost of one column, and it is paid by shape rather than by
+ * colour: a panel is its group's **name**, a verb is a **glyph**. There is never a question which
+ * highlight means what, and the strip stays readable as *what is armed* at a glance.
+ *
+ * ## The order is the pipeline
+ *
+ * Look, then Map, Ink, Walls, View — the same order the rail taught by being a numbered column, now
+ * taught by being a column. Each group's verbs sit under its own name, so what a tool acts on is
+ * said by where it is.
+ */
 export function render(): void {
   const strip = document.getElementById("tools");
   if (strip) {
     strip.replaceChildren();
     /*
-      A tool that has become unavailable cannot stay in hand. Removing the walls from the panel is
-      one way there and nominating a different map is another, and leaving Erase selected over a map
-      with no graph would show a pressed button whose presses do nothing.
+      A tool that has become unavailable cannot stay in hand. Nominating a different map is one way
+      there, and leaving Erase selected over a map with no graph would show a pressed button whose
+      presses do nothing.
     */
     const inHand = TOOLS.find((choice) => choice.id === tool);
     if (inHand && !usable(inHand)) apply("pan");
     const active = currentTool();
-    let band: ToolChoice["band"] | null = null;
 
-    for (const choice of TOOLS) {
-      if (band !== null && choice.band !== band) {
-        const rule = document.createElement("div");
-        rule.className = "tool-rule";
-        strip.append(rule);
-      }
-      if (choice.band !== band) {
-        const caption = document.createElement("p");
-        caption.className = "tool-band";
-        caption.textContent = BAND_LABELS[choice.band];
-        strip.append(caption);
-        band = choice.band;
-      }
+    const addTools = (band: ToolChoice["band"]): void => {
+      for (const choice of TOOLS.filter((candidate) => candidate.band === band)) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "tool";
+        /*
+          The glyph alone, with the name in the tooltip.
 
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "tool";
+          The words were there because discoverability is this surface's oldest weakness, and
+          dropping them is a real trade rather than a tidy-up: an unlabelled picture is a thing to
+          learn where a word is a thing to read. Three things carry the cost. The **tooltip** names
+          it on hover; the **hint at the top of the drawer** says in full what the tool in hand does;
+          and the **group names** keep the strip's order legible.
+
+          `aria-label` rather than the text it replaces, because the button has no text content at
+          all and a screen reader would otherwise announce nothing.
+        */
+        const glyph = toolIcon(choice.id);
+        if (glyph) button.append(glyph);
+        button.title = choice.label;
+        button.setAttribute("aria-label", choice.label);
+        // `aria-pressed` carries the selected look and the meaning together, rather than a class
+        // saying the same thing beside it.
+        button.setAttribute("aria-pressed", String(choice.id === active));
+        button.disabled = !usable(choice);
+        button.addEventListener("click", () => setTool(choice.id as Tool));
+        strip.append(button);
+      }
+    };
+
+    const rule = (): void => {
+      const line = document.createElement("div");
+      line.className = "tool-rule";
+      strip.append(line);
+    };
+
+    // Look first: the resting state, and the one group with no controls of its own to read.
+    const look = document.createElement("p");
+    look.className = "tool-band";
+    look.textContent = BAND_LABELS.navigate;
+    strip.append(look);
+    addTools("navigate");
+
+    for (const step of STEPS) {
+      rule();
+
+      const opener = document.createElement("button");
+      opener.type = "button";
+      opener.className = "tool-band panel";
+      opener.textContent = step.title;
+      opener.setAttribute("aria-pressed", String(currentPanel() === step.id));
       /*
-        The glyph alone, with the name in the tooltip.
-
-        The words were there because discoverability is this surface's oldest weakness, and dropping
-        them is a real trade rather than a tidy-up: an unlabelled picture is a thing to learn where a
-        word is a thing to read. Three things carry the cost. The **tooltip** names it on hover; the
-        **hint at the top of the rail** says in full what the tool in hand does, and stays there
-        however the rail is scrolled; and the **band captions** keep the strip's order legible.
-
-        `aria-label` rather than the text it replaces, because the button now has no text content at
-        all and a screen reader would otherwise announce nothing.
+        The same gate the drawer applies, said here because this is where the press lands. A group
+        offered over a map that does not exist is a control that lies.
       */
-      const glyph = toolIcon(choice.id);
-      if (glyph) button.append(glyph);
-      button.title = choice.label;
-      button.setAttribute("aria-label", choice.label);
-      // `aria-pressed` carries the selected look and the meaning together, rather than a class
-      // saying the same thing beside it.
-      button.setAttribute("aria-pressed", String(choice.id === active));
-      button.disabled = !usable(choice);
-      button.addEventListener("click", () => setTool(choice.id as Tool));
-      strip.append(button);
+      const shut = step.id !== "map" && !mapChosen();
+      opener.disabled = shut;
+      if (shut) opener.title = "Choose a map first";
+      /*
+        The mark moves here with the header it used to ride on. Its whole job is to be seen *before*
+        anything is opened, and the strip is now the only thing always on screen that names a group.
+      */
+      if (stepIsMarked(step.id)) {
+        opener.append(wallsMark());
+        opener.classList.add("marked");
+        opener.title = "These walls hold changes of yours";
+      }
+      opener.addEventListener("click", () => {
+        togglePanel(step.id);
+        // The user's rule: reading a group puts the verb down. See this module's own notes.
+        setTool("pan");
+      });
+      strip.append(opener);
+
+      addTools(step.id as ToolChoice["band"]);
     }
   }
 
-  /*
-    The hand-edit count was drawn here and is gone (2026-09-14).
-
-    It said "14 hand edits — re-reading the map discards them", which was a **numeric proxy** for
-    something a GM should be looking at: fourteen tells them nothing about whether those fourteen
-    mattered. What replaced it is the mark on the groups that would do the destroying, and — when
-    one of those controls is actually moved — the delta. `wallsMark.ts` carries the argument.
-  */
   const hint = document.getElementById("tool-hint");
   if (hint) {
     const chosen = TOOLS.find((choice) => choice.id === currentTool());

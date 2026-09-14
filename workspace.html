@@ -137,6 +137,14 @@
       #panel.hidden {
         display: none;
       }
+      /*
+        No drawer open. The whole panel goes, so the map is plainly visible — which on a surface
+        whose entire job is looking at a map is the state it most needs. The strip stays, because
+        it is how the drawer comes back.
+      */
+      #panel.shut {
+        display: none;
+      }
 
       h1 {
         margin: 0 0 0.15rem;
@@ -347,6 +355,8 @@
          Banded in the order the rail is numbered by, so reading down the strip and reading down the
          rail meet the same three subjects in the same sequence.
          ---------------------------------------------------------------------------------------- */
+      /* Left edge when no drawer is open, beside it when one is. `:has()` keeps the two in step
+         without either module knowing about the other's layout. */
       #tools {
         position: fixed;
         top: 0;
@@ -359,6 +369,10 @@
         background: rgba(12, 14, 30, 0.94);
         border-right: 1px solid rgba(187, 153, 255, 0.25);
         backdrop-filter: blur(6px);
+      }
+      body:has(#panel.shut) #tools,
+      body:has(#panel.hidden) #tools {
+        left: 0;
       }
       #tools.hidden {
         display: none;
@@ -376,6 +390,51 @@
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: #9aa0c8;
+      }
+      /*
+        A group's name, which is also the button that opens its drawer.
+
+        **Deliberately not glyph-shaped.** Two things can be highlighted in this column at once — an
+        armed verb and an open panel — and they are told apart by *shape* rather than by colour: a
+        panel is a word, a verb is a picture. Nothing has to be learned for the strip to keep
+        answering "what is armed" at a glance.
+      */
+      button.tool-band {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.2rem;
+        width: 100%;
+        padding: 0.25rem 0.1rem;
+        border: 0;
+        border-radius: 0.3rem;
+        background: transparent;
+        font: inherit;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #9aa0c8;
+        cursor: pointer;
+      }
+      button.tool-band:hover:not(:disabled) {
+        color: #e8e9f5;
+        background: rgba(187, 153, 255, 0.1);
+      }
+      /* The open drawer, named. An underline rather than a fill, so it cannot be mistaken for the
+         armed verb's pressed glyph two rows down. */
+      button.tool-band[aria-pressed="true"] {
+        color: #bb99ff;
+        box-shadow: inset 0 -2px 0 #bb99ff;
+      }
+      /* The same 0.65 every other inactive thing on this surface uses, measured against the 3:1
+         floor for non-text UI. */
+      button.tool-band:disabled {
+        opacity: 0.65;
+        cursor: default;
+      }
+      button.tool-band .walls-mark {
+        width: 11px;
+        height: 11px;
       }
       .tool-rule {
         height: 1px;

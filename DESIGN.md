@@ -1821,7 +1821,8 @@ was removed.
 produced it is what this had to answer. The pipeline, the emit path and the storage are untouched;
 this was a rework of the surface only.
 
-**All of it is built**: the tool strip and its glyphs, the non-exclusive rail, the pinned rail head,
+**All of it is built**: the tool strip and its glyphs, the rail (**a drawer since 2026-09-14** — see
+below), the pinned rail head,
 the hand-edit count and the warning it prices, one page with one panel button, undo, the derive
 indicators, the markup palette, the layer toggles and the colour pickers.
 
@@ -1929,9 +1930,42 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 - **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
   probe), ink (suppress, add, gaps), walls (move, draw, erase). One click to switch, and switching a
   tool does not move the controls.
-- **The controls rail** — the same groups in the same cascade order, still numbered so the order still
-  teaches itself, but **all present at once and reached by scrolling**. Collapsing a group stays
-  available and becomes *tidying* rather than *navigating*.
+- **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
+  the group's own name in the strip.
+
+  It was a scrolling rail with every group present at once, and it became a drawer on 2026-09-14
+  (user: *"let the buttons slide out drawers with their content when pressed"*). **That is not the
+  old exclusivity coming back.** The accordion was exclusive because a step bound the *drag*, so
+  two open steps were two meanings for one press; the drawer is exclusive because there is one
+  slot, and every group is one click away in the strip rather than a scroll away in a column.
+  Switching what you read and switching what your drag does are still separate gestures, which
+  was the whole of the complaint.
+
+  **The ordering still teaches itself, and the strip is what teaches it now** — Look, Map, Ink,
+  Walls, View down one column, with each group's verbs under its own name. The numbered rail is
+  gone and nothing was lost with it, because the column *is* the order.
+
+  **Two costs, stated.** Two groups can no longer be read side by side; the live counts moved to
+  the bar to cover the main case, and comparing two sets of numbers at once is gone. And a group's
+  controls are behind a press rather than a scroll, which is cheaper to reach and easier to forget
+  is there.
+
+- **Two selection groups, one column.** A **panel** opens a drawer; a **verb** arms a drag; neither
+  disturbs the other. Borrowed from Procreate, which mixes the two in one strip and is not read as
+  a category error precisely because tapping *Adjustments* does not put your brush down.
+
+  **They are told apart by shape, not colour**: a panel is a word, a verb is a glyph. That is what
+  pays for two things being highlighted at once, which is the cost of one column.
+
+  **One exception, and it is deliberate** (user, 2026-09-14): opening a panel puts the verb back to
+  **Pan**. The verbs here are little fixes where the parameters are the main event, so a GM who has
+  gone to read a group is about to look around rather than keep painting — and an armed brush under
+  an open panel is a press waiting to happen. It also settles the collision cleanly: a tool's own
+  controls and a group's controls can never both want the drawer.
+
+  **Nothing open is still a state**, and a better one than before: pressing the open group's name
+  shuts the drawer entirely and the strip slides to the window edge, leaving the map plain. That
+  used to be a hard-won exception to the accordion; it is now what the mechanism does anyway.
 
 Switching what you are doing and switching what you are reading stop being the same gesture, which is
 the whole of the complaint.
