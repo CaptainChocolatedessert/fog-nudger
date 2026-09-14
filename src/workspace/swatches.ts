@@ -22,7 +22,6 @@
  */
 
 import { colourFor, applyPalette, colourKey } from "./palette";
-import { normaliseColour } from "../settings";
 import { PALETTE_ROLES, PALETTE_DEFAULTS, ROLE_LABELS, type AdjustableRole } from "../palette";
 import { recolourInk } from "./layers/ink";
 import { controlsLive } from "./settingRows";
@@ -89,10 +88,25 @@ export function renderSwatches(body: HTMLElement): void {
   // In the palette's declared order, which puts ink first: it is the one covering real area and the
   // one most often changed, so it leads the list it has joined.
   for (const role of PALETTE_ROLES) {
-    body.append(role === "ink" ? inkRow() : colourRow(role));
+    body.append(colourRow(role));
   }
 }
 
+/**
+ * One row, for every colour, in the shape every other control on this rail has: the name on the
+ * left, the thing you turn on the right.
+ *
+ * **Ink used to have a builder of its own** and wore a different shape for it — its picker sat under
+ * the label in the swatch strip rather than beside it. That was invisible while it lived at the top
+ * of the Ink step with nothing to be compared against; once it moved down among the other four
+ * (2026-09-09) it was the odd one out, which a room said plainly: *"It should adopt that same format
+ * as the others."*
+ *
+ * So there is one builder, and ink's presets are an **addition** to the shared row rather than a
+ * replacement for it. The special-casing that survives is one `if`, where it used to be a second
+ * function that had drifted: the old one read the stored colour by hand with its own normalising
+ * call, which is precisely what `colourFor` already does for every role.
+ */
 function colourRow(role: AdjustableRole): HTMLElement {
   const row = document.createElement("div");
   row.className = "row";
@@ -106,6 +120,8 @@ function colourRow(role: AdjustableRole): HTMLElement {
   picker.type = "color";
   picker.disabled = !controlsLive();
   picker.value = colourFor(role);
+  // Live on `input`, saved on `change`: a colour costs a buffer rewrite rather than a re-read, so
+  // there is nothing to be gained by making the GM let go to see it.
   picker.addEventListener("input", () => setRoleColour(role, picker.value));
   picker.addEventListener("change", () => void persistSettings());
 
@@ -115,63 +131,39 @@ function colourRow(role: AdjustableRole): HTMLElement {
   hint.className = "hint";
   hint.textContent = ROLE_LABELS[role].means;
 
-  row.append(top, hint);
+  row.append(top);
+  // Ink alone gets presets, because it is the one colour covering real area — a palette of
+  // alternatives is worth a click there and would be inviting a mistake on the four marks, whose
+  // meanings are fixed.
+  if (role === "ink") row.append(swatchStrip(picker));
+  row.append(hint);
   return row;
 }
 
 /**
- * The ink row, which keeps its swatches because it is the one colour covering real area.
+ * The preset strip, under the row it belongs to.
  *
- * Labelled like the others now. At the top of the Ink step the heading above it said what it was;
- * among four other colours it needs its own name, and the same one-line meaning they carry.
+ * Takes the row's own picker because the picker is the **readout** of the current colour as well as a
+ * way to set one: a swatch that left it showing the previous colour made the row disagree with
+ * itself until the next rebuild of the panel.
  */
-function inkRow(): HTMLElement {
-  const row = document.createElement("div");
-  row.className = "row";
-
-  const top = document.createElement("div");
-  top.className = "top";
-  const label = document.createElement("label");
-  label.textContent = ROLE_LABELS.ink.name;
-  top.append(label);
-
+function swatchStrip(picker: HTMLInputElement): HTMLElement {
   const container = document.createElement("div");
   container.className = "swatches";
 
-  // Built before the swatches so they can write into it, appended after so it still sits at the end
-  // of the row.
-  const picker = document.createElement("input");
-  picker.type = "color";
-  picker.disabled = !controlsLive();
-  picker.value = normaliseColour(currentSettings().overlay.inkColour, PALETTE_DEFAULTS.ink);
-
   for (const swatch of INK_SWATCHES) {
     const button = document.createElement("button");
+    button.type = "button";
     button.style.background = swatch.value;
     button.title = swatch.name;
+    button.disabled = !controlsLive();
     button.addEventListener("click", () => {
       setRoleColour("ink", swatch.value);
-      // The picker is the readout of the current colour as well as a way to set one, so a swatch
-      // that left it showing the previous colour made the row disagree with itself until the next
-      // rebuild of the panel.
       picker.value = swatch.value;
       void persistSettings();
     });
     container.append(button);
   }
 
-  for (const button of container.querySelectorAll("button")) button.disabled = !controlsLive();
-
-  // Live on `input`, saved on `change`: a colour costs a buffer rewrite rather than a re-read, so
-  // there is nothing to be gained by making the GM let go to see it.
-  picker.addEventListener("input", () => setRoleColour("ink", picker.value));
-  picker.addEventListener("change", () => void persistSettings());
-  container.append(picker);
-
-  const hint = document.createElement("p");
-  hint.className = "hint";
-  hint.textContent = ROLE_LABELS.ink.means;
-
-  row.append(top, container, hint);
-  return row;
+  return container;
 }

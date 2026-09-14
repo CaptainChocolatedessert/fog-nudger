@@ -2653,16 +2653,31 @@ agreement that came out of that.
   Owlbear path is silently dead until Owlbear answers. Gating it would also have made it unverifiable
   outside a room, which is how the shape of this was checked at all.
 
-  **Verified outside a room:** all three buttons start disabled, arming shows the named pair and hides
-  the plain one, cancelling restores them and says nothing was cleared, and it re-arms. **What no desk
-  can check is the clearing itself**, which needs a scene — that a re-read after it composes no old
-  strokes is the thing to watch.
+  **Confirmed in a room (2026-09-13): it works as expected.**
 
 #### Cuts and moves
 
 - ~~The **ink colour picker** should move down with the other swatches, and the **ink opacity**
   control should go.~~ **Done at the desk (2026-09-10).** The ink row now leads the five colours at
-  the foot of View, labelled like its neighbours. Two consequences worth knowing:
+  the foot of View, labelled like its neighbours.
+  **And it takes their shape as well as their place (2026-09-13.)** A room: *"It should adopt that
+  same format as the others."* Ink had a builder of its own, which put its picker under the label
+  inside the swatch strip rather than beside it — invisible while it lived alone at the top of the Ink
+  step, and the odd one out the moment it joined four rows that did it differently. There is one
+  builder now and ink's presets are an addition to the shared row; the old one had also drifted,
+  reading the stored colour by hand with its own normalising call where `colourFor` does that for
+  every role.
+  **The pickers were also far too big** — *"a big color rectangle with a thick boundary … shrink them
+  closer in height to the words. The borders can be much thinner."* Two causes. The four non-ink rows
+  gave their input **no size at all**, so it came out at the UA's default of roughly 50×27, twice the
+  height of the label beside it. And **the thick boundary was the browser's own**: a native colour
+  input draws an inner swatch with a heavy border of its own, so a thin border on the element only
+  ever added a second line around a thick one — the vendor pseudo-elements are what remove it, and
+  `::-moz-color-swatch` is the one that counts for Firefox. Now 27×15 against a 19.5px label line,
+  with the presets square at the same height.
+  **`flex: none` is load-bearing there**, and was found by measuring rather than reasoning: a colour
+  input has no intrinsic width to defend itself with, so in a narrow rail it was squeezed to **2px**,
+  which is the two borders with nothing between them. Two consequences worth knowing:
   - **The ink opacity went as a parameter, not just a slider.** Hiding only the control would have
     left anyone who had already lowered it with a faded overlay forever and no way back; with the key
     gone the settings normaliser drops a stored value. **The cost** is the in-between setting — the

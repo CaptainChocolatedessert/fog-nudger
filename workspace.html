@@ -194,28 +194,64 @@
       .row .hint b {
         color: #c9cdea;
       }
+      /*
+        The colour pickers, sized to the line of text they sit on — room, 2026-09-13: "those have a
+        big color rectangle with a thick boundary, let's shrink them to be closer in height to the
+        words. The borders can be much thinner."
+
+        **The thick boundary was the browser's, not ours.** A native colour input draws its own inner
+        swatch with its own heavy border, inside whatever box the page gives it — so setting a thin
+        border here only ever added a second, thinner line around a thick one. The vendor
+        pseudo-elements below are what actually remove it, and `::-moz-color-swatch` is the one that
+        matters for the browser this is used in.
+
+        They also had no size of their own at all in the four rows that are not ink, which is how they
+        came out at the UA's default of roughly 50 by 27 — a rectangle twice the height of the label
+        beside it.
+      */
+      .row input[type="color"] {
+        /*
+          `flex: none`, and it is not decoration: the row is a flex line and a colour input has no
+          intrinsic width to defend itself with, so in a narrow rail it was squeezed to **2px** —
+          the two borders with nothing between them. Measured, not guessed.
+        */
+        flex: none;
+        width: 2.1rem;
+        height: 1.15rem;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 0.2rem;
+        background: transparent;
+        cursor: pointer;
+      }
+      .row input[type="color"]::-webkit-color-swatch-wrapper {
+        padding: 0;
+      }
+      .row input[type="color"]::-webkit-color-swatch {
+        border: none;
+        border-radius: 0.12rem;
+      }
+      .row input[type="color"]::-moz-color-swatch {
+        border: none;
+        border-radius: 0.12rem;
+      }
       .swatches {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.3rem;
+        gap: 0.25rem;
         align-items: center;
-        margin-bottom: 0.6rem;
+        margin: 0.25rem 0 0.35rem;
       }
+      /* Square, and the same height as the picker above them, so the strip reads as a row of the
+         same kind of thing rather than as a second, larger control. */
       .swatches button {
-        width: 1.5rem;
-        height: 1.5rem;
-        border-radius: 0.25rem;
-        border: 1px solid rgba(255, 255, 255, 0.35);
+        flex: none;
+        width: 1.15rem;
+        height: 1.15rem;
+        border-radius: 0.2rem;
+        border: 1px solid rgba(255, 255, 255, 0.22);
         padding: 0;
         cursor: pointer;
-      }
-      .swatches input[type="color"] {
-        width: 2.4rem;
-        height: 1.6rem;
-        padding: 0;
-        border: 1px solid rgba(255, 255, 255, 0.35);
-        border-radius: 0.25rem;
-        background: transparent;
       }
 
       /*
