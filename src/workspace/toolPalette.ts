@@ -33,7 +33,7 @@
  */
 
 import { STEPS, TOOLS, toolGroups, type Drag, type ToolChoice } from "../steps";
-import { anchorDrawer, currentPanel, openToolDrawer, togglePanel } from "./accordion";
+import { anchorDrawer, currentPanel, openPanel, openToolDrawer } from "./accordion";
 import { stepIsMarked, wallsMark } from "./wallsMark";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
@@ -163,16 +163,6 @@ function toolHasControls(id: Tool): boolean {
 
 export function setTool(next: Tool): void {
   apply(next);
-  /*
-    A tool with controls takes the drawer; a tool without one leaves it alone.
-
-    The brushes and the gap finder each carry settings, so picking one up shows exactly those and
-    nothing else — the group's own sliders are a different subject and have their own button. Move,
-    Draw, Erase and Pan have nothing to show, and taking the drawer away in order to show nothing
-    would be worse than not taking it: it is what lets a GM read the wall settings while drawing
-    walls.
-  */
-  if (toolHasControls(next)) openToolDrawer(next);
   render();
   for (const listener of listeners) listener(next);
   invalidate();
@@ -261,7 +251,21 @@ export function render(): void {
         // guessing from the pressed state — which two buttons carry at once.
         button.dataset.opens = `tool:${choice.id}`;
         button.disabled = !usable(choice);
-        button.addEventListener("click", () => setTool(choice.id as Tool));
+        button.addEventListener("click", () => {
+          setTool(choice.id as Tool);
+          /*
+            The drawer follows the press, including when the answer is "nothing".
+
+            A tool with controls shows exactly those; one without **clears** the drawer (user,
+            2026-09-14). Leaving it was the earlier rule and it produced a state that lied: with Add
+            ink's drawer open, arming Move left the drawer titled *Add ink* while the hint inside it
+            had already become Move's, because the hint follows the armed tool and the drawer did
+            not. Clearing removes the disagreement rather than papering over it, and it makes the
+            whole strip one rule — every press shows that button's own thing.
+          */
+          if (toolHasControls(choice.id as Tool)) openToolDrawer(choice.id as Tool);
+          else openPanel(null);
+        });
         strip.append(button);
       }
     };
@@ -327,9 +331,14 @@ export function render(): void {
         opener.title = "These walls hold changes of yours";
       }
       opener.addEventListener("click", () => {
-        togglePanel(step.id);
+        /*
+          Decided before anything moves, because `setTool` clears the drawer on its way past: asking
+          `currentPanel()` afterwards would always say "not open" and this would never close.
+        */
+        const wasOpen = currentPanel() === step.id;
         // The user's rule: reading a group's settings puts the verb down. See this module's notes.
         setTool("pan");
+        openPanel(wasOpen ? null : step.id);
       });
       strip.append(opener);
 

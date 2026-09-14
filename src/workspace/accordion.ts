@@ -207,10 +207,12 @@ export function openPanel(id: StepId | null): void {
   renderPanel();
 }
 
-/** Open a group's settings, or close the drawer if they are the ones already showing. */
-export function togglePanel(id: StepId): void {
-  openPanel(currentPanel() === id ? null : id);
-}
+/*
+  `togglePanel` was here and is gone. Its one caller decides the toggle itself now, because the press
+  that opens a group also puts the verb down — and `setTool` clears the drawer on its way past, so a
+  toggle that asked "is this already open" *after* that would always be told no and would never
+  close. The caller reads the answer before anything moves.
+*/
 
 /**
  * Whether a step can be entered at all yet.
