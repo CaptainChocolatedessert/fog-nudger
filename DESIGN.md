@@ -1068,6 +1068,48 @@ fall out. **Node ids are the only identity the document has.**
 - **`writeWallGraph` throws where `readSettings` swallows.** A failed read falls back to defaults
   and carries on; a failed write means the GM keeps editing something that is not being saved.
 
+### The base is stored beside the document — 2026-09-14
+
+**A second key holds the graph as the trace last derived it.** The document is what the GM has; the
+base is what it was before they touched it, and the difference between the two is the answer to the
+only question the surface needs to ask about hand editing: *is there work of mine in these walls?*
+
+**It replaces a count that could not survive a session.** `handEdits` is in memory, so a GM returning
+to a map they edited last week opened at zero — no mark, no warning, at exactly the moment both were
+most needed. Two graphs in the scene make the question a comparison of two durable things.
+
+**A count was the wrong instrument anyway** (user, 2026-09-14). Fourteen tells a GM nothing they can
+act on; they cannot know whether fourteen is a lot or whether those fourteen mattered. It is a
+numeric proxy for something that should be looked at, which is the fault that retired the merge
+alarm. What replaces it is a mark with no number, and — at the moment a regenerate is offered — the
+**delta drawn on the map**: what would go in amber, what would arrive in cyan, the same subtractive
+and additive pair the painted ink already uses.
+
+**Segments are compared by their endpoint coordinates, never by node id.** This is not the identity
+rule being broken. That rule is about whether two walls *meet*, where a proximity test would join a
+doorway's two deliberately-separate ends; nothing here asks that. This asks whether a segment is
+present in both sets, and both sets hold float32 coordinates quantised through `Math.fround` on the
+way in, so a segment in both is byte-identical — exact, with nothing to tune. What it buys is that
+`compactNodes` and pruning may renumber freely, where a diff by id would silently degrade into
+**wrong output** the first time either ran.
+
+**A move is a removal and an addition, deliberately.** There is no third category: dragging a vertex
+changes the coordinates of every segment touching it, so each falls out both ways with no special
+handling. **The cost, stated:** a crossing split replaces one segment with two halves and none of the
+three matches, so an incidental crossing reads as a change when nothing moved. Over-reporting is the
+safe direction; the refinement, if anyone minds, is to treat a split as unchanged when the halves are
+collinear with what they replaced.
+
+**No base means "assume it was edited".** Three cases — nothing stored, a base for another map, and
+one that will not decode — all mean *we cannot say this graph is still what was derived*, and the
+loud answer is the right one: a mark nobody needed costs a mark, where a missing one lets a GM
+regenerate away an evening with nothing said.
+
+**One `setMetadata` at a derive, two keys.** They are the same graph at that moment, so the encoding
+happens once. A hand edit writes only the document, which is why the base is its own key rather than
+a field in the same record — sharing one would put its tens of kilobytes back on the wire on every
+wall drag.
+
 **`decodeWallGraph` refuses all-or-nothing**, unlike the settings normaliser which degrades field by
 field. Settings are independent — a bad blur can take its default while the others survive. A graph is
 not: an edge referencing a node that does not exist has no sensible fallback, and **a graph with an
@@ -2133,7 +2175,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**824 tests across 58 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**839 tests across 59 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2766,6 +2808,7 @@ closed outright.
 | `trace/label.ts` | region labelling |
 | `trace/wallGraph.ts` | the document: build, encode, decode, compact, prune, and the two track measurements |
 | `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
+| `trace/wallGraphDiff.ts` | what the GM changed: two graphs compared by **segment endpoints**, never by node id, so compaction and renumbering cannot affect the answer. A move falls out as a removal plus an addition |
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one — and the two queries the tools aim with |
 | `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
@@ -2779,7 +2822,8 @@ out so it can be tested · `map/placement.ts`, `map/placeRegions.ts`, `map/raste
 placement, reused at a 1×1 raster because that *is* fraction space · `emit/fogShapes.ts` the shape items
 and the four emission constants · `emit/wallLines.ts` the wall `LINE`s · `emit/wallEmission.ts` the
 wall graph's faces placed in the world · `emit/emitRegions.ts` batch it into the scene ·
-`geometry/ring.ts` ring maths · `wallGraphStore.ts` and `inkPaintStore.ts` the two metadata documents ·
+`geometry/ring.ts` ring maths · `wallGraphStore.ts` and `inkPaintStore.ts` the two metadata documents — the
+first holds **two** keys, the document and the graph as the trace last derived it ·
 `settingsStore.ts` the settings.
 
 ### Settings and shared UI

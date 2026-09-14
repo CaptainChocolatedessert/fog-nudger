@@ -29,11 +29,13 @@
  */
 
 import { devLog } from "../devlog";
-import { readWallGraph, writeWallGraph } from "../wallGraphStore";
+import { readWallGraph, writeDerivedWalls, writeWallGraph } from "../wallGraphStore";
 import type { WallGraph } from "../trace/wallGraph";
+import { graphsDiffer } from "../trace/wallGraphDiff";
 import { clearUndo, pushUndo, type Restore } from "./undoHistory";
 
 let saved: WallGraph | null = null;
+let base: WallGraph | null = null;
 const listeners: (() => void)[] = [];
 
 /**
@@ -58,6 +60,32 @@ let edits = 0;
 /** How many hand edits the graph carries. Zero means re-deriving costs nothing. */
 export function handEdits(): number {
   return edits;
+}
+
+/**
+ * The graph as the trace last derived it, kept so the surface can say what the GM changed.
+ *
+ * `null` when there is nothing to compare against — no graph, a graph from a build that kept no
+ * base, or one saved against another map. Every caller treats those alike, which is why they are one
+ * value rather than three states.
+ */
+export function derivedBase(): WallGraph | null {
+  return base;
+}
+
+/**
+ * Whether the graph in hand still is what the trace derived. **The question the rail's mark asks.**
+ *
+ * This is the count's replacement, and it is better in the one way that matters: both sides are in
+ * the scene, so the answer survives closing the workspace. The count is in memory, so a GM returning
+ * to a map they edited last week opened at zero and got no mark at all — the one case where the
+ * signal was silent precisely when it was needed.
+ *
+ * It stays beside the count rather than replacing it outright, because `showingSaved` reads the
+ * count to decide which graph is on screen and that is a separate question with its own timing.
+ */
+export function wallsEdited(): boolean {
+  return graphsDiffer(base, saved);
 }
 
 /*
@@ -138,8 +166,9 @@ let mapId: string | null = null;
  */
 export async function loadStage(forMap: string | null): Promise<{ readonly corrupt: boolean }> {
   mapId = forMap;
-  const { graph, corrupt } = await readWallGraph(forMap);
+  const { graph, base: storedBase, corrupt } = await readWallGraph(forMap);
   saved = graph;
+  base = storedBase;
   edits = 0;
   // A different map's history describes a different document. Fractions of *a* map say nothing about
   // which, so restoring one here would put one map's walls onto another.
@@ -156,8 +185,11 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
  */
 export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
   if (!mapId) throw new Error("no map is nominated, so there is nothing to derive a graph against");
-  await writeWallGraph(mapId, graph);
+  await writeDerivedWalls(mapId, graph);
   saved = graph;
+  // The base moves with it: from here the document *is* the derivation, so the comparison the mark
+  // asks finds nothing until the GM touches a wall.
+  base = graph;
   // A derive replaces the graph wholesale, so whatever was edited into the last one is gone and the
   // new one is a pure function of the ink again. The history goes with it: those snapshots describe
   // a graph that is no longer on screen, and restoring one would put back walls derived from ink the
