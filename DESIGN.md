@@ -1406,15 +1406,31 @@ overlapping duplicates of every shape is a state nothing here is designed for.
 
 ### When a push happens
 
-- **The two buttons at the foot of the ink mode's last step** — *Put the walls on the map* and *Edit
-  the walls*. Both write the graph to metadata and then push.
-- **The editor's *Put on the map*.**
-- **Closing the editor**, when something changed. The fingerprint is the map plus every setting, held
-  in memory; losing it costs one unnecessary push, which is the safe direction.
+- **The workspace's *Put on the map*.** The mid-session case — a change a table is waiting on, made
+  without giving up the surface. It is also where the item-budget warning stands.
+- **Closing**, when something changed. The fingerprint is the map plus every setting plus the encoded
+  graph, held in memory; losing it costs one unnecessary push, which is the safe direction.
 
-**Closing the ink mode commits nothing.** That is what makes reopening it over an edited graph
-harmless, and it is what "opening stage one is just looking" costs — a GM who tunes and presses Escape
-gets nothing. It is deliberate, and it is the behaviour most likely to surprise.
+**There is no save button, and closing commits — 2026-09-14.** *Put the walls on the map* stood at
+the foot of Walls and was the crossing into editing: it wrote the derived graph to metadata, pushed
+it, and confirmed what it would replace.
+
+**What replaced it is that the commit is caused by the edit.** The wall tools act on the graph that
+is **drawn** rather than on the stored one, so a map that has been read can be edited straight away;
+and the first edit that changes something adopts the derivation as the document, because that is the
+moment a document becomes necessary. The store writes the base and the document in one
+`setMetadata`, so a first edit costs one scene write rather than two.
+
+> This is the rasterize moment from a drawing program, and the point of borrowing it is *where the
+> dialog goes*. Nothing asks you to commit before the brush will work; the commit happens because you
+> used the brush.
+
+**Closing used to commit nothing, and that rule was about the button.** While one existed, *not
+pressing it* meant something — so a GM who opened stage one to look at a threshold and pressed Escape
+had not replaced their walls. With no button the same behaviour is only a GM tuning for twenty
+minutes and getting nothing, which §7a already named as the thing to fix. What made the old rule
+necessary is handled elsewhere: **a graph carrying hand edits keeps the screen**, so a derivation can
+never be adopted over work the GM can see.
 
 **The modal is dismissed before a closing write, not after.** Waiting would leave a GM staring at an
 opaque sheet that has stopped responding for the seconds a large map takes. **`pushOnClose` never
@@ -1447,8 +1463,10 @@ sites drifting.
 
 ### The item budget
 
-**A warning stands in front of the ink mode's two exit buttons**, naming the item count and pointing at
-the slider that reduces it. Its threshold of **1,500 items is provisional and calibrated on two
+**A warning stands in front of *Put on the map***, naming the item count and pointing at the slider
+that reduces it. **It does not stand in front of closing**, which also pushes: a dialog in the way out
+is one a GM meets while leaving, and a write that will not finish already has the escape hatch — a way
+*out* of the problem rather than a question about it. Its threshold of **1,500 items is provisional and calibrated on two
 observations** — 274 items writes in a couple of seconds, 5,881 cannot be written at all — and nobody
 has bisected between them.
 
