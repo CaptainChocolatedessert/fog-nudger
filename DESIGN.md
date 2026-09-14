@@ -29,7 +29,7 @@ standing obligation — see §11. Everything else it taught this project is writ
 5. [The wall graph](#5-the-wall-graph--stored-walked-and-edited)
 6. [Emitting](#6-emitting)
 7. [The surfaces](#7-the-surfaces)
-   - [7a. The surface redesign — built, and unproven](#7a-the-surface-redesign--built-and-unproven)
+   - [7a. The surface redesign — built, and judged](#7a-the-surface-redesign--built-and-judged)
 8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
 9. [Constraints and pitfalls](#9-constraints-and-pitfalls)
 10. [Open questions and what is next](#10-open-questions-and-what-is-next)
@@ -1205,9 +1205,8 @@ not the cursor**; they differ by that offset, and measuring from the cursor make
 beside a wall that never comes close.
 
 **A snap is drawn in the target's place, not merely coloured**, because that is exactly what releasing
-produces, so the boundary has to be visible **before** it is crossed. (This said a merge "cannot be
-undone", which stopped being true when undo arrived; the rule stands on the better reason, that Undo
-only helps a GM who noticed what a release did.)
+produces, so the boundary has to be visible **before** it is crossed — undo reaches a merge, but only
+helps a GM who noticed what the release did.
 
 **A press and release that did not move writes nothing**, and does not fire the point probe either — a
 gesture the tool took is finished by the tool.
@@ -1242,7 +1241,7 @@ thing being transformed.
   limit, cascading, since every arm of a junction becomes a dead end once its neighbours go. **The
   doomed runs are drawn in red while the slider moves**, in the same red the erase tool uses, because
   a limit is not a number anybody can picture on their own map — and Undo, which does take a prune
-  back, only helps a GM who saw what went. (It said deleting "cannot be undone" until 2026-09-10.) The
+  back, only helps a GM who saw what went. The
   same setting takes four hairs off one map and a third of the walls off another. **`spurEdgesToPrune`
   is the question and `pruneWallGraph` is written in terms of it**, so the picture cannot lie about
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
@@ -1424,7 +1423,7 @@ zero. That is the gap the warning stands in for.
 
 > **This section describes the surface before the redesign, and parts of it are already superseded —
 > see
-> [§7a](#7a-the-surface-redesign--built-and-unproven). Read that before changing anything here.**
+> [§7a](#7a-the-surface-redesign--built-and-judged). Read that before changing anything here.**
 
 **One page, two modes**, chosen by `?mode=` on the URL and by which of two panel buttons opened it.
 The shell, the accordion, the map loading, the transform and every layer are shared; `steps.ts` gives
@@ -1678,8 +1677,23 @@ ahead of the map.
 
 ### The panel
 
-Down to **two buttons**: *Open the workspace* and *Remove ours*. One mode, so one door, and nothing
-else that acts on the scene.
+**Three buttons**: *Open the workspace*, *Remove ours*, and *Clear everything*. One mode, so one door,
+and nothing else that acts on the scene.
+
+**The two destructive ones differ by how far they reach.** *Remove ours* takes our items and the saved
+wall graph, leaving the reading settings, both painted layers and the map nomination — so a map you
+have painted on still composes your old strokes on the next read. *Clear everything* is the start-over:
+the scene as though the extension had never run.
+
+**It lives here rather than on the workspace**, and the argument that decided it is that the workspace
+is the thing being reset — a reset inside it is unreachable in exactly the case that needs it, a
+workspace that will not open because of what is stored. **It finds what to take by namespace rather
+than by a list of keys**, so a key written by a build whose name exists nowhere in the current code
+goes too, which is what a GM starting over means. The predicate that decides is the most dangerous
+line in the extension — it runs in a scene holding the GM's own fog — so it is pure, in
+`namespace.ts`, and tested; the separator is load-bearing, or a neighbouring extension whose id merely
+begins with ours would be caught by it. **It is the one control here that undo does not reach**, which
+is why it is also the one place "this cannot be undone" is true.
 
 **The diagnostics band went on 2026-09-09** (user): *"Remove everything except open and remove ours…
 we haven't used them in a long time."* It held *Trace, emit nothing*, *Inspect fog* and the three
@@ -1725,7 +1739,7 @@ rendering unreadably in their browser, this passage is the reason why, and prese
 was removed.
 ---
 
-## 7a. The surface redesign — built, and unproven
+## 7a. The surface redesign — built, and judged
 
 **§7 above describes the surface as it was before this**, and is kept because the reasoning that
 produced it is what this had to answer. The pipeline, the emit path and the storage are untouched;
@@ -1735,35 +1749,27 @@ this was a rework of the surface only.
 the hand-edit count and the warning it prices, one page with one panel button, undo, the derive
 indicators, the markup palette, the layer toggles and the colour pickers.
 
-### What the first room found
+### Two lessons the first room taught
 
-**It has now been through one** (2026-09-09), and the first pass returned fifteen observations. Two
-are settled here; the rest are open.
+**An exported symbol nothing reaches can be the defect rather than dead weight.** `toolPalette`
+exports an `onToolChange` hook and nothing subscribed to it, so choosing a tool set the state, redrew
+the strip and invalidated the canvas while the rail kept whatever body it was last given — the tool's
+controls were built correctly and never drawn again. The unreachability *was* the bug, and a
+reachability sweep that deleted it would have made things worse.
 
-**The rail never redrew when a tool was picked.** `toolPalette` exports an `onToolChange` hook, added
-when the picker moved out of the rail and into the strip, and **nothing ever subscribed to it** — so
-choosing a tool set the state, redrew the strip and invalidated the canvas while the rail kept
-whatever body it was last given. The tool's controls were built correctly and simply never drawn
-again; collapsing and reopening the section made them appear, which is what identified it. An
-exported symbol no live path reaches is the shape to watch for: here the unreachability *was* the
-defect, not a tidy-up opportunity.
+**The rail body is about the map; the pinned head is about the hand.** What counts as ink is a setting
+of the document; how wide the brush is, and whether it covers or uncovers, belongs to what you are
+holding. That is why a tool's controls sit in the head — they were at the foot of the Ink step, which
+needed the section expanded, a tool selected and a scroll to the bottom, all at once, and were
+reported simply missing. The head already carried the tool *hint* on exactly this argument and had
+stopped one step short of the controls it described. **The cost:** the head grows while a tool is
+armed, and that space comes off the scrollable rail.
 
-**A tool's controls moved to the pinned head.** They were at the foot of the Ink step, so the brush
-width needed the section expanded, a tool selected and a scroll to the bottom, all at once — and was
-reported missing. The rule this settles is in `accordion.ts` and is worth stating here: **the rail
-body is about the map, the pinned head is about the hand.** What counts as ink is a setting of the
-document; how wide the brush is, and whether it covers or uncovers, is a property of what you are
-holding. The head already carried the tool *hint* on exactly this argument — that a tool's controls
-"may be collapsed while the tool is still in hand" — and stopped one step short of the controls
-themselves. The cost is that the head grows while a tool is armed, and that space comes off the
-scrollable rail.
-
-> **It has been judged now, and it held.** Sessions on 2026-09-09 and 2026-09-13 went through the
-> whole surface — the rail, the strip, the tools, the wall actions, the panel — and what came back was
-> a list of fifteen faults, every one of them a detail rather than a disagreement with the
-> arrangement. Nobody asked for the modes back, for the accordion to force one section shut, or for
-> the verb to leave the strip. **The redesign's own question is answered: the shape is one a GM
-> wants.** What the list cost to fix is in §10.
+> **It has been judged, and it held.** Two sessions went through the whole surface — the rail, the
+> strip, the tools, the wall actions, the panel — and what came back was fifteen faults, every one a
+> detail rather than a disagreement with the arrangement. Nobody asked for the modes back, for the
+> accordion to force one section shut, or for the verb to leave the strip. **The redesign's own
+> question is answered: the shape is one a GM wants.**
 
 **That known cost is paid** (user, 2026-09-09): *"most items don't need any description at all. Let's
 see how far we can get just with good naming."* Roughly 1,400 words across the rail and the panel came
@@ -2087,22 +2093,22 @@ contrast against a particular map, and every change is now a trip through the op
 colour picker — slower, and a worse place to compare two candidates. What is bought is that a category
 is a category: five rows, one shape, and nothing to learn about why one of them is special.
 
-### Two measured fixes to carry over — one done, one half done
+### The measured typography finding, still half outstanding
 
-- ~~**Locked group headers fail their own purpose.**~~ **Done, and this entry went on listing it as
-  outstanding.** At 40% opacity a locked header was 2.17:1, under the 3:1 floor for non-text UI. The
-  stylesheet has had it at **0.65 (3.74:1)** for some time, with the measurement written beside the
-  rule — found on 2026-09-10 while applying the same fix to the tool strip. **0.65 is now the one
-  value for "inactive" on the surface**: disabled tools were at 0.4 (2.74:1) and match it at 5.35:1.
-- **The type is too small in the places that are left.** Base is 13px, but control hints are **9.9px**
-  and the state line **9.8px**. A 14px base with an 11px floor costs nothing; the rail scrolls already.
-  **Half applied (2026-09-10):** the tool strip's band captions were 9.1px and are at the 11px floor.
-  The hints and the state line are still under it, and the 14px base is not applied — it changes the
-  look of every control, which is worth a GM seeing before it lands rather than after.
-  **The second half of this finding has been overtaken**: it read *"the hints are where every
-  control's explanation lives"*, which was the argument for raising them and is no longer true — the
-  explanation lives in the label now, and two controls have a hint at all. The state line still
-  carries what it always did, so the floor is still worth having.
+**Contrast is settled.** `0.65` is the one value for "inactive" on this surface — locked headers,
+disabled tools, the undo pair — measured at 3.7:1 and better against a 3:1 floor for non-text UI. The
+`0.4` it replaced computed to 2.2:1 and 2.7:1, which is under the floor for something whose whole
+purpose is to be read while inactive.
+
+**Size is not.** The base is 13px, control hints are **9.9px** and the state line **9.8px**. A 14px
+base with an 11px floor costs nothing and the rail scrolls already. The tool strip's band captions are
+at the 11px floor; the hints and the state line are not, and the base is unchanged — it alters the look
+of every control at once, which is worth a GM seeing before it lands.
+
+**One half of this finding is void**, and it is the half that argued for raising the hints: it read
+*"the hints are where every control's explanation lives"*, which stopped being true when the labels
+took over that job. Two controls carry a hint at all. The state line still carries what it always did,
+so the floor is still worth having — on its own merits rather than that one.
 
 ### What does not change
 
@@ -2463,300 +2469,22 @@ the most informative thing that can happen to this project.
 
 **Nothing after the room's list depends on that list**, and nothing after it is urgent.
 
-### The first room's list
-
-**The first real session happened on 2026-09-09** and returned a list. It is written down here rather
-than left in a conversation because a conversation ends: this is the working set, and anything struck
-from it should be struck by being *done*, not by being forgotten.
-
 ### Where to pick this up
 
-**The room's list is finished.** Two sessions in a room on 2026-09-09 and 2026-09-13 produced fifteen
-observations and several more found while fixing them. Everything buildable from that list is built
-and confirmed in a room. What remains below is **six decisions**, not six jobs, and one of them
-carries three of the others.
+**Everything the rooms found is fixed.** What is left is six decisions rather than six jobs, and the
+first of them carries three of the others.
 
-**What the two sessions established, and it is the bigger news:**
-
-- **The partition is good on a real map.** The oldest open question in the project, asked since §1 was
-  written, has its first answer and the answer is yes. Scope is one map and one GM — see *The
-  partition has been judged* above, which says what that does and does not establish.
-- **The surface redesign held.** Fifteen faults, every one a detail. Nobody asked for the modes back,
-  for the accordion to force one section shut, or for the verb to leave the tool strip.
-
-**What was built along the way, all confirmed in a room:** the slider ghost (five faults behind one
-sentence), the unified undo and a new redo over both documents, *Clear everything* on the panel, the
-tool's controls in the pinned head, the wall actions gated before the press, and a long tail of naming
-and legibility work. Each has its own entry below or in §5.
-
-**The one thing still unseen:** View's **Defaults** restoring all five colours. The rows themselves
-have been looked at; nobody has pressed that button.
-
----
-
-**The six decisions, in the order I would take them.**
-
-1. **The fractured save-then-buttons workflow.** The largest, and **three of the others wait on it** —
-   the two *put on the map* cuts, and whether Prune and Straighten keep their buttons at all. It has
-   gained two facts since it was raised: a slider release never replaces the stored graph, and those
-   two actions were undoable the whole time, so the button-plus-confirmation shape was guarding a
-   permanence that undo had already removed. Its entry below has the threads.
-2. **The state line's placement.** Bottom-right of a full-screen window while every control that
-   writes to it is in the left rail. This is what made three working buttons read as dead, and it
-   affects every message on the surface rather than those three.
-3. **The ink-width readouts**, which quote a programmatic estimate as though it were a fact.
-4. **The frame button's wording** — *Make the outside a room* against the room's *Create walls around
-   map border*. Naming the outcome versus naming the mechanism.
-5. **Per-colour opacity**, explicitly not to be built until discussed.
-6. **The 14px base size**, measured and recorded, left alone because it changes the look of every
-   control at once and wants a GM's eye rather than a desk's.
-
-**And the thing that is not a decision at all: a second map.** The reading is least proven on styles
-unlike the one that has been tried — hatched stonework, a printed floor grid, a scan, walls drawn as
-texture rather than line. Everything in the list above is refinement; that is where the next real
-finding is.
+**The one check nobody has run:** View's **Defaults** restoring all five colours. The rows themselves
+have been looked at; that button has not been pressed.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
 
-Where an entry carries a guess about a cause, it says so.
+### The decisions, in the order to take them
 
-#### The wall-graph group — diagnosed, and it was not one cause
-
-Four entries: the wall tools greyed out, **Straighten walls** doing nothing, **Make the outside a
-room** doing nothing, **Undo** greyed out.
-
-**The one-cause hypothesis was half right.** Three of the four are the same condition — nothing had
-ever been saved from the Walls step, so `wallGraph()` was null. The tools grey out correctly, Undo
-greys out correctly on an empty history, and the frame button does check. Honest behaviour on a map
-that was never saved.
-
-**What made them look dead was where they answered.** All three actions *did* respond, by writing to
-the state line — which is pinned to the bottom-right corner of a full-screen window at 0.75rem in
-muted grey, while the button pressed is in the left rail. A diagonal across the whole screen. "It
-does nothing" is the correct reading of that, and the placement is now its own open item below.
-
-**Straighten was a different fault**: its limit defaults to off, so it refused for a reason that had
-nothing to do with the graph.
-
-**And the real find was Prune**, which is the room's separate entry about a button with no slider.
-Its limit is declared to **Walls** because it also shapes the derived graph; its button is rendered in
-**Edit walls**, where it re-applies the same number to the stored document. With the limit defaulting
-to off, that button could only ever refuse — and the control that would fix it was in another section
-with nothing pointing there.
-
-**Fixed by applying a rule the project already had.** `toolPalette` states it: *a tool offered in a
-state where its presses do nothing is a button that lies.* The strip obeyed it and the three actions
-did not. They are now gated before the press, in `actionGate.ts`, whose decision half is pure and
-tested — and gated buttons carry a sentence, because greying out alone trades a lying button for a
-silent one. No graph is silent by design, since `wallTools` already says it once; a limit at zero is
-per-action and names its own slider **and the step that holds it**.
-
-**Declaring the prune limit to both steps was the obvious fix and is forbidden.** The rail no longer
-forces a section shut, so two handles on one setting would be reachable at once and would disagree
-the moment either moved. `steps.test.ts` pins that, and the naming in the disabled sentence is what
-the second handle would have been for.
-
-**Confirmed in the room, both halves** (2026-09-09): the straighten button greys and un-greys as its
-own slider crosses zero, and the prune button's note reads *"Off — set Longest dead end to remove
-under Walls"*. That is the rare case where a desk claim was checked rather than assumed — and it had
-to be, because the first attempt at checking it produced a **false** failure report. The straighten
-button appeared stuck disabled, and the cause was almost certainly a half-updated module set: the
-files were being edited under a live dev server while the room was open, so HMR was swapping them in
-mid-change. A clean reopen fixed it and it has not recurred. See `CLAUDE.md` for the working
-agreement that came out of that.
-
-#### Bugs
-
-- ~~**Save the ink edits** reports that nothing has changed, after *Smallest mark to keep* was
-  adjusted.~~ **Fixed at the desk (2026-09-10), and the suspicion was right.** The guard compares only
-  the two painted layers against their saved copies, and a slider writes itself to the scene on
-  release — so there was genuinely nothing left to save. The fault was the phrase *ink edits*: on a
-  step called Ink every control is an ink edit, and the button only ever saved strokes. It is now
-  **Save painted strokes**, and its refusal says *"no painted strokes to save — sliders save
-  themselves as you release them"*, which answers the anxiety the old message produced.
-- ~~**The ghost mark on a slider** lands near the new value rather than on it, and never
-  disappears.~~ **Fixed at the desk (2026-09-10) — five faults behind one sentence**, all now in
-  `ghostMark.ts`, whose decision half is pure and tested:
-  - *Near, never on.* The old test compared track positions, and a release snaps its position to
-    the step or to three significant figures, so converting the value back lands a few steps off the
-    handle. An exact comparison of two numbers apart by rounding is never equal. **Settledness is now
-    asked in values** — applied and current are the same number once a recompute lands.
-  - *Never gone on brush widths, gap sliders and opacities*, which recompute nothing, so nothing was
-    ever pending on them and nothing could clear their ghost. **Only a pipeline control gets one.**
-  - *Never gone on pruning*, which re-applied without recording it. It now records itself.
-  - *Never re-asked when a derive landed*, only when a reading did. The rows are now re-run whenever
-    the picture catches up with any setting.
-  - *A leak underneath*: every row subscribed to the reading on build and that list is never cleared,
-    so each rail rebuild — every accordion click, and every tool change — stranded another row's
-    worth of listeners on detached elements. The ghost now lives with the row painters, which are
-    reset with the rows.
-
-  **The look is the room's**: a grey circle the size of the handle, placed where the handle's own
-  centre would be — which is half a thumb in from each end, not a bare percentage of the track.
-  **Measured in Chromium**: the circle is 16px, vertically centred on the track, and at the far left
-  exactly where a 16px thumb centres. The first attempt sized it in `rem` and came out 13px, because
-  this surface's root text is 13px; the native thumb does not follow the root font.
-  **Confirmed in Firefox by a room, both ways it can be wrong.** Under the handle mid-track
-  (2026-09-10), which settles the 16px size; under it at both ends of a track (2026-09-13), which
-  settles the inset — the half that is invisible anywhere but the ends. If it ever sits beside the
-  handle there, `--thumb` in `workspace.html` is the number to change.
-
-#### Legibility
-
-- ~~The text in the tool column is too thin or too dark to read comfortably.~~ **Fixed at the desk
-  (2026-09-10), and it was both.** *Too dark*: disabled tools were at 40% opacity, which measured
-  2.74:1 against the strip — under the 3:1 non-text floor — and before a map or a graph most of the
-  column is disabled. They match a locked header's 0.65 now, at 5.35:1. *Too thin*: the glyphs drew a
-  1.6-unit line on a 24-unit grid shown at about 15px, which renders at **1.04 CSS pixels** and
-  anti-aliases to grey; they are drawn at 2 units and a little larger now, landing at 1.52px. The
-  band captions passed on contrast but were 9.1px uppercase, and are at the record's 11px floor.
-  Checked in Chromium by measurement and by eye; **not in Firefox**.
-- ~~The layer toggles across the top are not self-explanatory; it is not obvious what they are
-  for.~~ **Addressed at the desk (2026-09-10), by naming rather than explaining.** They were a row of
-  bare words with the purpose in a hover tooltip, and two of the words — *Ink* and *Walls* — are also
-  rail sections, so the row read as navigation. It now leads with a caption, **Show**, styled like the
-  tool strip's band captions: *Show — Ink · Rooms · Walls*. **Not seen on screen**: nothing proposes a
-  layer outside a room, so the row was empty there. **Confirmed in a room (2026-09-13):** the caption
-  and the switches work. If it ever proves not to be enough, an eye glyph on each switch is the next
-  step — a design change rather than a naming one.
-- **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
-  control that writes to it is in the left rail, so a message about a press arrives as far from the
-  press as the window allows. This is what made three working buttons read as dead. Gating them
-  removed the need for that particular message; the placement is unchanged and affects every other
-  message on the surface.
-
-#### Bugs found later
-
-- ~~**The first ink tool picked after opening the workspace did nothing**~~ — the cursor stayed a hand
-  and no stroke landed; picking any other tool and coming back fixed it for the session (user,
-  2026-09-13). **Fixed the same day.** `openPaintMode` began by putting the tool back down. That was
-  right while the **accordion** opened the mode, when a GM entering the Ink step had no brush in hand
-  — but the strip took the verb, so the mode is opened *by* choosing a tool, and the reset wiped the
-  selection that had just asked for it. With no tool in hand the brush declines every press and the
-  drag falls through to a pan, which is the hand cursor. The second pick worked because the mode was
-  open by then and the early return meant nothing clobbered it.
-  **A second instance of the same clobber was found in the same function and not reported:** it also
-  cleared the gap search, which `setPaintTool` had just *run* for the gap tool — so the first time a
-  GM chose Gaps, its rings vanished as they appeared while the state line reported how many had been
-  found. Both lines are gone; `setPaintTool` owns the tool and the search.
-  **Not covered by a test:** `paintTool.ts` reaches the SDK and the DOM, so it cannot be imported into
-  a node test, and the ordering rule that broke here — *opening a mode must not change what is in
-  hand* — is not a decision that can be split out the way a gesture's can. Confirmed by a room instead.
-
-#### Wanted, and now built
-
-- ~~**A way to delete all the metadata and start over**~~ (user, 2026-09-13). **Built the same day**
-  as *Clear everything* on the panel, armed behind a second press. What follows is why it is shaped
-  the way it is. It was true that there was none, and
-  *Remove ours* is not it: it deletes our scene items **and** clears the saved wall graph, but leaves
-  the **reading settings**, the **two painted layers** and the **map nomination** in place — so
-  re-reading a map you have painted on still composes your old strokes into the ink.
-
-  **It belongs on the panel**, and the argument that decides it is that the workspace is the thing
-  being reset: a reset living inside it is unreachable in exactly the case that needs it, a workspace
-  that will not open or opens wrong because of bad stored state. *Remove ours* is already there and
-  this is its bigger sibling, so the destructive family stays in one place.
-
-  **What needs deciding is the scope**, because the stored state splits two ways. The wall graph and
-  the painted layers are **per map**; the settings and the nomination are **scene-wide**. So:
-  - *Start this map over* — its walls, its paint, its emitted shapes. Tuning and other maps untouched.
-  - *Clear everything* — all of that plus the settings and the nomination, as though the extension had
-    never run in this scene.
-
-  **Decided (user, 2026-09-13): "It should clear everything."** The scene as though the extension had
-  never run — items, wall graph, both painted layers, the settings and the nomination. **It is the one
-  genuinely irreversible control on the surface** — undo does not reach metadata — so it is the one
-  place "this cannot be undone" is true, and its note says exactly that.
-
-  **How it finds what to take: by namespace, not by a list.** Every key is `NAMESPACE/<name>` and
-  every item of ours carries one, so `clearScene.ts` asks the scene what of ours is in it. A key
-  written by an older build, whose name exists nowhere in this code, is exactly what a GM starting
-  over needs gone and exactly what a maintained list forgets — and it is why this also catches the
-  retired step-one probe's shapes, which the emit path's own two-key predicate does not.
-
-  **The predicate is the dangerous part and is the tested part.** It decides what a delete removes, in
-  a scene holding the GM's own fog, so `isOurKey` lives in the pure `namespace.ts` where a node test
-  can reach it. The separator is load-bearing: without the trailing slash, a neighbouring extension
-  published as `…fog-nudger-something` would read as ours and have its items deleted. Five mutations,
-  five caught.
-
-  **It asks with `confirmAction`, the same dialog the workspace asks with** (user, 2026-09-13:
-  *"We've moved to pop-up dialogs to confirm dangerous actions, rather than those odd double-click
-  buttons"*). It was briefly a pair of armed buttons, on the reasoning that a sandboxed iframe cannot
-  rely on `confirm()` — true of the **browser's** dialog and beside the point, since `confirmDialog.ts`
-  is ours and is plain DOM. **That is what made the dialog shared**: it drew its buttons with the
-  workspace's `.chip` classes, so a component that looked reusable could only be used on one page. It
-  carries its own styles now, and the alternative — copying thirty lines of CSS into the panel — is
-  where this project's drift bugs start.
-
-  **Wired at module load rather than inside `OBR.onReady`** — the arming needs no SDK, and the
-  workspace already states the lesson the probe learned three times: a listener written inside the
-  Owlbear path is silently dead until Owlbear answers. Gating it would also have made it unverifiable
-  outside a room, which is how the shape of this was checked at all.
-
-  **Confirmed in a room (2026-09-13): it works as expected.**
-
-#### Cuts and moves
-
-- ~~The **ink colour picker** should move down with the other swatches, and the **ink opacity**
-  control should go.~~ **Done at the desk (2026-09-10).** The ink row now leads the five colours at
-  the foot of View, labelled like its neighbours.
-  **And it takes their shape as well as their place (2026-09-13.)** A room: *"It should adopt that
-  same format as the others."* Ink had a builder of its own, which put its picker under the label
-  inside the swatch strip rather than beside it — invisible while it lived alone at the top of the Ink
-  step, and the odd one out the moment it joined four rows that did it differently. There is one
-  builder now and ink's presets are an addition to the shared row; the old one had also drifted,
-  reading the stored colour by hand with its own normalising call where `colourFor` does that for
-  every role.
-  **The pickers were also far too big** — *"a big color rectangle with a thick boundary … shrink them
-  closer in height to the words. The borders can be much thinner."* Two causes. The four non-ink rows
-  gave their input **no size at all**, so it came out at the UA's default of roughly 50×27, twice the
-  height of the label beside it. And **the thick boundary was the browser's own**: a native colour
-  input draws an inner swatch with a heavy border of its own, so a thin border on the element only
-  ever added a second line around a thick one — the vendor pseudo-elements are what remove it, and
-  `::-moz-color-swatch` is the one that counts for Firefox. Now 27×15 against a 19.5px label line,
-  with the presets square at the same height.
-  **`flex: none` is load-bearing there**, and was found by measuring rather than reasoning: a colour
-  input has no intrinsic width to defend itself with, so in a narrow rail it was squeezed to **2px**,
-  which is the two borders with nothing between them. Two consequences worth knowing:
-  - **The ink opacity went as a parameter, not just a slider.** Hiding only the control would have
-    left anyone who had already lowered it with a faded overlay forever and no way back; with the key
-    gone the settings normaliser drops a stored value. **The cost** is the in-between setting — the
-    ink is solid or it is hidden, and "does this ink sit on the line underneath" takes two views where
-    it took one.
-  - **View's Defaults now resets all five colours.** The ink colour's reset had lived on Ink and had
-    to follow the swatch, or Ink's Defaults would restore a colour it no longer shows. The other four
-    were never reset by anything, which looks like a gap left when they became adjustable; with all
-    five side by side, restoring one and not the others would have been the button and the section
-    disagreeing.
-  - The suppression colour's label, **Covered**, was the verb the Suppress tool had dropped; it is
-    **Suppressed** now (see Naming).
-- **Put the walls on the map** — the room's reaction was that it no longer makes sense.
-- **Put on the map** in Edit walls — consider removing it too.
-
-#### Naming
-
-- ~~**Rub out** on the Add ink tool should be **Erase**.~~ **Done (2026-09-09).**
-- ~~**Cover** and **Uncover** on Suppress are not right.~~ **Done (2026-09-09): both paint tools use
-  Draw and Erase**, and the layer in hand carries the difference. The cost is that "Cover" hinted
-  suppression is additive — nothing of the map is lost — and the Suppress blurb now says so outright.
-- ~~The suppression *colour* in View was labelled **Covered**~~, the verb the tool dropped. **Done
-  (2026-09-10): Suppressed**, named for the tool the way *Added* is named for *Add ink*.
-- **Considered and left:** the colour labels **Ink** and **Walls** share their names with rail
-  sections. On reflection that is agreement rather than collision — each names the same thing the
-  section and the layer toggle do, the ink layer and the wall graph. Recorded in case a room reads
-  them as links anyway.
-
-#### Wants a conversation before any code
-
-- **The ink-width readouts state a guess too confidently.** The measured ink width is a programmatic
-  estimate and several readouts quote it as though it were a fact. One candidate: if a line of text
-  is needed to say how many pixels something is, make **pixels the unit the slider reports on the
-  right** instead.
-- **The save-then-buttons workflow is fractured, and this is the big one** (user, 2026-09-09): *"It
-  seems fractured and unintuitive."* It absorbs the narrower "why a button at all" question, because
-  they are the same conversation from two ends.
+1. **The fractured save-then-buttons workflow.** The largest, and **three of the others wait on
+   it** — the two *put on the map* cuts below, and whether Prune and Straighten keep their buttons
+   at all.
 
   **What a GM currently does.** Tune the reading in **Walls**, where straightening and pruning are
   live sliders re-applied on every derive and costing nothing to sweep. Press **Put the walls on the
@@ -2800,55 +2528,61 @@ agreement that came out of that.
   "which half does the correcting" is *both, depending on what is wrong*. Any design that makes one
   side the ending is wrong about how the work goes.
 
-  **A second fact, same day: Prune and Straighten are already undoable.** Both save through the same
-  path as every hand edit, so both sit on the undo history, and until today both carried a
-  confirmation or a note saying they "cannot be undone". Those were false and are corrected. So the
-  button-plus-confirmation shape the editor gives them was built to guard a permanent loss that undo
-  had already removed — which answers the "could undo carry the risk" thread for these two, and makes
-  the case for their separate buttons thinner than it was argued. **What undo does not cover** is the
-  save from Walls: it clears the history, so replacing the stored graph remains the one step with no
-  way back.
+  **A second fact: Prune and Straighten are undoable.** Both save through the same path as every hand
+  edit, so both sit on the undo history. The button-plus-confirmation shape the editor gives them
+  guards a permanence that no longer exists — which answers the "could undo carry the risk" thread for
+  these two, and makes the case for their separate buttons thinner than it was argued. **What undo
+  does not cover** is the save from Walls: it clears the history, so replacing the stored graph remains
+  the one step with no way back.
 
   **Do not start building on this.** It touches the stage boundary, which is §3's core, and the two
   cuts already parked (*Put the walls on the map*, *Put on the map*) are downstream of whatever it
   decides.
-- ~~**Where undo and redo go**, and whether redo is possible.~~ **Both done (2026-09-13).** Undo covers
-  the ink as well as the graph (§5), **redo is built**, and the pair sits in the pinned rail head above
-  the hand-edit count.
 
-  **Not the tool strip**, which the room proposed first: every button there is a *mode*, picked and
-  held and shown by a pressed state, where these are momentary — one list holding both would make that
-  highlight mean two things. The machinery agreed: a tool declares the drag it binds, whether it opens
-  paint mode, and what the pinned hint says while it is *in hand*, and undo answers none of them.
-  **Not the chrome bar** either, where undo used to be: that is Fit, Controls and Close, which are
-  about the *surface*. The head is where the **hand-edit count** already sat with nothing owning it —
-  its own comment said it "belongs to the document" and should move to whatever owns that. These are
-  that owner, so the count and the way back from it are one block.
+2. **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
+  control that writes to it is in the left rail, so a message about a press arrives as far from the
+  press as the window allows. This is what made three working buttons read as dead. Gating them
+  removed the need for that particular message; the placement is unchanged and affects every other
+  message on the surface.
 
-  **Redo is the same stack read the other way.** A restore hands back the way to the state it just
-  left, so the two stacks only ever trade entries — which is what makes them symmetrical rather than
-  two implementations that have to agree. A new act abandons the forward history; a redo does not.
-  **Ctrl+Shift+Z**, which was free because the undo handler had always refused Shift rather than
-  ignoring it.
+3. **The ink-width readouts state a guess too confidently.** The measured ink width is a programmatic
+  estimate and several readouts quote it as though it were a fact. One candidate: if a line of text
+  is needed to say how many pixels something is, make **pixels the unit the slider reports on the
+  right** instead.
 
-  Sixteen mutations, sixteen caught, in two rounds — and two of those survived their first pass because
-  a test was weaker than its name.- ~~**`editSimplifyFraction` is declared `read` stage, and that looks wrong.**~~ **Settled from the code
-  and fixed (2026-09-10), and it was five controls, not one.** The discard prompt read a parameter's
-  stage and never its kind, so it fired for every `read`-filed control — including both brush widths,
-  both gap sliders and the editor's straighten slider, all of which are `tool` kind and re-read
-  nothing. With wall edits outstanding each told the GM it *"decides what counts as ink"* and would
-  derive the walls again; neither was true, and confirming did nothing. The code's own comment on the
-  declaration said *"nothing reads it"*, which was false. **The prompt now asks `rereadsTheMap`**, the
-  same predicate the recompute uses to request a re-read, so the two cannot disagree — pinned by name
-  to the five ink-reading sliders. Pruning left the list too: it is a reading-stage pipeline parameter
-  and still never goes near the map.
-  **Confirmed in a room (2026-09-13):** with a wall edit outstanding, a brush width moves with no
-  dialog. That is the one a GM would meet most often — it stood between them and every stroke width
-  they set while wall edits were outstanding.
-- **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
+4. **The two *put on the map* buttons**, which wait on the first decision. A room's reaction to
+   **Put the walls on the map** was that it no longer makes sense; **Put on the map** in Edit walls is
+   the same question from the other side.
+
+5. **Wording for the frame button.** *Make the outside a room* was the room's second doubt about it;
   *Create walls around map border* was offered as an alternative.
-- **Per-colour opacity.** Explicitly **not to be built until it has been discussed** — it may not fit
-  the design language, and that is the conversation.
+
+6. **Two visual changes that want a GM's eye before they land.** **Per-colour opacity**, which may not
+   fit the design language — that is the conversation, and it is explicitly not to be built before it.
+   And the **14px base size** from §7a's measured typography note, left alone because it changes the
+   look of every control at once.
+
+**And the thing that is not a decision at all: a second map.** The reading is least proven on styles
+unlike the one that has been tried — hatched stonework, a printed floor grid, a scan, walls drawn as
+texture rather than line. Everything above is refinement; that is where the next real finding is.
+
+### Rules the rooms left behind
+
+Four constraints a later change could break without noticing. Each is enforced somewhere in the code;
+these are here so the reason survives the enforcement.
+
+- **The prune limit's slider is in Walls and its button is in Edit walls, and it must not be declared
+  to both.** The rail no longer forces a section shut, so two handles on one setting would be
+  reachable at once and would disagree the moment either moved. `steps.test.ts` pins it; the button
+  names its slider's step instead.
+- **A control offered where its presses do nothing is a control that lies.** The tool strip always
+  obeyed this; the wall actions did not, and answered a press by writing to a state line in the
+  opposite corner of the window. Gate before the press, and say why the gate is down.
+- **`0.65` is the one value for "inactive"** on this surface — locked headers, disabled tools, the
+  undo pair. It is measured against the 3:1 contrast floor; 0.4 was below it.
+- **The undo stack is cleared when walls are saved and when the map changes**, and that is what makes
+  undoing a stroke safe without a confirmation. `undoHistory.ts` carries the argument. Relaxing the
+  clearing rule means a confirmation has to replace it.
 
 ### Two features unimplemented, and one still needs a conversation before code
 
