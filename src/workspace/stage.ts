@@ -31,7 +31,7 @@
 import { devLog } from "../devlog";
 import { readWallGraph, writeWallGraph } from "../wallGraphStore";
 import type { WallGraph } from "../trace/wallGraph";
-import { EditHistory } from "./editHistory";
+import { clearUndo, pushUndo } from "./undoHistory";
 
 let saved: WallGraph | null = null;
 const listeners: (() => void)[] = [];
@@ -60,63 +60,40 @@ export function handEdits(): number {
   return edits;
 }
 
-/**
- * What the graph looked like before each of the last few edits, newest last.
- *
- * **Undo exists because the boundary that used to make this unnecessary is gone.** While the reading
- * controls and the editing tools were separate pages, wall edits could not be destroyed by accident;
- * on one surface they can, and the count plus its warning only help a GM *predict*. Nothing helped
- * with a judgement that looked right and was not — pruning at a limit that seemed fine and taking a
- * wall you wanted had no route back but regenerating and losing everything.
- *
- * Snapshots rather than inverse operations. The graph is tens of kilobytes and every edit already
- * replaces it wholesale, so keeping the old one costs almost nothing and cannot disagree with what
- * an inverse would have reconstructed. Twenty is far more than a GM will reach for and still well
- * under a megabyte.
- *
- * Each carries what it would undo, so the button can name it: "Undo erasing a wall" tells you what
- * you are about to get back, where a bare "Undo" asks you to remember.
- */
-const HISTORY_DEPTH = 20;
+/*
+  The stack lives in `undoHistory.ts` now, shared with the painted ink (user, 2026-09-13).
 
-const history = new EditHistory<WallGraph>(HISTORY_DEPTH);
+  **Undo exists because the boundary that used to make this unnecessary is gone.** While the reading
+  controls and the editing tools were separate pages, wall edits could not be destroyed by accident;
+  on one surface they can, and the count plus its warning only help a GM *predict*. Nothing helped
+  with a judgement that looked right and was not — pruning at a limit that seemed fine and taking a
+  wall you wanted had no route back but regenerating and losing everything.
 
-/** What undoing would take back, or `null` when there is nothing. */
-export function undoLabel(): string | null {
-  return history.peek()?.label ?? null;
-}
+  Snapshots rather than inverse operations. The graph is tens of kilobytes and every edit already
+  replaces it wholesale, so keeping the old one costs almost nothing and cannot disagree with what an
+  inverse would have reconstructed.
+
+  What this file still owns is the **count**: `edits` is wall edits and nothing else, because what it
+  prices is a re-derive replacing the graph. A stroke does not enter it, which is why the restore
+  below decrements and a paint restore does not.
+*/
 
 /**
- * Take back the last edit.
+ * Put the graph back as it was before one edit.
  *
- * Writes to the scene like any other edit, because the graph is stored there — undo is a change to
- * the document rather than a view of it. Refuses while another write is in flight, so two overlapping
- * writes cannot land in the wrong order.
+ * Handed to `undoHistory` as the way back from a wall edit. Writes to the scene like any other edit,
+ * because the graph is stored there — undo is a change to the document rather than a view of it.
  *
- * **The count comes back down with it.** Undoing every edit returns it to zero, at which point
- * re-deriving is free again and stops asking — which is true, and is the whole point of counting
- * rather than latching a flag.
+ * **The count comes down with it**, which is the whole point of counting rather than latching a flag:
+ * undoing every edit returns it to zero, at which point re-deriving is free again and stops asking.
  */
-let writing = false;
-
-export async function undoEdit(): Promise<string | null> {
-  const last = history.peek();
-  if (!last || writing || !mapId) return null;
-
-  writing = true;
-  try {
-    // Written before it is popped, so a failed write leaves the entry there to try again rather than
-    // silently consuming the one state that could have been restored.
-    await writeWallGraph(mapId, last.document);
-    history.pop();
-    saved = last.document;
-    edits = Math.max(0, edits - 1);
-    announce();
-    devLog("info", `stage: undid ${last.label} — ${edits} hand edits left`);
-    return last.label;
-  } finally {
-    writing = false;
-  }
+async function restoreGraph(before: WallGraph): Promise<void> {
+  if (!mapId) return;
+  await writeWallGraph(mapId, before);
+  saved = before;
+  edits = Math.max(0, edits - 1);
+  announce();
+  devLog("info", `stage: undid a wall edit — ${edits} hand edits left`);
 }
 
 /**
@@ -160,7 +137,7 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
   edits = 0;
   // A different map's history describes a different document. Fractions of *a* map say nothing about
   // which, so restoring one here would put one map's walls onto another.
-  history.clear();
+  clearUndo();
   announce();
   return { corrupt };
 }
@@ -180,7 +157,7 @@ export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
   // a graph that is no longer on screen, and restoring one would put back walls derived from ink the
   // GM has since changed.
   edits = 0;
-  history.clear();
+  clearUndo();
   announce();
   devLog("info", `stage: saved — ${graph.nodes.length} nodes, ${graph.edges.length} segments`);
 }
@@ -202,7 +179,7 @@ export async function saveEditedWalls(graph: WallGraph, label: string): Promise<
     The store throws where the settings reader swallows, and the reason applies here too: a history
     entry for an edit the scene never took would offer to restore a state that was already current.
   */
-  if (before) history.push(before, label);
+  if (before) pushUndo(label, () => restoreGraph(before));
   saved = graph;
   edits += 1;
   announce();

@@ -1898,10 +1898,38 @@ misjudged, and a bare "Undo" asks them to remember what that was.
 re-deriving is free again and stops asking. That is true, and it is what counting buys over latching
 a flag.
 
-**What it does not cover, stated.** The graph only. Settings are not destructive — turning a slider
-back puts the walls back, because a derivation is not spent by being redone — and the paint layers are
-a raster document with their own Discard and Clear. A stroke-level undo for those is a different
-mechanism against a different document.
+**It covers both documents the GM edits by hand** — the graph and the painted ink — since 2026-09-13.
+It was the graph alone, and this said the paint layers were "a raster document with their own Discard
+and Clear ... a different mechanism against a different document". A room asked the obvious question,
+*"Why wouldn't undo cover ink edits, too?"*, and the answer is that a GM expects one Undo that takes
+back the last thing they did, whatever it was. Two histories with different names was the tool's
+structure showing through.
+
+**Settings are still outside it**, and that part was always right: turning a slider back puts the
+walls back, because a derivation is not spent by being redone.
+
+**What made the raster affordable** was already in the codebase. A snapshot is **run-length encoded**
+with the codec the scene store uses — an untouched layer is a single run and ordinary brushwork a
+couple of runs a row — so twenty snapshots of two layers cost almost nothing, where twenty raw clones
+would be hundreds of megabytes on a large map. The cost is one pass over the raster per **stroke**,
+not per pointer sample.
+
+**An entry is a way back, not a document.** The stack holds closures, so it never learns what kind of
+thing it is restoring: `stage.ts` writes a graph to the scene, `paintTool` puts a raster back and asks
+for a recompose. That is what keeps the stack free of both owners, and so free of the import cycle a
+union type would have forced.
+
+**No confirmation, and the reason is structural.** Mixing the two raised the question of an undo that
+loses downstream work, since walls are derived from ink. It cannot arise: the stack is cleared when
+walls are saved from the Walls step and when the map changes, so everything on it happened since the
+last save; undo is last-in-first-out, so it returns to a state that existed; and undoing a stroke
+changes the *preview* partition, where the **saved** graph is replaced only by a save — the thing that
+cleared the stack. **If that clearing rule is relaxed, a confirmation is what has to replace it.**
+
+**Two details a room will notice if they are wrong.** A paint undo **reopens the paint mode** if the
+brush has been put down, because putting it down releases the working copies — and that is exactly
+when a GM looks at what they drew and wants it back. And a stroke that changed no pixels pushes
+nothing, so a click never fills the stack with entries that undo to the state they are already in.
 
 **The staleness rule is the part worth pinning, and it is where the tests are.** A snapshot describes
 the document as it was, and two events make it describe something else: a **derive** replaces the
@@ -2779,8 +2807,27 @@ agreement that came out of that.
   **Do not start building on this.** It touches the stage boundary, which is §3's core, and the two
   cuts already parked (*Put the walls on the map*, *Put on the map*) are downstream of whatever it
   decides.
-- **Undo, and whether redo is possible.** The room suggested undo belongs in the tool column as a
-  curved back arrow. **Redo is possible and small — answered from the code, not built (2026-09-10).**
+- **Where undo and redo go.** **Undo now covers the ink as well as the graph (2026-09-13)** — see §5.
+  What is left of this entry is placement, and a room's proposal: undo and redo as tools in a new
+  section below Walls.
+
+  **The grouping is right and the strip is the wrong home.** Undo sits in the chrome bar beside Fit,
+  Controls and Close, which are all about the *surface*; undo acts on the **document**, so it is in
+  the wrong company. But every button in the strip is a **mode** — picked, held, and shown by a
+  pressed state — where undo is momentary, and the machinery says the same: a tool declares the drag
+  it binds, whether it opens paint mode, and what the pinned hint says while it is *in hand*. Undo
+  would need a special case through each, which is usually the sign the category is wrong.
+
+  **Suggested instead: the pinned rail head**, beside the hand-edit count that already lives there —
+  the two would form one block, the count of edits and the way back from them. It never scrolls or
+  collapses, it takes the curved-arrow glyphs the room asked for, and the edit count's own comment
+  already says it "is not a property of the tool — it belongs to the document" and should move to
+  whatever owns that. Nothing owns it yet; undo and redo arriving would.
+
+  **Note that the room's own next question undercuts the placement**: undo covering ink as well as
+  walls means "below Walls" is no longer its scope.
+
+  **Redo is possible and small — answered from the code, not built (2026-09-10).**
   Undo is snapshot-based: each wall edit and each of the three wall actions pushes the pre-edit graph
   onto a stack twenty deep (`EditHistory`, pure and tested), and undo writes a snapshot back to the
   scene. Redo is the usual second stack — undo parks the current graph on it before restoring, redo
@@ -3039,7 +3086,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
   untouched**) · `paintControls.ts` (the tool in hand, drawn into the **pinned head**, plus the step's own Save) · `paintState.ts` · `gapSearch.ts` · `wallTools.ts` (only the
   sentence shown when no graph is saved)
-- **Acting on the document** — `undoAction.ts` and `editHistory.ts` (the snapshot stack, pure and
+- **Acting on the document** — `undoAction.ts` (the button and Ctrl+Z) · `undoHistory.ts` (**the one
+  stack, for the graph and the painted ink both**: entries are labelled closures, so it never learns
+  what it is restoring — pure and tested) · `editHistory.ts` (the bounded stack under it, pure and
   tested) · `simplifyAction.ts`, `pruneAction.ts`, `frameAction.ts`
 - **What is drawn** — `layerToggles.ts` (pure and tested: groups propose, the GM disposes, a tool may
   only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds

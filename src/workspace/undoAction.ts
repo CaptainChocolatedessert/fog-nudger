@@ -27,7 +27,7 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { invalidate, say } from "./shell";
-import { onStageChange, undoEdit, undoLabel } from "./stage";
+import { onUndoChange, undoLabel, undoLast } from "./undoHistory";
 
 let button: HTMLButtonElement | null = null;
 let running = false;
@@ -52,7 +52,7 @@ async function run(): Promise<void> {
   paint();
   say("undoing…", "working");
   try {
-    const label = await undoEdit();
+    const label = await undoLast();
     say(label === null ? "nothing to undo" : `undid ${label}`);
   } catch (error) {
     const detail = describeError(error);
@@ -71,8 +71,13 @@ export function registerUndoAction(): void {
   button = found instanceof HTMLButtonElement ? found : null;
   button?.addEventListener("click", () => void run());
 
-  // Every edit and every derive moves what there is to undo, and both announce here.
-  onStageChange(paint);
+  /*
+    Every act that can be taken back announces here, and so does every clearing.
+
+    It was `onStageChange`, which is a graph event — right while the stack held graphs alone, and
+    silent for a brush stroke. The stack tells us itself now, whichever document moved.
+  */
+  onUndoChange(paint);
 
   /*
     Ctrl+Z as well as the button, because the surface owns its keyboard.

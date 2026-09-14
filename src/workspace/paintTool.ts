@@ -57,6 +57,7 @@ import {
   type PaintTool,
   type PaintVerb,
 } from "./paintGesture";
+import { pushUndo } from "./undoHistory";
 import {
   anyUnsavedPaint,
   beginPaint,
@@ -64,6 +65,8 @@ import {
   discardPaint,
   endPaint,
   paintModeOpen,
+  restorePaint,
+  snapshotPaint,
   workingLayer,
 } from "./paintState";
 import { requestRecompose } from "./reading";
@@ -177,6 +180,49 @@ function apply(kind: PaintKind, at: BrushPoint): void {
   refreshPaintRegion(result.bounds);
 }
 
+/**
+ * The layer as it was when the stroke in progress began, and which layer that was.
+ *
+ * Taken at the press and pushed at the release, because only the release knows whether anything was
+ * actually painted — a click that changed no pixels must not fill the undo stack with entries that
+ * take nothing back.
+ */
+let strokeStart: { readonly kind: PaintKind; readonly snapshot: string } | null = null;
+
+/**
+ * Remember how to take one paint edit back.
+ *
+ * **A recompose is asked for on the way back**, which is the same thing committing a stroke asks for
+ * and for the same reason: the reading composes from the *working* copy, so a stroke is in the ink
+ * from the next composition onward — undoing has to put that right, or the amber would vanish and the
+ * ink it produced would stay. A recompose rather than a re-read, because the map has not changed:
+ * only what we lay over it has.
+ */
+export function rememberPaint(kind: PaintKind, snapshot: string, label: string): void {
+  pushUndo(label, () => {
+    /*
+      The mode may have closed since, and usually has: putting the brush down writes both layers and
+      lets the working copies go, which is exactly when a GM looks at what they drew and wants it
+      back. Opening a fresh copy from what was committed is the same thing entering the step does,
+      and the snapshot then goes into it.
+
+      Without this the restore had nothing to write into and did nothing at all — a button that says
+      "Undo drawing added ink" and silently declines.
+    */
+    if (!paintModeOpen() && !beginPaint()) return;
+    if (!restorePaint(kind, snapshot)) return;
+    const layer = workingLayer(kind);
+    // The whole layer, because a snapshot says nothing about which part of it moved — where a stroke
+    // hands over the rectangle it knows it changed.
+    if (layer) {
+      refreshPaintRegion({ left: 0, top: 0, right: layer.width - 1, bottom: layer.height - 1 });
+    }
+    gapsChanged();
+    requestRecompose();
+    invalidate();
+  });
+}
+
 function start(point: MapPoint): boolean {
   if (busy || !paintModeOpen()) return false;
 
@@ -198,6 +244,8 @@ function start(point: MapPoint): boolean {
   verb = verbFor(verbs[kind], point.modifier);
   last = null;
   strokePixels = 0;
+  const snapshot = snapshotPaint(kind);
+  strokeStart = snapshot === null ? null : { kind, snapshot };
   apply(kind, rasterPoint(point.u, point.v, workingLayer(kind)!));
   setBrushPosition({ u: point.u, v: point.v, kind });
   return true;
@@ -217,7 +265,11 @@ function acceptAt(point: MapPoint): boolean {
   const index = markAt(gapMarks(), raster, point.u, point.v, point.perPixel);
   if (index === null) return false;
 
+  // Accepting writes ordinary added ink, so it is a paint edit and belongs on the stack with the
+  // strokes. Snapshotted before, because after it the layer is already changed.
+  const before = snapshotPaint("ink");
   const result = acceptGap(index);
+  if (before !== null && result.accepted > 0) rememberPaint("ink", before, "closing a gap");
   if (result.bounds) refreshPaintRegion(result.bounds);
   gapsChanged();
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
@@ -233,11 +285,13 @@ function acceptAt(point: MapPoint): boolean {
  */
 export function acceptAllShownGaps(): void {
   if (tool !== "gaps") return;
+  const before = snapshotPaint("ink");
   const result = acceptAllGaps();
   if (result.accepted === 0) {
     say("nothing here can be accepted — the rings left are guesses the search could not finish");
     return;
   }
+  if (before !== null) rememberPaint("ink", before, "closing every gap shown");
   if (result.bounds) refreshPaintRegion(result.bounds);
   gapsChanged();
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
@@ -257,7 +311,16 @@ function move(point: MapPoint): void {
 function end(): void {
   const kind = brushKind(tool);
   last = null;
+  const began = strokeStart;
+  strokeStart = null;
+  // Nothing was painted, so there is nothing to take back. A click that changed no pixels must not
+  // put an entry on the stack that undoes to the state it is already in.
   if (!kind || strokePixels === 0) return;
+
+  if (began && began.kind === kind) {
+    rememberPaint(kind, began.snapshot, `${verb === "paint" ? "drawing" : "erasing"} ${PAINT_NAMES[kind]}`);
+  }
+
   const verbWord = verb === "paint" ? "painted" : "erased";
   say(`${verbWord} ${strokePixels} px of ${PAINT_NAMES[kind]} · not saved until you leave Ink`);
   strokePixels = 0;
@@ -267,7 +330,10 @@ function cancel(): void {
   // A cancelled pointer abandons the *gesture*, not the layer: what has been laid down is already in
   // the working copy and there is no half-applied state to undo. Dropping the last sample is all
   // there is to do, and it stops the next press bridging from where this one was interrupted.
-  last = null;
+  //
+  // Which is exactly why it ends the stroke the ordinary way rather than dropping the snapshot: the
+  // marks are on the layer, so there has to be a way back from them.
+  end();
 }
 
 /**
@@ -459,7 +525,13 @@ function describePainted(): string {
 
 /** Throw away one layer's unsaved edits. The only way work here is lost. */
 export function abandonPaint(kind: PaintKind): void {
+  // On the stack like any other edit, so undoing after a discard takes the discard back rather than
+  // stepping past it to some state before it — which would look like undo skipping an act.
+  const before = snapshotPaint(kind);
   discardPaint(kind);
+  if (before !== null) {
+    rememberPaint(kind, before, `discarding the ${PAINT_NAMES[kind]} edits`);
+  }
   last = null;
   say(`${PAINT_NAMES[kind]} back to what was last saved`);
   invalidate();

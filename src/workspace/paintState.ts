@@ -47,7 +47,16 @@ import {
 } from "../inkPaintStore";
 import type { PaintLayers } from "../pipeline";
 import { NO_PAINT } from "../pipeline";
-import { copyPaint, emptyPaint, isPaintEmpty, paintedCount, type PaintLayer } from "../trace/inkPaint";
+import {
+  copyPaint,
+  decodePaint,
+  emptyPaint,
+  encodePaint,
+  isPaintEmpty,
+  paintedCount,
+  type PaintLayer,
+} from "../trace/inkPaint";
+import { clearUndo } from "./undoHistory";
 
 /** What the scene holds, and what the pipeline composes from. */
 let committed: PaintLayers = NO_PAINT;
@@ -155,6 +164,12 @@ export function noteRaster(width: number, height: number): void {
   if (working) {
     devLog("warn", "paint: the raster changed while a paint mode was open, so it was abandoned");
     working = null;
+    /*
+      And the undo stack with it: every paint snapshot describes a layer at a size that no longer
+      exists, and a graph entry on the same stack belongs to the map that has just been replaced.
+      Clearing is the same answer `loadStage` gives for the same reason.
+    */
+    clearUndo();
     announce();
   }
 }
@@ -214,6 +229,47 @@ function workingCopy(kind: PaintKind): PaintLayer | null {
 /** The layer one brush is editing, for it to write into. */
 export function workingLayer(kind: PaintKind): PaintLayer | null {
   return working?.[kind] ?? null;
+}
+
+/**
+ * One layer as it is right now, small enough to keep twenty of.
+ *
+ * **Run-length encoded rather than copied**, which is what makes undo affordable on a raster. A raw
+ * clone is a byte per pixel — twenty of those, on two layers, would be hundreds of megabytes on a
+ * large map. The codec is the one the scene store already uses, and its own note is the reason this
+ * works: an untouched layer is a single run and painted ones are a couple of runs a row, so ordinary
+ * brushwork encodes to almost nothing. The cost moves to a pass over the raster per **stroke**, which
+ * is once per drag rather than once per pointer sample.
+ */
+export function snapshotPaint(kind: PaintKind): string | null {
+  const layer = working?.[kind];
+  return layer ? encodePaint(layer) : null;
+}
+
+/**
+ * Put a layer back to a snapshot, in place.
+ *
+ * **In place, into the existing layer object**, because a stroke mutates in place and the painter
+ * notices a *replaced* layer by comparing references — handing it a new object here would make it
+ * rebuild every pixel on the map for what is usually a mark a few across. The caller repaints the
+ * rectangle it knows changed, exactly as a stroke does.
+ *
+ * Refuses a snapshot of a different size rather than stretching it. That means the raster moved under
+ * an open mode, which abandons the working copy anyway — the guard is here so a stale entry cannot
+ * write marks at the wrong scale if the two ever get out of step.
+ */
+export function restorePaint(kind: PaintKind, snapshot: string): boolean {
+  const layer = working?.[kind];
+  if (!layer) return false;
+
+  const decoded = decodePaint(snapshot);
+  if (!decoded || decoded.width !== layer.width || decoded.height !== layer.height) {
+    devLog("warn", `paint: a saved ${PAINT_NAMES[kind]} state did not fit the layer, so it was not restored`);
+    return false;
+  }
+
+  layer.data.set(decoded.data);
+  return true;
 }
 
 /*

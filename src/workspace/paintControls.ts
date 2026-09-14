@@ -34,13 +34,20 @@ import { STEPS, groupControls, toolGroups } from "../steps";
 import { confirmAction } from "../confirmDialog";
 import { renderPanel } from "./accordion";
 import { brushKind } from "./paintGesture";
-import { anyUnsavedPaint, hasUnsavedPaint, paintRaster, workingLayer } from "./paintState";
+import {
+  anyUnsavedPaint,
+  hasUnsavedPaint,
+  paintRaster,
+  snapshotPaint,
+  workingLayer,
+} from "./paintState";
 import {
   abandonPaint,
   acceptAllShownGaps,
   currentPaintTool,
   currentVerb,
   finishPaint,
+  rememberPaint,
   setVerb,
 } from "./paintTool";
 import { settingRow } from "./settingRows";
@@ -309,6 +316,9 @@ async function clearWholeLayer(kind: PaintKind): Promise<void> {
   });
   if (!yes) return;
 
+  // Snapshotted before the wipe, so clearing a layer is as undoable as the strokes that filled it.
+  const before = snapshotPaint(kind);
+
   // A stroke wide enough to cover the raster, which is the brush's own erase applied everywhere.
   const width = raster?.width ?? layer.width;
   const height = raster?.height ?? layer.height;
@@ -320,6 +330,9 @@ async function clearWholeLayer(kind: PaintKind): Promise<void> {
     false,
   );
   if (result.bounds) refreshPaintRegion(result.bounds);
+  if (before !== null && result.changed > 0) {
+    rememberPaint(kind, before, `clearing the ${PAINT_NAMES[kind]}`);
+  }
   say(`cleared ${result.changed} px · not saved until you save or leave Ink`);
   invalidate();
 }
