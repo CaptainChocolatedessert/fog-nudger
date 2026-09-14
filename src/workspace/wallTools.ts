@@ -10,10 +10,11 @@
  * in that state, which says *that* they are unavailable but not *why* — so the answer, in the place
  * the walls would have been, is a sentence saying where they come from.
  *
- * **The sentence was stale and is fixed (2026-09-09).** It read "close this, open **Read the map**
- * from the panel", which described the two-page arrangement: no control called that has existed
- * since the workspaces merged, and there is nothing to close — Walls is a heading in the same rail,
- * two above this one.
+ * **It has been stale twice, which says something about sentences that describe a route.** It first
+ * read "close this, open **Read the map** from the panel", describing an arrangement that no longer
+ * existed. Then it said to put the walls on the map from **Walls** — true until the save button was
+ * deleted on 2026-09-14, after which there is nothing to press there and the walls simply appear
+ * once a map has been read. What is left points at the only thing that is actually missing.
  */
 
 import { wallGraph } from "./stage";
@@ -23,7 +24,6 @@ export function renderWallTools(body: HTMLElement): void {
 
   const empty = document.createElement("p");
   empty.className = "hint";
-  empty.innerHTML =
-    "No walls are saved for this map yet. Open <b>Walls</b> above and put them on the map from there.";
+  empty.innerHTML = "No walls yet. Choose a map and open <b>Ink</b> above to read its linework.";
   body.append(empty);
 }

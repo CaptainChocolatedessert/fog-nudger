@@ -212,6 +212,37 @@ export async function writeDerivedWalls(mapId: string, graph: WallGraph): Promis
 }
 
 /**
+ * Write a graph the GM has just edited **and** the derivation it was edited from, in one call.
+ *
+ * This is the first hand edit on a graph that was only ever a derivation — the moment the surface
+ * adopts what the trace produced as the document, because a document is now needed. It is under the
+ * hood by design: a GM never presses anything to enter an editing stage, they move a wall and the
+ * commit happens because the edit needed one.
+ *
+ * **Two keys, two different values, one write.** The base is what they started from and the document
+ * is what they made of it, so unlike `writeDerivedWalls` the encodings differ — but it is still a
+ * single `setMetadata`, because a scene write is the expensive part of an edit and the first one
+ * must not cost twice what the rest do.
+ */
+export async function writeCommittedWalls(
+  mapId: string,
+  graph: WallGraph,
+  base: WallGraph,
+): Promise<void> {
+  const encoded = encodeWallGraph(graph);
+  await OBR.scene.setMetadata({
+    [GRAPH_KEY]: { map: mapId, graph: encoded },
+    [BASE_KEY]: { map: mapId, graph: encodeWallGraph(base) },
+  });
+  devLog(
+    "info",
+    `graph: adopted the derivation as the document on a first edit — ` +
+      `${graph.nodes.length} nodes and ${graph.edges.length} walls, ` +
+      `over a base of ${base.edges.length}`,
+  );
+}
+
+/**
  * Discard the stored graph.
  *
  * **One caller, and it is the panel's "Remove ours"** (user, 2026-09-05: *"the panel has a way to

@@ -1,20 +1,20 @@
 /**
  * Writing the scene: the editor's button, the ink mode's save, and the close hook.
  *
- * ## Who pushes, and when — and the two modes answer differently on purpose
+ * ## Who pushes, and when — one answer now, where there used to be two
  *
- * **The editor pushes on close.** Its edits are written to the document as they are made, so the
- * scene is simply behind the thing the GM has already committed to; catching it up on the way out is
- * what makes that mode end by looking at the table. Its own button is the mid-session case — a
- * change a table is waiting on, made without giving up the surface.
+ * **Closing pushes, and commits first if nothing has been committed yet.** Edits are written to the
+ * document as they are made, so the scene is usually just behind a thing the GM already has;
+ * catching it up on the way out is what makes a session end by looking at the table. The button is
+ * the mid-session case — a change a table is waiting on, made without giving up the surface.
  *
- * **The ink mode pushes only when the GM saves** (user, 2026-09-05: *"saving out of ink mode pushes
- * that graph"*). Nothing there is committed until they say so, which is exactly what makes reopening
- * it over an edited graph harmless. A close-time push would undo that in one keystroke: a GM who
- * opened stage one to look at their threshold and pressed Escape would have replaced their walls.
+ * **This was asymmetric until 2026-09-14 and the asymmetry is gone with the save button.** The ink
+ * mode used to push only when the GM saved, so closing it committed nothing — which was right while
+ * a save button existed, because then *not pressing it* meant something. With no button the same
+ * behaviour is just a GM tuning for twenty minutes, pressing Escape and getting nothing.
  *
- * That asymmetry is the two-mode split showing through rather than an inconsistency. One mode holds
- * a draft; the other holds the document.
+ * What made the old rule necessary is handled elsewhere now: a graph carrying hand edits keeps the
+ * screen, so a derivation can never be adopted over work the GM can see.
  *
  * ## Only when something changed
  *
@@ -55,7 +55,9 @@ import { pushToFog, pushWouldChange, requestPushStop } from "../emit/emitRegions
 import { readNominatedMapId } from "../map/mapImage";
 import { encodeWallGraph } from "../trace/wallGraph";
 import { paintRevision } from "../trace/inkPaint";
-import { wallGraph } from "./stage";
+import { confirmAction } from "../confirmDialog";
+import { currentRegions, currentWalls, previewGraph } from "./regions";
+import { saveDerivedWalls, wallGraph } from "./stage";
 import { controlsLive } from "./settingRows";
 import { currentPaint } from "./paintState";
 import { currentSettings, persistSettings } from "./settingsState";
@@ -101,16 +103,34 @@ async function fingerprint(): Promise<string> {
 export async function pushOnClose(): Promise<void> {
   if (!controlsLive()) return;
   /*
-    A derivation writes nothing on the way out; a saved graph is what closing can push.
+    Closing commits, and that is the change the save button's removal turns on.
 
-    An underived graph is one re-run away from the settings and paint that are already stored, so
-    leaving loses nothing — and pushing it would commit walls the GM never asked to commit, possibly
-    over ones they spent an evening editing. Saving is the deliberate act, and it has its own buttons
-    at the foot of Walls.
+    It used to return here: a derivation wrote nothing on the way out, on the argument that pushing
+    it would commit walls the GM never asked to commit, possibly over ones they spent an evening
+    editing. That argument was about the *save button* — it existed, so leaving without pressing it
+    meant something. With no button, the same behaviour is simply a GM tuning for twenty minutes,
+    pressing Escape and getting nothing, which §7a already named as the thing to fix.
+
+    It is safe for the reason the old one was not: the derivation can only be what is **on screen**,
+    and a graph carrying hand edits keeps the screen, so there is no state in which this adopts a
+    derivation over work the GM can see. Nothing is committed over: `saveDerivedWalls` is reached
+    only when there is no document at all.
   */
   if (!wallGraph()) {
-    devLog("info", "workspace: closing with no saved graph, which commits nothing on its own");
-    return;
+    const derived = previewGraph();
+    if (!derived) {
+      devLog("info", "workspace: closing with nothing derived, so there is nothing to commit");
+      return;
+    }
+    try {
+      await saveDerivedWalls(derived);
+    } catch (error) {
+      const detail = describeError(error);
+      say(`could not save the walls: ${detail}`, "bad");
+      devLog("error", "workspace: committing the derivation on close failed", detail);
+      console.error("Fog Nudger — committing the derivation on close failed", error);
+      return;
+    }
   }
   const mark = await fingerprint();
   if (!pushWouldChange(mark)) {
@@ -194,6 +214,54 @@ export async function pushCurrent(): Promise<boolean> {
   return false;
 }
 
+/**
+ * How many scene items a push may be expected to write before it is worth stopping to ask.
+ *
+ * **Provisional, and calibrated on exactly two observations** — which is stated because a threshold
+ * with no measurement behind it invites being trusted. On 2026-09-07 a graph of **5,881** wall
+ * segments could not be written at all: Owlbear allows a scene write five seconds, and
+ * `OBR_SCENE_ITEMS_ADD_ITEMS` blew through it repeatedly, stopping at 432, 1,104, 1,968, 2,568 and
+ * 3,960 across attempts until even asking whether the scene was ready timed out. The same map at a
+ * sane tolerance writes **274** items and takes a couple of seconds.
+ *
+ * So the cliff is somewhere between those, and nobody has bisected it. This sits an order of
+ * magnitude above the known-good figure and well below the known-bad one, which makes it a warning
+ * that should almost never fire on ordinary work.
+ *
+ * **It warns and does not refuse.** The GM may have a genuinely enormous map, and this is a
+ * prediction about a scene rather than a measurement of one.
+ */
+const LARGE_PUSH_ITEMS = 1_500;
+
+/**
+ * Ask before writing a graph large enough that the scene may not take it.
+ *
+ * The counts come from the partition already on screen rather than from a fresh traversal, which is
+ * the point: what this warns about is exactly what the GM is looking at.
+ *
+ * **It stands in front of the button and not in front of closing**, which is a change from where it
+ * used to live (the deleted save button, the only exit that committed). A dialog in the way out is a
+ * dialog a GM meets while leaving, and the case it guards — a write that will not finish — already
+ * has the escape hatch, which is a way *out* of the same problem rather than a question about it.
+ */
+async function mayBeTooLarge(): Promise<boolean> {
+  const items = currentRegions().length + currentWalls().length;
+  if (items < LARGE_PUSH_ITEMS) return true;
+
+  return confirmAction({
+    title: `Put ${items.toLocaleString()} items on the map?`,
+    body: [
+      `This graph is ${items.toLocaleString()} separate scene items — ${currentRegions().length} ` +
+        `rooms and ${currentWalls().length} wall segments. A scene write that large may not ` +
+        "finish, and there is a point past which Owlbear refuses it outright.",
+      "Raising Straightening under Walls is what reduces it: every point it removes is a wall " +
+        "segment fewer. Pruning the dead ends helps too. If you go ahead, the write can be stopped " +
+        "part way, and pushing again afterwards replaces whatever landed.",
+    ],
+    confirmLabel: "Put it on the map",
+  });
+}
+
 export function renderPushAction(body: HTMLElement): void {
   const actions = document.createElement("div");
   actions.className = "step-actions";
@@ -206,27 +274,33 @@ export function renderPushAction(body: HTMLElement): void {
 
   // No note. All three of its sentences were reassurance — that closing does the same thing, that
   // edits are saved either way — and reassurance about a button is prose in the shape of a warning.
-  button.addEventListener("click", () => {
-    /*
-      Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for a
-      second click to land and write a second copy of everything.
+  /*
+    The size question is asked first, and nothing is said or written until it is answered.
 
-      **Through `pushCurrent` rather than the emit path directly**, which it used to call behind its
-      back. One route in means this button gets the escape hatch, the settings write and the
-      fingerprint on the same terms as every other push, rather than three call sites drifting.
-    */
+    **Through `pushCurrent` rather than the emit path directly**, which this used to call behind its
+    back. One route in means this button gets the escape hatch, the settings write and the
+    fingerprint on the same terms as every other push, rather than three call sites drifting.
+  */
+  const run = async (): Promise<void> => {
+    try {
+      if (!(await mayBeTooLarge())) return;
+      say("putting it on the map…", "working");
+      await pushCurrent();
+    } catch (error) {
+      const detail = describeError(error);
+      say(`could not write to the scene: ${detail}`, "bad");
+      devLog("error", "workspace: push failed", detail);
+      console.error("Fog Nudger — push failed", error);
+    } finally {
+      button.disabled = !controlsLive();
+    }
+  };
+
+  button.addEventListener("click", () => {
+    // Disabled while it runs. A push takes seconds on a large map, which is exactly long enough for
+    // a second click to land and write a second copy of everything.
     button.disabled = true;
-    say("putting it on the map…", "working");
-    void pushCurrent()
-      .catch((error: unknown) => {
-        const detail = describeError(error);
-        say(`could not write to the scene: ${detail}`, "bad");
-        devLog("error", "workspace: push failed", detail);
-        console.error("Fog Nudger — push failed", error);
-      })
-      .finally(() => {
-        button.disabled = !controlsLive();
-      });
+    void run();
   });
 
   actions.append(button);

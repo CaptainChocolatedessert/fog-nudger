@@ -41,7 +41,7 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { compactNodes } from "../trace/wallGraph";
+import { compactNodes, type WallGraph } from "../trace/wallGraph";
 import { nearestEdge, removeEdge, type EditResult } from "../trace/planarOps";
 import {
   applyDraw,
@@ -56,8 +56,25 @@ import {
   type DrawPoint,
   type Grab,
 } from "./dragGesture";
+import { previewGraph, showingSaved } from "./regions";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
+
+/**
+ * The graph the GM is looking at, which is the one their tools have to act on.
+ *
+ * **This is what removes the save step.** The tools read the stored document before, so a map that
+ * had never been saved offered three wall tools that did nothing and a sentence telling the GM to go
+ * and save first. There is nothing to save first now: what is drawn is what a press acts on, and the
+ * first press that changes something is what makes a document out of it.
+ *
+ * `showingSaved` is the same predicate the partition and the wall layer read, which is deliberate —
+ * the tools acting on a graph other than the drawn one is the defect this project has already paid
+ * for once, when the ink mode previewed one face derivation and emitted another.
+ */
+function editableGraph(): WallGraph | null {
+  return showingSaved() ? wallGraph() : previewGraph();
+}
 
 /** Which verb a press means. */
 export type WallTool = "move" | "draw" | "erase";
@@ -196,7 +213,7 @@ function clearGesture(): void {
 
 function start(point: MapPoint): boolean {
   if (busy) return false;
-  const graph = wallGraph();
+  const graph = editableGraph();
   if (!graph) return false;
 
   pressedAt = { u: point.u, v: point.v };
@@ -238,7 +255,7 @@ function start(point: MapPoint): boolean {
 }
 
 function move(point: MapPoint): void {
-  const graph = wallGraph();
+  const graph = editableGraph();
   if (!graph) return;
   lastPerPixel = point.perPixel;
   lastPointer = { u: point.u, v: point.v };
@@ -289,7 +306,7 @@ function escape(): boolean {
 }
 
 function end(): void {
-  const graph = wallGraph();
+  const graph = editableGraph();
   if (!graph) {
     clearGesture();
     return;
@@ -312,7 +329,12 @@ function end(): void {
     if (!held || !landed) return;
     const result = applyDrag(graph, held, landed);
     if (!result) return;
-    commit(result, describeEdit(landed.snapTo !== null, result.splits, result.overlaps), "moving a point");
+    commit(
+      result,
+      describeEdit(landed.snapTo !== null, result.splits, result.overlaps),
+      "moving a point",
+      graph,
+    );
     return;
   }
 
@@ -321,7 +343,7 @@ function end(): void {
     clearGesture();
     invalidate();
     if (target === null) return;
-    commit(removeEdge(graph, target), "erased a wall", "erasing a wall");
+    commit(removeEdge(graph, target), "erased a wall", "erasing a wall", graph);
     hoveredEdge = null;
     return;
   }
@@ -348,7 +370,7 @@ function end(): void {
     say("too short to be a wall, so nothing was added");
     return;
   }
-  commit(result, describeDraw(result.splits, result.overlaps), "drawing a wall");
+  commit(result, describeDraw(result.splits, result.overlaps), "drawing a wall", graph);
 }
 
 /**
@@ -358,7 +380,7 @@ function end(): void {
  * differ between them: the graph is stored before what is in hand changes, so a failed write leaves
  * the GM with what they had.
  */
-function commit(result: EditResult, message: string, undoLabel: string): void {
+function commit(result: EditResult, message: string, undoLabel: string, from: WallGraph): void {
   /*
     Compacted here and nowhere else, which is what makes renumbering safe.
 
@@ -371,7 +393,10 @@ function commit(result: EditResult, message: string, undoLabel: string): void {
   const graph = compactNodes(result.graph);
   busy = true;
   say("saving…", "working");
-  void saveEditedWalls(graph, undoLabel)
+  // `from` is what this edit was applied to. When it is not the stored document — the first edit on
+  // a graph that has only ever been a derivation — saving adopts it, which is the commit that used
+  // to be a button.
+  void saveEditedWalls(graph, undoLabel, from)
     .then(() => {
       say(message);
     })
@@ -392,7 +417,7 @@ function commit(result: EditResult, message: string, undoLabel: string): void {
 }
 
 function hover(point: MapPoint | null): void {
-  const graph = wallGraph();
+  const graph = editableGraph();
   if (!point || !graph) {
     if (hovered === null && hoveredEdge === null) return;
     hovered = null;

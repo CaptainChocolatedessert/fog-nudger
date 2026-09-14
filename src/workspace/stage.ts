@@ -29,7 +29,12 @@
  */
 
 import { devLog } from "../devlog";
-import { readWallGraph, writeDerivedWalls, writeWallGraph } from "../wallGraphStore";
+import {
+  readWallGraph,
+  writeCommittedWalls,
+  writeDerivedWalls,
+  writeWallGraph,
+} from "../wallGraphStore";
 import type { WallGraph } from "../trace/wallGraph";
 import { graphsDiffer } from "../trace/wallGraphDiff";
 import { clearUndo, pushUndo, type Restore } from "./undoHistory";
@@ -207,10 +212,33 @@ export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
  * through here rather than writing the store directly. One call is one act the GM performed, which
  * is what makes the count something to show them.
  */
-export async function saveEditedWalls(graph: WallGraph, label: string): Promise<void> {
+export async function saveEditedWalls(
+  graph: WallGraph,
+  label: string,
+  /**
+   * The graph this edit was applied to, when that is not the stored document.
+   *
+   * **This is what deletes the save button.** A GM editing a wall on a graph that has only ever been
+   * a derivation is the moment a document becomes necessary — so the surface adopts the derivation
+   * as the document *here*, caused by the edit rather than performed beforehand. Left undefined, the
+   * edit is an ordinary one on what is already stored.
+   */
+  from?: WallGraph,
+): Promise<void> {
   if (!mapId) throw new Error("no map is nominated, so there is nothing to save the graph against");
   const before = saved;
-  await writeWallGraph(mapId, graph);
+  /*
+    One write either way, which is why the store has a second function rather than this making two
+    calls. A first edit on a derivation has to leave *two* different graphs in the scene — what the
+    trace produced and what the GM made of it — and doing that as two writes would make the first
+    wall drag on every map cost twice what the rest do.
+  */
+  if (from && from !== saved) {
+    await writeCommittedWalls(mapId, graph, from);
+    base = from;
+  } else {
+    await writeWallGraph(mapId, graph);
+  }
   /*
     Pushed after the write, so a failed one leaves nothing to undo back to.
 

@@ -72,7 +72,6 @@ import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { onSettingCommitted, refreshHints, setControlsLive } from "./workspace/settingRows";
 import { registerWallEdit } from "./workspace/wallEdit";
 import { renderWallTools } from "./workspace/wallTools";
-import { renderSaveAction } from "./workspace/saveAction";
 import { onStageChange } from "./workspace/stage";
 import { loadSettings, onApplied, onSettingsWriteFailure } from "./workspace/settingsState";
 import { onMapClick, say, setCloseAction, start } from "./workspace/shell";
@@ -287,7 +286,15 @@ registerStepContent("view", renderSwatches, "bottom");
   the registration for the other one costs a map entry nobody reads — which is cheaper than a branch
   here that has to be kept in step with `steps.ts`.
 */
-registerStepContent("walls", renderSaveAction, "bottom");
+/*
+  Nothing at the foot of Walls any more, and the deletion is the point.
+
+  *Put the walls on the map* lived here and was the crossing into stage two: it saved the derived
+  graph and pushed it, with a confirmation naming what it would replace. There is no crossing now.
+  The first hand edit adopts the derivation as the document because the edit needs one, and closing
+  commits and pushes — so a GM never presses anything to begin editing, and never loses a session by
+  not having pressed it.
+*/
 // What you do with the walls, above the button that writes them.
 registerStepContent("edit", renderWallTools);
 /*
