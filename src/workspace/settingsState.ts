@@ -148,3 +148,27 @@ export async function persistSettings(): Promise<void> {
     reportFailure?.("could not save your settings — this tuning will not survive a reload");
   }
 }
+
+/**
+ * Whether the controls may be touched yet.
+ *
+ * **Here rather than with the rows**, because four modules ask it and none of them builds a row:
+ * the colour pickers, the frame action, the push button and the composition root. What it
+ * actually reports is whether the *stored settings have arrived*, which is this module's subject.
+ *
+ * They are drawn from `DEFAULT_SETTINGS` at module load so the surface looks like itself from the
+ * first frame rather than after an SDK round trip — but they are **disabled** until the stored
+ * settings arrive, because a slider dragged in that window would be moving a default that is about
+ * to be overwritten by the GM's own saved value. Rendering them only when the SDK answers was the
+ * first version, and it is the same mistake the probe made three times: gating on Owlbear something
+ * that does not depend on Owlbear.
+ */
+let live = false;
+
+export function controlsLive(): boolean {
+  return live;
+}
+
+export function setControlsLive(next: boolean): void {
+  live = next;
+}

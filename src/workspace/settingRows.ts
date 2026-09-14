@@ -1,10 +1,13 @@
 /**
  * One slider, built from the shared control declaration.
  *
- * Every step that has numbers to turn builds its rows here rather than each one growing its own,
- * because what a row *does* on release is a property of the parameter rather than of the step
+ * Every group with numbers to turn builds its rows here rather than each one growing its own,
+ * because what a row *does* on release is a property of the parameter rather than of the group
  * drawing it — and a second implementation would be a second place for that to be decided
  * differently.
+ *
+ * **What a release costs is `recompute.ts`'s**, which is a separate question with separate callers:
+ * a group's Defaults spends it too, and that is a button rather than a row.
  *
  * DOM, and the pipeline only for the measurements a readout reports against.
  */
@@ -12,11 +15,9 @@
 import { type Control, type Measured } from "../controls";
 import { lastInkWidth, lastPixelsPerSquare, lastRasterWidth } from "../pipeline";
 import {
-  isSkeletonOnly,
   PARAMETER_KIND,
   readParameter,
   regeneratesWalls,
-  rereadsTheMap,
   SETTING_LIMITS,
   writeParameter,
 } from "../settings";
@@ -31,11 +32,15 @@ import {
   type ScaleLimits,
 } from "../sliderScale";
 import { graphScaleTop, onGraphScale } from "./graphScale";
-import { refreshGapSearch } from "./paintTool";
-import { requestReread } from "./reading";
 import { ghostPosition } from "./ghostMark";
-import { invalidateRegions, repruneRegions } from "./regions";
-import { appliedSettings, currentSettings, persistSettings, setSettings } from "./settingsState";
+import { recomputeFor } from "./recompute";
+import {
+  appliedSettings,
+  controlsLive,
+  currentSettings,
+  persistSettings,
+  setSettings,
+} from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
 import { confirmAction } from "../confirmDialog";
 import { describeError } from "../describeError";
@@ -66,7 +71,7 @@ function trackFor(name: SettingName): ScaleLimits {
 /**
  * The number beside the label.
  *
- * A control may ask to report **where its handle is** rather than what its value is, because three of
+ * A control may ask to report **where its handle is** rather than what its value is, because two of
  * them store a fraction of the map and neither that nor any spelling of it is a number a GM can hold
  * on to. Everything else takes the shared formatter, which knows about steps and off positions and
  * should not be bypassed for taste.
@@ -123,25 +128,6 @@ export function resetHints(): void {
   hintPainters = [];
 }
 
-/**
- * Whether the controls may be touched yet.
- *
- * They are drawn from `DEFAULT_SETTINGS` at module load so the surface looks like itself from the
- * first frame rather than after an SDK round trip — but they are **disabled** until the stored
- * settings arrive, because a slider dragged in that window would be moving a default that is about
- * to be overwritten by the GM's own saved value. Rendering them only when the SDK answers was the
- * first version, and it is the same mistake the probe made three times: gating on Owlbear something
- * that does not depend on Owlbear.
- */
-let live = false;
-
-export function controlsLive(): boolean {
-  return live;
-}
-
-export function setControlsLive(next: boolean): void {
-  live = next;
-}
 
 /**
  * Ask before a reading change throws away hand edits, and put the handle back if the answer is no.
@@ -150,8 +136,9 @@ export function setControlsLive(next: boolean): void {
  * fires — so declining has to restore both the input and the position this row compares against, or
  * the next release would think nothing had changed and write the discarded value silently.
  *
- * It names the count, which is the whole point of keeping one: "re-reading the map discards 14 wall
- * edits" is a price, where "you are leaving stage two" was only a boundary.
+ * **It does not name a count**, and used to. Fourteen tells a GM nothing they can act on, and the
+ * mark on the group already says that there is work at stake; what this adds is the price of the
+ * particular press, at the moment of pressing.
  */
 async function confirmDiscard(
   control: Control,
@@ -210,68 +197,6 @@ async function confirmDiscard(
   void persistSettings();
 }
 
-/**
- * Recompute whatever a set of changed parameters invalidates, and nothing else.
- *
- * Shared by a slider's release and a step's Defaults, so the two cannot disagree about what a change
- * costs. A reading covers the partition as well — the regions subscribe to it — so the two cases are
- * exclusive rather than cumulative.
- */
-export function recomputeFor(names: readonly SettingName[]): void {
-  /*
-    A `tool` parameter recomputes nothing and tells its tool instead.
-
-    That is the whole of the third kind's behaviour on this side. A brush width has no one to tell —
-    the next stroke simply reads it — but the gap search is holding a set of marks that the numbers
-    it was run with have just stopped describing, and marks on screen that no longer match the
-    settings beside them are the stale-diagnostic failure in miniature. Re-running is cheap by
-    comparison with a re-read and is what the GM is asking for by moving the slider at all.
-  */
-  if (names.some((name) => PARAMETER_KIND[name] === "tool")) refreshGapSearch();
-
-  const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
-  /*
-    Graph-only first, and it is now a third thing rather than a cheaper second.
-
-    `GRAPH_ONLY` has exactly one member, the spur limit. It used to mean "skip the 690ms re-read but
-    re-derive everything", because pruning happened between thinning and chaining. **Pruning moved
-    past the derivation on 2026-09-06**, so it changes nothing the trace did — the graph is already
-    fitted and stored, and re-pruning it is a run walk and a face traversal, single-digit
-    milliseconds against the better part of a second.
-
-    The weld radius was the other member and was deleted rather than defaulted to zero, after 459 of
-    600 generated cases failed at its default.
-  */
-  const rest = pipeline.filter((name) => !isSkeletonOnly(name));
-  const graphChanged = pipeline.some(isSkeletonOnly);
-
-  // The same predicate the discard prompt asks, so the two can never disagree about what re-reads.
-  if (names.some(rereadsTheMap)) requestReread();
-  // Ordered so the broadest wins: a Defaults reset changes both kinds at once, and a full derive
-  // re-prunes on its way through where a re-prune would leave the trace stale.
-  else if (rest.length > 0) invalidateRegions();
-  else if (graphChanged) repruneRegions();
-  invalidate();
-  for (const listener of commitListeners) listener();
-}
-
-/**
- * Told whenever a setting has been committed, which is the funnel every write already goes through.
- *
- * **For controls whose availability depends on another control's value.** The three wall actions are
- * disabled while their own limit is at zero, and without this the slider that lifts the limit would
- * leave the button dead until something unrelated happened to redraw the rail — the same defect the
- * tool strip had, where the state changed and nothing was told.
- *
- * Subscribed at module scope and never cleared, so **do not call this from a render function**: a
- * step's body is rebuilt on every accordion click, and a subscription there adds a listener per
- * click.
- */
-const commitListeners: (() => void)[] = [];
-
-export function onSettingCommitted(listener: () => void): void {
-  commitListeners.push(listener);
-}
 
 /**
  * Build one slider.
@@ -502,7 +427,7 @@ export function settingRow(control: Control): HTMLElement {
     the graph is a derivation until the GM saves, and the save is the one place the replacement is
     named and confirmed. A control that is live in the only mode that draws it needs no notice.
   */
-  input.disabled = !live;
+  input.disabled = !controlsLive();
 
   /*
     The track wraps the input so the ghost can be positioned against it.

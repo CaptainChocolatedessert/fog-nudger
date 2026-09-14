@@ -59,7 +59,7 @@ import { paintRevision } from "../trace/inkPaint";
 import { confirmAction } from "../confirmDialog";
 import { currentRegions, currentWalls, previewGraph } from "./regions";
 import { saveDerivedWalls, wallGraph, wallsEdited } from "./stage";
-import { controlsLive } from "./settingRows";
+import { controlsLive } from "./settingsState";
 import { currentPaint } from "./paintState";
 import { currentSettings, persistSettings } from "./settingsState";
 import { say, withEscapeHatch } from "./shell";

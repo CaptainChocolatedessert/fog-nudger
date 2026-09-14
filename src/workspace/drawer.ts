@@ -56,7 +56,8 @@ import {
   type StepId,
 } from "../steps";
 import { forgetGraphScale } from "./graphScale";
-import { recomputeFor, resetHints, settingRow } from "./settingRows";
+import { recomputeFor } from "./recompute";
+import { resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";

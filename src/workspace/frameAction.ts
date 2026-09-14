@@ -29,7 +29,7 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { addFrameWalls } from "../trace/frameWalls";
 import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
-import { controlsLive } from "./settingRows";
+import { controlsLive } from "./settingsState";
 import { say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
 

@@ -24,7 +24,7 @@
 import { colourFor, applyPalette, colourKey } from "./palette";
 import { PALETTE_ROLES, ROLE_LABELS, type AdjustableRole } from "../palette";
 import { recolourInk } from "./layers/ink";
-import { controlsLive } from "./settingRows";
+import { controlsLive } from "./settingsState";
 import { invalidate } from "./shell";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 

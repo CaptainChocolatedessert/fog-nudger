@@ -2939,7 +2939,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   undo)
 - **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` (the bar's commit, the close
   hook, and `commitDerivation` — **where the save button went**) · `workspaceControl.ts`
-- **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `settingsState.ts`
+- **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `recompute.ts`
+  (**what a settings change invalidates** — the one place the three stages are spent, shared by a
+  slider's release and a group's Defaults) · `settingsState.ts`
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
   pickers) · `graphScale.ts` ·
   `seedSimplify.ts`
