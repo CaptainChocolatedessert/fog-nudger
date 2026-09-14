@@ -1931,7 +1931,11 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
   probe), ink (suppress, add, gaps), walls (move, draw, erase). One click to switch, and switching a
   tool does not move the controls.
 - **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
-  the group's own name in the strip.
+  the group's own name in the strip. It slides out **beside** the strip rather than under it, is only
+  as tall as it needs to be, and sits **level with the button that opened it** — so the strip never
+  moves, the map stays visible above and below it, and the thing you pressed and the thing that
+  appeared are plainly the same subject. The tool in hand draws its own controls at the top of it,
+  where the pinned rail head used to be.
 
   It was a scrolling rail with every group present at once, and it became a drawer on 2026-09-14
   (user: *"let the buttons slide out drawers with their content when pressed"*). **That is not the

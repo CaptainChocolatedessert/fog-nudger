@@ -102,26 +102,39 @@
          painting over them — a poll, a heartbeat and a reserved band down one side. Owning the
          surface means the controls simply have a place on it, and the map is drawn in what is left.
          ---------------------------------------------------------------------------------------- */
-      /* `bottom` clears the bar, which spans the whole width now. Running underneath it would put
-         the last rows of a scrolled group behind opaque chrome. */
+      /*
+        The drawer: it slides out **beside** the strip rather than under it, and it is only as tall
+        as it needs to be.
+
+        Three things follow from that and each was asked for. The strip never moves, so the buttons
+        are in the same place whether or not something is open. The map stays visible above and
+        below whatever is being read. And `--drawer-top` puts it level with the button that opened
+        it, so the thing you pressed and the thing that appeared are plainly the same subject — set
+        from the button's own position in `accordion.ts`, because only the strip knows where its
+        buttons are.
+      */
       #panel {
         position: fixed;
-        top: 0;
-        left: 0;
-        bottom: 2.6rem;
-        width: 22rem;
-        max-width: 42vw;
+        top: var(--drawer-top, 0.6rem);
+        left: 4.4rem;
+        width: 20rem;
+        max-width: calc(100vw - 5.6rem);
+        /* Bounded by whatever is left between the anchor and the bar, so a long group scrolls
+           inside the drawer rather than running off the bottom of the window. */
+        max-height: calc(100vh - var(--drawer-top, 0.6rem) - 3.4rem);
         box-sizing: border-box;
-        /* A column, so the head can stay put while the groups scroll under it. */
+        /* A column, so the title can stay put while the controls scroll under it. */
         display: flex;
         flex-direction: column;
-        background: rgba(16, 18, 36, 0.94);
-        border-right: 1px solid rgba(187, 153, 255, 0.25);
+        border-radius: 0.5rem;
+        background: rgba(16, 18, 36, 0.97);
+        border: 1px solid rgba(187, 153, 255, 0.25);
         backdrop-filter: blur(6px);
+        box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7);
       }
       #panel-head {
         flex: none;
-        padding: 0.9rem 1rem 0;
+        padding: 0.7rem 0.9rem 0;
       }
       /*
         `min-height: 0` is what makes the scroll actually happen: a flex child's default is
@@ -132,7 +145,7 @@
         flex: 1;
         min-height: 0;
         overflow-y: auto;
-        padding: 0 1rem 1.4rem;
+        padding: 0 0.9rem 0.9rem;
       }
       #panel.hidden {
         display: none;
@@ -355,12 +368,13 @@
          Banded in the order the rail is numbered by, so reading down the strip and reading down the
          rail meet the same three subjects in the same sequence.
          ---------------------------------------------------------------------------------------- */
-      /* Left edge when no drawer is open, beside it when one is. `:has()` keeps the two in step
-         without either module knowing about the other's layout. */
+      /* The strip does not move. The drawer opens beside it, so a group's button is in the same
+         place whether or not anything is open — which is the whole reason the drawer went to the
+         right rather than pushing the column across. */
       #tools {
         position: fixed;
         top: 0;
-        left: 22rem;
+        left: 0;
         bottom: 2.6rem;
         width: 4rem;
         box-sizing: border-box;
@@ -369,10 +383,6 @@
         background: rgba(12, 14, 30, 0.94);
         border-right: 1px solid rgba(187, 153, 255, 0.25);
         backdrop-filter: blur(6px);
-      }
-      body:has(#panel.shut) #tools,
-      body:has(#panel.hidden) #tools {
-        left: 0;
       }
       #tools.hidden {
         display: none;
@@ -1013,16 +1023,17 @@
           have to stay true while you are reading something further down — the hint scrolled away
           exactly when a GM was deep in a group and least able to remember which tool was in hand.
         -->
+        <!--
+          The only pinned part of the drawer: which group this is, and what is drawn.
+
+          The layer row stays here rather than going into View, because a tool may turn a layer on
+          and may never turn one off — so things accumulate, and the switches have to be somewhere
+          a GM meets without going looking. Pinned while any drawer is open is the compromise: with
+          the drawer shut they are looking at the map plainly, which is when the toggles are least
+          needed.
+        -->
         <div id="panel-head">
           <h1 id="mode-name">Fog Nudger</h1>
-          <p id="tool-hint"></p>
-          <!--
-            The controls of whatever is in hand, directly under the sentence describing it, because
-            they are the same subject: what a press does and how wide it does it. Built by
-            `renderPanel` so its sliders share the readout-painter lifecycle of every other row, and
-            empty whenever no tool is selected.
-          -->
-          <div id="tool-controls"></div>
           <div id="layer-row"></div>
         </div>
 
@@ -1033,8 +1044,18 @@
           so it cannot be described in a place the canvas cannot read.
         -->
         <div id="panel-body">
+          <!--
+            What is in hand, above the group’s own controls.
+
+            The sentence and the tool’s settings are the same subject — what a press does and how
+            wide it does it — and they sit at the top because a tool is the more immediate of the
+            two: a GM holding a brush is mid-gesture, where the group’s sliders are the setting they
+            arrived at. Both are built by `renderPanel`, so their rows share the readout-painter
+            lifecycle of every other row, and both collapse to nothing when no tool is in hand.
+          -->
+          <p id="tool-hint"></p>
+          <div id="tool-controls"></div>
           <div id="steps"></div>
-          <div id="view-group"></div>
         </div>
       </div>
 

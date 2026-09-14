@@ -81,6 +81,67 @@ import { stepIsMarked, wallsNotice } from "./wallsMark";
  */
 let openStep: StepId | null = workspaceSteps()[0]?.id ?? null;
 
+/**
+ * Put the drawer level with the button that opened it.
+ *
+ * **The anchor is read off the strip rather than computed from the group's index**, because the
+ * strip's own layout decides where a button lands: the bands have rules between them, the verbs
+ * under a group vary in number, and a locked group still takes its row. Anything derived from the
+ * declaration order would be a second opinion about where a button is, and it would be wrong the
+ * first time a tool moved.
+ *
+ * **Clamped at both ends.** Never above the window's own margin, and never so low that the drawer
+ * has no room left between the anchor and the bar — a group opened from the bottom of the strip
+ * would otherwise be a title and a scrollbar. The floor is generous enough to hold a few rows, and
+ * past it the drawer simply stops following the button downward.
+ *
+ * Called from both renders, because either can happen without the other: a settings arrival rebuilds
+ * the drawer with the strip untouched, and a tool change rebuilds the strip with the drawer as it
+ * was.
+ */
+export function anchorDrawer(): void {
+  place();
+  /*
+    And again one frame later, because **a measurement taken in the same tick as a render can be
+    reading a layout that has not finished**. Caught at start-up: the drawer anchored at 10px while
+    its button sat at 82, and the arithmetic was correct throughout — the strip simply had not laid
+    out yet when it was asked. The same trap the operating notes record for caption widths, one
+    property over.
+
+    Guarded to one pending frame, so a burst of renders costs one re-measure rather than a queue.
+  */
+  if (pendingAnchor) cancelAnimationFrame(pendingAnchor);
+  pendingAnchor = requestAnimationFrame(() => {
+    pendingAnchor = 0;
+    place();
+  });
+}
+
+let pendingAnchor = 0;
+
+function place(): void {
+  const panel = document.getElementById("panel");
+  if (!panel) return;
+  const opener = document.querySelector('#tools button.tool-band[aria-pressed="true"]');
+  if (!(opener instanceof HTMLElement)) return;
+
+  const margin = 10;
+  /** The bar plus the gap the drawer keeps off it. */
+  const barAndGap = 58;
+  /** Enough drawer left to be worth opening: a title and a few rows. */
+  const leastRoom = 190;
+  const lowest = Math.max(margin, window.innerHeight - barAndGap - leastRoom);
+  const top = Math.min(Math.max(opener.getBoundingClientRect().top, margin), lowest);
+  panel.style.setProperty("--drawer-top", `${Math.round(top)}px`);
+}
+
+/*
+  The clamp is against the window, so the window changing moves it. Without this, shrinking the
+  height leaves a drawer anchored below where its own floor now is — a title with a scrollbar under
+  it, and no press to put it right.
+*/
+window.addEventListener("resize", place);
+
 /** Which group the drawer is showing. */
 export function currentPanel(): StepId | null {
   return openStep;
@@ -418,6 +479,9 @@ export function renderPanel(): void {
   // Nothing open is a coherent state and the whole drawer goes with it, so the map is plainly
   // visible. The strip stays: it is how the drawer comes back.
   document.getElementById("panel")?.classList.toggle("shut", showing === null);
+  // After the body exists, so a drawer that has just grown or shrunk is clamped against what
+  // it actually holds rather than against what it held a moment ago.
+  anchorDrawer();
 
   applyOpenStep();
 }

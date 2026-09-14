@@ -33,7 +33,7 @@
  */
 
 import { STEPS, TOOLS, type Drag, type ToolChoice } from "../steps";
-import { currentPanel, openPanel, togglePanel } from "./accordion";
+import { anchorDrawer, currentPanel, openPanel, togglePanel } from "./accordion";
 import { stepIsMarked, wallsMark } from "./wallsMark";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
@@ -163,8 +163,8 @@ export function setTool(next: Tool): void {
     **Only when nothing is open**, so it never takes a group away from a GM who is reading one: a tool
     may turn a thing on and may never turn one off, which is the same rule the layers follow.
 
-    Interim. When a tool's controls move out of the pinned head and into the drawer as their own
-    content, this becomes "show your own controls" and stops being a guess about which group to open.
+    The tool's controls are drawn at the top of the drawer's body, so opening the group its band
+    names is exactly "show me what is in my hand" rather than a guess about where to look.
   */
   const band = TOOLS.find((choice) => choice.id === next)?.band;
   if (band === "ink" && currentPanel() === null) openPanel("ink");
@@ -304,6 +304,10 @@ export function render(): void {
 
       addTools(step.id as ToolChoice["band"]);
     }
+
+    // The buttons have just moved, so whatever the drawer was level with may not be there any
+    // more -- a group becoming locked or usable changes the height of the column above it.
+    anchorDrawer();
   }
 
   const hint = document.getElementById("tool-hint");
