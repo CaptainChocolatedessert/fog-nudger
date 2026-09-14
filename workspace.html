@@ -235,24 +235,11 @@
         border: none;
         border-radius: 0.12rem;
       }
-      .swatches {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-        align-items: center;
-        margin: 0.25rem 0 0.35rem;
-      }
-      /* Square, and the same height as the picker above them, so the strip reads as a row of the
-         same kind of thing rather than as a second, larger control. */
-      .swatches button {
-        flex: none;
-        width: 1.15rem;
-        height: 1.15rem;
-        border-radius: 0.2rem;
-        border: 1px solid rgba(255, 255, 255, 0.22);
-        padding: 0;
-        cursor: pointer;
-      }
+      /*
+        `.swatches` was here, for the seven ink presets. They went on 2026-09-13 so that ink is a
+        colour row like the other four, and the rules went with the markup rather than being left
+        to style nothing.
+      */
 
       /*
         The indeterminate strip, along the top edge of the canvas.

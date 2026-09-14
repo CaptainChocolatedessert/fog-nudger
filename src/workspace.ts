@@ -60,7 +60,7 @@ import { refreshPruneAction, renderPruneAction } from "./workspace/pruneAction";
 import { refreshSimplifyAction, renderSimplifyAction } from "./workspace/simplifyAction";
 import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
-import { renderSwatches } from "./workspace/swatches";
+import { renderSwatches } from "./workspace/colourRows";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";

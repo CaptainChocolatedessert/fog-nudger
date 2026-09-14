@@ -22,38 +22,26 @@
  */
 
 import { colourFor, applyPalette, colourKey } from "./palette";
-import { PALETTE_ROLES, PALETTE_DEFAULTS, ROLE_LABELS, type AdjustableRole } from "../palette";
+import { PALETTE_ROLES, ROLE_LABELS, type AdjustableRole } from "../palette";
 import { recolourInk } from "./layers/ink";
 import { controlsLive } from "./settingRows";
 import { invalidate } from "./shell";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 
-/**
- * Preset overlay colours.
- *
- * A spread of hues plus both extremes of neutral, because the only thing that makes a colour good
- * here is contrast against a particular map — red vanishes on red stonework and shouts on a grey
- * plan, and only the GM can see which they have. Seven is enough to find something workable on any
- * map in one click, with the picker there for the rest. The count is the argument, so it has to
- * match the list: this said six while declaring seven, and the paragraph appeared twice.
- */
 /*
-  Violet leads, because it is the default and the first thing a GM sees on the map.
+  The seven ink presets were here, and they are gone (user, 2026-09-13): "Remove the ink presets. Ink
+  should be just like all of the other categories with colors."
 
-  Cyan and amber are **not** offered, which is the change worth knowing about: they mean *added ink*
-  and *suppressed ink* everywhere else on this canvas, and a mask wearing one of them would make the
-  GM's own corrections indistinguishable from what the trace read. Red is gone for the same reason —
-  it is reserved for what an action would remove.
+  **The cost, stated rather than argued away.** They existed because nothing makes a colour good here
+  except contrast against a particular map — violet vanishes on violet stonework and shouts on a grey
+  plan — and one click on a spread of hues found something workable on any map. Every colour change is
+  now a trip through the operating system's colour picker, which is slower and is a worse place to
+  compare two candidates.
+
+  What is bought is that a category is a category: five rows, one shape, nothing to learn about why
+  one of them is special. That was the argument for the presets in reverse — ink was singled out
+  because it covers real area — and the room has decided the consistency is worth more than the click.
 */
-const INK_SWATCHES: readonly { readonly value: string; readonly name: string }[] = [
-  { value: PALETTE_DEFAULTS.ink, name: "Violet" },
-  { value: "#ff20d0", name: "Magenta" },
-  { value: "#2b6bff", name: "Blue" },
-  { value: "#ffd000", name: "Yellow" },
-  { value: "#00e070", name: "Green" },
-  { value: "#ffffff", name: "White" },
-  { value: "#000000", name: "Black" },
-];
 
 /**
  * Set one role's colour and put it into effect everywhere at once.
@@ -97,15 +85,14 @@ export function renderSwatches(body: HTMLElement): void {
  * left, the thing you turn on the right.
  *
  * **Ink used to have a builder of its own** and wore a different shape for it — its picker sat under
- * the label in the swatch strip rather than beside it. That was invisible while it lived at the top
+ * the label in a strip of presets rather than beside it. That was invisible while it lived at the top
  * of the Ink step with nothing to be compared against; once it moved down among the other four
  * (2026-09-09) it was the odd one out, which a room said plainly: *"It should adopt that same format
  * as the others."*
  *
- * So there is one builder, and ink's presets are an **addition** to the shared row rather than a
- * replacement for it. The special-casing that survives is one `if`, where it used to be a second
- * function that had drifted: the old one read the stored colour by hand with its own normalising
- * call, which is precisely what `colourFor` already does for every role.
+ * **There is no special case left at all** (2026-09-13). The presets went with the room's next
+ * sentence — *"Ink should be just like all of the other categories with colors"* — so what was a
+ * second builder, then one builder with an `if`, is now one builder with none.
  */
 function colourRow(role: AdjustableRole): HTMLElement {
   const row = document.createElement("div");
@@ -131,39 +118,7 @@ function colourRow(role: AdjustableRole): HTMLElement {
   hint.className = "hint";
   hint.textContent = ROLE_LABELS[role].means;
 
-  row.append(top);
-  // Ink alone gets presets, because it is the one colour covering real area — a palette of
-  // alternatives is worth a click there and would be inviting a mistake on the four marks, whose
-  // meanings are fixed.
-  if (role === "ink") row.append(swatchStrip(picker));
-  row.append(hint);
+  row.append(top, hint);
   return row;
 }
 
-/**
- * The preset strip, under the row it belongs to.
- *
- * Takes the row's own picker because the picker is the **readout** of the current colour as well as a
- * way to set one: a swatch that left it showing the previous colour made the row disagree with
- * itself until the next rebuild of the panel.
- */
-function swatchStrip(picker: HTMLInputElement): HTMLElement {
-  const container = document.createElement("div");
-  container.className = "swatches";
-
-  for (const swatch of INK_SWATCHES) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.style.background = swatch.value;
-    button.title = swatch.name;
-    button.disabled = !controlsLive();
-    button.addEventListener("click", () => {
-      setRoleColour("ink", swatch.value);
-      picker.value = swatch.value;
-      void persistSettings();
-    });
-    container.append(button);
-  }
-
-  return container;
-}

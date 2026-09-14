@@ -1714,10 +1714,15 @@ iframe.
 
 Explicit opaque option colours would fix that one symptom, but a native popup inside a sandboxed
 third-party iframe is a rendering path we neither control nor can style reliably. **So we draw the
-control ourselves** — the map picker is a list of radio rows, the ink colour is a row of swatch buttons
-— and each also happens to be better for its job, since choosing a map is a *comparison* and a dropdown
-hides what you compare on. The native `<input type="color">` is still offered beside the swatches,
-because when it works it beats any fixed palette.
+control ourselves** — the map picker is a list of radio rows — and it also happens to be better for
+its job, since choosing a map is a *comparison* and a dropdown hides what you compare on.
+
+**The ink colour was the second example and no longer is** (2026-09-13). It was a row of preset
+swatches with the native `<input type="color">` beside them; the presets went so that ink is a colour
+row like the other four, leaving the native control alone. That is the one place this argument is now
+*not* acted on, and it is worth knowing which way the risk runs: if a GM ever reports the colour popup
+rendering unreadably in their browser, this passage is the reason why, and presets are the remedy that
+was removed.
 ---
 
 ## 7a. The surface redesign — built, and unproven
@@ -2044,9 +2049,13 @@ tune away the mechanism the hues rely on.
 **Changing one republishes the custom properties**, so a blurb naming a colour — *"covered areas show
 in amber"* — cannot outlive the mark it describes.
 
-**Only ink keeps swatches.** It is the one colour covering real area, so a palette of alternatives is
-worth offering; the other four are marks a few pixels wide whose meaning is fixed, and offering
-alternatives there would be inviting a GM to make *added* look like *going*.
+**No colour keeps swatches** (user, 2026-09-13: *"Ink should be just like all of the other categories
+with colors"*). Ink kept a palette of seven until then, on the argument that it is the one colour
+covering real area and worth a one-click spread of hues, where the other four are marks a few pixels
+wide whose meaning is fixed. **The cost of dropping it, stated:** nothing makes a colour good here but
+contrast against a particular map, and every change is now a trip through the operating system's
+colour picker — slower, and a worse place to compare two candidates. What is bought is that a category
+is a category: five rows, one shape, and nothing to learn about why one of them is special.
 
 ### Two measured fixes to carry over — one done, one half done
 
@@ -3021,7 +3030,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
 - **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` · `saveAction.ts` ·
   `workspaceControl.ts`
 - **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `settingsState.ts`
-  (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `swatches.ts` (the five colour
+  (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
   pickers) · `graphScale.ts` ·
   `seedSimplify.ts`
 - **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag) ·
