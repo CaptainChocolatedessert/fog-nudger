@@ -1758,12 +1758,12 @@ holding. The head already carried the tool *hint* on exactly this argument — t
 themselves. The cost is that the head grows while a tool is armed, and that space comes off the
 scrollable rail.
 
-> **The rest of the surface has still not been judged.** It types, 782 tests pass, the production
-> build is clean, and both pages were driven in a browser outside Owlbear. What that cannot say is
-> whether the arrangement is one a GM wants, which is the whole question the redesign was for. **A
-> real session of map
-> correction is the next thing this project needs**, and it now tests the surface as well as the
-> partition.
+> **It has been judged now, and it held.** Sessions on 2026-09-09 and 2026-09-13 went through the
+> whole surface — the rail, the strip, the tools, the wall actions, the panel — and what came back was
+> a list of fifteen faults, every one of them a detail rather than a disagreement with the
+> arrangement. Nobody asked for the modes back, for the accordion to force one section shut, or for
+> the verb to leave the strip. **The redesign's own question is answered: the shape is one a GM
+> wants.** What the list cost to fix is in §10.
 
 **That known cost is paid** (user, 2026-09-09): *"most items don't need any description at all. Let's
 see how far we can get just with good naming."* Roughly 1,400 words across the rail and the panel came
@@ -2119,14 +2119,15 @@ Worth stating, because it is most of the project:
 
 **The cost, stated: this lands almost entirely in the untested half.** The surface touches the SDK, so
 it cannot be imported into a node test, and the ~6,800 lines of workspace code it reworks have no
-coverage. The 782 tests stay green throughout and will not be evidence about any of it. **A room is
-the only instrument here**, which is an argument for building it in stages that can each be looked at
-rather than as one landing.
+coverage. The tests stay green throughout and were never evidence about any of it. **A room is the
+only instrument here**, which is an argument for building it in stages that can each be looked at
+rather than as one landing — and which is exactly how it went: two sessions, fifteen faults, and
+several of them invisible from a desk by construction.
 ---
 
 ## 8. Testing and diagnostic practice
 
-**782 tests across 54 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**824 tests across 58 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2470,56 +2471,55 @@ from it should be struck by being *done*, not by being forgotten.
 
 ### Where to pick this up
 
-**Everything below is the working set, and it is complete** — this list is the handover rather than
-a summary of a conversation, and it was brought up to date after an unattended pass on 2026-09-10.
+**The room's list is finished.** Two sessions in a room on 2026-09-09 and 2026-09-13 produced fifteen
+observations and several more found while fixing them. Everything buildable from that list is built
+and confirmed in a room. What remains below is **six decisions**, not six jobs, and one of them
+carries three of the others.
 
-**Closed, and confirmed in a room:** the tool's controls were unreachable (a missing `onToolChange`
-subscription plus a home three conditions deep) and now sit in the pinned head; the "Correcting it by
-hand / Pick a tool from the strip" empty state went with the slot it labelled; and the three wall
-actions are gated before the press, with the prune button naming the step that holds its slider.
+**What the two sessions established, and it is the bigger news:**
 
-**Closed at the desk on 2026-09-09, not yet judged in a room:** the prose cull, the paint verbs
-becoming Draw and Erase on both layers, the panel dropping to two buttons, and the spur *limit*
-rename.
+- **The partition is good on a real map.** The oldest open question in the project, asked since §1 was
+  written, has its first answer and the answer is yes. Scope is one map and one GM — see *The
+  partition has been judged* above, which says what that does and does not establish.
+- **The surface redesign held.** Fifteen faults, every one a detail. Nobody asked for the modes back,
+  for the accordion to force one section shut, or for the verb to leave the tool strip.
 
-**Closed at the desk on 2026-09-10, unattended.** All of it has since been through a room except the
-last two lines, which nobody has had reason to look at:
+**What was built along the way, all confirmed in a room:** the slider ghost (five faults behind one
+sentence), the unified undo and a new redo over both documents, *Clear everything* on the panel, the
+tool's controls in the pinned head, the wall actions gated before the press, and a long tail of naming
+and legibility work. Each has its own entry below or in §5.
 
-- *Save the ink edits* is **Save painted strokes**, and its refusal says where a slider's change went.
-- **The slider ghost** — five faults fixed, now a grey circle the size of the handle.
-- **The ink colour** leads the five colours in View; **the ink opacity is gone**, as a parameter; and
-  View's Defaults restores all five colours.
-- **Five false discard prompts removed** — the brush widths, the gap sliders and the editor's
-  straighten slider no longer offer to re-read the map.
-- **The tool column** — heavier glyphs, larger captions, disabled tools over the contrast floor.
-- **The layer toggles** lead with the word *Show*. The suppression colour is labelled **Suppressed**.
-- **Prune and Straighten no longer claim they cannot be undone.** They always could be.
+**The one thing still unseen:** View's **Defaults** restoring all five colours. The rows themselves
+have been looked at; nobody has pressed that button.
 
-**What a room should check first, in order** — each is something only a room can confirm:
+---
 
-1. ~~**The ghost in Firefox.**~~ **Closed (2026-09-13):** under the handle mid-track and at both
-   ends, which settles the size and the inset.
-2. ~~**A brush width with a wall edit outstanding.**~~ **Confirmed (2026-09-13):** no dialog.
-3. ~~**The *Show* caption**, never drawn outside a room.~~ **Confirmed (2026-09-13):** the caption
-   and the toggles work.
-4. **The ink colour row in View**, and View's Defaults putting all five colours back. The rows
-   themselves were seen when the presets were dropped; the **Defaults** button restoring all five is
-   the half nobody has pressed.
+**The six decisions, in the order I would take them.**
 
-**The largest thing** is still the fractured save-then-buttons workflow, a conversation and not a
-build, and it now has **two facts it did not have**: a slider release never replaces the stored graph
-(only a save does), and Prune and Straighten were undoable all along. Both are in its entry below.
+1. **The fractured save-then-buttons workflow.** The largest, and **three of the others wait on it** —
+   the two *put on the map* cuts, and whether Prune and Straighten keep their buttons at all. It has
+   gained two facts since it was raised: a slider release never replaces the stored graph, and those
+   two actions were undoable the whole time, so the button-plus-confirmation shape was guarding a
+   permanence that undo had already removed. Its entry below has the threads.
+2. **The state line's placement.** Bottom-right of a full-screen window while every control that
+   writes to it is in the left rail. This is what made three working buttons read as dead, and it
+   affects every message on the surface rather than those three.
+3. **The ink-width readouts**, which quote a programmatic estimate as though it were a fact.
+4. **The frame button's wording** — *Make the outside a room* against the room's *Create walls around
+   map border*. Naming the outcome versus naming the mechanism.
+5. **Per-colour opacity**, explicitly not to be built until discussed.
+6. **The 14px base size**, measured and recorded, left alone because it changes the look of every
+   control at once and wants a GM's eye rather than a desk's.
 
-**Still parked, each needing a decision:** the state line's placement; the two button cuts, which wait
-on the workflow; the ink-width readouts; the frame button's wording; per-colour opacity; and the 14px
-base size, which changes every
-control's look.
+**And the thing that is not a decision at all: a second map.** The reading is least proven on styles
+unlike the one that has been tried — hatched stonework, a printed floor grid, a scan, walls drawn as
+texture rather than line. Everything in the list above is refinement; that is where the next real
+finding is.
 
-**One agreement, learned expensively:** do not edit the running modules while the user has a room
-open, and try a reopen before diagnosing anything. `CLAUDE.md` says why.
+**Two agreements, both learned expensively:** do not edit the running modules while a room is open,
+and try a reopen before diagnosing anything. `CLAUDE.md` says why.
 
-Where an entry carries a guess about the cause, it says so. **None of these has been diagnosed beyond
-what the room reported** unless the entry says otherwise.
+Where an entry carries a guess about a cause, it says so.
 
 #### The wall-graph group — diagnosed, and it was not one cause
 
