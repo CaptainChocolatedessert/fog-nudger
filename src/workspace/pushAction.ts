@@ -281,14 +281,19 @@ async function mayBeTooLarge(): Promise<boolean> {
   });
 }
 
-export function renderPushAction(body: HTMLElement): void {
-  const actions = document.createElement("div");
-  actions.className = "step-actions";
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "chip";
-  button.textContent = "Put on the map";
+/**
+ * Bind the bar's commit button.
+ *
+ * **In the bar rather than at the foot of a section, since 2026-09-14.** It is the surface's whole
+ * purpose, and a control that only exists while one group happens to be open is a control a GM has
+ * to go and find. Beside the way out is where it belongs, because closing does the same thing.
+ *
+ * Bound by id rather than built, like every other chip in the bar: the markup carries the bar's
+ * order, and a button appended from here would have to know where in that order it goes.
+ */
+export function renderPushAction(): void {
+  const button = document.getElementById("push");
+  if (!(button instanceof HTMLButtonElement)) return;
   button.disabled = !controlsLive();
 
   // No note. All three of its sentences were reassurance — that closing does the same thing, that
@@ -321,7 +326,4 @@ export function renderPushAction(body: HTMLElement): void {
     button.disabled = true;
     void run();
   });
-
-  actions.append(button);
-  body.append(actions);
 }

@@ -39,7 +39,7 @@ import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { requireLayer } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
-import { handEdits, onStageChange, wallGraph } from "./stage";
+import { onStageChange, wallGraph } from "./stage";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
 
@@ -222,16 +222,13 @@ export function render(): void {
   }
 
   /*
-    Drawn here because this already redraws on a stage change and owns the head's other dynamic
-    line. It is not a property of the tool — it belongs to the document — and when the two modes
-    merge into one page it should move to whatever owns that.
-  */
-  const count = document.getElementById("edit-count");
-  if (count) {
-    const n = handEdits();
-    count.textContent = n === 0 ? "" : `${n} hand ${n === 1 ? "edit" : "edits"} — re-reading the map discards ${n === 1 ? "it" : "them"}`;
-  }
+    The hand-edit count was drawn here and is gone (2026-09-14).
 
+    It said "14 hand edits — re-reading the map discards them", which was a **numeric proxy** for
+    something a GM should be looking at: fourteen tells them nothing about whether those fourteen
+    mattered. What replaced it is the mark on the groups that would do the destroying, and — when
+    one of those controls is actually moved — the delta. `wallsMark.ts` carries the argument.
+  */
   const hint = document.getElementById("tool-hint");
   if (hint) {
     const chosen = TOOLS.find((choice) => choice.id === currentTool());

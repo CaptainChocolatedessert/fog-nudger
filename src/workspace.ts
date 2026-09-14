@@ -316,10 +316,17 @@ registerStepContent(
       changes is whether the outside is somewhere the party can go.
     */
     renderFrameAction(body);
-    renderPushAction(body);
   },
   "bottom",
 );
+
+/*
+  The commit lives in the bar now, so it is bound once rather than rendered into a section.
+
+  It was at the foot of Edit walls, which meant the one action the whole surface exists for was
+  reachable only while that group happened to be open.
+*/
+renderPushAction();
 
 /*
   Closing writes the result to the scene.

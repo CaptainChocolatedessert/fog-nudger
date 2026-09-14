@@ -524,7 +524,6 @@
       #history-row {
         display: flex;
         gap: 0.25rem;
-        margin: 0 0 0.6rem;
       }
       button.history {
         display: flex;
@@ -552,18 +551,6 @@
       button.history:disabled {
         opacity: 0.65;
         cursor: default;
-      }
-
-      #edit-count {
-        margin: 0 0 0.9rem;
-        padding: 0.35rem 0.6rem;
-        border-left: 2px solid #f59e0b;
-        background: rgba(245, 158, 11, 0.1);
-        font-size: 0.78rem;
-        color: #f0b357;
-      }
-      #edit-count:empty {
-        display: none;
       }
 
       /* ----------------------------------------------------------------------------------------
@@ -726,6 +713,32 @@
         display: flex;
         gap: 0.4rem;
         align-items: center;
+        /* Grows leftward from the right edge rather than spanning the window, which keeps it
+           clear of the rail without having to know how wide the rail is or whether it shows. */
+        max-width: calc(100vw - 1.2rem);
+      }
+      /*
+        The map being traced, named where it stays true however the rail is scrolled.
+
+        Truncated rather than wrapped: it is a reminder of which image is under everything rather
+        than something to read, and the whole name is in the title for the once it matters.
+      */
+      #map-name {
+        margin: 0 0.2rem 0 0;
+        max-width: 14rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.78rem;
+        color: #9aa0c8;
+      }
+      /* Document on one side, surface on the other. A hairline rather than a gap, because a gap
+         at this size reads as a layout accident. */
+      .bar-split {
+        width: 1px;
+        align-self: stretch;
+        margin: 0.15rem;
+        background: rgba(187, 153, 255, 0.28);
       }
       button.chip {
         padding: 0.4rem 0.65rem;
@@ -795,10 +808,19 @@
         (The third case this used to name, "the opacity is at zero", is not reported here and does
         not need to be: the slider's own readout says so, right beside the slider that did it.)
       */
+      /*
+        Bottom **left**, under the rail, since 2026-09-14.
+
+        It sat bottom-right of a full-screen window while every control that writes to it is in
+        the left rail, so a message about a press arrived as far from the press as the window
+        allows — which is what made three working buttons read as dead. Still a sibling of
+        `#panel` rather than a child: it has to stay visible with the controls hidden, or a slow
+        close looks like a hang.
+      */
       #state {
         position: fixed;
         bottom: 0.6rem;
-        right: 0.6rem;
+        left: 0.6rem;
         padding: 0.35rem 0.6rem;
         border-radius: 0.35rem;
         background: rgba(16, 18, 36, 0.9);
@@ -814,7 +836,7 @@
           the window is; the outer one stops a narrow window producing a negative width, which CSS
           discards as invalid — leaving exactly the unbounded line this is here to prevent.
         */
-        max-width: max(12rem, min(34rem, calc(100vw - 30rem)));
+        max-width: max(12rem, min(34rem, calc(100vw - 2rem)));
         text-align: left;
       }
       /*
@@ -823,8 +845,10 @@
         remain. `:has()` is the whole mechanism; where it is unsupported the line simply keeps
         the tighter cap, which is the safe direction.
       */
-      body:has(#panel.hidden) #state {
-        max-width: max(12rem, min(34rem, calc(100vw - 2rem)));
+      /* The rail's own footer room, so the last rows of a scrolled group are never left
+         underneath the line sitting over them. */
+      #panel-body {
+        padding-bottom: 4.2rem;
       }
       #state.bad {
         color: #ff8080;
@@ -865,7 +889,6 @@
         -->
         <div id="panel-head">
           <h1 id="mode-name">Fog Nudger</h1>
-          <p class="sub" id="map-name">Loading…</p>
           <p id="tool-hint"></p>
           <!--
             The controls of whatever is in hand, directly under the sentence describing it, because
@@ -875,25 +898,6 @@
           -->
           <div id="tool-controls"></div>
           <div id="layer-row"></div>
-          <!--
-            The document's own history, and the count of what is in it.
-
-            Here rather than in the tool strip, which a room proposed: every button there is a *mode*,
-            picked and held and shown by a pressed state, where these are momentary. Mixing the two
-            would make that highlight mean two things — and a tool declares the drag it binds, whether
-            it opens paint mode, and what the pinned hint says while it is in hand, none of which undo
-            has an answer for.
-
-            Here rather than the bar at the top right, where undo used to sit: that bar is Fit,
-            Controls and Close, which are about the *surface*. Undo acts on the document, and the
-            count of hand edits was already here with nothing owning it — its own comment said it
-            "belongs to the document" and should move to whatever owns that. These are that owner.
-          -->
-          <div id="history-row">
-            <button class="history" id="undo" disabled title="Nothing to undo"></button>
-            <button class="history" id="redo" disabled title="Nothing to redo"></button>
-          </div>
-          <p id="edit-count"></p>
         </div>
 
         <!--
@@ -910,9 +914,28 @@
 
       <div id="tools"></div>
 
+      <!--
+        The bar: what belongs to the *document*, then what belongs to the surface.
+
+        Undo and the map name were in the rail head until 2026-09-14, and the argument for putting
+        them there was that this bar held Fit, Controls and Close — the surface — while undo acts
+        on the document. That argument is answered rather than overturned: the bar is not only the
+        surface any more, and what lives here is what stays true however the rail is scrolled and
+        whatever tool is in hand.
+      -->
       <div id="bar">
-        <!-- Undo moved to the rail head on 2026-09-13, beside the edit count it acts on. What is
-             left in this bar is the surface: how you are looking at it, and how you leave. -->
+        <p id="map-name" title="The map being traced">Loading…</p>
+        <div id="history-row">
+          <button class="history" id="undo" disabled title="Nothing to undo"></button>
+          <button class="history" id="redo" disabled title="Nothing to redo"></button>
+        </div>
+        <!--
+          The commit, beside the way out, because it is the surface's whole purpose and was at the
+          foot of a section. Closing pushes too — this is the mid-session case, a change a table is
+          waiting on without giving up the surface.
+        -->
+        <button class="chip" id="push">Put on the map</button>
+        <span class="bar-split" aria-hidden="true"></span>
         <button class="chip" id="fit" title="Fit the whole map">Fit</button>
         <button class="chip" id="toggle-panel" title="Hide the controls" aria-pressed="true">Controls</button>
         <button class="chip" id="close">Close (Esc)</button>
