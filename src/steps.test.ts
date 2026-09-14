@@ -489,6 +489,24 @@ describe("stepRegeneratesWalls", () => {
     expect(stepRegeneratesWalls("map")).toBe(false);
   });
 
+  it("marks fewer controls than the group it sits in, which is the point of moving the gate", () => {
+    /*
+      **The over-marking the per-control gate fixes** (user, 2026-09-14). Ink holds nine controls and
+      only five rebuild the walls: the two brush widths and the two gap settings recompute nothing at
+      all. Marking the *group* therefore told a GM the brush width was dangerous, and a mark that is
+      wrong about half of what it covers stops being believed about the other half.
+
+      Pinned as a strict inequality rather than as the numbers, so adding a control to Ink does not
+      fail this — what has to stay true is that the group is not a proxy for its parts.
+
+      Two mutations tried, two caught: `regeneratesWalls` admitting everything, and admitting nothing.
+    */
+    const inInk = stepParameters("ink");
+    const rebuild = inInk.filter(regeneratesWalls);
+    expect(rebuild.length).toBeGreaterThan(0);
+    expect(rebuild.length).toBeLessThan(inInk.length);
+  });
+
   it("agrees with the per-parameter question for every step", () => {
     // The two must not drift: the mark says a press here would destroy, and the dialog fires on the
     // press. If a step could be unmarked while holding a control that confirms, the dialog would be

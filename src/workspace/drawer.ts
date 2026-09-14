@@ -62,7 +62,7 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
 import { proposeLayers } from "./layerToggles";
-import { stepIsMarked, wallsNotice } from "./wallsMark";
+import { controlIsMarked, wallsNotice } from "./regenerateGuard";
 
 /**
  * Which group is in the drawer, or `null` for none.
@@ -266,8 +266,9 @@ function stepBody(step: Step): HTMLElement {
   blurb.innerHTML = step.blurb;
   body.append(blurb);
 
-  // Above everything the group holds, including its tool picker: it is about all of them.
-  if (stepIsMarked(step.id)) body.append(wallsNotice());
+  // Above everything the group holds, and only where something in it is actually locked — the
+  // notice explains the marks, so a group with none has nothing for it to explain.
+  if (stepParameters(step.id).some(controlIsMarked)) body.append(wallsNotice());
 
   content.get(step.id)?.top?.(body);
 

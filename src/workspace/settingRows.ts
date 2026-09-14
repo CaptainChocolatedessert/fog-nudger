@@ -17,7 +17,6 @@ import { lastInkWidth, lastPixelsPerSquare, lastRasterWidth } from "../pipeline"
 import {
   PARAMETER_KIND,
   readParameter,
-  regeneratesWalls,
   SETTING_LIMITS,
   writeParameter,
 } from "../settings";
@@ -42,9 +41,7 @@ import {
   setSettings,
 } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
-import { confirmAction } from "../confirmDialog";
-import { describeError } from "../describeError";
-import { discardWalls, wallsEdited } from "./stage";
+import { confirmRegenerate, controlIsMarked, wallsMark } from "./regenerateGuard";
 
 /**
  * The track a control's slider runs over.
@@ -130,75 +127,6 @@ export function resetHints(): void {
 
 
 /**
- * Ask before a reading change throws away hand edits, and put the handle back if the answer is no.
- *
- * Asked *after* the release rather than before, because a slider has already moved by the time it
- * fires — so declining has to restore both the input and the position this row compares against, or
- * the next release would think nothing had changed and write the discarded value silently.
- *
- * **It does not name a count**, and used to. Fourteen tells a GM nothing they can act on, and the
- * mark on the group already says that there is work at stake; what this adds is the price of the
- * particular press, at the moment of pressing.
- */
-async function confirmDiscard(
-  control: Control,
-  input: HTMLInputElement,
-  /** Puts the row's own idea of where the handle sits back, which the closure alone can do. */
-  restore: (position: number) => void,
-  previous: number,
-  position: number,
-  limits: Parameters<typeof fromSlider>[1],
-  scale: Parameters<typeof fromSlider>[2],
-): Promise<void> {
-  const ok = await confirmAction({
-    title: "Generate the walls again, discarding your changes to them?",
-    body: [
-      `${control.label} is one of the settings the walls are derived from, so changing it builds ` +
-        "them again from the map. Anything you moved, drew or erased by hand is not in what replaces " +
-        "them, and it cannot be undone afterwards.",
-      "The ink you painted is safe: suppression and added ink are inputs to the reading, so they " +
-        "survive it. Only changes made to the walls themselves go.",
-    ],
-    confirmLabel: "Generate them again",
-    destructive: true,
-  });
-
-  if (!ok) {
-    input.value = String(previous);
-    restore(previous);
-    say("kept your wall edits — the setting is unchanged");
-    return;
-  }
-
-  /*
-    Consent is the document being thrown away, rather than a flag saying consent was given.
-
-    With nothing stored, the derive is free to run, what it produces takes the screen, and the push
-    adopts it — which is the state a map that has never been edited is already in, so there is one
-    path rather than a consented one beside it. `stage.ts` says why the base is not restored instead.
-
-    **Awaited before the setting is written.** A failed clear must leave the GM's walls and their
-    slider both where they were, rather than a setting that has moved against a document that has not.
-  */
-  try {
-    await discardWalls();
-  } catch (error) {
-    input.value = String(previous);
-    restore(previous);
-    const detail = describeError(error);
-    say(`could not discard the walls, so nothing changed: ${detail}`, "bad");
-    console.error("Fog Nudger — discarding the walls failed", error);
-    return;
-  }
-
-  const current = fromSlider(position, limits, scale);
-  setSettings(writeParameter(currentSettings(), control.name, current));
-  recomputeFor([control.name]);
-  void persistSettings();
-}
-
-
-/**
  * Build one slider.
  *
  * Two events, and the split is the point of using a slider. `input` fires continuously while
@@ -247,7 +175,29 @@ export function settingRow(control: Control): HTMLElement {
   const readout = document.createElement("span");
   readout.className = "value";
   readout.textContent = format(control, value, toSlider(value, limits, scale), limits, scale);
-  top.append(label, readout);
+  /*
+    A control that would rebuild the walls is **locked** while they hold hand edits.
+
+    The slider is inert and the mark beside its name is the way in: pressing it asks, and agreeing
+    unlocks every marked control at once, because agreeing is the stored graph going. The mark is a
+    **button** rather than a glyph on the row so it is reachable by keyboard — a disabled input
+    cannot be tabbed to, and a lock with no key for one input method is a wall rather than a gate.
+  */
+  const name = document.createElement("span");
+  name.className = "row-name";
+  name.append(label);
+  if (controlIsMarked(control.name)) {
+    row.classList.add("locked");
+    const key = document.createElement("button");
+    key.type = "button";
+    key.className = "row-lock";
+    key.append(wallsMark());
+    key.title = `${control.label} rebuilds the walls, discarding your changes to them`;
+    key.setAttribute("aria-label", `Unlock ${control.label}`);
+    key.addEventListener("click", () => void confirmRegenerate(control.label));
+    name.append(key);
+  }
+  top.append(name, readout);
 
   const input = document.createElement("input");
   input.type = "range";
@@ -377,34 +327,16 @@ export function settingRow(control: Control): HTMLElement {
       the editing tools. With one surface they are, so the guard has to be the *count* — and at zero,
       which is most of the time, nothing interrupts.
     */
-    const previous = placed;
     placed = position;
     /*
-      Every control that regenerates the walls, not only the ones that re-read the map.
+      Nothing is asked here any more.
 
-      It asked `rereadsTheMap` before, which is a question about **cost** — does the expensive first
-      half run again. What the prompt is about is what a change **destroys**, and straightening and
-      pruning destroy exactly as much as a threshold does now that each is one live slider rather than
-      a slider here and a button in the editor.
+      A control that would rebuild the walls is **locked** while they hold hand edits, so a release
+      can only happen once the GM has already agreed — see `regenerateGuard.ts`. Asking on the
+      release meant asking after the handle had moved, and declining then had to restore the input
+      *and* this row's own idea of where it sat, or the next release would think nothing had changed
+      and write the discarded value silently. That whole dance is gone with the question's timing.
     */
-    const destroys = regeneratesWalls(control.name) && wallsEdited();
-    if (destroys) {
-      setPendingEdit(false);
-      void confirmDiscard(
-        control,
-        input,
-        (back) => {
-          placed = back;
-          showGhost();
-        },
-        previous,
-        position,
-        limits,
-        scale,
-      );
-      return;
-    }
-
     const current = fromSlider(position, limits, scale);
     setSettings(writeParameter(currentSettings(), control.name, current));
     setPendingEdit(false);
@@ -427,7 +359,9 @@ export function settingRow(control: Control): HTMLElement {
     the graph is a derivation until the GM saves, and the save is the one place the replacement is
     named and confirmed. A control that is live in the only mode that draws it needs no notice.
   */
-  input.disabled = !controlsLive();
+  // Locked as well as ungated: a marked control cannot be picked up until the GM agrees, which
+  // is the whole of the gate — see `regenerateGuard.ts`.
+  input.disabled = !controlsLive() || controlIsMarked(control.name);
 
   /*
     The track wraps the input so the ghost can be positioned against it.

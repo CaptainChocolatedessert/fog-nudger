@@ -2264,7 +2264,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**848 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**849 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2959,8 +2959,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   tested) · `frameAction.ts` (the one wall action left; straighten and prune became live sliders) ·
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
   own limit at zero — pure and tested)
-- **What is drawn** — `wallsMark.ts` (the mark on the groups whose controls would rebuild edited
-  walls, and the line inside them saying what it means) · `layerToggles.ts` (pure and tested: groups
+- **What is drawn** — `regenerateGuard.ts` (**the mark and the gate**: which control or tool would
+  rebuild the walls, the one question asked before it can, and the glyph that says so — per control
+  rather than per group, since Ink holds nine controls and five regenerate) · `layerToggles.ts` (pure and tested: groups
   propose, the GM disposes, a tool may only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
   the values and is pure)
 - **Layers** — `layers/ink.ts` · `layers/paint.ts` (repainting only the rectangle a stroke changed) ·

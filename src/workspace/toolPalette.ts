@@ -41,7 +41,7 @@ import {
   openToolDrawer,
   setDrawerTop,
 } from "./drawer";
-import { stepIsMarked, wallsMark } from "./wallsMark";
+import { confirmRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
@@ -307,9 +307,25 @@ export function render(): void {
         // What this button opens, so the drawer can find the button it belongs to without
         // guessing from the pressed state — which two buttons carry at once.
         button.dataset.opens = `tool:${choice.id}`;
+        /*
+          A tool that writes to the reading carries the same mark a slider does, and asks the same
+          question before it can be armed. Painted ink and an accepted gap are inputs to the trace,
+          so all three change what the walls are derived from.
+        */
+        if (toolIsMarked(choice.id)) {
+          button.append(wallsMark());
+          button.classList.add("marked");
+          button.title = `${choice.label} rebuilds the walls, discarding your changes to them`;
+        }
         button.disabled = !usable(choice);
         button.addEventListener("click", () => {
-          setTool(choice.id as Tool);
+          void pressTool(choice.id as Tool);
+        });
+        // Split out so the question can be awaited before the tool is armed — asking after would be
+        // asking with paint already down, which is the one place a prompt cannot honestly go.
+        const pressTool = async (id: Tool): Promise<void> => {
+          if (toolIsMarked(id) && !(await confirmRegenerate(choice.label))) return;
+          setTool(id);
           /*
             The drawer follows the press, including when the answer is "nothing".
 
@@ -320,9 +336,9 @@ export function render(): void {
             not. Clearing removes the disagreement rather than papering over it, and it makes the
             whole strip one rule — every press shows that button's own thing.
           */
-          if (toolHasControls(choice.id as Tool)) openToolDrawer(choice.id as Tool);
+          if (toolHasControls(id)) openToolDrawer(id);
           else openPanel(null);
-        });
+        };
         strip.append(button);
       }
     };

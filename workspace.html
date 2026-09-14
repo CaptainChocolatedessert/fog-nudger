@@ -704,6 +704,34 @@
         The sentence the mark cannot carry. Cased down the edge in the structure colour so the two
         read as one statement, and quiet enough that a group wearing it does not shout on every open.
       */
+      /*
+        A control that would rebuild the walls, while they hold hand edits.
+
+        Dimmed rather than hidden, because reading it is the point — the whole reason the gate is on
+        the control and not on the group is that opening a group to see what a threshold is set to
+        should cost nothing. The mark beside the name is the way in.
+      */
+      .row.locked input[type="range"] {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .row-name {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      button.row-lock {
+        display: flex;
+        align-items: center;
+        padding: 0.1rem;
+        border: 0;
+        border-radius: 0.25rem;
+        background: transparent;
+        cursor: pointer;
+      }
+      button.row-lock:hover {
+        background: rgba(122, 167, 255, 0.18);
+      }
       .walls-notice {
         margin: 0 0 0.6rem;
         padding: 0.45rem 0.6rem;
