@@ -56,6 +56,7 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
 import { proposeLayers } from "./layerToggles";
+import { stepIsMarked, wallsMark, wallsNotice } from "./wallsMark";
 
 /**
  * Which groups are expanded. Several may be, and none is a legitimate state.
@@ -190,6 +191,9 @@ function stepBody(step: Step): HTMLElement {
   blurb.className = "sub";
   blurb.innerHTML = step.blurb;
   body.append(blurb);
+
+  // Above everything the group holds, including its tool picker: it is about all of them.
+  if (stepIsMarked(step.id)) body.append(wallsNotice());
 
   content.get(step.id)?.top?.(body);
 
@@ -369,6 +373,16 @@ export function renderPanel(): void {
       header.type = "button";
       header.className = "step-header";
       header.textContent = step.title;
+      /*
+        The mark rides on the header rather than inside the group, because its whole job is to be
+        seen *before* anything is opened or touched. `wallsMark.ts` says why it is a wall glyph and
+        not a count, a dot or a lock.
+      */
+      if (stepIsMarked(step.id)) {
+        header.append(wallsMark());
+        header.classList.add("marked");
+        header.title = "These walls hold changes of yours";
+      }
       header.disabled = shut;
       if (shut) header.title = "Choose a map first";
       header.setAttribute("aria-expanded", String(open.has(step.id)));

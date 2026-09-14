@@ -38,6 +38,7 @@ import { CONTROLS, type Control } from "./controls";
 import {
   DEFAULT_SETTINGS,
   readParameter,
+  regeneratesWalls,
   writeParameter,
   type SettingName,
   type Settings,
@@ -635,6 +636,18 @@ export function workspaceSteps(): readonly Step[] {
  */
 export function stepParameters(step: StepId): readonly SettingName[] {
   return (Object.keys(PARAMETER_STEP) as SettingName[]).filter((name) => stepsOf(name).includes(step));
+}
+
+/**
+ * Whether a step holds any control that would rebuild the wall graph.
+ *
+ * **What the rail's mark is hung on**, and it is asked of the parameters rather than hardcoded to
+ * Ink and Walls — so a control moving between groups carries its consequences with it rather than
+ * leaving the mark behind on the group it left. `regeneratesWalls` is the per-parameter half;
+ * `workspace/wallsMark.ts` is the drawing.
+ */
+export function stepRegeneratesWalls(step: StepId): boolean {
+  return stepParameters(step).some(regeneratesWalls);
 }
 
 /** The controls belonging to one step, in declaration order. */

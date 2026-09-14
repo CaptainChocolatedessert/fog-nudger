@@ -39,6 +39,7 @@ import {
   TOOLS,
   stepControls,
   stepParameters,
+  stepRegeneratesWalls,
   toolGroups,
   ungroupedControls,
   workspaceSteps,
@@ -50,6 +51,7 @@ import {
   PARAMETER_KIND,
   PARAMETER_STAGE,
   readParameter,
+  regeneratesWalls,
   SETTING_LIMITS,
   writeParameter,
 } from "./settings";
@@ -460,6 +462,40 @@ describe("the four axes are declared independently", () => {
       expect(PARAMETER_STAGE[name]).toBeDefined();
       expect(PARAMETER_KIND[name]).toBeDefined();
       expect(typeof isPostReading(name)).toBe("boolean");
+    }
+  });
+});
+
+describe("stepRegeneratesWalls", () => {
+  /*
+    What the rail's mark is hung on.
+
+    Five mutations tried, five caught: a step that never regenerates, one that always does, `every`
+    in place of `some`, `regeneratesWalls` admitting the display kinds, and it admitting nothing.
+
+    Asked of a step's parameters rather than hardcoded, so that a control moving between groups takes
+    its consequences with it. What these pin is the *shape* of the answer rather than today's list:
+    the groups that build the walls carry it, and the groups that only decide what is drawn do not.
+  */
+  it("marks the groups whose controls rebuild the walls", () => {
+    expect(stepRegeneratesWalls("ink")).toBe(true);
+    expect(stepRegeneratesWalls("walls")).toBe(true);
+  });
+
+  it("leaves alone the groups that change nothing about the walls", () => {
+    // View is preview fill and outline: appearance, recomputing nothing. Map has no parameters at
+    // all, and nominating an image is destructive by a different route that has its own handling.
+    expect(stepRegeneratesWalls("view")).toBe(false);
+    expect(stepRegeneratesWalls("map")).toBe(false);
+  });
+
+  it("agrees with the per-parameter question for every step", () => {
+    // The two must not drift: the mark says a press here would destroy, and the dialog fires on the
+    // press. If a step could be unmarked while holding a control that confirms, the dialog would be
+    // the first a GM heard of it.
+    for (const step of workspaceSteps()) {
+      const any = stepParameters(step.id).some(regeneratesWalls);
+      expect(stepRegeneratesWalls(step.id), step.id).toBe(any);
     }
   });
 });

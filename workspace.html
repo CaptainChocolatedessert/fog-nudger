@@ -619,6 +619,41 @@
         box-shadow: inset 2px 0 0 #bb99ff;
         padding-left: 0.6rem;
       }
+      /*
+        The mark: a miniature wall graph on the header of any group whose controls would rebuild
+        walls the GM has changed by hand. `wallsMark.ts` carries why it is this and not a count.
+
+        Baseline-aligned rather than floated, so it reads as part of the heading rather than as a
+        badge stuck to it — a badge is what made it look like a modifier on the tool.
+      */
+      .step-header.marked {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+      .walls-mark {
+        flex: none;
+        /* Optically centred against uppercase letterforms, which sit above the baseline. */
+        margin-top: -0.06rem;
+      }
+      /*
+        The sentence the mark cannot carry. Cased down the edge in the structure colour so the two
+        read as one statement, and quiet enough that a group wearing it does not shout on every open.
+      */
+      .walls-notice {
+        margin: 0 0 0.6rem;
+        padding: 0.45rem 0.6rem;
+        border-left: 2px solid var(--structure, #7aa7ff);
+        background: rgba(122, 167, 255, 0.09);
+        border-radius: 0 3px 3px 0;
+        font-size: 0.76rem;
+        line-height: 1.45;
+        color: #c3c7e4;
+      }
+      .walls-notice b {
+        color: #e8e9f5;
+        font-weight: 600;
+      }
       .step:not(.open) > .step-body {
         display: none;
       }
