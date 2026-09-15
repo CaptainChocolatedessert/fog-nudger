@@ -51,6 +51,11 @@ const STYLES = `
   place-items: center;
   background: rgba(6, 7, 16, 0.72);
 }
+#confirm.reveal {
+  place-items: end center;
+  background: rgba(6, 7, 16, 0.28);
+}
+#confirm.reveal .confirm-panel { margin-bottom: 4.5rem; }
 #confirm .confirm-panel {
   max-width: 30rem;
   margin: 1rem;
@@ -100,6 +105,18 @@ export interface ConfirmOptions {
   readonly confirmLabel: string;
   /** Marks the confirming button as the destructive one, which is what colours it. */
   readonly destructive?: boolean;
+  /**
+   * Keep what is behind this legible, because the answer is back there.
+   *
+   * The regenerate question draws the walls it would destroy **on the map**, and the ordinary
+   * backdrop is 72% of near-black over exactly that — so the picture the dialog is pointing at
+   * would be the one thing the dialog hid. This lightens the backdrop and moves the panel out
+   * of the middle, which is where a map's interesting part usually is.
+   *
+   * **Not the default**, and the dimming it gives up is doing real work everywhere else: a
+   * modal that does not look modal is one a GM answers without reading.
+   */
+  readonly reveal?: boolean;
 }
 
 /**
@@ -117,6 +134,9 @@ export function confirmAction(options: ConfirmOptions): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const host = document.createElement("div");
     host.id = HOST_ID;
+    // A class rather than inline styles, so the two rules it switches on stay beside the ones they
+    // override and a reader of the stylesheet can see the whole of what "reveal" means in one place.
+    if (options.reveal) host.classList.add("reveal");
 
     const panel = document.createElement("div");
     panel.className = "confirm-panel";

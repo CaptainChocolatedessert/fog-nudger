@@ -54,9 +54,21 @@ const listeners: (() => void)[] = [];
   second statement of a fact the graphs already carry, which is the arrangement this file's own
   header warns about.
 
-  `derivedBase` was the accessor the delta drawing will want. It has no caller yet, and one line is
-  cheaper to write again than to keep explaining.
+  `derivedBase` was the accessor the delta drawing will want. It came back on 2026-09-15 when the
+  delta drawing did — one line, written again, exactly as that note expected.
 */
+
+/**
+ * The trace's own version of these walls, which the document was made from.
+ *
+ * **One caller, and it wants it to draw the difference**: what a regenerate would take away and
+ * what it would bring back. Everything else asks `wallsEdited`, which is this same comparison
+ * reduced to a yes or no — so the base is exposed rather than the delta, and the module that
+ * draws it owns how the two graphs are compared.
+ */
+export function derivedBase(): WallGraph | null {
+  return base;
+}
 
 /**
  * Whether the graph in hand still is what the trace derived.

@@ -43,13 +43,21 @@ import {
 } from "./layerToggles";
 import { invalidate, setActiveLayers } from "./shell";
 
-/** What each layer is called where a GM can see it. The ids are ours; these are theirs. */
+/**
+ * What each layer is called where a GM can see it. The ids are ours; these are theirs.
+ *
+ * **Every layer, not only the ones with a switch.** Exhaustive over `LayerId` deliberately: the row
+ * below draws the always-on three, so a name here for `paint`, `gaps` or `delta` reaches nothing
+ * today — and the type is what makes adding a layer a compile error until somebody has decided what
+ * a GM would call it, rather than a blank label the first time one is offered a switch.
+ */
 const NAMES: Readonly<Record<LayerId, string>> = {
   ink: "Ink",
   paint: "Your edits",
   gaps: "Gaps",
   regions: "Rooms",
   graph: "Walls",
+  delta: "Your wall changes",
 };
 
 /**

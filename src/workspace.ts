@@ -53,6 +53,7 @@ import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
+import { registerDeltaLayer } from "./workspace/layers/delta";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSimplifySeed } from "./workspace/seedSimplify";
 import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
@@ -164,6 +165,13 @@ registerGapsLayer();
 registerRegionsLayer();
 // Last, so the graph sits over the rooms it makes rather than under them.
 registerGraphLayer();
+/*
+  Last, so the delta draws over the walls it is about.
+
+  Under them it would be the wrong way round: the marks say *these are the ones at stake*, and
+  the blue centreline they lie exactly on top of would hide most of each one.
+*/
+registerDeltaLayer();
 /*
   The one tool on this surface that changes the GM's own work rather than a setting.
 

@@ -2704,10 +2704,36 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   - **It is unproven.** None of it has been in a room. Every behavioural change here is in the
     surface, which has no coverage by construction.
 
-  **What is still open from this** is the **delta view** — drawing what would go in amber and what
-  would arrive in cyan at the moment a regenerate is offered. `trace/wallGraphDiff.ts` computes it
-  and nothing draws it yet, so today the dialog names the price in words where it should be showing
-  it on the map.
+  **The delta view is built — 2026-09-15.** `trace/wallGraphDiff.ts` computed it and nothing drew
+  it; `workspace/layers/delta.ts` now does, over the map, for as long as the regenerate dialog is
+  up. What the GM added is **amber**, because a derivation would not contain it and it would go;
+  what they erased is **cyan**, because the derivation has it and it would come back. The diff's own
+  words run the other way — `added` is what the GM did — and the swap is the point: this draws the
+  future rather than the past.
+
+  **It is a third kind of layer**, declared as `QUESTION_LAYERS` beside the always-on set and the
+  tool layers, and `steps.test.ts` asserts the three cover every layer there is. A layer nothing
+  proposes is a painter that never runs, and the alternative was an exception in the test, which
+  would have retired that guarantee for the next layer as well as this one. It gets no switch, on
+  the tool layers' rule: what turns it on is the thing it is about, so a second handle would be a
+  way to answer the question by hiding it.
+
+  **The dialog had to learn to stand aside.** Its backdrop is 72% of near-black across the whole
+  window, which is exactly the picture this draws — so `confirmAction` takes a `reveal` flag that
+  lightens the backdrop and moves the panel out of the middle. Only the regenerate question passes
+  it; the dimming is doing real work everywhere else, because a modal that does not look modal is
+  one a GM answers without reading.
+
+  **The counts go to the dev log, not to the dialog.** A delta can be entirely outside the view — a
+  GM who edited a corner and then zoomed elsewhere is looking at an unchanged map — and *nothing to
+  lose* and *nothing in view* are the same image. The log separates them; the dialog says in words
+  that the marks are wherever the edits were. Putting a number in the dialog would be reinstating
+  the instrument this whole feature replaced.
+
+  **Unproven.** The layer has not been in a room: it needs a map, a derived graph and hand edits on
+  it, none of which exists outside Owlbear. What has been checked from a desk is that the page loads
+  the new module without error and that `reveal` puts the panel at the foot of the window over a
+  backdrop light enough to see through.
 
 2. **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
   control that writes to it is in the left rail, so a message about a press arrives as far from the
@@ -3033,7 +3059,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   the values and is pure)
 - **Layers** — `layers/ink.ts` · `layers/paint.ts` (repainting only the rectangle a stroke changed) ·
   `layers/gaps.ts` (proposals, ringed) · `layers/regions.ts` (the partition as vector paths) ·
-  `layers/graph.ts` (the walls, with handles only for the tools that can use them) · `bitmap.ts`
+  `layers/graph.ts` (the walls, with handles only for the tools that can use them) ·
+  `layers/delta.ts` (what a regenerate would take and bring back, while the question is up) ·
+  `bitmap.ts`
 
 ---
 

@@ -80,7 +80,7 @@ export type StepId = "map" | "ink" | "walls" | "view";
   drawing both would have put two answers to one question on the canvas -- and the graph is the
   honest one, because it is what gets stored.
 */
-export const LAYERS = ["ink", "paint", "gaps", "regions", "graph"] as const;
+export const LAYERS = ["ink", "paint", "gaps", "regions", "graph", "delta"] as const;
 
 /**
  * What the map shows from the moment one is chosen — user, 2026-09-14.
@@ -113,6 +113,24 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
   ink: "paint",
   gaps: "gaps",
 };
+
+/**
+ * Drawn only while a question is on screen — the third and last way a layer can be asked for.
+ *
+ * `delta` is the whole list: the walls a regenerate would take and the ones it would bring
+ * back, up for exactly as long as the dialog asking about them. That is the one moment *which
+ * walls* is worth the whole map, and it is why this is not a tool layer — no tool is in hand,
+ * and the thing that puts it up is a modal rather than a press.
+ *
+ * These get no switch either, for the tool layers' reason: what turns it on is the thing it is
+ * about, so a second handle would be a way to answer the question by hiding it.
+ *
+ * **Declared rather than left as an exception**, because `steps.test.ts` asserts that every
+ * layer is proposed by something — a painter nothing ever asks for is dead pixels with nothing
+ * to say so — and a hard-coded excuse in the test would retire that guarantee for the next one
+ * as well as this one.
+ */
+export const QUESTION_LAYERS = ["delta"] as const;
 
 /*
   One rule about `paint`, because it is the layer that does not follow the convention.

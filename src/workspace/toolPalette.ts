@@ -39,6 +39,7 @@ import {
   TOOLS,
   toolGroups,
   type Drag,
+  type LayerId,
   type ToolChoice,
 } from "../steps";
 import {
@@ -61,6 +62,7 @@ import { toolIcon } from "./toolIcons";
 import { onReading } from "./reading";
 import { editableGraph, onDerived } from "./regions";
 import { onStageChange } from "./stage";
+import { deltaShowing, onDeltaChange } from "./layers/delta";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
 
@@ -167,8 +169,17 @@ function proposeVisibleLayers(): void {
     proposeLayers([]);
     return;
   }
-  const extra = TOOL_LAYERS[tool];
-  proposeLayers(extra ? [...ALWAYS_LAYERS, extra] : [...ALWAYS_LAYERS]);
+  /*
+    Everything the tool adds and everything the question adds, in one expression.
+
+    The delta could have called `requireLayer` from where it is armed, and that would have been
+    the defect this function's own note is about: `requireLayer` adds to a list this replaces on
+    its next render, so the marks would survive until anything at all redrew the strip.
+  */
+  const extra = [TOOL_LAYERS[tool], deltaShowing() ? "delta" : undefined].filter(
+    (layer): layer is LayerId => layer !== undefined,
+  );
+  proposeLayers([...ALWAYS_LAYERS, ...extra]);
 }
 
 /**
@@ -547,6 +558,9 @@ export function registerToolPalette(): void {
     No loop: this render anchors the drawer but never re-renders it.
   */
   onStepChange(render);
+  // And when the regenerate question puts the delta up or takes it down, since the proposal is
+  // computed here and nothing else can put a layer in it.
+  onDeltaChange(render);
   apply("pan");
   render();
 }

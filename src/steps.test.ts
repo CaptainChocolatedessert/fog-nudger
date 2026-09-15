@@ -32,6 +32,7 @@ import {
   headingGroups,
   isStepDefault,
   ALWAYS_LAYERS,
+  QUESTION_LAYERS,
   LAYERS,
   TOOL_LAYERS,
   PARAMETER_STEP,
@@ -158,19 +159,39 @@ describe("the step declaration", () => {
     expect(workspaceSteps().length).toBeGreaterThan(0);
   });
 
-  it("shows every layer either always or with the tool that owns it", () => {
+  it("shows every layer always, or with the tool that owns it, or with a question", () => {
     /*
       A layer nothing ever proposes is a painter that never runs: dead pixels, dead code, and
       nothing to say so. Groups used to declare which layers they showed and this walked them;
-      the picture is constant now, so the two sources are the always-on set and the handful that
-      belong to a tool.
+      the picture is constant now, so the sources are the always-on set, the handful belonging
+      to a tool, and the one that belongs to a dialog.
 
       The other direction — something proposing a layer nobody registered a painter for — is a
       wiring fact the surface owns and this cannot see.
     */
-    const shown = new Set<string>([...ALWAYS_LAYERS, ...Object.values(TOOL_LAYERS)]);
+    const shown = new Set<string>([
+      ...ALWAYS_LAYERS,
+      ...Object.values(TOOL_LAYERS),
+      ...QUESTION_LAYERS,
+    ]);
     for (const layer of LAYERS) {
       expect(shown.has(layer), layer).toBe(true);
+    }
+  });
+
+  it("keeps the question layers out of the other two sources", () => {
+    /*
+      A layer that is always on cannot also be a question's: the question would be answered
+      before it was asked, and the marks would be on the map at moments nothing is at stake.
+      The same for a tool's, which would put them up whenever that tool was picked.
+
+      Five mutations tried, five caught: delta added to the always-on set, delta added to the tool
+      layers, the coverage test no longer reading `QUESTION_LAYERS`, a layer declared and proposed
+      by nothing, and `QUESTION_LAYERS` emptied.
+    */
+    for (const layer of QUESTION_LAYERS) {
+      expect(ALWAYS_LAYERS.includes(layer as never), layer).toBe(false);
+      expect(Object.values(TOOL_LAYERS).includes(layer), layer).toBe(false);
     }
   });
 

@@ -41,6 +41,16 @@
  * **Blue and not red**, which is where this started: red is reserved for destruction and earns its
  * alarm by being rare, while this can be worn for a whole session.
  *
+ * ## The question shows its own answer — 2026-09-15
+ *
+ * While the dialog is up, the **delta** is on the map: what the GM added in amber because it
+ * would go, what they erased in cyan because it would come back. That is what the record meant
+ * by retiring the count — *"fourteen tells a GM nothing they can act on"* — and the words in the
+ * body were standing in for it until now.
+ *
+ * The dialog asks to be shown through, which it does not do anywhere else. A backdrop that hides
+ * the picture the question is about would make the picture pointless.
+ *
  * DOM for the glyph; `stage.ts` for the question and for the consent.
  */
 
@@ -50,6 +60,7 @@ import { regeneratesWalls, type SettingName } from "../settings";
 import { stepRegeneratesWalls, TOOLS, type StepId } from "../steps";
 import { say } from "./shell";
 import { discardWalls, wallsEdited } from "./stage";
+import { showWallDelta } from "./layers/delta";
 
 /** Whether a group holds anything that would rebuild the walls — the summary on its own glyph. */
 export function stepIsMarked(step: StepId): boolean {
@@ -86,31 +97,65 @@ export function toolIsMarked(tool: string): boolean {
  * with a setting that has moved against a document that has not.
  */
 export async function confirmRegenerate(what: string): Promise<boolean> {
-  const ok = await confirmAction({
-    title: "Generate the walls again, discarding your changes to them?",
-    body: [
-      `${what} is one of the things the walls are derived from, so using it builds them again from ` +
-        "the map. Anything you moved, drew or erased by hand is not in what replaces them, and it " +
-        "cannot be undone afterwards.",
-      "The ink you painted is safe: suppression and added ink are inputs to the reading, so they " +
-        "survive it. Only changes made to the walls themselves go.",
-    ],
-    confirmLabel: "Generate them again",
-    destructive: true,
-  });
-  if (!ok) {
-    say("kept your wall changes — nothing was touched");
-    return false;
-  }
-
+  /*
+    Up before the question and down in a `finally`, so no path leaves the marks on the map after
+    the dialog has gone — including the thrown one, where the walls are still exactly as the
+    delta describes them and a stale picture would be the only thing saying otherwise.
+  */
+  const marked = showWallDelta(true);
   try {
-    await discardWalls();
-    return true;
-  } catch (error) {
-    const detail = describeError(error);
-    say(`could not discard the walls, so nothing changed: ${detail}`, "bad");
-    console.error("Fog Nudger — discarding the walls failed", error);
-    return false;
+    const ok = await confirmAction({
+      title: "Generate the walls again, discarding your changes to them?",
+      body: [
+        `${what} is one of the things the walls are derived from, so using it builds them again ` +
+          "from the map. Anything you moved, drew or erased by hand is not in what replaces " +
+          "them, and it cannot be undone afterwards.",
+        /*
+          The legend, and it names the marks rather than counting them.
+
+          It also admits they may be off screen, which is the one thing a picture cannot say
+          about itself: a GM who edited a corner and then zoomed elsewhere is looking at an
+          unchanged map, and *nothing to lose* and *nothing in view* are the same image.
+        */
+        "The ink you painted is safe: suppression and added ink are inputs to the reading, so they " +
+          "survive it. Only changes made to the walls themselves go.",
+      ].concat(
+        /*
+          The legend, and it names the marks rather than counting them.
+
+          It also admits they may be off screen, which is the one thing a picture cannot say about
+          itself: a GM who edited a corner and then zoomed elsewhere is looking at an unchanged map,
+          and *nothing to lose* and *nothing in view* are the same image. The counts go to the dev
+          log, where a number is a diagnostic rather than the instrument this feature replaced.
+        */
+        marked
+          ? [
+              "On the map: what would go is marked in amber, and what you erased is in cyan " +
+                "because it would come back. Pan or zoom out if you cannot see any — they are " +
+                "wherever you made them.",
+            ]
+          : [],
+      ),
+      confirmLabel: "Generate them again",
+      destructive: true,
+      reveal: marked,
+    });
+    if (!ok) {
+      say("kept your wall changes — nothing was touched");
+      return false;
+    }
+
+    try {
+      await discardWalls();
+      return true;
+    } catch (error) {
+      const detail = describeError(error);
+      say(`could not discard the walls, so nothing changed: ${detail}`, "bad");
+      console.error("Fog Nudger — discarding the walls failed", error);
+      return false;
+    }
+  } finally {
+    showWallDelta(false);
   }
 }
 
