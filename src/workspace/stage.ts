@@ -92,25 +92,78 @@ export function wallsEdited(): boolean {
 */
 
 /**
- * Put the graph back as it was before one edit.
+ * The stored document, or `null` for "nothing is stored and the walls are a derivation".
+ *
+ * **`null` is a state undo has to be able to return to**, which is the whole reason this is a shape
+ * rather than a bare graph. Both halves move together on a first edit — the graph appears and the
+ * base appears under it — so a way back that put only the graph right would leave a base describing
+ * a document that is no longer there.
+ */
+interface Stored {
+  readonly graph: WallGraph;
+  /** The derivation `graph` was made from, or `null` for a graph stored before bases existed. */
+  readonly base: WallGraph | null;
+}
+
+/** The document as it stands, for an edit to hand to undo as the way back. */
+function stored(): Stored | null {
+  return saved ? { graph: saved, base } : null;
+}
+
+/**
+ * Put the document back as it was before one edit — including back to not existing.
  *
  * Handed to `undoHistory` as the way back from a wall edit. Writes to the scene like any other edit,
  * because the graph is stored there — undo is a change to the document rather than a view of it.
  *
+ * ## It took a graph, and so could not express the first edit — room, 2026-09-15
+ *
+ * The first hand edit on a map is the one that *creates* the document: before it the surface is
+ * showing a derivation and the scene holds nothing. `saveEditedWalls` pushed an entry only when
+ * there was already a graph to go back to, so **that edit went on the scene with nothing on the
+ * stack describing it** — and a GM pressing undo straight afterwards watched their wall edit stay
+ * exactly where it was while the press reached past it into whatever was below. Which, on a shared
+ * stack, was a brush stroke: *"sometimes I thought undo wasn't working, so I probably clicked
+ * multiple times"*, and four clicks took 1,795 pixels of painted ink off a map.
+ *
+ * Nothing was missing from the store to make this expressible — `clearWallGraph` already removes
+ * both keys, which is exactly the state a first edit leaves behind it. What was missing was a way to
+ * *say* it: a `WallGraph` has no value meaning "there is no graph".
+ *
  * **Undoing every edit puts the mark out by itself**, with nothing here to decrement: once the graph
- * matches the base again `wallsEdited` simply says no. That is what the comparison buys over a
- * counter — there is no running total to keep honest across undo and redo.
+ * matches the base again — or both are gone — `wallsEdited` simply says no. That is what the
+ * comparison buys over a counter: there is no running total to keep honest across undo and redo.
  */
-function restoreGraph(next: WallGraph): Restore {
+function restoreTo(next: Stored | null): Restore {
   return async () => {
     if (!mapId) return;
-    const leaving = saved;
-    await writeWallGraph(mapId, next);
-    saved = next;
+    const leaving = stored();
+    if (!next) {
+      await clearWallGraph();
+    } else if (next.base && next.base !== base) {
+      // The base moves only across a first edit, in either direction. Writing both keys is what
+      // `writeCommittedWalls` is for, and doing it here means a redo of that edit costs one write
+      // rather than two, exactly as the edit itself did.
+      //
+      // Tested rather than asserted, and the truthiness is not defensive padding: a graph stored
+      // before bases existed loads with none, and an edit on one pushes an entry whose base is null.
+      // Its restore wants the plain write below, which is what this falls through to.
+      await writeCommittedWalls(mapId, next.graph, next.base);
+    } else {
+      await writeWallGraph(mapId, next.graph);
+    }
+    saved = next?.graph ?? null;
+    base = next?.base ?? null;
     announce();
-    devLog("info", "stage: a wall edit was put back");
-    // The way back to where we just were, which is what redo takes.
-    return leaving ? restoreGraph(leaving) : undefined;
+    devLog(
+      "info",
+      next
+        ? "stage: a wall edit was put back"
+        : "stage: the first wall edit was put back, so the walls are a derivation again",
+    );
+    // The way back to where we just were, which is what redo takes. Always something now: "nothing
+    // stored" is a state like any other, so the first edit is redoable as well as undoable.
+    return restoreTo(leaving);
   };
 }
 
@@ -211,9 +264,9 @@ export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
 /**
  * Save a graph the GM has changed by hand.
  *
- * The one place `edits` grows, which is why every editing tool and every one-shot operation goes
- * through here rather than writing the store directly. One call is one act the GM performed, which
- * is what makes the count something to show them.
+ * **One call is one act the GM performed**, which is why every editing tool and every one-shot
+ * operation goes through here rather than writing the store directly — and why exactly one entry
+ * goes on the history for it, whatever the act turns out to have cost in writes.
  */
 export async function saveEditedWalls(
   graph: WallGraph,
@@ -229,7 +282,7 @@ export async function saveEditedWalls(
   from?: WallGraph,
 ): Promise<void> {
   if (!mapId) throw new Error("no map is nominated, so there is nothing to save the graph against");
-  const before = saved;
+  const before = stored();
   /*
     One write either way, which is why the store has a second function rather than this making two
     calls. A first edit on a derivation has to leave *two* different graphs in the scene — what the
@@ -247,8 +300,12 @@ export async function saveEditedWalls(
 
     The store throws where the settings reader swallows, and the reason applies here too: a history
     entry for an edit the scene never took would offer to restore a state that was already current.
+
+    **Unconditionally**, which it was not until 2026-09-15. It read `if (before)`, so the one edit
+    that has no earlier document — the first, which creates it — was the one edit that could not be
+    taken back. See `restoreTo` for what that cost in a room.
   */
-  if (before) pushUndo(label, restoreGraph(before), "walls");
+  pushUndo(label, restoreTo(before), "walls");
   saved = graph;
   announce();
 }

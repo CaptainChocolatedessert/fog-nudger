@@ -2764,6 +2764,22 @@ these are here so the reason survives the enforcement.
   what it is restoring; it can only compare. Clearing with no tag still clears everything, which is
   the safe default: a caller that forgets its tag loses history, where one that clears too little
   leaves entries describing a document that no longer exists.
+- **Every hand edit goes on the stack, including the one that creates the document.** Saving an
+  edited graph pushed an entry only when there was already a graph to go back to — so the **first**
+  edit on a map, which is the one that turns the derivation into a stored document, went to the
+  scene with nothing on the stack describing it. Undo then reached past it into whatever was below.
+  On a shared stack that was a brush stroke, and the room's account is the symptom exactly:
+  *"sometimes I thought undo wasn't working, so I probably clicked multiple times"* — four clicks,
+  1,795 pixels of painted ink gone, and the reduced layer written to the scene the next time a tool
+  changed. Fixed 2026-09-15 by giving the way back a shape that can say **"nothing is stored"**: a
+  `WallGraph` has no such value, and nothing was missing from the store, which already clears both
+  keys together.
+
+  What this does **not** fix, and it is parked rather than solved: the stack is still one stack
+  across two documents, so undo after a wall edit can still walk into the painted ink once the wall
+  entries run out. The tags are on every entry, so scoping the *button* is a UI question rather than
+  a machinery one — user, 2026-09-15: *"that's a tricky UI challenge, when we undo something we
+  can't see."*
 
 ### Two features unimplemented, and one still needs a conversation before code
 
