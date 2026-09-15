@@ -2079,7 +2079,7 @@ reached the scene.
 
 ### What draws: everything, from the moment there is a map — 2026-09-14
 
-**The ink, the GM's paint, the rooms and the walls are on always.** Layers used to be declared per
+**The ink, the rooms and the walls are on always.** Layers used to be declared per
 group and proposed by whichever was open, so the picture changed as the GM moved around it. A room
 called that confusing, and it caused a real defect: arming a wall tool clears the drawer, and the
 drawer proposed the empty set on its way out, so *the walls disappeared exactly when you picked up
@@ -2090,8 +2090,13 @@ the picture is constant and the only marks that come and go belong to the thing 
 
 **Affordances belong to the tool, not to the layer.** A handle at every point is not the graph — it is
 the *grab target*, and with a brush selected it is a dot you cannot use, several hundred times over.
-So **handles appear only for wall tools, and gap rings only for the gap tool**: the gap finder's rings
-are the one whole *layer* that is tool-specific, because they mean nothing when it is not running.
+So **handles appear only for wall tools**, and two whole layers are tool-specific: the gap finder's
+rings, which mean nothing when it is not running, and **the GM's own paint** — because the ink layer
+already draws the composite, so what they suppressed and what they added are in the picture as ink.
+Seeing the two apart is what a *brush* needs, and putting the brush down is how you stop needing it.
+
+**A tool's layers get no switch**, and the tool is the switch. Offering one would be two handles on
+the same state, and the switches are about the resting picture rather than about what is in hand.
 
 **The ink layer draws the COMPOSITE, and the base only while a brush is in hand.** It drew the base
 always, on the rule that the composite makes invented pixels indistinguishable from read ones. That
@@ -2110,6 +2115,13 @@ is the mode.
 **The state kept is what the GM switched *off*, not what is on.** Holding the positive set instead
 would mean every proposal deciding whether it was allowed to add. A layer the GM has hidden stays
 proposed, so its switch stays — which is the whole of how it comes back.
+
+**The drawer has one slot.** It held four fixed children with three hidden at any moment, which was
+the shape of the **pinned head** it replaced — that was always on screen, so a child per content kind
+cost nothing. Under a drawer it was history kept live, and it bit: `#layer-row` set a `display` of
+its own, which outranks the user agent's `[hidden]` rule, so the switches appeared inside every
+drawer with nothing anywhere to say why. `[hidden] { display: none !important }` is the guard, and
+building only what is showing is the fix.
 
 **The switches moved out of the pinned head into their own drawer, behind the eye.** They were pinned
 because a tool may turn a layer on and never off, so what was drawn *accumulated* and the switches

@@ -64,17 +64,6 @@ import { onStageChange } from "./stage";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
 
-/**
- * The line under a tool, which is its own hint or the blurb of the group it reveals.
- *
- * The ink tools each have a step group carrying the sentence that explains them, and that sentence
- * is already shown beside their controls. Reading it rather than repeating it keeps one copy.
- */
-function hintFor(choice: ToolChoice): string {
-  if (choice.hint) return choice.hint;
-  const groups = STEPS.flatMap((step) => step.groups ?? []);
-  return groups.find((group) => group.tool === choice.id)?.blurb ?? "";
-}
 
 /**
  * The tool in hand. **Held here, not recovered from the modules underneath.**
@@ -514,11 +503,14 @@ export function render(): void {
     anchorDrawer();
   }
 
-  const hint = document.getElementById("tool-hint");
-  if (hint) {
-    const chosen = TOOLS.find((choice) => choice.id === currentTool());
-    hint.innerHTML = chosen ? hintFor(chosen) : "";
-  }
+  /*
+    The hint is the drawer's to draw, not this module's.
+
+    It was written here by id, into an element that sat in the markup whether or not a tool was in
+    hand. The drawer builds one tool's controls when that tool's drawer is showing, and the sentence
+    saying what a press does belongs with them — `toolHint` in `steps.ts` is the shared answer, so
+    there is one statement of what a tool says rather than two.
+  */
 }
 
 /** Bind the palette to the surface, and put the starting tool into effect. */

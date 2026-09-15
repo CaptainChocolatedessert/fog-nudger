@@ -61,8 +61,17 @@ function announce(): void {
  * Called by the rail whenever what is expanded changes, and by the tool strip when the tool does.
  */
 export function proposeLayers(layers: readonly LayerId[]): void {
+  /*
+    **Unchanged means silent**, which is a correctness rule rather than an optimisation.
+
+    The strip re-proposes on every render, and a listener that re-renders the drawer would then
+    render the strip, which proposes again — an unbounded loop from two things each doing the
+    right thing. Announcing only a real change breaks it at the source.
+  */
+  const same =
+    proposed.length === layers.length && proposed.every((layer, at) => layers[at] === layer);
   proposed = layers;
-  announce();
+  if (!same) announce();
 }
 
 /**
@@ -117,15 +126,21 @@ export function showAllLayers(): void {
   announce();
 }
 
-export function hideAllLayers(): void {
+/**
+ * Hide exactly what was offered, which is **not** everything proposed.
+ *
+ * A tool's own marks are proposed too and have no switch, so sweeping them into the hidden set
+ * would turn off something the GM was never offered and cannot see a way back to.
+ */
+export function hideAllLayers(layers: readonly LayerId[]): void {
   const before = hidden.size;
-  for (const layer of proposed) hidden.add(layer);
+  for (const layer of layers) hidden.add(layer);
   if (hidden.size !== before) announce();
 }
 
 /** Whether anything proposed is currently switched off, which is what the show-all button asks. */
-export function anyLayerHidden(): boolean {
-  return proposed.some((layer) => hidden.has(layer));
+export function anyLayerHidden(layers: readonly LayerId[]): boolean {
+  return layers.some((layer) => hidden.has(layer));
 }
 
 export function allLayers(): readonly LayerId[] {

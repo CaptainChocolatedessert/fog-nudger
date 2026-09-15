@@ -1093,29 +1093,15 @@
           the sections drifted apart in the first place, and a group decides what the canvas paints,
           so it cannot be described in a place the canvas cannot read.
         -->
-        <div id="panel-body">
-          <!--
-            What is in hand, above the group’s own controls.
+        <!--
+          One slot. The drawer shows exactly one thing — a group's settings, one tool's controls, or
+          the layer switches — so it has one place to put it.
 
-            The sentence and the tool’s settings are the same subject — what a press does and how
-            wide it does it — and they sit at the top because a tool is the more immediate of the
-            two: a GM holding a brush is mid-gesture, where the group’s sliders are the setting they
-            arrived at. Both are built by `renderPanel`, so their rows share the readout-painter
-            lifecycle of every other row, and both collapse to nothing when no tool is in hand.
-          -->
-          <p id="tool-hint"></p>
-          <div id="tool-controls"></div>
-          <!--
-            The layer switches, in their own drawer off the eye rather than pinned above every group.
-
-            They were pinned because a tool may turn a layer on and never off, so what was drawn
-            accumulated as the GM moved and the switches had to be somewhere they would be met. The
-            picture is constant now, so nothing accumulates — and hiding one of four always-on layers
-            is something a GM goes looking for rather than a correction they stumble on.
-          -->
-          <div id="layer-row"></div>
-          <div id="steps"></div>
-        </div>
+          It held four fixed children with three hidden at any moment, which was the shape of the
+          **pinned head** it replaced: that was always on screen, so a child per content kind cost
+          nothing. Under a drawer it was history kept live (user, 2026-09-15).
+        -->
+        <div id="panel-body"><div id="drawer-body"></div></div>
       </div>
 
       <div id="tools"></div>

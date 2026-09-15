@@ -50,6 +50,7 @@ import {
   STEPS,
   stepParameters,
   TOOLS,
+  toolHint,
   ungroupedControls,
   workspaceSteps,
   type Step,
@@ -59,6 +60,7 @@ import { forgetGraphScale } from "./graphScale";
 import { recomputeFor } from "./recompute";
 import { resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
+import { renderLayerRow } from "./layerRow";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
 import { controlIsMarked, wallsNotice } from "./regenerateGuard";
@@ -454,26 +456,8 @@ export function renderPanel(): void {
   */
   forgetGraphScale();
 
-  // The tool in hand, inside this pass so its rows get their painters from the same `resetHints`
-  // above. Empty whenever nothing is in hand, and hidden below whenever a group has the drawer.
-  const toolBody = document.getElementById("tool-controls");
-  if (toolBody) {
-    toolBody.replaceChildren();
-    for (const render of toolContent) render(toolBody);
-  }
-
-  /*
-    The drawer: the open group's body, and nothing else.
-
-    The headers went to the strip, where they are the group's own button. A header here *and* a
-    button there would be two handles on one piece of state, which is the shape of defect this
-    project keeps finding; and the strip is where the GM already is, because it is where the verbs
-    are.
-  */
   const title = document.getElementById("mode-name");
-  const container = document.getElementById("steps");
-  const hint = document.getElementById("tool-hint");
-  const toolRows = document.getElementById("tool-controls");
+  const body = document.getElementById("drawer-body");
 
   /*
     A locked group cannot be the open one.
@@ -493,23 +477,31 @@ export function renderPanel(): void {
   if (title) title.textContent = showingLayers() ? "Show" : (step?.title ?? tool?.label ?? "");
 
   /*
-    One of the two, never both.
+    **One slot, filled with exactly one thing.**
 
-    The drawer held a tool's controls *and* the open group's settings, which was the in-between state
-    a room reported. What is in your hand and what decided the ink underneath it are different
-    subjects, and showing them together meant neither got the drawer to itself.
+    It was four fixed children with three hidden, which was the pinned head's shape surviving into a
+    drawer that shows one thing at a time — and it bit: `#layer-row` set a `display` of its own, which
+    outranks the user agent's `[hidden]` rule, so the switches appeared inside every drawer with
+    nothing to say why. Building only what is showing removes the question rather than answering it.
+
+    Everything is built inside this pass, because `resetHints` above clears every readout painter on
+    each rebuild: a row built outside it would keep its element and lose its painter, which is a
+    slider whose number silently stops moving.
   */
-  if (container) {
-    container.replaceChildren();
-    if (step) container.append(stepBody(step));
-    container.hidden = step === null;
+  if (body) {
+    body.replaceChildren();
+    if (step) body.append(stepBody(step));
+    else if (tool) {
+      const hint = document.createElement("p");
+      hint.id = "tool-hint";
+      hint.innerHTML = toolHint(tool.id);
+      body.append(hint);
+      const rows = document.createElement("div");
+      rows.id = "tool-controls";
+      body.append(rows);
+      for (const render of toolContent) render(rows);
+    } else if (showingLayers()) renderLayerRow(body);
   }
-  if (hint) hint.hidden = tool === null;
-  if (toolRows) toolRows.hidden = tool === null;
-  // The switches are a sibling of the group body rather than built into it, for the reason the
-  // tool rows are: they keep their own listeners and must not be rebuilt under them.
-  const layerRow = document.getElementById("layer-row");
-  if (layerRow) layerRow.hidden = !showingLayers();
 
   document.getElementById("panel")?.classList.toggle("shut", drawer === null);
 

@@ -206,7 +206,9 @@ applyPalette();
 registerToolPalette();
 // The layer switches, and the one subscription that keeps the canvas and the row agreeing about what
 // is drawn.
-registerLayerRow();
+// The row lives in the drawer, so a layer change asks the drawer to redraw rather than
+// rebuilding a fixed element in place.
+registerLayerRow(renderPanel);
 // Undo, in the bar rather than in a group: it takes back a change to the document, not to whatever
 // section happens to be expanded.
 registerUndoAction();

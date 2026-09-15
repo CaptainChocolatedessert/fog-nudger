@@ -94,10 +94,25 @@ export const LAYERS = ["ink", "paint", "gaps", "regions", "graph"] as const;
  * hand — which today is exactly one layer, the gap finder's rings, and they mean nothing when it
  * is not running.
  */
-export const ALWAYS_LAYERS = ["ink", "paint", "regions", "graph"] as const;
+export const ALWAYS_LAYERS = ["ink", "regions", "graph"] as const;
 
-/** Drawn only while the tool that owns them is in hand. */
-export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = { gaps: "gaps" };
+/**
+ * Drawn only while the tool that owns them is in hand.
+ *
+ * **The GM's paint is one of these, and that is the point** (user, 2026-09-14): the ink layer
+ * draws the *composite*, so what they suppressed and what they added are already in the picture
+ * as ink. Drawing the two layers separately is a thing the **brush** needs — it is how you see
+ * what you are editing — and putting the brush down is how you stop needing it.
+ *
+ * These get no switch of their own. A tool's own marks are part of the tool rather than part of
+ * the resting picture, so the tool *is* the switch, and offering a second one would be two
+ * handles on the same state.
+ */
+export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
+  suppress: "paint",
+  ink: "paint",
+  gaps: "gaps",
+};
 
 /*
   One rule about `paint`, because it is the layer that does not follow the convention.
@@ -641,6 +656,20 @@ export function stepParameters(step: StepId): readonly SettingName[] {
  */
 export function stepRegeneratesWalls(step: StepId): boolean {
   return stepParameters(step).some(regeneratesWalls);
+}
+
+/**
+ * The line shown under a tool: its own hint, or the blurb of the group it belongs to.
+ *
+ * Pure, and here rather than in the tool strip, because the drawer needs the same answer — it draws
+ * the hint now that a tool's controls are its own drawer rather than a pinned strip. Two copies of
+ * "what does this tool say" is the kind of pair this project keeps paying for.
+ */
+export function toolHint(id: string): string {
+  const choice = TOOLS.find((candidate) => candidate.id === id);
+  if (!choice) return "";
+  if (choice.hint) return choice.hint;
+  return STEPS.flatMap((step) => step.groups ?? []).find((group) => group.tool === id)?.blurb ?? "";
 }
 
 /** The controls belonging to one step, in declaration order. */

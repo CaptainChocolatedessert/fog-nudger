@@ -30,9 +30,8 @@
  * saying to anyone who knew what the row was.
  */
 
-import type { LayerId } from "../steps";
+import { ALWAYS_LAYERS, type LayerId } from "../steps";
 import {
-  allLayers,
   anyLayerHidden,
   hideAllLayers,
   showAllLayers,
@@ -53,14 +52,20 @@ const NAMES: Readonly<Record<LayerId, string>> = {
   graph: "Walls",
 };
 
-function render(): void {
-  const host = document.getElementById("layer-row");
-  if (!host) return;
-  host.replaceChildren();
+/**
+ * The switches, built into whatever the drawer hands us.
+ *
+ * **Only the always-on layers get one.** A tool's own marks — the paint while a brush is held, the
+ * gap rings while the finder is running — are proposed too and are deliberately absent here: they
+ * are part of the tool rather than part of the resting picture, so the tool *is* the switch and a
+ * second one would be two handles on the same state.
+ */
+export function renderLayerRow(body: HTMLElement): void {
+  const host = document.createElement("div");
+  host.id = "layer-row";
+  body.append(host);
 
-  const showing = allLayers().filter((layer) => layerProposed(layer));
-  // Nothing proposed means no row at all, caption included — the stylesheet collapses it on `:empty`,
-  // so the caption is appended only once there is something for it to introduce.
+  const showing = ALWAYS_LAYERS.filter((layer) => layerProposed(layer));
   if (showing.length === 0) return;
 
   /*
@@ -73,10 +78,10 @@ function render(): void {
   const all = document.createElement("button");
   all.type = "button";
   all.className = "chip quiet";
-  all.textContent = anyLayerHidden() ? "Show all" : "Hide all";
+  all.textContent = anyLayerHidden(showing) ? "Show all" : "Hide all";
   all.addEventListener("click", () => {
-    if (anyLayerHidden()) showAllLayers();
-    else hideAllLayers();
+    if (anyLayerHidden(showing)) showAllLayers();
+    else hideAllLayers(showing);
   });
   host.append(all);
 
@@ -97,16 +102,23 @@ function render(): void {
   }
 }
 
-export function registerLayerRow(): void {
+export function registerLayerRow(redraw: () => void): void {
   /*
     One subscription doing both jobs, so the canvas and the row can never disagree about what is
-    drawn. Everything that changes either — a group expanding, a tool being picked, a switch being
-    clicked — arrives here.
+    drawn. Everything that changes either — a tool being picked, a switch being clicked — arrives
+    here.
+
+    **The row is redrawn by asking the drawer**, rather than by rebuilding a fixed element in place.
+    That is what having one slot costs and it is a fair price: the drawer owns what is in it, so
+    there is no host sitting in the markup waiting for a module that may never be showing.
+
+    Safe from looping only because `proposeLayers` is silent when the set is unchanged — the strip
+    re-proposes on every render, and without that guard this would render the drawer, which renders
+    the strip, which proposes again.
   */
   onLayerChange(() => {
     setActiveLayers(visibleLayers());
-    render();
+    redraw();
   });
   setActiveLayers(visibleLayers());
-  render();
 }
