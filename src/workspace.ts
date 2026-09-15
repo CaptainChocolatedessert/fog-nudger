@@ -61,7 +61,7 @@ import { renderSwatches } from "./workspace/colourRows";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
-import { renderInkSave, renderToolControls } from "./workspace/paintControls";
+import { renderToolControls } from "./workspace/paintControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation } from "./workspace/regions";
@@ -215,14 +215,10 @@ registerUndoAction();
 // holds, not a number to turn.
 registerStepContent("map", renderMapPicker);
 /*
-  The three ink tools, under the sliders they correct the results of, and one Save under them.
-
-  **One step, three tools** since 2026-09-05 (user): the picker names the layer a press writes into
-  and a pair inside it says paint or erase. Both paint layers are held open together while the step
-  is, which is what makes flicking between them free — the thing two separate steps could not offer,
-  because leaving one wrote it to the scene.
+  Nothing at the foot of Ink. **Save painted strokes** was here and is deleted (user, 2026-09-14):
+  putting the brush down saves, switching group saves, and closing saves, so its absence cost
+  nothing and its presence implied the opposite.
 */
-registerStepContent("ink", renderInkSave, "bottom");
 /*
   The tool's own controls go to the pinned head instead, and only Save is left in the step.
 

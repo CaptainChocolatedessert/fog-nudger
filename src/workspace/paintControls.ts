@@ -35,7 +35,6 @@ import { confirmAction } from "../confirmDialog";
 import { renderPanel } from "./drawer";
 import { brushKind } from "./paintGesture";
 import {
-  anyUnsavedPaint,
   hasUnsavedPaint,
   paintRaster,
   snapshotPaint,
@@ -46,7 +45,6 @@ import {
   acceptAllShownGaps,
   currentPaintTool,
   currentVerb,
-  finishPaint,
   rememberPaint,
   setVerb,
 } from "./paintTool";
@@ -113,17 +111,6 @@ export function renderToolControls(head: HTMLElement): void {
   head.append(kind ? brushActions(kind) : gapActions());
 }
 
-/**
- * Saving, which stays at the foot of the Ink step.
- *
- * **It did not go to the head with the rest**, and the split is the rule rather than an exception:
- * saving is one act for *both* layers, so it belongs to the step and not to whichever tool happens
- * to be in hand — including no tool at all. A GM who paints, puts the brush down and then wants the
- * work committed must still find it.
- */
-export function renderInkSave(body: HTMLElement): void {
-  renderSave(body);
-}
 
 /**
  * Paint or erase, for whichever brush is in hand.
@@ -249,48 +236,21 @@ function gapActions(): HTMLElement {
   return row;
 }
 
-/**
- * Save now, at the foot of the step, for both layers at once.
- *
- * **Not the only way work is kept**: putting the brush down or closing the workspace saves too. That
- * keeps the standing claim true — nothing on this surface is ever lost by navigating away — and it
- * makes the tools' own Discard the only control here that throws anything away, which is the right
- * shape for the one that does.
- *
- * ## It saves strokes and nothing else, and the name has to say so — room, 2026-09-09
- *
- * It was *Save the ink edits*, and a room adjusted *Smallest mark to keep*, pressed it, and was told
- * "nothing has changed since the ink edits were last saved" — which read as the slider change having
- * been lost. It had not: a slider writes itself to the scene on release, so by the time this button
- * is pressed there is nothing of the slider's left to save. The guard was right. **"Ink edits" was
- * the fault**, because on a step called Ink every control is an ink edit, and the button only ever
- * saved the two painted layers.
- *
- * So the label names what it saves, and the refusal says where the slider's change went — which is
- * the anxiety the old message produced, and the one thing a GM pressing this with nothing painted
- * needs to hear.
- */
-function renderSave(body: HTMLElement): void {
-  const row = document.createElement("div");
-  row.className = "step-actions";
+/*
+  `renderSave` was here and is gone (user, 2026-09-14): *"there is no need for a step that saves the
+  ink."*
 
-  const save = document.createElement("button");
-  save.type = "button";
-  save.className = "chip";
-  save.textContent = "Save painted strokes";
-  save.addEventListener("click", () => {
-    if (!anyUnsavedPaint()) {
-      say("no painted strokes to save — sliders save themselves as you release them");
-      return;
-    }
-    void finishPaint("save");
-  });
+  It said **Save painted strokes**, and its own comments already recorded that it could not lose
+  anything: putting the brush down saves, switching group saves, closing saves — which is what keeps
+  *nothing on this surface is ever lost by navigating away* true. A button whose absence costs
+  nothing is a button pressed for reassurance.
 
-  // No note: it said leaving does the same thing, which is reassurance about a button that cannot
-  // lose anything. The two buttons beside it that *can* — Discard and Clear — confirm instead.
-  row.append(save);
-  body.append(row);
-}
+  What it did cost was real. A GM who had not pressed it reasonably believed their strokes were not
+  kept, and a room read it as the thing that unlocked the walls — which it was not, though it
+  coincided with the derive laziness that was.
+
+  Discard and Clear stay, because those *can* lose something, and they confirm.
+*/
 
 /**
  * Wipe one layer, after asking.

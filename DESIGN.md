@@ -2077,35 +2077,55 @@ across either would put back walls belonging to a graph the GM is no longer look
 graph is stored in fractions of *a* map with nothing saying which, that would not look wrong until it
 reached the scene.
 
-### What draws, now that no step decides
+### What draws: everything, from the moment there is a map — 2026-09-14
+
+**The ink, the GM's paint, the rooms and the walls are on always.** Layers used to be declared per
+group and proposed by whichever was open, so the picture changed as the GM moved around it. A room
+called that confusing, and it caused a real defect: arming a wall tool clears the drawer, and the
+drawer proposed the empty set on its way out, so *the walls disappeared exactly when you picked up
+the tool for editing them.*
+
+**What made the old arrangement necessary was that a group was a mode. It is not; the tool is.** So
+the picture is constant and the only marks that come and go belong to the thing in your hand.
 
 **Affordances belong to the tool, not to the layer.** A handle at every point is not the graph — it is
 the *grab target*, and with a brush selected it is a dot you cannot use, several hundred times over.
-So **wall lines always draw; handles appear only for wall tools, and gap rings only for the gap tool.**
-The dense picture stops being the resting state and becomes what you get while doing the thing that
-needs it.
+So **handles appear only for wall tools, and gap rings only for the gap tool**: the gap finder's rings
+are the one whole *layer* that is tool-specific, because they mean nothing when it is not running.
 
-**A tool may turn a layer on. It may never turn one off.** Picking a wall tool brings the graph up if
-it was down — you cannot edit what you cannot see — but nothing you switched on disappears because you
-changed tools. Monotone in the safe direction, and it does not re-create the coupling being removed:
-the tool nudges, the GM's toggles are final. Things therefore accumulate, so the toggles are a visible
-row rather than something buried.
+**The ink layer draws the COMPOSITE, and the base only while a brush is in hand.** It drew the base
+always, on the rule that the composite makes invented pixels indistinguishable from read ones. That
+was right about the risk and wrong about where to pay for it: the rest of the time what a GM wants is
+*the current state of the ink*, which is what everything downstream is derived from — and showing
+them the base while the walls come from the composite is a picture of something else. The distinction
+survives where it matters, since with a brush armed the base is drawn and the two paint layers sit
+over it in their own colours. The **point probe** is unchanged as the per-pixel fallback: it still
+says whether what you are pointing at was painted or read.
 
-**The state kept is what the GM switched *off*, not what is on**, and that is what makes the two rules
-compose: groups and tools add to a proposal freely, and one small set subtracts from it. Holding the
-positive set instead would mean every proposal deciding whether it was allowed to add.
+**One caller computes the whole proposal**, and that is a correctness rule rather than tidiness.
+`proposeLayers` **replaces** and `requireLayer` **adds**, so two callers meant the answer depended on
+which ran last — which is exactly how the defect above happened. The strip owns it, because the tool
+is the mode.
 
-**A switch appears only for a layer something is asking for.** Listing all five always would offer to
-hide things that are not on screen. A layer the GM has hidden stays proposed, so its switch stays —
-which is the whole of how it comes back.
+**The state kept is what the GM switched *off*, not what is on.** Holding the positive set instead
+would mean every proposal deciding whether it was allowed to add. A layer the GM has hidden stays
+proposed, so its switch stays — which is the whole of how it comes back.
+
+**The switches moved out of the pinned head into their own drawer, behind the eye.** They were pinned
+because a tool may turn a layer on and never off, so what was drawn *accumulated* and the switches
+had to be somewhere a GM would meet them. Nothing accumulates now, and hiding one of four always-on
+layers is something they go looking for. **The drawer carries a show-all/hide-all**, because with
+everything on, getting back to the bare map image was otherwise four presses — and seeing the map
+plainly is the state this surface most needs.
 
 **One subject, everything else reference.** Most of the crowding is a *strength* problem rather than a
 presence problem — the ink mask, the paint layers, the gap marks and the wall centrelines all want the
-same few pixels of a wall stroke. The controls for it are the preview fill and outline and the layer
-toggles; **the ink opacity was one of them and was removed on 2026-09-09**, which takes away the
-in-between setting — the ink is now either solid or hidden. Per-colour opacity is parked for a
-conversation and is where that would come back. Deliberately **not** automated: which layer is the
-subject is a judgement, and guessing it wrongly is more annoying than leaving it.
+same few pixels of a wall stroke. **Context-dimming was proposed and is not built** (user,
+2026-09-14: the ink faint while in Walls, the walls faint while in Ink). It is worth knowing that it
+reverses two recorded decisions rather than extending them: per-layer opacity was removed outright in
+September, and automating *which layer is the subject* was rejected because that is a judgement and
+guessing it wrongly is more annoying than leaving it. It may well feel better than the record
+predicts; only a room can say.
 
 *Reassurance on scale: the densest state today is already four layers together in the Walls step, and
 that has been through a room. Everything-on is five.*
@@ -2264,7 +2284,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**849 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**850 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 

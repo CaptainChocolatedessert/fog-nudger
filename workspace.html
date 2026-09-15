@@ -1068,7 +1068,6 @@
         -->
         <div id="panel-head">
           <h1 id="mode-name">Fog Nudger</h1>
-          <div id="layer-row"></div>
         </div>
 
         <!--
@@ -1089,6 +1088,15 @@
           -->
           <p id="tool-hint"></p>
           <div id="tool-controls"></div>
+          <!--
+            The layer switches, in their own drawer off the eye rather than pinned above every group.
+
+            They were pinned because a tool may turn a layer on and never off, so what was drawn
+            accumulated as the GM moved and the switches had to be somewhere they would be met. The
+            picture is constant now, so nothing accumulates — and hiding one of four always-on layers
+            is something a GM goes looking for rather than a correction they stumble on.
+          -->
+          <div id="layer-row"></div>
           <div id="steps"></div>
         </div>
       </div>

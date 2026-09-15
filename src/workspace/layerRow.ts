@@ -33,6 +33,9 @@
 import type { LayerId } from "../steps";
 import {
   allLayers,
+  anyLayerHidden,
+  hideAllLayers,
+  showAllLayers,
   layerHidden,
   layerProposed,
   onLayerChange,
@@ -60,10 +63,22 @@ function render(): void {
   // so the caption is appended only once there is something for it to introduce.
   if (showing.length === 0) return;
 
-  const caption = document.createElement("span");
-  caption.className = "layer-caption";
-  caption.textContent = "Show";
-  host.append(caption);
+  /*
+    One press back to the map alone, and one back to everything.
+
+    With four layers on from the moment a map is chosen, turning them off one at a time is four
+    presses to see the image you are tracing — and seeing it plainly is the state this surface most
+    needs. The button says which way it would go, because a toggle that does not is a coin flip.
+  */
+  const all = document.createElement("button");
+  all.type = "button";
+  all.className = "chip quiet";
+  all.textContent = anyLayerHidden() ? "Show all" : "Hide all";
+  all.addEventListener("click", () => {
+    if (anyLayerHidden()) showAllLayers();
+    else hideAllLayers();
+  });
+  host.append(all);
 
   for (const layer of showing) {
     const button = document.createElement("button");

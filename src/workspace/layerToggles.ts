@@ -99,6 +99,35 @@ export function toggleLayer(layer: LayerId): void {
 }
 
 /** Every layer, in declaration order, for whoever draws the row. */
+/**
+ * Show everything, or hide everything that is proposed.
+ *
+ * **The one press that gets back to a plain map**, which is the state this surface most needs and
+ * had lost when the picture became constant: with four layers always on, turning them off one at a
+ * time is four presses to see the image you are tracing.
+ *
+ * It writes the *hidden* set, like every other route here — showing everything is forgetting what
+ * was switched off, and hiding everything is switching off exactly what is currently proposed. A
+ * layer that arrives later is therefore shown, which is right: hiding is a statement about the
+ * layers you were looking at, not a standing order about ones you have not met.
+ */
+export function showAllLayers(): void {
+  if (hidden.size === 0) return;
+  hidden.clear();
+  announce();
+}
+
+export function hideAllLayers(): void {
+  const before = hidden.size;
+  for (const layer of proposed) hidden.add(layer);
+  if (hidden.size !== before) announce();
+}
+
+/** Whether anything proposed is currently switched off, which is what the show-all button asks. */
+export function anyLayerHidden(): boolean {
+  return proposed.some((layer) => hidden.has(layer));
+}
+
 export function allLayers(): readonly LayerId[] {
   return LAYERS;
 }

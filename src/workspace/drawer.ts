@@ -80,9 +80,31 @@ import { controlIsMarked, wallsNotice } from "./regenerateGuard";
  */
 type Drawer =
   | { readonly kind: "params"; readonly step: StepId }
-  | { readonly kind: "tool"; readonly tool: string };
+  | { readonly kind: "tool"; readonly tool: string }
+  /**
+   * The layer switches, which are a drawer of their own rather than a pinned row.
+   *
+   * They were pinned because a tool may turn a layer on and never off, so what was drawn
+   * *accumulated* as the GM moved around and the switches had to be somewhere they would be
+   * met. The picture is constant now, so nothing accumulates — and with four layers always on,
+   * hiding one is a deliberate thing a GM goes looking for rather than a correction they need
+   * to stumble on.
+   */
+  | { readonly kind: "layers" };
 
 let drawer: Drawer | null = { kind: "params", step: workspaceSteps()[0]?.id ?? "map" };
+
+/** Whether the drawer is showing the layer switches. */
+export function showingLayers(): boolean {
+  return drawer?.kind === "layers";
+}
+
+/** Show the layer switches, or close the drawer if they are already showing. */
+export function openLayersDrawer(): void {
+  drawer = showingLayers() ? null : { kind: "layers" };
+  touched = true;
+  renderPanel();
+}
 
 /** Which tool's controls the drawer is showing, if it is showing a tool's at all. */
 export function currentToolDrawer(): string | null {
@@ -468,7 +490,7 @@ export function renderPanel(): void {
   const step = panelSteps().find((candidate) => candidate.id === currentPanel()) ?? null;
   const tool = TOOLS.find((choice) => choice.id === currentToolDrawer()) ?? null;
 
-  if (title) title.textContent = step?.title ?? tool?.label ?? "";
+  if (title) title.textContent = showingLayers() ? "Show" : (step?.title ?? tool?.label ?? "");
 
   /*
     One of the two, never both.
@@ -484,6 +506,10 @@ export function renderPanel(): void {
   }
   if (hint) hint.hidden = tool === null;
   if (toolRows) toolRows.hidden = tool === null;
+  // The switches are a sibling of the group body rather than built into it, for the reason the
+  // tool rows are: they keep their own listeners and must not be rebuilt under them.
+  const layerRow = document.getElementById("layer-row");
+  if (layerRow) layerRow.hidden = !showingLayers();
 
   document.getElementById("panel")?.classList.toggle("shut", drawer === null);
 

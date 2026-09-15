@@ -45,9 +45,11 @@ import {
   currentPanel,
   currentToolDrawer,
   onStepChange,
+  openLayersDrawer,
   openPanel,
   openToolDrawer,
   setDrawerTop,
+  showingLayers,
 } from "./drawer";
 import { confirmRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
@@ -236,7 +238,11 @@ function anchorDrawer(): void {
 let pendingAnchor = 0;
 
 function place(): void {
-  const opens = currentPanel() ? `params:${currentPanel()}` : `tool:${currentToolDrawer() ?? ""}`;
+  const opens = showingLayers()
+    ? "layers"
+    : currentPanel()
+      ? `params:${currentPanel()}`
+      : `tool:${currentToolDrawer() ?? ""}`;
   const opener = document.querySelector(`#tools button[data-opens="${opens}"]`);
   if (!(opener instanceof HTMLElement)) return;
 
@@ -256,6 +262,28 @@ function place(): void {
 */
 window.addEventListener("resize", place);
 
+/**
+ * The eye: the layer switches, in a drawer of their own.
+ *
+ * It does **not** put the verb down, unlike a group's settings button. Hiding a layer is something a
+ * GM does *while* holding a tool — the commonest case is taking the ink away to see the walls they
+ * are drawing — so taking the brush out of their hand to do it would be the opposite of helpful.
+ */
+function layersOpener(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tool params";
+  const glyph = toolIcon("view");
+  if (glyph) button.append(glyph);
+  button.title = "What is drawn";
+  button.setAttribute("aria-label", "What is drawn");
+  button.setAttribute("aria-pressed", String(showingLayers()));
+  button.dataset.opens = "layers";
+  button.disabled = !mapChosen();
+  button.addEventListener("click", () => openLayersDrawer());
+  return button;
+}
+
 export function setTool(next: Tool): void {
   apply(next);
   render();
@@ -263,11 +291,10 @@ export function setTool(next: Tool): void {
   invalidate();
 }
 
-const BAND_LABELS: Readonly<Record<ToolChoice["band"], string>> = {
-  navigate: "Look",
-  ink: "Ink",
-  walls: "Walls",
-};
+/*
+  `BAND_LABELS` went with the Look band. Every caption in the strip is a group's own title now, which
+  is one source rather than two that could disagree about what a band is called.
+*/
 
 /**
  * Draw the strip, and the hint that says what the tool in hand does.
@@ -407,12 +434,22 @@ export function render(): void {
       strip.append(line);
     };
 
-    caption(BAND_LABELS.navigate);
-    addTools("navigate");
+    /*
+      **Look and View are one band** (user, 2026-09-14). Look held exactly one button, and what it
+      held it for — moving the map — is the same subject as how the map is styled and which layers
+      are drawn. So View carries all three: the hand, its own settings, and the switches.
 
+      It sits last, where View already was. Pan being at the foot of the column rather than the head
+      is the one cost, and it is small: Pan is the resting state the surface starts in, and Ctrl-drag
+      pans from anywhere regardless of what is armed.
+    */
+    let first = true;
     for (const step of STEPS) {
-      rule();
+      // No rule above the first group: a divider needs something on both sides of it.
+      if (!first) rule();
+      first = false;
       caption(step.title);
+      if (step.id === "view") addTools("navigate");
 
       /*
         The group's own settings.
@@ -425,7 +462,13 @@ export function render(): void {
       const opener = document.createElement("button");
       opener.type = "button";
       opener.className = "tool params";
-      const glyph = toolIcon(step.id === "ink" || step.id === "walls" ? "params" : step.id);
+      /*
+        Sliders for every group whose drawer is settings, and the picture only for Map, whose drawer
+        is a list of images. **View takes sliders too** — the eye beside it means *what is drawn*,
+        which is a different question, and giving both buttons the same glyph made them look like one
+        control drawn twice.
+      */
+      const glyph = toolIcon(step.id === "map" ? "map" : "params");
       if (glyph) opener.append(glyph);
       const name = step.id === "map" ? "Choose the map" : `${step.title} settings`;
       opener.title = shut ? "Choose a map first" : name;
@@ -453,6 +496,17 @@ export function render(): void {
         openPanel(wasOpen ? null : step.id);
       });
       strip.append(opener);
+
+      /*
+        View's second button: the switches.
+
+        **Two panel buttons in one group**, which is new and is the honest shape — *how the preview is
+        styled* and *what is drawn at all* are different questions, and folding them into one drawer
+        would make the group's settings a place a GM goes to do two unrelated things. The eye is the
+        one that says "what can I see", which is what it always meant; the sliders beside it say "how
+        does it look".
+      */
+      if (step.id === "view") strip.append(layersOpener());
 
       addTools(step.id as ToolChoice["band"]);
     }
