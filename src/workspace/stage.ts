@@ -179,7 +179,9 @@ export async function discardWalls(): Promise<void> {
   await clearWallGraph();
   saved = null;
   base = null;
-  clearUndo();
+  // The walls only. A brush stroke is still perfectly restorable, and taking that away because
+  // the GM agreed to rebuild the walls is deleting one document to replace another.
+  clearUndo("walls");
   announce();
   devLog("info", "stage: the stored walls were discarded so the reading can be derived again");
 }
@@ -246,7 +248,7 @@ export async function saveEditedWalls(
     The store throws where the settings reader swallows, and the reason applies here too: a history
     entry for an edit the scene never took would offer to restore a state that was already current.
   */
-  if (before) pushUndo(label, restoreGraph(before));
+  if (before) pushUndo(label, restoreGraph(before), "walls");
   saved = graph;
   announce();
 }

@@ -2307,7 +2307,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**850 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**852 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2754,8 +2754,16 @@ these are here so the reason survives the enforcement.
 - **`0.65` is the one value for "inactive"** on this surface — locked headers, disabled tools, the
   undo pair. It is measured against the 3:1 contrast floor; 0.4 was below it.
 - **The undo stack is cleared when walls are saved and when the map changes**, and that is what makes
-  undoing a stroke safe without a confirmation. `undoHistory.ts` carries the argument. Relaxing the
-  clearing rule means a confirmation has to replace it.
+  undoing a stroke safe without a confirmation. `undoHistory.ts` carries the argument.
+
+  **It is cleared per document since 2026-09-15**, and that narrowing is the fix for a real defect
+  (room: *"changing parameters on the walls shouldn't delete ink edits"*). Discarding the wall graph
+  cleared the whole stack, so agreeing that a wall setting may rebuild the walls also took away the
+  ability to undo a brush stroke — and the paint entries were perfectly good, describing a raster
+  nothing in that path had touched. Entries carry an **opaque tag**, so the history still never learns
+  what it is restoring; it can only compare. Clearing with no tag still clears everything, which is
+  the safe default: a caller that forgets its tag loses history, where one that clears too little
+  leaves entries describing a document that no longer exists.
 
 ### Two features unimplemented, and one still needs a conversation before code
 

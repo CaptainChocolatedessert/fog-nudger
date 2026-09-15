@@ -199,7 +199,7 @@ let strokeStart: { readonly kind: PaintKind; readonly snapshot: string } | null 
  * only what we lay over it has.
  */
 export function rememberPaint(kind: PaintKind, snapshot: string, label: string): void {
-  pushUndo(label, paintStep(kind, snapshot));
+  pushUndo(label, paintStep(kind, snapshot), "ink");
 }
 
 /** One step of a layer's history, which hands back the step that reverses it. */

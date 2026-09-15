@@ -19,8 +19,10 @@
  *
  * Generic in the document type so the test can use a cheap stand-in. Nothing here reads the graph.
  *
- * Five mutations tried, five caught: pushing in the wrong order, the bound dropping the newest
- * instead of the oldest, the bound off by one, a peek that consumes, and a clear that does nothing.
+ * Eight mutations tried, eight caught: pushing in the wrong order, the bound dropping the newest
+ * instead of the oldest, the bound off by one, a peek that consumes, a clear that does nothing, and
+ * three on the tag — a clear that ignores it, one that keeps the tagged entries instead of dropping
+ * them, and one that forgets nothing at all.
  *
  * Pure: no DOM, no SDK.
  */
@@ -30,6 +32,16 @@ export interface Snapshot<T> {
   readonly document: T;
   /** What that edit was, in words a button can say: "erasing a wall". */
   readonly label: string;
+  /**
+   * Which document this entry belongs to, **as an opaque string**.
+   *
+   * The history still never learns what it is restoring — it cannot read this, only compare it.
+   * What it buys is that *forgetting* can be as narrow as the event that caused it: throwing away
+   * the wall graph makes every graph entry stale and leaves every paint entry perfectly good, and
+   * clearing both was taking back the GM's ability to undo a brush stroke because they changed a
+   * wall setting.
+   */
+  readonly tag: string;
 }
 
 export class EditHistory<T> {
@@ -44,8 +56,8 @@ export class EditHistory<T> {
    * restores. Getting this backwards would make the first undo a no-op and every later one restore
    * the wrong state — which looks like undo lagging by one and is easy to misread as a timing bug.
    */
-  push(document: T, label: string): void {
-    this.entries.push({ document, label });
+  push(document: T, label: string, tag: string): void {
+    this.entries.push({ document, label, tag });
     // Oldest first, so the bound drops what a GM is least likely to reach for.
     while (this.entries.length > this.depth) this.entries.shift();
   }
@@ -69,8 +81,16 @@ export class EditHistory<T> {
    * something the GM is no longer looking at — and because a graph is stored in fractions of *a* map
    * with nothing in it saying which, that would not even look wrong until it was pushed.
    */
-  clear(): void {
-    this.entries = [];
+  /**
+   * Forget everything, or only the entries carrying one tag.
+   *
+   * **Narrow by default is wrong here and wide by default is right**: a caller that forgets to
+   * name its tag clears too much, which costs history, where one that clears too little leaves
+   * entries describing a document that no longer exists — and restoring one of those puts back
+   * something the GM is not looking at.
+   */
+  clear(tag?: string): void {
+    this.entries = tag === undefined ? [] : this.entries.filter((entry) => entry.tag !== tag);
   }
 
   /** How many edits could be taken back. */

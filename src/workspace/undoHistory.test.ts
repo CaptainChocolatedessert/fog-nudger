@@ -48,16 +48,16 @@ describe("the shared undo stack", () => {
   });
 
   it("names the most recent act, whichever document it belongs to", () => {
-    pushUndo("drawing added ink", () => {});
-    pushUndo("pruning the dead ends", () => {});
+    pushUndo("drawing added ink", () => {}, "ink");
+    pushUndo("pruning the dead ends", () => {}, "walls");
     // The button finishes the sentence "Undo …", so the newest act is what it must name.
     expect(undoLabel()).toBe("pruning the dead ends");
   });
 
   it("runs the way back and takes the entry off", async () => {
     const order: string[] = [];
-    pushUndo("drawing added ink", () => void order.push("ink"));
-    pushUndo("erasing a wall", () => void order.push("wall"));
+    pushUndo("drawing added ink", () => void order.push("ink"), "ink");
+    pushUndo("erasing a wall", () => void order.push("wall"), "walls");
 
     expect(await undoLast()).toBe("erasing a wall");
     expect(order).toEqual(["wall"]);
@@ -86,7 +86,7 @@ describe("the shared undo stack", () => {
     pushUndo("pruning the dead ends", async () => {
       await gate;
       finished = true;
-    });
+    }, "walls");
 
     const undoing = undoLast();
     expect(finished).toBe(false);
@@ -106,7 +106,7 @@ describe("the shared undo stack", () => {
     */
     pushUndo("erasing a wall", () => {
       throw new Error("the scene refused the write");
-    });
+    }, "walls");
 
     await expect(undoLast()).rejects.toThrow("the scene refused the write");
     expect(undoLabel()).toBe("erasing a wall");
@@ -119,13 +119,13 @@ describe("the shared undo stack", () => {
     const heard = vi.fn();
     onUndoChange(heard);
 
-    pushUndo("drawing added ink", () => {});
+    pushUndo("drawing added ink", () => {}, "ink");
     expect(heard).toHaveBeenCalledTimes(1);
 
     await undoLast();
     expect(heard).toHaveBeenCalledTimes(2);
 
-    pushUndo("erasing a wall", () => {});
+    pushUndo("erasing a wall", () => {}, "walls");
     clearUndo();
     expect(heard).toHaveBeenCalledTimes(4);
   });
@@ -133,15 +133,15 @@ describe("the shared undo stack", () => {
   it("forgets everything when the documents it describes are replaced", () => {
     // Saving the derived walls, loading another map, or the raster changing under an open paint
     // mode. Each leaves every entry describing something that is no longer on screen.
-    pushUndo("drawing added ink", () => {});
-    pushUndo("erasing a wall", () => {});
+    pushUndo("drawing added ink", () => {}, "ink");
+    pushUndo("erasing a wall", () => {}, "walls");
     clearUndo();
     expect(undoLabel()).toBeNull();
     expect(undoDepth()).toBe(0);
   });
 
   it("keeps the newest twenty and drops the oldest", () => {
-    for (let i = 0; i < 25; i += 1) pushUndo(`edit ${i}`, () => {});
+    for (let i = 0; i < 25; i += 1) pushUndo(`edit ${i}`, () => {}, "walls");
     expect(undoDepth()).toBe(20);
     expect(undoLabel()).toBe("edit 24");
   });
@@ -165,13 +165,13 @@ describe("going forward again", () => {
 
   it("offers nothing to redo until something has been undone", () => {
     expect(redoLabel()).toBeNull();
-    pushUndo("drawing added ink", () => {});
+    pushUndo("drawing added ink", () => {}, "ink");
     expect(redoLabel()).toBeNull();
   });
 
   it("takes an undone act forward again, and leaves it undoable", async () => {
     const box = { value: "after" };
-    pushUndo("drawing added ink", step(box, "before"));
+    pushUndo("drawing added ink", step(box, "before"), "ink");
 
     await undoLast();
     expect(box.value).toBe("before");
@@ -186,9 +186,9 @@ describe("going forward again", () => {
 
   it("walks a run of acts back and forward in order", async () => {
     const box = { value: "third" };
-    pushUndo("first", step(box, "start"));
-    pushUndo("second", step(box, "first"));
-    pushUndo("third", step(box, "second"));
+    pushUndo("first", step(box, "start"), "walls");
+    pushUndo("second", step(box, "first"), "walls");
+    pushUndo("third", step(box, "second"), "walls");
 
     await undoLast();
     await undoLast();
@@ -210,11 +210,11 @@ describe("going forward again", () => {
       longer follows from anything on screen.
     */
     const box = { value: "after" };
-    pushUndo("drawing added ink", step(box, "before"));
+    pushUndo("drawing added ink", step(box, "before"), "ink");
     await undoLast();
     expect(redoDepth()).toBe(1);
 
-    pushUndo("erasing a wall", () => {});
+    pushUndo("erasing a wall", () => {}, "walls");
     expect(redoDepth()).toBe(0);
     expect(redoLabel()).toBeNull();
   });
@@ -223,9 +223,9 @@ describe("going forward again", () => {
     // A redo is not a new act. Putting it back through the front door would clear the entries behind
     // it, so redoing one of three would silently lose the other two.
     const box = { value: "third" };
-    pushUndo("first", step(box, "start"));
-    pushUndo("second", step(box, "first"));
-    pushUndo("third", step(box, "second"));
+    pushUndo("first", step(box, "start"), "walls");
+    pushUndo("second", step(box, "first"), "walls");
+    pushUndo("third", step(box, "second"), "walls");
     await undoLast();
     await undoLast();
     await undoLast();
@@ -237,14 +237,14 @@ describe("going forward again", () => {
 
   it("keeps the entry when going forward fails", async () => {
     const box = { value: "after" };
-    pushUndo("drawing added ink", step(box, "before"));
+    pushUndo("drawing added ink", step(box, "before"), "ink");
     await undoLast();
 
     // Replace the forward step with one that refuses, the way a scene write can.
     clearUndo();
     pushUndo("erasing a wall", () => () => {
       throw new Error("the scene refused the write");
-    });
+    }, "walls");
     await undoLast();
 
     await expect(redoLast()).rejects.toThrow("the scene refused the write");
@@ -261,7 +261,7 @@ describe("going forward again", () => {
     });
     pushUndo("pruning the dead ends", () => async () => {
       await gate;
-    });
+    }, "walls");
     await undoLast();
 
     const redoing = redoLast();
@@ -277,7 +277,7 @@ describe("going forward again", () => {
     //
     // The undo is **awaited**: unawaited, the forward step had not been pushed yet when the clear
     // ran, so this passed against a clear that only emptied one stack.
-    pushUndo("drawing added ink", () => () => {});
+    pushUndo("drawing added ink", () => () => {}, "ink");
     await undoLast();
     expect(redoDepth()).toBe(1);
 
@@ -289,7 +289,7 @@ describe("going forward again", () => {
   it("does not offer an act that cannot be gone forward into", async () => {
     // A restore returning nothing means its owner could not snapshot what it was replacing — the
     // paint half says so when there is no layer in hand. Offering it would be a button that declines.
-    pushUndo("drawing added ink", () => {});
+    pushUndo("drawing added ink", () => {}, "ink");
     await undoLast();
     expect(redoLabel()).toBeNull();
     expect(redoDepth()).toBe(0);

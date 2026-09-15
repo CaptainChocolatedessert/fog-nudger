@@ -93,8 +93,8 @@ export function onUndoChange(listener: () => void): void {
  * dead ends*, *drawing added ink*. A bare "Undo" asks a GM to remember what they just did, which is
  * exactly what someone who has misjudged an effect cannot do.
  */
-export function pushUndo(label: string, restore: Restore): void {
-  history.push(restore, label);
+export function pushUndo(label: string, restore: Restore, tag: string): void {
+  history.push(restore, label, tag);
   /*
     A new act abandons the forward history, which is the ordinary rule everywhere and is worth stating
     because the alternative is worse than it sounds: keeping it would offer to redo an act on top of a
@@ -123,7 +123,7 @@ export async function undoLast(): Promise<string | null> {
 
   const forward = await entry.document();
   history.pop();
-  if (forward) redo.push(forward, entry.label);
+  if (forward) redo.push(forward, entry.label, entry.tag);
   announce();
   return entry.label;
 }
@@ -147,7 +147,7 @@ export async function redoLast(): Promise<string | null> {
 
   const back = await entry.document();
   redo.pop();
-  if (back) history.push(back, entry.label);
+  if (back) history.push(back, entry.label, entry.tag);
   announce();
   return entry.label;
 }
@@ -160,9 +160,23 @@ export async function redoLast(): Promise<string | null> {
  * documents, and **the raster changing** abandons the open paint mode, which leaves every snapshot
  * describing a layer at a size that no longer exists.
  */
-export function clearUndo(): void {
-  history.clear();
-  redo.clear();
+/**
+ * Forget what can no longer be restored — all of it, or only one document's.
+ *
+ * **Discarding the wall graph used to clear the lot**, which took the GM's brush strokes off the
+ * history because they agreed to a wall setting rebuilding the walls (room, 2026-09-15). The
+ * paint entries were still perfectly good: they describe a raster nothing in that path touched.
+ *
+ * The rule this relaxes is a real one — *the stack is cleared when the graph is replaced, and
+ * that is what makes undoing a stroke safe without a confirmation* — so it is worth saying why
+ * the narrower version is still safe. Undo is last-in-first-out, so it always returns to a state
+ * that existed; and undoing a stroke moves the **preview**, where the stored graph is replaced
+ * only by a derive or a push. After a discard there is no stored graph at all, so there is
+ * nothing for a restored stroke to disagree with.
+ */
+export function clearUndo(tag?: string): void {
+  history.clear(tag);
+  redo.clear(tag);
   announce();
 }
 
