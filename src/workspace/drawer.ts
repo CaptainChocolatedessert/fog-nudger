@@ -61,7 +61,6 @@ import { resetHints, settingRow } from "./settingRows";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
-import { proposeLayers } from "./layerToggles";
 import { controlIsMarked, wallsNotice } from "./regenerateGuard";
 
 /**
@@ -402,27 +401,15 @@ function panelSteps(): readonly Step[] {
   return STEPS;
 }
 
-/** The group a tool belongs to, which is the group whose layers it wants drawn. */
-function bandOf(tool: string): StepId | null {
-  const band = TOOLS.find((choice) => choice.id === tool)?.band;
-  return band === undefined || band === "navigate" ? null : (band as StepId);
-}
 
 function applyOpenStep(): void {
   /*
-    A tool's drawer proposes **its group's** layers rather than none.
-
-    What a brush acts on is the same picture the group describes, so taking the layers away the
-    moment the GM picked the brush up would blank the thing they are about to paint on. The tool also
-    asks for its own layer in `apply`, and the two compose: the group proposes, the tool adds, and
-    the GM's switches subtract.
+    **The drawer no longer decides what is drawn** (user, 2026-09-14). Layers were the open group's,
+    which made the picture change as the GM moved around it — and the tool strip owns the proposal
+    now, because the tool is the mode and a group is not. What is left here is telling whoever cares
+    which group is showing.
   */
-  const owner =
-    drawer === null ? null : drawer.kind === "params" ? drawer.step : bandOf(drawer.tool);
-  const step = panelSteps().find((candidate) => candidate.id === owner) ?? null;
-  // Proposed rather than set: the GM's own toggles subtract from this, and a tool may add to it.
-  proposeLayers([...(step?.layers ?? [])]);
-  for (const listener of stepListeners) listener(step?.id ?? null);
+  for (const listener of stepListeners) listener(currentPanel());
   invalidate();
 }
 

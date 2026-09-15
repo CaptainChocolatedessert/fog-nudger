@@ -5,18 +5,46 @@
  * a *smallest-room* verdict, which the three-stage split put in stage two, and drawing it here would
  * put a stage-two outcome on a stage-one surface.
  *
- * Which steps show it is the steps' business, not this file's — it is declared in `steps.ts`, and
- * today the ink and walls steps both ask for it because both are judged by looking at it.
+ * ## The composite, except while a brush is in hand — user, 2026-09-14
+ *
+ * It drew the **base** — the ink as read, before the GM's paint — on the rule that handing it the
+ * composite would make invented pixels indistinguishable from read ones. That rule was right about
+ * the risk and wrong about where to pay for it: the rest of the time what a GM wants is *the current
+ * state of the ink*, which is the thing everything downstream is derived from, and showing them the
+ * base while the walls come from the composite is showing them a picture of something else.
+ *
+ * So: **the composite normally, the base while a paint tool is armed.** The distinction survives
+ * exactly where it matters — with a brush in hand the base is drawn and the GM's two layers sit over
+ * it in their own colours, so what they added and what they took away are separable at the moment
+ * they are being edited. And the per-pixel fallback is unchanged: the point probe still answers
+ * whether what you are pointing at was painted or read.
  */
 
 import { DEFAULT_SETTINGS } from "../../settings";
+import type { BinaryMask } from "../../trace/binarize";
 import { paintMask, parseColour } from "../../overlay/maskImage";
 import { bitmapFrom, type Bitmap } from "../bitmap";
 import { maskShowing, onReading } from "../reading";
 import { currentSettings } from "../settingsState";
 import { addPainter, invalidate, say, type Painter } from "../shell";
+import { currentTool, onToolChange } from "../toolPalette";
 
 let painted: Bitmap | null = null;
+
+/** The last reading, kept so a tool change can redraw from the other half of it. */
+let reading: { readonly mask: BinaryMask; readonly composed: BinaryMask } | null = null;
+
+/** Whether a brush is in hand, which is when the base is wanted rather than the composite. */
+function painting(): boolean {
+  const tool = currentTool();
+  return tool === "suppress" || tool === "ink";
+}
+
+/** Which half of the reading to draw. */
+function inkToDraw(): BinaryMask | null {
+  if (!reading) return null;
+  return painting() ? reading.mask : reading.composed;
+}
 
 /** The last mask painted, kept so a colour change can rewrite it without asking the pipeline. */
 let lastMask: Parameters<typeof paintMask>[0] | null = null;
@@ -65,13 +93,29 @@ export function registerInkLayer(): void {
   onReading((result) => {
     // Kept before rasterising, so a later colour change repaints *this* mask rather than whichever
     // one happened to be current when the workspace opened.
-    lastMask = result.mask;
-    const bitmap = rasterise(result.mask, currentSettings().overlay.inkColour, painted);
+    reading = { mask: result.mask, composed: result.composed };
+    lastMask = inkToDraw();
+    const bitmap = rasterise(lastMask!, currentSettings().overlay.inkColour, painted);
     if (!bitmap) {
       say("could not allocate the mask image", "bad");
       return false;
     }
     painted = bitmap;
     return true;
+  });
+
+  /*
+    Picking a brush up or putting it down swaps which half is drawn, and nothing else announces it.
+
+    Re-rasterised rather than redrawn, because the two halves are different pixels — a repaint with
+    the same bitmap would show the composite while the GM paints into the layers that made it.
+  */
+  onToolChange(() => {
+    const next = inkToDraw();
+    if (!next || next === lastMask) return;
+    lastMask = next;
+    const bitmap = rasterise(next, currentSettings().overlay.inkColour, painted);
+    if (bitmap) painted = bitmap;
+    invalidate();
   });
 }

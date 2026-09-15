@@ -82,6 +82,23 @@ export type StepId = "map" | "ink" | "walls" | "view";
 */
 export const LAYERS = ["ink", "paint", "gaps", "regions", "graph"] as const;
 
+/**
+ * What the map shows from the moment one is chosen — user, 2026-09-14.
+ *
+ * Layers used to be declared per group and proposed by whichever was open, so the picture
+ * changed as the GM moved around it. A room called that confusing, and it caused a real defect:
+ * arming a wall tool cleared the drawer, and the drawer proposed the empty set on its way out.
+ *
+ * **What made the old arrangement necessary was that a group was a mode.** It is not; the tool
+ * is. So the picture is constant and the only marks that come and go belong to the thing in your
+ * hand — which today is exactly one layer, the gap finder's rings, and they mean nothing when it
+ * is not running.
+ */
+export const ALWAYS_LAYERS = ["ink", "paint", "regions", "graph"] as const;
+
+/** Drawn only while the tool that owns them is in hand. */
+export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = { gaps: "gaps" };
+
 /*
   One rule about `paint`, because it is the layer that does not follow the convention.
 
@@ -249,7 +266,6 @@ export interface Step {
    */
   readonly blurb: string;
   /** What the canvas shows while this step is open. */
-  readonly layers: readonly LayerId[];
   /** Sub-headings, for controls that need their own explanation inside a step. */
   readonly groups?: readonly StepGroup[];
   /**
@@ -297,7 +313,6 @@ export const STEPS: readonly Step[] = [
       the chicken-and-egg of a surface that needs a map to draw: with no map chosen there is nothing
       here but the picker, and that is a complete and honest state rather than an empty canvas.
     */
-    layers: [],
   },
   {
     id: "ink",
@@ -327,7 +342,6 @@ export const STEPS: readonly Step[] = [
       controls stayed, under the Linework sub-heading: they are ink *filters*, deciding which marks
       survive rather than what a wall is.
     */
-    layers: ["ink", "paint", "gaps"],
     /*
       A brush takes every press, which is what `brush` means -- and here it is qualified by the tool.
 
@@ -429,7 +443,6 @@ export const STEPS: readonly Step[] = [
       real and is the one to watch in a room** -- a wall this step's own filter severed no longer
       announces itself, and finding it means running the Gaps tool one step up.
     */
-    layers: ["ink", "paint", "regions", "graph"],
   },
   /*
     The Regions step was here, and it is GONE (user, 2026-09-05).
@@ -477,7 +490,6 @@ export const STEPS: readonly Step[] = [
       rather than in a step: the partition has two homes now, and a control living in one of them is
       one the other home has to be left in order to reach.
     */
-    layers: [],
     persistent: true,
   },
 ];

@@ -31,7 +31,9 @@ import {
   groupControls,
   headingGroups,
   isStepDefault,
+  ALWAYS_LAYERS,
   LAYERS,
+  TOOL_LAYERS,
   PARAMETER_STEP,
   stepsOf,
   resetStep,
@@ -156,12 +158,27 @@ describe("the step declaration", () => {
     expect(workspaceSteps().length).toBeGreaterThan(0);
   });
 
-  it("shows every layer in at least one step", () => {
-    // A layer no step asks for is a painter that never runs: dead pixels, dead code, and nothing to
-    // say so. The other direction — a step asking for a layer nobody registered — is a wiring fact
-    // the surface owns and this cannot see.
+  it("shows every layer either always or with the tool that owns it", () => {
+    /*
+      A layer nothing ever proposes is a painter that never runs: dead pixels, dead code, and
+      nothing to say so. Groups used to declare which layers they showed and this walked them;
+      the picture is constant now, so the two sources are the always-on set and the handful that
+      belong to a tool.
+
+      The other direction — something proposing a layer nobody registered a painter for — is a
+      wiring fact the surface owns and this cannot see.
+    */
+    const shown = new Set<string>([...ALWAYS_LAYERS, ...Object.values(TOOL_LAYERS)]);
     for (const layer of LAYERS) {
-      expect(STEPS.some((step) => step.layers.includes(layer))).toBe(true);
+      expect(shown.has(layer), layer).toBe(true);
+    }
+  });
+
+  it("keeps the two sources apart, so a layer is not both always on and tool-specific", () => {
+    // Overlap would make the tool's own mark indistinguishable from the resting picture, which is
+    // the whole distinction the constant set is for.
+    for (const layer of Object.values(TOOL_LAYERS)) {
+      expect(ALWAYS_LAYERS).not.toContain(layer);
     }
   });
 });

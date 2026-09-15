@@ -32,7 +32,15 @@
  * giving it a button costs one row and removes a piece of folklore.
  */
 
-import { STEPS, TOOLS, toolGroups, type Drag, type ToolChoice } from "../steps";
+import {
+  ALWAYS_LAYERS,
+  STEPS,
+  TOOL_LAYERS,
+  TOOLS,
+  toolGroups,
+  type Drag,
+  type ToolChoice,
+} from "../steps";
 import {
   currentPanel,
   currentToolDrawer,
@@ -46,8 +54,9 @@ import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
-import { requireLayer } from "./layerToggles";
+import { proposeLayers } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
+import { onReading } from "./reading";
 import { editableGraph, onDerived } from "./regions";
 import { onStageChange } from "./stage";
 
@@ -130,32 +139,45 @@ function apply(next: Tool): void {
   }
   setDrag(dragFor(next));
   requestPaintMode(next === "suppress" || next === "ink" || next === "gaps");
-  requireToolLayers();
+  proposeVisibleLayers();
 }
 
 /**
- * What the tool in hand needs on screen.
+ * What the map shows: everything the trace produced, plus whatever the tool in hand adds.
  *
- * **A tool brings its own layer up and never takes one down.** You cannot edit what you cannot see,
- * so picking a wall tool has to guarantee the graph is drawn. Adding only is what keeps this from
- * re-creating the coupling the strip was built to remove: the tool nudges, and whatever the GM
- * switched on stays on.
+ * ## Everything, all the time — user, 2026-09-14
  *
- * **Re-asserted whenever the drawer moves, which is the fix for a real defect** (room, 2026-09-14:
- * *"when I click the wall tools, I don't see the walls drawn"*). `proposeLayers` **replaces** the
- * proposal and `requireLayer` adds to it, so order decides the outcome — and arming a wall tool does
- * both: it asks for the graph, and then, because Move, Draw and Erase have no controls, it clears
- * the drawer, which proposes the empty set and takes the graph straight back down.
+ * The ink, the GM's paint, the rooms and the walls are on from the moment a map is chosen. Layers
+ * used to be **derived from whichever group was open**, and that produced a surface where the
+ * picture changed as you moved around it: a room called it confusing, and it caused a real defect
+ * where arming a wall tool cleared the drawer and took the walls down with it.
  *
- * Reordering that one call site would have fixed the symptom and left the trap. Re-asserting after
- * every drawer change makes it order-independent: the drawer proposes, and the strip — which already
- * hears about it — puts back what the hand needs.
+ * What made the old arrangement necessary was that a group *was* a mode. It is not; the tool is. So
+ * the picture is constant, and the only things that come and go are the marks belonging to the thing
+ * in your hand.
+ *
+ * **Tool-specific, and this is the whole of the exception:** the gap finder's rings, which mean
+ * nothing when it is not running.
+ *
+ * ## Gated on a map, not on a drawer
+ *
+ * Nothing is proposed before there is a picture to draw over, which is what makes the surface open
+ * plainly rather than with five switches over an empty canvas.
+ *
+ * ## One caller, so order cannot decide the outcome
+ *
+ * `proposeLayers` **replaces** and `requireLayer` adds, so two callers meant the answer depended on
+ * which ran last — and that was a real defect: arming a wall tool asked for the graph, then cleared
+ * the drawer, and the drawer proposed the empty set on its way out. Computing the whole proposal in
+ * one place removes the question rather than ordering the answer.
  */
-function requireToolLayers(): void {
-  const band = TOOLS.find((choice) => choice.id === tool)?.band;
-  if (band === "walls") requireLayer("graph");
-  if (tool === "suppress" || tool === "ink") requireLayer("paint");
-  if (tool === "gaps") requireLayer("gaps");
+function proposeVisibleLayers(): void {
+  if (!mapChosen()) {
+    proposeLayers([]);
+    return;
+  }
+  const extra = TOOL_LAYERS[tool];
+  proposeLayers(extra ? [...ALWAYS_LAYERS, extra] : [...ALWAYS_LAYERS]);
 }
 
 /**
@@ -284,6 +306,7 @@ const BAND_LABELS: Readonly<Record<ToolChoice["band"], string>> = {
  * said by where it is.
  */
 export function render(): void {
+  proposeVisibleLayers();
   const strip = document.getElementById("tools");
   if (strip) {
     strip.replaceChildren();
@@ -456,6 +479,14 @@ export function registerToolPalette(): void {
   // A derivation arriving is what makes the wall tools usable, and nothing else announces it.
   onDerived(render);
   /*
+    A reading landing is what says there is a picture to draw over, and the proposal is gated on
+    having one — so the strip re-proposes then as well as on every other thing it redraws for.
+  */
+  onReading(() => {
+    proposeVisibleLayers();
+    render();
+  });
+  /*
     And whenever the drawer changes, because the strip draws which drawer is open.
 
     **Two symptoms, one cause, both reported from a room (2026-09-14):** the workspace opened with
@@ -469,11 +500,7 @@ export function registerToolPalette(): void {
 
     No loop: this render anchors the drawer but never re-renders it.
   */
-  onStepChange(() => {
-    // After the drawer has proposed, because it replaces the proposal and this adds to it.
-    requireToolLayers();
-    render();
-  });
+  onStepChange(render);
   apply("pan");
   render();
 }
