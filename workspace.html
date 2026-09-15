@@ -26,6 +26,23 @@
         user-select: none;
       }
 
+      /*
+        `hidden` must win, and without this it silently does not.
+
+        The attribute's effect comes from a **user-agent** rule, `[hidden] { display: none }`, which
+        any author rule with an id in it outranks. So `#layer-row { display: flex }` quietly defeated
+        `el.hidden` on that element and the layer switches appeared inside every drawer — reported
+        from a room, with nothing anywhere to say why: the JavaScript was setting the attribute, the
+        attribute was on the element, and the element was visible.
+
+        `!important` is right here rather than heavy-handed. This is not a style choice competing with
+        others; it is the meaning of an attribute, and anything that wants an element shown should not
+        be setting `hidden` on it.
+      */
+      [hidden] {
+        display: none !important;
+      }
+
       #surface {
         position: fixed;
         inset: 0;
