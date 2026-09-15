@@ -48,7 +48,7 @@ import { setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { requireLayer } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
-import { editableGraph } from "./regions";
+import { editableGraph, onDerived } from "./regions";
 import { onStageChange } from "./stage";
 
 export type Tool = "pan" | "suppress" | "ink" | "gaps" | WallTool;
@@ -453,6 +453,8 @@ export function registerToolPalette(): void {
     does nothing.
   */
   onStageChange(render);
+  // A derivation arriving is what makes the wall tools usable, and nothing else announces it.
+  onDerived(render);
   /*
     And whenever the drawer changes, because the strip draws which drawer is open.
 

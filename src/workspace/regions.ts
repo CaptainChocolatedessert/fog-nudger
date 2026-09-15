@@ -49,7 +49,6 @@ import { describeError } from "../describeError";
 import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
 import { isSkeletonOnly, SETTING_LIMITS, type SettingName } from "../settings";
-import type { StepId } from "../steps";
 import { buildWallFaces, describeWallFaces, wallSegments } from "../trace/wallFaces";
 import {
   pruneWallGraph,
@@ -132,6 +131,21 @@ let unitsPerSquare = 0;
 let preview: WallGraph | null = null;
 let previewDropped = 0;
 
+/**
+ * Told whenever a derivation lands, so whoever depends on there *being* one can catch up.
+ *
+ * **The tool strip is the caller and the reason.** Its wall tools are offered only when there is a
+ * graph to edit, and with the derive running continuously the first one arrives seconds after the
+ * map — so without this the strip would draw them locked, learn nothing when the graph appeared, and
+ * stay locked until something unrelated happened to redraw it. That is the defect shape this surface
+ * keeps producing: a state changes and nothing is told.
+ */
+const derivedListeners: (() => void)[] = [];
+
+export function onDerived(listener: () => void): void {
+  derivedListeners.push(listener);
+}
+
 /** The graph the last derive arrived at, or `null` when none has run. */
 export function previewGraph(): WallGraph | null {
   return preview;
@@ -190,16 +204,33 @@ function derivingWouldDestroyEdits(): boolean {
   return wallsEdited();
 }
 
-/**
- * Whether the partition in hand is for the settings now applied.
- *
- * Starts stale rather than absent, which is the state a workspace opens in: no partition has been
- * derived, and one is owed the moment anybody looks.
- */
-let stale = true;
+/*
+  `stale` was here and is gone with the gate. It recorded that a derive was *owed* so that entering
+  the group which draws the partition could pay it — and with the derive running unconditionally
+  there is no owing: a change starts one, and `requests` is what tracks whether the answer in hand
+  is for the settings now applied.
+*/
 
-/** Whether the step that shows the partition is the one open. */
-let watching = false;
+/*
+  `watching` was here and is gone (2026-09-14).
+
+  The partition was derived **only while the group that draws it was open**, which is the laziness
+  §7a decided to remove and never did. What a room met instead: with Map or Ink showing there was no
+  derive, so no graph, so no walls drawn and all three wall tools locked — and the GM's reasonable
+  reading was that saving their painted strokes is what unlocked walls, because that is what happened
+  to coincide with it.
+
+  **The old trigger was "you opened the Walls step", which was a proxy for "you are now looking at
+  this".** There is no such moment any more: wall lines are drawn always, so "derive when visible"
+  degenerates into "derive always" — and that is the answer rather than the objection. The merge
+  failure this project cares most about is visible in the *partition*, not in the mask, so deriving
+  continuously shows it at the moment it is caused instead of whenever the GM next goes to look.
+
+  **The cost, unchanged and stated:** ~700ms on a cached mask against a ~690ms reading, so chaining
+  them roughly doubles a slider release. The debounce in `reading.ts` is what makes that liveable and
+  a worker is still the real answer; what is new here is that the tools are locked while it runs, so
+  the wait is visible rather than a surface that quietly ignores presses.
+*/
 
 export function currentWalls(): readonly PreviewWall[] {
   return walls;
@@ -249,44 +280,19 @@ let lastSummaryOk = true;
  * partition is made of, and a deriving parameter, because it decides what is made of the mask.
  */
 export function invalidateRegions(): void {
-  stale = true;
   // The trace is out of date, so the derivation's output is too and there is nothing left to re-prune.
   derivation = null;
   requests.request();
   invalidate();
-  if (watching) void derive();
+  void derive();
 }
 
-/**
- * Which of the groups that draw the partition are open.
- *
- * **A set rather than a flag, and it is down to one member.** Two groups drew the partition — Walls
- * and Edit walls — until Edit walls was deleted, and the set is kept because the reason for it was
- * never the count: every listener is told on every change, one true and the rest false, and the
- * order they are told in is not ours to depend on. A flag would be set by one listener and cleared
- * by the other.
- */
-const lookers = new Set<StepId>();
+/*
+  `watchRegions` and its set of lookers went with the gate.
 
-/** Called when a step opens or closes, so entering a step that draws it is what pays for it. */
-export function watchRegions(step: StepId, open: boolean): void {
-  if (open) lookers.add(step);
-  else lookers.delete(step);
-  watching = lookers.size > 0;
-  if (!watching) return;
-  if (stale) {
-    void derive();
-    return;
-  }
-  /*
-    Nothing to recompute, so say what is already on screen.
-
-    Without this, entering a step whose partition is current says nothing at all, and the figures
-    that describe what the GM is looking at are only ever visible in the instant they were derived.
-    A room asked for the room count and there was no way to get it back.
-  */
-  if (lastSummary !== "") say(lastSummary, lastSummaryOk ? "" : "bad");
-}
+  It existed so that entering the group which draws the partition is what paid for it, and both
+  halves of that are gone: there is no entering, and the partition is drawn whatever is open.
+*/
 
 /**
  * What the last trace produced, before pruning — held so a prune needs no second trace.
@@ -341,7 +347,6 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   // Fractions of the map, exactly as in the editor, so the painter needs no branch either.
   raster = { width: 1, height: 1 };
   unitsPerSquare = from.pxPerSquare > 0 ? from.pxPerSquare / from.rasterWidth : 0;
-  stale = false;
 
   /*
     The same figures the editor says, in the same order, because they now describe the same object.
@@ -376,6 +381,7 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
       `collinear, which costs nothing; ${describeWallFaces(faces)}`,
   );
   invalidate();
+  for (const listener of derivedListeners) listener();
 }
 
 /**
@@ -398,13 +404,6 @@ export function repruneRegions(): void {
   }
   if (!derivation || inFlight) {
     invalidateRegions();
-    return;
-  }
-  if (!watching) {
-    // Nobody is looking, so the cheap thing is still too much. Marked owed, like any other change.
-    stale = true;
-    requests.request();
-    invalidate();
     return;
   }
   requests.request();
@@ -529,7 +528,7 @@ async function derive(): Promise<void> {
   } finally {
     inFlight = false;
     invalidate();
-    if (!isClosing() && watching && requests.waiting()) void derive();
+    if (!isClosing() && requests.waiting()) void derive();
   }
 }
 
@@ -558,7 +557,6 @@ function clearPartition(): void {
   raster = { width: 1, height: 1 };
   unitsPerSquare = 0;
   preview = null;
-  stale = false;
   noteGraph(null);
   requests.fulfil(generation);
   lastSummary = "no walls saved for this map yet";
@@ -579,7 +577,6 @@ function derivePartition(graph: WallGraph): void {
   raster = { width: 1, height: 1 };
   unitsPerSquare = 0;
   preview = null;
-  stale = false;
 
   const rooms = `${regions.length} room${regions.length === 1 ? "" : "s"}`;
   const points = graph.nodes.length;
@@ -601,9 +598,8 @@ function derivePartition(graph: WallGraph): void {
  */
 export function registerRegionInvalidation(): void {
   onReading(() => {
-    stale = true;
-    derivation = null;
+      derivation = null;
     requests.request();
-    if (watching) void derive();
+    void derive();
   });
 }

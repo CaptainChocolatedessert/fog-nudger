@@ -41,7 +41,6 @@ import { probeMapFraction } from "./pipeline";
 import { describeError } from "./describeError";
 import { requestPushStop } from "./emit/emitRegions";
 import {
-  onStepChange,
   registerToolContent,
   registerStepContent,
   renderPanel,
@@ -65,7 +64,7 @@ import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderInkSave, renderToolControls } from "./workspace/paintControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
-import { invalidateRegions, registerRegionInvalidation, watchRegions } from "./workspace/regions";
+import { invalidateRegions, registerRegionInvalidation } from "./workspace/regions";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { onSettingCommitted } from "./workspace/recompute";
 import { refreshHints } from "./workspace/settingRows";
@@ -191,8 +190,6 @@ registerPaintTool();
   In the editor it is a walk of a graph already in hand, which is cheap enough that the laziness
   costs nothing there.
 */
-// One drawer means one value, so the question is simply which group has it.
-onStepChange((step) => watchRegions("walls", step === "walls"));
 /*
   The paint mode follows the **tool**, not a heading, and `toolPalette` is where that happens.
 
