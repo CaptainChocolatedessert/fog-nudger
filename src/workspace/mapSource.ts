@@ -27,6 +27,7 @@
  */
 
 import { devLog } from "../devlog";
+import { resolveTraceMap } from "../map/mapImage";
 import { advanceTo, renderPanel } from "./drawer";
 import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
@@ -55,6 +56,27 @@ export function mapChosen(): boolean {
 }
 
 export async function loadNominatedMap(opening = false): Promise<void> {
+  /*
+    The GM's paint is loaded **before** the reading, and that ordering is load-bearing.
+
+    It used to come after, justified by *"what the ink layer draws is the base, which no paint layer
+    touches, so nothing wrong is on screen in the meantime"* — and that stopped being true on
+    2026-09-14, when the ink layer started drawing the **composite**. The first reading then composed
+    no paint, so the surface opened showing ink that was missing every stroke the GM had saved, and
+    corrected itself only once something forced a recompose (reported from a room, 2026-09-15).
+
+    The old comment said loading first would mean *guessing* which map. It would not:
+    `resolveTraceMap` answers that without touching a pixel, and is what the reading resolves with
+    anyway. One extra item query buys a first frame that is simply right.
+  */
+  const map = await resolveTraceMap();
+  if (map) {
+    const early = await loadPaint(map.id);
+    if (early.corrupt) {
+      say("some saved painting could not be read and has been ignored — see the console", "bad");
+    }
+  }
+
   const outcome = await takeReading();
   chosen = outcome.ok;
   if (!outcome.ok) {
@@ -87,22 +109,20 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   }
 
   /*
-    The GM's two paint layers, read for this map for the same reason the graph is.
+    Loaded again only if the reading resolved a *different* map than the resolver did.
 
-    **After the reading rather than before it**, which costs one recompose and is the honest order.
-    A layer records which map it belongs to, and the only thing that says which map this is, is the
-    reading that has just resolved it — so loading first would mean guessing. The reading itself is
-    unaffected: what the ink layer draws is the base, which no paint layer touches, so nothing wrong
-    is on screen in the meantime.
-
-    The recompose is skipped when there is nothing to fold in, which is every scene until someone
-    paints.
+    They agree in every ordinary case — the reading resolves with the same function — but a scene
+    whose items changed between the two calls could differ, and a paint layer belonging to the wrong
+    map is worse than a wasted query. No recompose either way: the early load happened before the
+    reading, so the composite already has it.
   */
-  const paint = await loadPaint(result.mapId);
-  if (paint.corrupt) {
-    say("some saved painting could not be read and has been ignored — see the console", "bad");
+  if (result.mapId !== map?.id) {
+    const paint = await loadPaint(result.mapId);
+    if (paint.corrupt) {
+      say("some saved painting could not be read and has been ignored — see the console", "bad");
+    }
+    if (paint.present) requestRecompose();
   }
-  if (paint.present) requestRecompose();
   /*
     Where a GM lands, which the stage decides.
 
