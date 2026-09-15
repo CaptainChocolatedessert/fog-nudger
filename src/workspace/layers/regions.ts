@@ -33,7 +33,6 @@ import { PROPOSAL_COLOURS } from "../../emit/fogShapes";
 import {
   currentRaster,
   currentRegions,
-  currentWalls,
   outlineUnitsPerSquare,
   regionsShowing,
 } from "../regions";
@@ -49,22 +48,12 @@ import { addPainter, type Painter } from "../shell";
  */
 const MIN_STROKE_PX = 1;
 
-/**
- * Staged wall lines, drawn in the colour the emit path stages them in.
- *
- * **Cased, and that is not decoration.** A wall line is a centreline, so by construction it lies
- * exactly on top of the map's own linework — and the first version drew it near-black, which made it
- * invisible on every wall it described. Reported from a room as "no stubs or bridges showing", when
- * they were all being drawn. A saturated core over a light casing reads on dark ink and on pale
- * paper alike, which is the only pair of backgrounds a wall is ever drawn against.
- *
- * Fixed rather than cycled like the proposal fills: a wall is one kind of thing, and what is being
- * judged is where it runs.
- */
-const WALL_COLOUR = "#ff2020";
-const WALL_CASING = "#ffffff";
-/** Screen pixels. A hairline over busy map art is not a wall a GM can judge. */
-const WALL_WIDTH_PX = 2;
+/*
+  `WALL_COLOUR`, `WALL_CASING` and `WALL_WIDTH_PX` went with the lines they drew. The casing argument
+  they carried is not lost — it is the general rule now, and `regenerateGuard.ts` and the graph layer
+  both state it: a saturated core over a light casing is what makes a centreline readable on dark ink
+  and pale paper alike, which are the only two backgrounds a wall is ever drawn against.
+*/
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const regions = currentRegions();
@@ -118,34 +107,22 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   });
 
   /*
-    The walls that emit as lines rather than as part of a ring — a stub hanging into a room being the
-    usual case.
+    **The emitted wall lines were drawn here and are gone** (user, 2026-09-15).
 
-    Drawn here because otherwise the preview would show *fewer walls than staging writes*, which is
-    the one thing this surface exists to prevent: the preview and the staged scene have to be the
-    same picture. They are lines rather than fills because that is what they become.
+    They were the walls that emit as `LINE` items rather than as part of a ring — a stub hanging into
+    a room being the usual case — stroked in red over the fills. The reason given was that otherwise
+    "the preview would show *fewer walls than staging writes*", and that was true when the graph layer
+    appeared in one step only.
+
+    It is on always now and draws every wall, bridges included, so the preview shows all of them
+    regardless. What the red added was *which* walls emit as lines rather than as ring boundaries —
+    an emit-path distinction, drawn over the one thing this layer exists to show.
+
+    **And it read as a fault.** Turning the Walls layer off left a great many walls still on screen,
+    apparently changing colour: two layers drawing walls, one of them switched off. Red also stops
+    doing a job it was not supposed to have — the palette reserves it for destruction, and this was
+    one of the two uses §7a already wanted gone.
   */
-  const walls = currentWalls();
-  if (walls.length > 0) {
-    context.globalAlpha = 1;
-    context.lineCap = "round";
-    context.beginPath();
-    for (const wall of walls) {
-      wall.points.forEach((point, at) => {
-        const x = view.x + point.x * scaleX;
-        const y = view.y + point.y * scaleY;
-        if (at === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-    }
-    // One path, stroked twice: the casing first, then the core over it.
-    context.strokeStyle = WALL_CASING;
-    context.lineWidth = WALL_WIDTH_PX + 2;
-    context.stroke();
-    context.strokeStyle = WALL_COLOUR;
-    context.lineWidth = WALL_WIDTH_PX;
-    context.stroke();
-  }
 
   context.restore();
 };

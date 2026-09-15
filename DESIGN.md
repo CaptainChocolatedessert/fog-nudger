@@ -1629,9 +1629,18 @@ pixels indistinguishable from read ones.
 **The regions layer sits below the graph in the canvas stack**: a fill drawn after a two-pixel line
 covers the thing being judged.
 
-**Wall lines are blue in the editor and red in the ink mode**, and cased — a white stroke two pixels
-wider under a saturated core. A centreline lies exactly on top of the map's own linework, so a dark
-line is invisible; a room once reported "no stubs showing" when all 22 were being drawn.
+**Wall lines are blue and cased** — a white stroke two pixels wider under a saturated core. A
+centreline lies exactly on top of the map's own linework, so a dark line is invisible; a room once
+reported "no stubs showing" when all 22 were being drawn.
+
+**The rooms layer no longer draws the emitted wall lines** (user, 2026-09-15). It stroked the walls
+that emit as `LINE` items — the bridges — in red over the fills, so that the preview would not show
+*fewer walls than the push writes*. That reason held while the graph layer appeared in one step only;
+with it on always and drawing every wall, bridges included, the preview shows all of them regardless.
+**And it read as a fault**: turning the Walls layer off left a great many walls on screen apparently
+changing colour, because two layers were drawing walls and one of them was switched off. What is lost
+is which walls emit as lines rather than as ring boundaries — an emit-path distinction, drawn over
+the one thing that layer exists to show.
 
 **The preview draws wall lines at a fixed 2 screen pixels**, not the fog stroke width. That is settled
 rather than outstanding: it is a **preview** affordance, and what a GM judges there is where a wall
@@ -2224,8 +2233,10 @@ cannot recur.
 | **Destructive** | red | **reserved** — erase target, doomed spurs, nothing else |
 | **Rooms** | a generated cycle | not semantic |
 
-**Red earns its alarm value by being rare.** Today it does three jobs — default ink, emitted wall
-lines in the preview, and destructive previews — and the first two move to violet and blue.
+**Red earns its alarm value by being rare.** It did three jobs — default ink, emitted wall lines in
+the preview, and destructive previews. The ink moved to violet, and the preview's wall lines are
+**gone entirely** rather than recoloured (2026-09-15), so red is down to the one job it was reserved
+for.
 
 **Ink stops being red for a second reason beyond "it reads as an error": it is the largest area on
 screen**, worn for the whole session, and it should be the calmest thing there rather than the
