@@ -25,7 +25,7 @@
  * `nudge-action.svg` already uses — but **2 wide rather than its 1.6**, for the reason on `toolIcon`.
  * `currentColor` is the part that matters: a selected tool inverts to dark-on-accent and the glyph
  * follows without a second rule anywhere. **One kind of line is heavier on purpose**: ink, at 4, in
- * the Suppress and Gaps glyphs.
+ * every glyph of the Ink band.
  *
  * ## What each one says
  *
@@ -33,7 +33,7 @@
  * another hat: a hand means the surface moves, a crosshair means the tool acts at a point. Move is
  * arrows around a *vertex* rather than a second hand, so the two cannot be confused.
  *
- * The rest draw the thing they do to the linework: a brush swiping ink away, a nib laying one down,
+ * The rest draw the thing they do to the linework: a brush swiping ink away, a pen laying it down,
  * two heavy strokes of ink ringed where a gap parts them, two ends joined, one struck out, two loose
  * wall ends ringed where a mend would join them, and a whole room's walls dashed and struck out.
  * **The two gap tools mirror each other** — ink running into the ring, walls ending in it.
@@ -52,8 +52,16 @@ const ICONS: Readonly<Record<string, string>> = {
   */
   suppress:
     '<path d="M2.5 12h3.2" stroke-width="4" /><path d="M18.3 12h3.2" stroke-width="4" /><rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-45 12 12)" />',
-  // A nib putting a line down.
-  ink: '<path d="M4 20l1.2-3.6L15.6 6a2 2 0 0 1 2.8 2.8L8 19.2 4.4 20.4z" /><path d="M14.2 7.4l2.4 2.4" />',
+  /*
+    A pen at the end of a heavy stroke of ink it has just laid down.
+
+    The nib it always was, smaller, with the Ink band's heavy stroke added (user, 2026-09-16). Chosen
+    over Suppress's own swipe filled with ink, which would have paired the two brushes as opposites
+    and left them one outline apart on adjacent buttons — the confusion Mend's glyph was redrawn to
+    end. **The cost:** the most detailed glyph in the band, and a pen suggests a fine line where the
+    tool is a brush with a width.
+  */
+  ink: '<path d="M3.5 19H8.5" stroke-width="4" /><path d="M11.5 19l.57-2.97 6.72-6.72a1.7 1.7 0 0 1 2.4 2.4l-6.72 6.72z" /><path d="M17 11.1l2.4 2.4" />',
   /*
     Two heavy strokes of ink stopping short of each other inside a dashed ring, the way the search
     rings a gap on the map.
