@@ -2726,7 +2726,7 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   lightening its own backdrop — and the `reveal` flag that did that is gone again.
 
   What replaces it is a **review state**. Pressing the lock's key puts the delta on the map and two
-  answers in the bar; the surface stays entirely live. Nothing is pending while the GM looks, because
+  answers in the drawer, level with the button pressed; the surface stays entirely live. Nothing is pending while the GM looks, because
   nothing has happened: the walls are exactly as they were, so wandering off and arming another tool
   is a perfectly good answer and simply takes the marks down. This is `confirmDialog.ts`'s own rule
   one step on — *show the boundary first by disabling what would cross it and saying why* — except
@@ -2736,10 +2736,28 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   yes, so agreeing regenerates and arms the tool in one go, as the dialog did. A locked slider hands
   over nothing: unlocking is the whole act.
 
+  **The answers were in the bar for a few hours, and that was the wrong place** (user, same day:
+  *"it's easy to miss those buttons down on the bar"*). The bar was chosen because the question
+  arrives from two places — a locked slider inside a drawer and a marked tool in the strip — and it
+  is the one piece of furniture both can reach. Reachable from both turned out to mean near neither,
+  which is **the open question this record already carries about the state line**: a message about a
+  press arriving as far from the press as the window allows is what once made three working buttons
+  read as dead. The fix is placement, not emphasis — colouring the bar louder would have treated the
+  same defect as a visibility problem.
+
+  So the drawer, which is where a press already puts things. It costs the two buttons stacking rather
+  than sitting side by side, and a locked slider's own drawer being taken over by the question about
+  it — fair, since the slider cannot be touched until it is answered. **Every opener answers the
+  question with *keep* on its way past**, which is what makes "wandering off is a perfectly good
+  answer" true rather than aspirational: the review is the one drawer owning something outside
+  itself, and a press that replaced it silently would strand the marks on the map with nothing able
+  to take them down.
+
   **Two costs, stated.** The destructive action is no longer behind a modal, so a stray click can
-  reach it — which is why it sits at the far end of the bar from everything else, fenced by a
-  hairline, and is the only urgent chip on screen. And it is a **mode**, on a surface that has been
-  shedding them; the mildest kind, since it changes nothing and leaves on any other action, but one.
+  reach it — which is why it is the **second** of the two in a drawer that has just appeared, so a
+  reflex press lands on the harmless one, and why it is the only urgent chip on screen. And it is a
+  **mode**, on a surface that has been shedding them; the mildest kind, since it changes nothing and
+  leaves on any other action, but one.
 
   Escape answers *keep*, and is stopped there — the shell's own Escape closes the workspace, and the
   reflex that used to dismiss the prompt would otherwise shut the surface. A failed discard leaves
@@ -2759,10 +2777,12 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
 
   **Unproven.** The delta itself has not been in a room: it needs a map, a derived graph and hand
   edits on it, none of which exists outside Owlbear. The **review** has been driven from a desk, and
-  what that establishes is the state machine rather than the picture — the pair appears and hides,
-  Escape answers *keep* without closing the workspace, a failed discard leaves the review up and
-  does not run the pending press, and the legend takes its two colours from the palette rather than
-  from a hardcoded hue.
+  what that establishes is the state machine rather than the picture — the drawer opens level with
+  the button that raised the question and that button stays pressed, answering puts the drawer back
+  to what the anchor shows, Escape answers *keep* without closing the workspace, reaching for any
+  other drawer answers *keep* too, a failed discard leaves the review up and does not run the
+  pending press, and the legend takes its two colours from the palette rather than from a hardcoded
+  hue.
 
 2. **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
   control that writes to it is in the left rail, so a message about a press arrives as far from the
@@ -3084,7 +3104,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
 - **What is drawn** — `regenerateGuard.ts` (**the mark and the gate**: which control or tool would
   rebuild the walls, the glyph that says so — per control rather than per group, since Ink holds nine
   controls and five regenerate — and the **review state** the question is asked in, which is a delta
-  on the map and two answers in the bar rather than a dialog) · `layerToggles.ts` (pure and tested: groups
+  on the map and two answers in the drawer, level with the button pressed, rather than a dialog) · `layerToggles.ts` (pure and tested: groups
   propose, the GM disposes, a tool may only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
   the values and is pure)
 - **Layers** — `layers/ink.ts` · `layers/paint.ts` (repainting only the rectangle a stroke changed) ·

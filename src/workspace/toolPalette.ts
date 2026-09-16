@@ -44,13 +44,14 @@ import {
 } from "../steps";
 import {
   currentPanel,
-  currentToolDrawer,
+  drawerAnchor,
   onStepChange,
   openLayersDrawer,
   openPanel,
   openToolDrawer,
   setDrawerTop,
   showingLayers,
+  showingReview,
 } from "./drawer";
 import { reviewRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
@@ -238,12 +239,7 @@ function anchorDrawer(): void {
 let pendingAnchor = 0;
 
 function place(): void {
-  const opens = showingLayers()
-    ? "layers"
-    : currentPanel()
-      ? `params:${currentPanel()}`
-      : `tool:${currentToolDrawer() ?? ""}`;
-  const opener = document.querySelector(`#tools button[data-opens="${opens}"]`);
+  const opener = document.querySelector(`#tools button[data-opens="${drawerAnchor()}"]`);
   if (!(opener instanceof HTMLElement)) return;
 
   const margin = 10;
@@ -399,7 +395,8 @@ export function render(): void {
         */
         const pressTool = (id: Tool): void => {
           if (toolIsMarked(id)) {
-            reviewRegenerate(choice.label, () => armTool(id));
+            // Anchored at this button, because this button is the press being asked about.
+            reviewRegenerate(choice.label, () => armTool(id), `tool:${id}`);
             return;
           }
           armTool(id);
@@ -523,6 +520,19 @@ export function render(): void {
       if (step.id === "view") strip.append(layersOpener());
 
       addTools(step.id as ToolChoice["band"]);
+    }
+
+    /*
+      While the question is up, the button that raised it stays pressed.
+
+      Nothing else would say where the marks on the map came from: a review is neither a group nor a
+      tool, so neither selection group claims a button, and the drawer would sit open beside a strip
+      that looks untouched. The stamp is the same one the anchoring reads, so the highlight and the
+      position cannot point at different buttons.
+    */
+    if (showingReview()) {
+      const raised = strip.querySelector(`button[data-opens="${drawerAnchor()}"]`);
+      if (raised instanceof HTMLElement) raised.setAttribute("aria-pressed", "true");
     }
 
     anchorDrawer();

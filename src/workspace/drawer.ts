@@ -63,7 +63,14 @@ import { currentSettings, persistSettings, setSettings } from "./settingsState";
 import { renderLayerRow } from "./layerRow";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
-import { controlIsMarked, wallsNotice } from "./regenerateGuard";
+import {
+  controlIsMarked,
+  keepWallChanges,
+  onRegenerateReview,
+  regenerateReview,
+  reviewBody,
+  wallsNotice,
+} from "./regenerateGuard";
 
 /**
  * Which group is in the drawer, or `null` for none.
@@ -92,7 +99,19 @@ type Drawer =
    * hiding one is a deliberate thing a GM goes looking for rather than a correction they need
    * to stumble on.
    */
-  | { readonly kind: "layers" };
+  | { readonly kind: "layers" }
+  /**
+   * The regenerate question: what it would cost, and the two answers.
+   *
+   * **A drawer rather than a dialog, and rather than the bar.** It needs the map live behind it —
+   * the price is drawn there and the GM has to pan around to judge it — and it needs to be where
+   * the press was, which the bar was not (user, 2026-09-15: *"it's easy to miss those buttons
+   * down on the bar"*). This is the one slot that is already both.
+   *
+   * It carries `anchor` because it is the only drawer not opened *by* a strip button: a marked
+   * tool names its own, and a locked slider's key names nothing and keeps the group it is in.
+   */
+  | { readonly kind: "review"; readonly anchor: string };
 
 let drawer: Drawer | null = { kind: "params", step: workspaceSteps()[0]?.id ?? "map" };
 
@@ -101,8 +120,86 @@ export function showingLayers(): boolean {
   return drawer?.kind === "layers";
 }
 
+/** Whether the drawer is showing the regenerate question. */
+export function showingReview(): boolean {
+  return drawer?.kind === "review";
+}
+
+/**
+ * The `data-opens` stamp of the strip button this drawer belongs to.
+ *
+ * **A fact about the drawer, so it is computed here**, and the strip reads it to decide both what
+ * to anchor and what to draw pressed. It lived in the strip's own `place`, which meant the two
+ * questions were answered twice — and the anchoring one broke silently, twice in one afternoon,
+ * each time by naming markup the other module owned.
+ */
+export function drawerAnchor(): string {
+  if (!drawer) return "";
+  switch (drawer.kind) {
+    case "layers":
+      return "layers";
+    case "params":
+      return `params:${drawer.step}`;
+    case "tool":
+      return `tool:${drawer.tool}`;
+    case "review":
+      return drawer.anchor;
+  }
+}
+
+/*
+  The question opens and closes its own drawer.
+
+  Subscribed rather than called, so the guard never has to know there is a drawer — it owns whether
+  the question is up, and this file owns where a thing raised by a press is shown. The import runs
+  one way, which is what keeps that true.
+*/
+onRegenerateReview(() => {
+  const review = regenerateReview();
+  if (review) {
+    // No anchor means the press came from inside the drawer — a locked slider's key — so the
+    // question stays level with the group the GM was already reading.
+    drawer = { kind: "review", anchor: review.anchor ?? drawerAnchor() };
+    touched = true;
+  } else if (showingReview()) {
+    /*
+      Answered, so the drawer goes back to what the anchor's own button shows.
+
+      Not closed: the GM pressed something to get here, and leaving them with a bare map would
+      make answering feel like a dismissal. `advanceTo` is not used because this is not a step
+      gate — the anchor already names the destination.
+    */
+    drawer = reopenFrom(drawerAnchor());
+  }
+  renderPanel();
+});
+
+/**
+ * Reaching for anything else answers the question with "keep".
+ *
+ * **Every opener goes through this**, because the review is the one drawer that owns something
+ * outside itself: the marks on the map. A press that replaced it silently would leave those marks up
+ * with nothing on screen able to take them down or act on them — a question still being asked after
+ * its own answers have been thrown away.
+ *
+ * This is also what makes the header's claim true rather than aspirational: *wandering off and arming
+ * some other tool is a perfectly good answer*.
+ */
+function leaveReview(): void {
+  if (showingReview()) keepWallChanges();
+}
+
+/** The drawer a `data-opens` stamp describes, for putting one back after a review. */
+function reopenFrom(anchor: string): Drawer | null {
+  if (anchor === "layers") return { kind: "layers" };
+  if (anchor.startsWith("params:")) return { kind: "params", step: anchor.slice(7) as StepId };
+  if (anchor.startsWith("tool:")) return { kind: "tool", tool: anchor.slice(5) };
+  return null;
+}
+
 /** Show the layer switches, or close the drawer if they are already showing. */
 export function openLayersDrawer(): void {
+  leaveReview();
   drawer = showingLayers() ? null : { kind: "layers" };
   touched = true;
   renderPanel();
@@ -122,6 +219,7 @@ export function currentToolDrawer(): string | null {
  * taking it.
  */
 export function openToolDrawer(tool: string): void {
+  leaveReview();
   drawer = currentToolDrawer() === tool ? null : { kind: "tool", tool };
   touched = true;
   renderPanel();
@@ -161,6 +259,7 @@ export function currentPanel(): StepId | null {
  * canvas clear.
  */
 export function openPanel(id: StepId | null): void {
+  leaveReview();
   drawer = id === null ? null : { kind: "params", step: id };
   touched = true;
   renderPanel();
@@ -474,7 +573,13 @@ export function renderPanel(): void {
   const step = panelSteps().find((candidate) => candidate.id === currentPanel()) ?? null;
   const tool = TOOLS.find((choice) => choice.id === currentToolDrawer()) ?? null;
 
-  if (title) title.textContent = showingLayers() ? "Show" : (step?.title ?? tool?.label ?? "");
+  if (title) {
+    title.textContent = showingReview()
+      ? "Rebuild these walls?"
+      : showingLayers()
+        ? "Show"
+        : (step?.title ?? tool?.label ?? "");
+  }
 
   /*
     **One slot, filled with exactly one thing.**
@@ -490,7 +595,8 @@ export function renderPanel(): void {
   */
   if (body) {
     body.replaceChildren();
-    if (step) body.append(stepBody(step));
+    if (showingReview()) body.append(reviewBody());
+    else if (step) body.append(stepBody(step));
     else if (tool) {
       const hint = document.createElement("p");
       hint.id = "tool-hint";

@@ -11,9 +11,27 @@
  * stopped holding (*"maybe the dialog isn't the right idea if there is interaction needed"*).
  *
  * So there is no dialog on this path. Pressing the lock's key puts the delta on the map and the two
- * answers in the bar, and the surface stays entirely live while the GM looks. **Nothing is pending
- * while they do**: the walls are exactly as they were, so wandering off and arming some other tool is
- * a perfectly good answer and simply takes the marks down.
+ * answers **in the drawer, level with the button that was pressed**, and the surface stays entirely
+ * live while the GM looks. **Nothing is pending while they do**: the walls are exactly as they were,
+ * so wandering off and arming some other tool is a perfectly good answer and simply takes the marks
+ * down.
+ *
+ * ## The answers were in the bar for a few hours — user, 2026-09-15
+ *
+ * *"It's easy to miss those buttons down on the bar."* The bar was chosen because the question
+ * arrives from two places — a locked slider inside a drawer, a marked tool in the strip — and it is
+ * the one piece of furniture both can reach. Reachable from both turned out to mean near neither.
+ *
+ * That is a failure this record had already written down about the **state line**: it sits at the
+ * foot of a full-screen window while every control that writes to it is in the left rail, so a
+ * message about a press arrives as far from the press as the window allows — and that is what once
+ * made three working buttons read as dead. The fix is placement rather than emphasis. Colouring the
+ * bar louder would have been treating the same defect as a visibility problem.
+ *
+ * The drawer is where a press already puts things. Using it means the answers arrive where the eye
+ * is and no new place has to be learnt — at the cost of the two buttons stacking rather than
+ * sitting side by side, and of a locked slider's own drawer being taken over by the question about
+ * it. Both are fair: the slider cannot be touched until it is answered anyway.
  *
  * That is this project's own rule one step further on. `confirmDialog.ts` already argues that a
  * dialog is a bad way to make a boundary visible, because it arrives *after* the gesture, and that
@@ -22,9 +40,10 @@
  * describing it.
  *
  * **Two costs, and they are real.** The destructive action is no longer behind a modal, so a stray
- * click can reach it — which is why it sits at the far end of the bar from everything else, fenced,
- * and is the only urgent chip on screen. And this is a **mode**, on a surface that has been shedding
- * them; the mildest kind, since it changes nothing and leaves on any other action, but one.
+ * click can reach it — which is why it is the **second** of the two in a drawer that has just
+ * appeared, so the reflex press lands on the harmless one, and why it is the only urgent chip on
+ * screen. And this is a **mode**, on a surface that has been shedding them; the mildest kind, since
+ * it changes nothing and leaves on any other action, but one.
  *
  * ## What the mark is on, and why it is not on the group
  *
@@ -106,6 +125,15 @@ export function toolIsMarked(tool: string): boolean {
 interface Review {
   readonly what: string;
   readonly then: (() => void) | null;
+  /**
+   * Which strip button the drawer should open level with, or `null` for wherever it already is.
+   *
+   * A marked **tool** names its own button, because the press that raised the question is that
+   * button and the answer belongs beside it. A locked **slider** names nothing: its key is inside
+   * a drawer that is already anchored at its group, so the question stays exactly where the GM
+   * was looking rather than jumping to a button they did not press.
+   */
+  readonly anchor: string | null;
 }
 
 let review: Review | null = null;
@@ -134,9 +162,11 @@ function announce(): void {
  * at which this function knows the answer, because the surface goes on working while the answer is
  * being decided. A caller hands over what to do if the answer turns out to be yes.
  */
-export function reviewRegenerate(what: string, then?: () => void): void {
-  review = { what, then: then ?? null };
+export function reviewRegenerate(what: string, then?: () => void, anchor?: string): void {
+  review = { what, then: then ?? null, anchor: anchor ?? null };
   const marked = showWallDelta(true);
+  // The state line still narrates, because it is the surface's running commentary and this is an
+  // event. What it is not any more is where the *answer* lives.
   say(
     marked
       ? `${what} would build these walls again from the map — look at what changes, then choose`
@@ -187,7 +217,60 @@ export async function acceptRegenerate(): Promise<void> {
 }
 
 /**
- * Bind the two answers, and the ways out that are not a press.
+ * The question, built for the drawer to put in its slot.
+ *
+ * Built fresh on every render and wired directly, with no ids on anything. A drawer's contents are
+ * rebuilt wholesale, so an id here would be a handle onto an element that may already have been
+ * replaced — which is how a lookup for `#tool-hint` came to name nothing at all.
+ */
+export function reviewBody(): HTMLElement {
+  const body = document.createElement("div");
+  body.className = "review-body";
+  if (!review) return body;
+
+  const said = document.createElement("p");
+  said.className = "sub";
+  said.innerHTML =
+    `<b>${review.what}</b> builds these walls again from the map. Anything you moved, drew or ` +
+    "erased by hand goes with them, and the ink you painted does not — it is an input to the " +
+    "reading, so it survives.";
+  body.append(said);
+
+  /*
+    The key names no colour, and is printed in them instead.
+
+    A sentence saying "what goes is in amber" is a copy of a value the GM can retune — the palette
+    publishes every role as a custom property so the page and the canvas cannot disagree, and a
+    hue's *name* in prose is the one form of that copy no property can keep honest.
+  */
+  const legend = document.createElement("p");
+  legend.className = "review-legend";
+  legend.innerHTML =
+    'On the map: <b class="going">what goes</b> · <b class="coming">what comes back</b>';
+  body.append(legend);
+
+  // Keep first, destroy second: a drawer that has just appeared under the cursor should meet a
+  // reflex press with the harmless answer.
+  const keep = document.createElement("button");
+  keep.type = "button";
+  // The ordinary chip, filled, which on this surface is what a default answer looks like. Not
+  // `quiet` — that is styled under `.step-actions` and would be a class doing nothing here.
+  keep.className = "chip";
+  keep.textContent = "Keep my changes";
+  keep.addEventListener("click", keepWallChanges);
+
+  const go = document.createElement("button");
+  go.type = "button";
+  go.className = "chip urgent";
+  go.textContent = "Generate them again";
+  go.addEventListener("click", () => void acceptRegenerate());
+
+  body.append(keep, go);
+  return body;
+}
+
+/**
+ * The ways out of a review that are not one of its own two buttons.
  *
  * `onStageChange` closes a review the walls have moved out from under — an undo taking the last hand
  * edit back is the reachable one, and it leaves a delta describing a difference that no longer
@@ -195,11 +278,6 @@ export async function acceptRegenerate(): Promise<void> {
  * would be asking about nothing.
  */
 export function registerRegenerateReview(): void {
-  document.getElementById("regenerate-go")?.addEventListener("click", () => {
-    void acceptRegenerate();
-  });
-  document.getElementById("regenerate-keep")?.addEventListener("click", keepWallChanges);
-
   /*
     Escape answers "keep", and stops there.
 
@@ -220,32 +298,6 @@ export function registerRegenerateReview(): void {
   onStageChange(() => {
     if (review && !wallsEdited()) keepWallChanges();
   });
-
-  onRegenerateReview(paint);
-  paint();
-}
-
-/** Show or hide the pair, and name what is being decided. */
-function paint(): void {
-  const host = document.getElementById("regenerate-review");
-  if (host) host.hidden = review === null;
-
-  const legend = document.getElementById("regenerate-legend");
-  if (legend) {
-    /*
-      The key names no colour, and is printed in them instead.
-
-      A sentence saying "what goes is in amber" is a copy of a value the GM can retune — the palette
-      publishes every role as a custom property so the page and the canvas cannot disagree, and a
-      hue's *name* in prose is the one form of that copy no property can keep honest.
-    */
-    legend.innerHTML = review
-      ? 'On the map: <b class="going">what goes</b> · <b class="coming">what comes back</b>'
-      : "";
-  }
-
-  const go = document.getElementById("regenerate-go");
-  if (go) go.title = review ? `${review.what} rebuilds the walls, discarding your changes` : "";
 }
 
 /**
