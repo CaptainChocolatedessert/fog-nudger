@@ -29,11 +29,11 @@ function sampleValues(name: (typeof CONTROLS)[number]["name"]): number[] {
 
 const NONSENSE = ["NaN", "Infinity", "undefined", "null", "[object"];
 
-/** Nothing read yet — the state a workspace opens in, and the only state the editor is ever in. */
-const MEASURED_NONE: Measured = { pxPerSquare: null, inkWidth: null, rasterWidth: null };
+/** Nothing read yet — the state a workspace opens in. */
+const MEASURED_NONE: Measured = { pxPerSquare: null, rasterWidth: null };
 
 /** The test map's own figures, so a passing sweep is about a plausible map. */
-const MEASURED_MAP: Measured = { pxPerSquare: 51, inkWidth: 5.7, rasterWidth: 3300 };
+const MEASURED_MAP: Measured = { pxPerSquare: 51, rasterWidth: 3300 };
 
 function sweep(measured: Measured, label: string): void {
   for (const control of CONTROLS) {
@@ -59,7 +59,7 @@ describe("every control's readout", () => {
     // squares, and `=== null` does not catch a zero — so the division that followed printed
     // "Infinity". `lastPixelsPerSquare` nulls a zero at source now; this is the type's own contract
     // holding rather than one caller remembering to.
-    sweep({ pxPerSquare: 0, inkWidth: 0, rasterWidth: 0 }, "zero measurements");
+    sweep({ pxPerSquare: 0, rasterWidth: 0 }, "zero measurements");
   });
 
   it("says nothing nonsensical on a real measurement", () => {
@@ -71,7 +71,7 @@ describe("every control's readout", () => {
   it("says nothing nonsensical on a negative measurement either", () => {
     // Not reachable from the pipeline, and asserted because `Measured` permits it: a readout is a
     // pure function of what it is handed, and it should not be the caller's job to know that.
-    sweep({ pxPerSquare: -1, inkWidth: -1, rasterWidth: -1 }, "negative measurements");
+    sweep({ pxPerSquare: -1, rasterWidth: -1 }, "negative measurements");
   });
 });
 
@@ -88,13 +88,11 @@ describe("readouts that depend on a measurement", () => {
   });
 
   /*
-    The two graph-derived controls say nothing at all without a raster, and that is the case the
-    editor is always in.
+    The two graph-derived controls say nothing at all without a raster.
 
-    They are stored as a fraction of the map because that is the only unit both modes can speak. The
-    ink mode can turn it back into pixels; the editor never ran a reading and cannot, so the readout
-    goes quiet rather than inventing one. Both are checked, because a readout that is right only in
-    the mode it was written in is the failure this file exists to catch.
+    They are stored as a fraction of the map, and turning that back into pixels needs the raster the
+    last reading used. Until one lands the readout goes quiet rather than inventing one. Both are
+    checked, because two controls sharing a formatter is exactly where one of them gets left behind.
   */
   it("says nothing in pixels when no raster has been read", () => {
     for (const control of [spurs, simplify]) {
@@ -128,47 +126,49 @@ describe("readouts that depend on a measurement", () => {
     }
   });
 
-  it("says so plainly when an ink width is wanted and has not been measured", () => {
-    // Only the stroke filter is denominated in ink widths now. The simplification tolerance was,
-    // and moved to a fraction of the map on 2026-09-06 so that both modes could speak it — it
-    // reports *against* an ink width where one exists, which the raster test above covers.
-    expect(stroke.derive!(0.5, { pxPerSquare: 51, inkWidth: null, rasterWidth: 3300 })).toBe(
-      "trace once for a figure",
-    );
+  it("gives the stroke filter no derived line, because every figure it could give is a guess", () => {
+    /*
+      **Removed on 2026-09-16, and pinned so it is not quietly put back.** The stroke filter is stored
+      in measured ink widths, so any pixel figure beside it is the setting times an erosion estimate
+      — biased thin and unrepresentative on a hatched map — stated as though it were a fact. Its
+      readout said *"under ~4px goes (ink is 3.2px)"*, and nobody looked at it while tuning.
+
+      `Measured` no longer carries the ink width at all, so no readout can quote it without `tsc`
+      refusing. This covers the one control whose line was *made* of it rather than decorated by it.
+
+      Mutation-tested with the rest of this block on 2026-09-16: six mutations, six caught — five
+      here, and one by `tsc` alone (a readout destructuring `inkWidth` from `Measured` fails TS2339,
+      which is the guard for the three lines that only quoted it).
+    */
+    expect(stroke.derive).toBeUndefined();
   });
 
   it("uses the measurement it is handed rather than a constant", () => {
     /*
-      The direct regression for the hardcoded-`0.111` bug: a readout that multiplied by one map's
-      ink width, inside a control meant for any map. Two different measurements must produce two
-      different sentences, or the number in them is not coming from the measurement.
+      The regression for the hardcoded-`0.111` bug: a readout that multiplied by one map's measured
+      ink width, inside a control meant for any map. That readout is gone, and the principle is not:
+      two different measurements must produce two different sentences, or the number in them is not
+      coming from the measurement.
     */
-    for (const control of [stroke, simplify]) {
-      const thin = control.derive!(0.5, { pxPerSquare: 51, inkWidth: 3, rasterWidth: 3300 });
-      const thick = control.derive!(0.5, { pxPerSquare: 51, inkWidth: 9, rasterWidth: 3300 });
-      expect(thin, control.name).not.toBe(thick);
-    }
-    // The two stored as a fraction of the map report against the raster instead, so that is the
-    // measurement their sentence has to come from.
+    // The two stored as a fraction of the map report against the raster.
     for (const control of [spurs, simplify]) {
-      const small = control.derive!(4e-4, { pxPerSquare: 51, inkWidth: 5.7, rasterWidth: 1600 });
-      const large = control.derive!(4e-4, { pxPerSquare: 51, inkWidth: 5.7, rasterWidth: 3300 });
+      const small = control.derive!(4e-4, { pxPerSquare: 51, rasterWidth: 1600 });
+      const large = control.derive!(4e-4, { pxPerSquare: 51, rasterWidth: 3300 });
       expect(small, control.name).not.toBe(large);
     }
     for (const control of [gapFill]) {
-      const coarse = control.derive!(12, { pxPerSquare: 20, inkWidth: 5.7, rasterWidth: 3300 });
-      const fine = control.derive!(12, { pxPerSquare: 80, inkWidth: 5.7, rasterWidth: 3300 });
+      const coarse = control.derive!(12, { pxPerSquare: 20, rasterWidth: 3300 });
+      const fine = control.derive!(12, { pxPerSquare: 80, rasterWidth: 3300 });
       expect(coarse, control.name).not.toBe(fine);
     }
   });
 
   it("says a control that is off is off, whatever has been measured", () => {
-    // Zero is off for all four of these, and it has to read as off rather than as "0px, 0.00 of a
-    // square" — a GM scanning for which controls are doing something reads the readout, not the
-    // slider position.
+    // Zero is off, and it has to read as off rather than as "0px, 0.00 of a square" — a GM scanning
+    // for which controls are doing something reads the readout, not the slider position.
     // Not the two stored as a map fraction: they say "off" through `format` instead, which the
     // raster test above pins. A control cannot be in both lists without saying it twice.
-    for (const control of [gapFill, stroke]) {
+    for (const control of [gapFill]) {
       for (const measured of [MEASURED_NONE, MEASURED_MAP]) {
         expect(control.derive!(0, measured), control.name).toBe("off");
       }

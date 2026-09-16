@@ -13,7 +13,7 @@
  */
 
 import { type Control, type Measured } from "../controls";
-import { lastInkWidth, lastPixelsPerSquare, lastRasterWidth } from "../pipeline";
+import { lastPixelsPerSquare, lastRasterWidth } from "../pipeline";
 import {
   PARAMETER_KIND,
   readParameter,
@@ -90,7 +90,6 @@ function format(
 function measured(): Measured {
   return {
     pxPerSquare: lastPixelsPerSquare(),
-    inkWidth: lastInkWidth(),
     rasterWidth: lastRasterWidth(),
   };
 }
@@ -98,10 +97,10 @@ function measured(): Measured {
 /**
  * Repaint functions for the rows on screen: each row's derived readout, and each row's ghost.
  *
- * Several readouts report a setting against a **measurement** — the minimum stroke width against the
- * measured ink width, the gap widths against pixels per square — and before a first trace those
- * say "trace once for a figure". Without this they would go on saying it until the row's own slider
- * was touched, which is a readout being quietly wrong about what it knows.
+ * Several readouts report a setting against a **measurement** — the gap width and the brushes against
+ * pixels per square, the two graph sliders against the raster — and before a first reading those
+ * fall back to a shorter form. Without this they would stay in it until the row's own slider was
+ * touched, which is a readout being quietly wrong about what it knows.
  *
  * **The ghosts joined on 2026-09-10**, because they have the same lifetime and the same problem.
  * They were each subscribed to the reading on build, and that list is never cleared, so every rebuild

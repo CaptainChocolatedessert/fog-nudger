@@ -27,9 +27,17 @@ import type { Scale } from "./sliderScale";
 /**
  * What the last run measured, for the readouts that report a value in something a GM can feel.
  *
- * Both are nullable and both are nullable *for a reason*: before a first trace there is no ink
- * width and no pixel density, and a control that invents one would be reporting a guess in the
- * voice of a measurement. The readouts say "trace once for a figure" instead.
+ * Both are nullable and both are nullable *for a reason*: before a first reading there is no pixel
+ * density and no raster, and a control that invented one would be reporting a guess in the voice of
+ * a measurement. The readouts fall back to what they can say without it instead — bare pixels, or
+ * nothing.
+ *
+ * **The measured ink width is deliberately not here** (user, 2026-09-16). Three readouts quoted it —
+ * *"under ~4px goes (ink is 3.2px)"*, *"1.31 of a 3.2px ink width"*, *"3.8x the map's ink"* — and it
+ * is an estimate: erosion-measured, biased thin, saturating at 2px and unrepresentative on a hatched
+ * map, stated in the voice of a fact. Nobody looked at them while tuning; moving the slider and
+ * watching the map is what the GM does. So they went rather than being reworded, and the field went
+ * with its last reader. The pipeline still measures it, for seeding the straightening default.
  *
  * **A non-positive number is treated as no measurement**, not as a measurement of zero. Every
  * `derive` below tests `> 0` rather than `!== null`, because dividing by a zero pixel density puts
@@ -40,16 +48,13 @@ import type { Scale } from "./sliderScale";
 export interface Measured {
   /** Raster pixels per grid square, or `null` before any run. */
   readonly pxPerSquare: number | null;
-  /** Measured ink width in raster pixels, or `null` before any run. */
-  readonly inkWidth: number | null;
   /**
    * The raster the last reading used, in pixels across, or `null` before any run.
    *
    * What turns a fraction of the map back into pixels, for the two controls whose stored unit is a
-   * fraction. Nullable for the same reason as the other two, and for one more: **the editor never
-   * has it**, because it never runs a reading. A readout that invented a raster there would be
-   * reporting a guess in the voice of a measurement about a mode that has no such measurement at
-   * all.
+   * fraction. Nullable for the same reason as the density: until a reading lands there is no raster,
+   * and a readout that invented one would be reporting a guess in the voice of a measurement. (It
+   * gave a second reason once — that the wall editor never runs a reading — and the editor is gone.)
    */
   readonly rasterWidth: number | null;
 }
@@ -130,6 +135,18 @@ export interface Control {
  * opacity led the Ink step on the same argument until it was removed (2026-09-09).
  */
 /**
+ * A fraction of the map in raster pixels, which is the unit a GM can actually feel.
+ *
+ * It needs the raster the last reading used, so it says nothing until one has landed. The stored
+ * unit stays a fraction regardless — that is what keeps the setting from depending on a measurement —
+ * and this is the readout being generous where it can.
+ */
+function inRasterPixels(value: number, { rasterWidth }: Measured): string {
+  if (rasterWidth === null || rasterWidth <= 0) return "";
+  return `${(value * rasterWidth).toFixed(1)}px`;
+}
+
+/**
  * What a brush width says, shared by the two brushes.
  *
  * A width in raster pixels means nothing on its own — a GM has no feel for what a pixel of *this*
@@ -137,22 +154,6 @@ export interface Control {
  * pixels where none has. The nullable measurement is why: before a first reading there is no density
  * and a readout that invented one would be a guess in the voice of a measurement.
  */
-/**
- * The same fraction in raster pixels, which is the unit a GM can actually feel.
- *
- * Only the ink mode can say it: it needs the raster the last reading used, and the editor has never
- * run one. That asymmetry is the whole reason the stored unit is a fraction — a control the editor
- * cannot denominate is a control the editor cannot have — so this is the readout being generous
- * where it can rather than the setting depending on a measurement.
- */
-function inRasterPixels(value: number, { rasterWidth, inkWidth }: Measured): string {
-  if (rasterWidth === null || rasterWidth <= 0) return "";
-  const px = value * rasterWidth;
-  const base = `${px.toFixed(1)}px`;
-  if (inkWidth === null || inkWidth <= 0) return base;
-  return `${base}, ${(px / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink width`;
-}
-
 function brushReadout(value: number, { pxPerSquare }: Measured): string {
   const px = `${Math.round(value)}px across`;
   if (pxPerSquare === null || pxPerSquare <= 0) return px;
@@ -184,15 +185,9 @@ export const CONTROLS: readonly Control[] = [
     name: "minStrokeInkWidths",
     label: "Thinnest stroke to keep",
     hint: "",
-    derive: (value, { inkWidth }) => {
-      if (value <= 0) return "off";
-      if (inkWidth === null || inkWidth <= 0) return "trace once for a figure";
-      const width = value * inkWidth;
-      const radius = Math.max(0, Math.round(width / 2));
-      return radius <= 0
-        ? `rounds to nothing against ${inkWidth.toFixed(1)}px ink`
-        : `under ~${radius * 2}px goes (ink is ${inkWidth.toFixed(1)}px)`;
-    },
+    // No derived line. Every figure it could give is the setting times the measured ink width, which
+    // is an estimate — so a pixel count here is the same guess in another unit. The number at the
+    // right is the setting itself, which is what a GM needs to come back to one.
   },
   {
     name: "minIslandPx",
@@ -245,12 +240,7 @@ export const CONTROLS: readonly Control[] = [
     name: "inkBrushPx",
     label: "Brush width",
     hint: "",
-    derive: (value, measured) => {
-      const base = brushReadout(value, measured);
-      const { inkWidth } = measured;
-      if (inkWidth === null || inkWidth <= 0) return base;
-      return `${base}, ${(value / inkWidth).toFixed(1)}x the map's ink`;
-    },
+    derive: brushReadout,
   },
   {
     name: "fillOpacity",

@@ -1880,9 +1880,14 @@ down to about 250.
 ### The rule for UI text, and what it kept
 
 **A line of description survives only if it says something the label and the readout beside it
-cannot.** The readout is half of that and is easy to forget: every slider already prints its value in
-a unit a GM can feel — *"under ~4px goes, ink is 3.2px"* — which is what most of the deleted sentences
-were restating in words.
+cannot.** The readout is half of that and is easy to forget: most sliders already print their value in
+a unit a GM can feel — *"12px, 0.24 of a square"* — which is what most of the deleted sentences were
+restating in words.
+
+**A readout is held to the same rule as a sentence: it must be true.** The example here used to be
+the stroke filter's *"under ~4px goes, ink is 3.2px"*, and that line went on 2026-09-16 with every
+other readout quoting the measured ink width (§10, decision 3). Nobody had looked at them while
+tuning, and what they quoted was an estimate.
 
 **Where a name was doing too little, the name changed rather than being propped up.** The old note in
 `controls.ts` defended a hint on every control on the grounds that a direction is not guessable —
@@ -2886,10 +2891,27 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   five findings of 2026-09-15 include nothing about it. That is absence of a complaint, not a test:
   nobody has been asked whether a message now lands where they are looking.
 
-3. **The ink-width readouts state a guess too confidently.** The measured ink width is a programmatic
-  estimate and several readouts quote it as though it were a fact. One candidate: if a line of text
-  is needed to say how many pixels something is, make **pixels the unit the slider reports on the
-  right** instead.
+3. ~~**The ink-width readouts state a guess too confidently.**~~ **Removed 2026-09-16.**
+
+  **What it was.** The measured ink width is an erosion estimate — biased thin, saturating at 2px,
+  and unrepresentative on a hatched or stippled map (§4) — and three derived lines quoted it as a
+  fact: the stroke filter's *"under ~4px goes (ink is 3.2px)"*, the two graph sliders' *"…, 1.31 of a
+  3.2px ink width"*, and the add-ink brush's *"…, 3.8x the map's ink"*.
+
+  **What answered it was not a better unit.** The candidate here was to report pixels instead; but
+  the stroke filter's pixel figure is the setting times the same estimate, so it is the guess in
+  another unit. The user's report settled it the other way (2026-09-16): *"I haven't looked at them
+  while adjusting settings. Just playing with the sliders works well."* So they went. The stroke
+  filter has no derived line now and shows its bare setting at the right; the other three keep the
+  pixels and grid squares that come from the raster and the grid, and lose only the ink-width tail.
+
+  **The field went with its last reader.** `Measured`, the bundle of last-run figures a readout is
+  handed, no longer carries the ink width, so a readout cannot quote it without `tsc` refusing — that
+  is the guard, alongside a test that the stroke filter has no derived line. The pipeline still
+  measures ink width, because it seeds the straightening default when a map is first read.
+
+  **Derived lines in general stay, for now** (user, same day). The same report — sliders are tuned by
+  watching the map — may apply to all of them; that is a separate question and was not taken.
 
 4. **The one *put on the map* button that is left.** *Put the walls on the map* is deleted with the
    save; what remains is the editor's, and the open question is whether it is needed at all now that
