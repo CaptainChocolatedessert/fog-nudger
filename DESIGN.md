@@ -2736,10 +2736,8 @@ and **18.19px inside one**, exactly the 18.19px of the tool glyph beside it. The
 `button.tool-band .walls-mark` rule had asked for 11px in the old band button, so every size the mark
 has ever been told to be in the strip is smaller than the one it gets.
 
-**This is a measurement, not a defect.** Whether a mark the size of the glyph it sits beside is wrong
-is a question only a look can answer — it may read as a second icon rather than as a mark on one, or
-it may be fine. Nothing here changed it either way, and it wants an eye in a room before a number is
-picked.
+**This is a measurement, not a defect**, and it is deliberately not being chased now (user,
+2026-09-16) — decision 7 below holds it for later.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
@@ -2913,9 +2911,10 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   **Derived lines in general stay, for now** (user, same day). The same report — sliders are tuned by
   watching the map — may apply to all of them; that is a separate question and was not taken.
 
-4. **The one *put on the map* button that is left.** *Put the walls on the map* is deleted with the
-   save; what remains is the editor's, and the open question is whether it is needed at all now that
-   closing pushes — a GM cannot see the result without leaving anyway. Parked deliberately.
+4. ~~**The one *put on the map* button that is left.**~~ **Kept (user, 2026-09-16).** The question was
+   whether *Put on the map* in the bar is needed now that closing pushes, given a GM cannot see the
+   result without leaving anyway. The answer is to keep it. The case §6 already makes for it stands:
+   it is the mid-session push, for a change a table is waiting on, made without giving up the surface.
 
 5. ~~**Wording for the frame button.**~~ **Settled 2026-09-14** as *Add walls around the map
   edge*, after *Make the outside a room* was doubted in a second room: the exterior is not
@@ -2926,6 +2925,12 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
    language — that is the conversation, and it is explicitly not to be built before it. The **14px
    base size** that shared this item is ~~open~~ **settled 2026-09-16 as no change**: the eye was
    given and every size on the surface looks fine. §7a's typography note carries the figures.
+
+7. **Reconsider the walls mark in the strip — later, not now** (user, 2026-09-16). The mark riding on
+   a group's settings button draws at **18.19px**, the size of the glyph beside it, because the strip's
+   `button.tool svg` rule outranks the 13px the mark gives itself. Every size it was ever meant to be
+   there was smaller. Whether that reads as a second icon rather than as a mark on one is a question
+   for a look, and "Where to pick this up" carries the measurement.
 
 **And the thing that is not a decision at all: a second map.** The reading is least proven on styles
 unlike the one that has been tried — hatched stonework, a printed floor grid, a scan, walls drawn as
