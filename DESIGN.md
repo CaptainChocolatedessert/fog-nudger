@@ -71,6 +71,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **sliver** | a cycle enclosing no lattice point — sub-pixel, an artefact of junction clusters. |
 | **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink* — a place the drawing failed to close a wall. What merges two rooms. **Not a doorway**, which is a real opening and the tool's known false positive. **In the graph** the same fault is a break in the walls: two pieces close in space and far apart *measured along the walls*. |
 | **mend** | a proposed wall that closes a gap in the graph, and the act of accepting one. Once accepted it is an ordinary drawn wall. **Not a bridge** — a mend usually closes a loop and splits a region in two, which is the opposite of what a bridge is. |
+| **dissolve** | removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
 
 ### The stages — and the surface words for them are **retired**
 
@@ -1213,7 +1214,7 @@ Every edit is planar-safe and every one goes through one crossing sweep.
 - **Only the segments an edit touched are checked** — a correctness argument before a speed one, since
   a graph that was planar before can only have gained a crossing involving something that moved.
   Sweeping everything is quadratic: order 10^8 pairs on a real map, at every drag-end.
-- **`removeEdge` runs no crossing sweep**, because deleting cannot break planarity.
+- **`removeEdge` and `removeEdges` run no crossing sweep**, because deleting cannot break planarity.
 - **`mergeNodes` is what snapping produces**, and it is a different operation from a move: every
   reference to the folded id is renamed, so the walls genuinely *share a point*.
 
@@ -1245,16 +1246,18 @@ here" means. Erasing and merging leave vertices no wall uses; the layer skips th
 that moves nothing would be a lie — and the snap query has to skip them too, or drawing catches on
 points nobody can see.
 
-### The three verbs, and Mend
+### The three verbs, Mend and Dissolve region
 
 A drag can only mean one thing, so the editor has a sticky tool picker: **Move**, **Draw**, **Erase**,
 Move by default. **Mend** joined them on 2026-09-16 — it proposes walls across breaks rather than
-taking a gesture, and §10 carries it. The alternative — hiding draw and erase behind modifier keys — was rejected for
+taking a gesture — and **Dissolve region** the same day, which removes the walls around a region with
+one click; §10 carries both. The alternative — hiding draw and erase behind modifier keys — was rejected for
 putting a destructive action on an unannounced click and leaving both verbs undiscoverable.
 
-- **Two of the three decide by looking.** Move takes a press only when a vertex is under it and Erase
-  only when a wall is, so a plain drag on empty map still pans. **Draw is the exception and takes
-  every press**, because a wall has to be able to start on empty map. Ctrl pans regardless.
+- **All but Draw decide by looking.** Move takes a press only when a vertex is under it, Erase only
+  when a wall is, Mend only inside a ring and Dissolve region only inside a region, so a plain drag
+  anywhere else still pans. **Draw is the exception and takes every press**, because a wall has to be
+  able to start on empty map. Ctrl pans regardless.
 - **Draw supports both forms.** Press-drag-release puts a wall down in one gesture; press-release then
   click puts one down in two, with the far end re-aimable in between. Neither is more correct — a drag
   is quicker and two clicks are more precise — so both are served.
@@ -1994,7 +1997,7 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 **Separate what a drag does from what controls you are reading.**
 
 - **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
-  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend). One click to switch, and switching a
+  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend, dissolve region). One click to switch, and switching a
   tool does not move the controls.
 - **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
   the group's own name in the strip. It slides out **beside** the strip rather than under it, is only
@@ -2298,7 +2301,7 @@ cannot recur.
 | **Structure** | blue | the wall graph, cased |
 | **Additive** | cyan | your added ink, gap proposals, a snap target |
 | **Subtractive** | amber | your suppression |
-| **Destructive** | red | **reserved** — erase target, doomed spurs, nothing else |
+| **Destructive** | red | **reserved** — erase target, the walls a dissolve would take, doomed spurs, nothing else |
 | **Rooms** | a generated cycle | not semantic |
 
 **Red earns its alarm value by being rare.** It did three jobs — default ink, emitted wall lines in
@@ -2385,7 +2388,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**897 tests across 63 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**915 tests across 64 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2407,6 +2410,18 @@ invisible. It costs almost nothing to keep.
   reading was that the step guards something vanishingly rare. A random sweep said otherwise: without
   it, 7,926 of 19,061 mends ended beside the vertex they should share (2026-09-16). An estimate of
   rarity is reasoning; a sweep over the input space is the check.
+
+  **Sometimes the answer is that two rules overlap.** Dissolve region had a check for walls with the
+  region on both sides and a separate rule by the sign of a loop, and disabling the check survived
+  every test — because once a loop of zero area goes, a wall walked out and back is such a loop, and
+  the check never decided anything (2026-09-16). It was deleted rather than tested, leaving one rule.
+- **A sweep has to be shown to reach the case, not only to pass.** Dissolve region's oracle sweep ran
+  over the derivation's own random linework and agreed on every region of 510 maps — while keeping
+  not a single wall, because skeletons of random ink runs almost never put one closed room inside
+  another, which is the whole of what the rule decides (2026-09-16). A sweep that never meets its case
+  is a green light about nothing. **Count what it exercised and assert the count**: the replacement
+  generator hangs small shapes off existing vertices and asserts that walls were kept, and kept from
+  an outer cycle, before it asserts anything else.
 - **A fixture that is easy to read can be too symmetric to fail.** The mend tool's first two landing
   fixtures — a horizontal wall, then a slanted one picked by hand — both attached with or without the
   step they were written for. A tangent test on a horizontal run cannot detect a search being
@@ -2739,15 +2754,29 @@ is the next section's list.
 
 ### Where to pick this up
 
-**The next thing is a room**, and there is a lot waiting for one. Three builds have landed since the
-last — graph units, the mend tool, and the delta's review from the day before — and none has been
-looked at on a real map. Everything below was checked at a desk as far as a desk can: `tsc`, the suite
-with mutation counts recorded beside the tests, a build, and the workspace loading clean.
+**The next thing is a room.** Graph units, the mend tool and the delta's review have been **used** in
+one since they landed and appear to work (user, 2026-09-16: *"I haven't tested them carefully, but
+I've used them."*) — so their lists below are what careful checking would look at, not a record of
+nothing known. **Dissolve region** landed after that and has not been in a room at all. Everything was
+checked at a desk as far as a desk can: `tsc`, the suite with mutation counts recorded beside the
+tests, a build, and the workspace loading clean.
 
-**First, before anything else will work: clear the stored graph.** Graphs saved before graph units
-(format version 3) are refused, not converted, so the test map's saved walls will not load. *Remove
-ours* in the panel clears them, and the map derives fresh. The prune and straightening sliders come
-back at their defaults, because both settings were renamed with their unit, and straightening reseeds.
+**A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
+they are refused, not converted. *Remove ours* in the panel clears one, and the map derives fresh.
+
+**Dissolve region** (§10, *Dissolve region*):
+
+- **The highlight** — the walls a click would take, in red, appearing as the pointer enters a region,
+  changing as it crosses into another, and gone outside every region, where a press pans.
+- **The rule on real walls**: a pillar or a room inside keeps its walls, a stub hanging in goes, and a
+  room touching the outer wall at one point keeps its walls.
+- **Accepting**: one click is one step of undo, *Undo dissolving a region*; on a map never edited the
+  first dissolve adopts the derivation, and the locks appear on the controls that rebuild the walls.
+- **A room on a building's edge** opens to the outside when dissolved, and the fills of every room it
+  merged with vanish. Expected, and worth seeing once, since it is the largest thing one click here
+  can do.
+- **Hover on a large graph.** The traversal is rebuilt once per edit rather than per pointer move, and
+  the region lookup is a bounding-box pass over the regions; neither is measured on a real map.
 
 **Graph units** (§5, *What is stored*) — on the non-square test map:
 
@@ -3053,32 +3082,73 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### One feature unimplemented, and one built from a conversation
+### Two tools built from conversations
 
-**1. The small-area-face tool.** Wanted eventually, and **not designed**: *it's not obvious how it
-should work.*
+**1. Dissolve region — built 2026-09-16, never run in a room.** Click inside a region and the walls
+around it go.
 
-Worth recognising what it is: **the smallest-room control returning in the form this record already
-said was correct.** That control was deleted rather than defaulted off, because it removed a *region*
-when what is usually wrong is a *wall*, and "removing a sliver by deleting the wall that made it is
-exact, local and visible, where removing it by area is none of those". **In the editor, deleting a
-small face IS deleting the walls that bound it.** Same control, right stage.
+This is **the small-area-face tool**, which stood here as wanted and undesigned, and it is the
+smallest-room control returning in the form this record already said was correct. That control was
+deleted because it removed a *region* when what is usually wrong is a *wall*; in the editor, deleting a
+region *is* deleting the walls that bound it. The questions it was carried with, and their answers:
 
-The questions to start from, offered as a starting point and not as an agenda:
+- **Which walls go?** All that enclose it — so it merges with every neighbour at once — **and the walls
+  of closed regions inside it stay** (user, 2026-09-16).
+- **A threshold, or a click?** A click. A threshold was the deleted control.
+- **What unit is the area in?** None: nothing measures an area.
+- **A stub?** **A wall with the region on both sides goes** — a stub hanging in, a freestanding wall, a
+  lollipop's stem — while a stub sticking *out* is its neighbour's on both sides and stays, left
+  freestanding (user, 2026-09-16).
 
-- **Which walls go?** A face is bounded by several. Deleting all of them merges it into *every*
-  neighbour at once; deleting one merges it into exactly one, and **which one is a choice nothing in
-  the geometry makes for you.**
-- **A threshold, or a click?** A sweep over everything under an area is what the deleted control was. A
-  click on the face you actually want gone is the exact, local, visible version — but it is one click
-  per sliver where a split may leave many.
-- **What unit is the area in?** Graph units squared means nothing to a GM; grid squares needs
-  a pixels-per-square figure the editor does not have.
-- **A face bounded partly by a stub is not a merge.** Deleting a bridge deletes the stub and merges
-  nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or a
-  different action has not been asked.
+**Named** *Dissolve region*, after the map-making operation that merges areas by deleting the
+boundaries between them, and drawn as Erase's glyph for a whole room: four walls dashed between corner
+vertices and struck through. The corner vertices are what keep a dashed square from reading as a
+selection marquee. *Clear* was ruled out by *Clear everything* in the panel, *Merge* by being this
+project's word for its worst failure, and *Erase room* by guessing intent — the region may be a table.
 
-**2. The mend tool, the graph's gap tool — built 2026-09-16, never run in a room.**
+**As built** — `trace/dissolve.ts` is the decision, pure and tested; the tool is a fifth wall tool, so
+a dissolve saves through the one path every wall edit does.
+
+- **One test decides every case: the sign of a loop.** The region's walk is split into simple loops
+  wherever it returns to a vertex it is already on, and the traversal keeps the region on the same side
+  of every half-edge, so a loop around the region is positive, a loop around something it surrounds is
+  negative, and a wall walked out and back encloses nothing. Positive and zero go; negative stays.
+- **The loops are forced by a room joined to the outer wall** — by a stem, or at a single shared vertex.
+  It is the same piece of linework, so the traversal walks it as part of the region's *outer* cycle,
+  and "on the outer cycle" does not mean "around the region".
+- **A stub drawn twice goes.** Two walls on the same pair of vertices are a legal state to pass through,
+  and the traversal files the sliver between them under the outside — so a rule asking whether a wall
+  has the region on both sides left both copies standing (measured). Their loop encloses nothing, and
+  zero goes.
+- **The region under a point** is the first whose walked outer cycle contains it and none of whose holes
+  do. A walked cycle can be tested as it stands: slits cancel, and a joined inner room reads as outside.
+  *The smaller wins* is not the tie-break, because a region's area is net of its holes.
+- **The traversal now hands out `sourceEdges`**, because a half-edge id is not a graph edge index once a
+  segment of no length has been left out of the walk.
+- **The highlight is Erase's**: the destructive colour at Erase's width, over the walls a click would take,
+  and drawn only against the graph it was found on. No handles, since the tool grabs no point. A crosshair
+  inside a region, the hand outside every region, where a press pans.
+- **The traversal is rebuilt once per graph**, not per pointer move — keyed on the graph object, which an
+  edit or a derive replaces.
+
+**Checked against an oracle that shares none of its reasoning**: a region is inside the clicked one
+exactly when it cannot reach the outside, crossing walls, without passing through it. It agrees on every
+region of 1,303 random graphs and of 280 derivations of random ink. **Fourteen mutations, fourteen
+caught.** Two survivors on the way were answered rather than explained: one was the doubled stub above,
+and one was a check the loop rule had made redundant, which was deleted (§8).
+
+**Three costs, stated.**
+
+- **A region with no area can never be clicked**, since no point is inside it. One with a little area can,
+  zoomed in far enough.
+- **Dissolving a room on a building's edge takes out part of the building's outer wall**, so it and every
+  room it merged with join the outside and become unrevealable. Loud — their fills vanish — and Undo
+  takes it back.
+- **Walls that ran up to the deleted boundary are left as dead ends**, and the pruning slider cannot take
+  them, because it rebuilds the walls and this is a hand edit. Erase takes them a segment at a time.
+
+**2. The mend tool, the graph's gap tool — built 2026-09-16, used in a room and not yet checked
+carefully.**
 
 The idea: pair free endpoints by graph distance, which is exact where a pixel closing is a guess, and
 turns the bounded flood into a shortest path.
@@ -3330,7 +3400,8 @@ closed outright.
 | `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
 | `trace/wallGraphDiff.ts` | what the GM changed: two graphs compared by **segment endpoints**, never by node id, so compaction and renumbering cannot affect the answer. A move falls out as a removal plus an addition |
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
-| `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one — and the two queries the tools aim with |
+| `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several — and the two queries the tools aim with |
+| `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |

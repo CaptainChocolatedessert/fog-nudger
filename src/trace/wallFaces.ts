@@ -146,6 +146,16 @@ export interface WallFaces {
   readonly vertices: number;
   /** Segments the traversal ran on — the graph's, less any of no length. */
   readonly edges: number;
+  /**
+   * The graph's index for each segment the traversal ran on.
+   *
+   * **A half-edge id is not a graph edge index**, and this is the translation. The traversal numbers
+   * only the segments it walked, so once a segment of no length has been left out every later id is
+   * shifted — and a caller that took `half >> 1` as an index into `graph.edges` would act on the wall
+   * next door. Half-edge `h` belongs to `graph.edges[sourceEdges[h >> 1]]`, running from its `a` to
+   * its `b` when `h` is even and back when odd.
+   */
+  readonly sourceEdges: readonly number[];
   /** Segments whose ends are at the same point, so they have no heading to sort by. */
   readonly zeroLength: number;
   /** Whether V − E + enclosing = components. */
@@ -391,6 +401,7 @@ export function buildWallFaces(graph: WallGraph): WallFaces {
     components: roots.size,
     vertices,
     edges: edges.length,
+    sourceEdges: sourceOf,
     zeroLength,
     eulerHolds: vertices - edges.length + enclosing.length === roots.size,
   };
@@ -495,12 +506,20 @@ function boundingBox(points: readonly Vector2[]): {
 /**
  * Whether a point lies inside a closed polygon. Plain crossing number.
  *
- * No on-boundary handling, and it needs none for the one thing it is asked: the point belongs to one
- * piece of linework and the polygon to another, and two pieces of linework share no vertex. A vertex
- * of one lying exactly on an *edge* of another would be on the boundary — and cannot reach here,
- * because the planarity sweep splits that meeting into a shared node, which makes them one piece.
+ * No on-boundary handling, and neither caller needs any. **Containment grouping** asks it about a
+ * point of one piece of linework against a polygon of another, and two pieces share no vertex. A
+ * vertex of one lying exactly on an *edge* of another would be on the boundary — and cannot reach
+ * here, because the planarity sweep splits that meeting into a shared node, which makes them one
+ * piece. **Dissolve region** asks it about a click, which lands exactly on a wall only by accident,
+ * and either answer there is one of the two regions the wall divides.
+ *
+ * **A walked cycle can be handed in as it stands**, slits and all. A slit is walked out and back, so a
+ * ray crosses its two sides together or not at all and they cancel; and a room hanging off the
+ * boundary is walked as a loop of its own inside the outer one, so a ray from a point inside it
+ * crosses each loop an odd number of times, the total is even, and the point reads as outside. That is what lets a click inside an inner room or a lollipop's head choose that room
+ * rather than the one around it.
  */
-function containsPoint(polygon: readonly Vector2[], point: Vector2): boolean {
+export function containsPoint(polygon: readonly Vector2[], point: Vector2): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const a = polygon[i]!;

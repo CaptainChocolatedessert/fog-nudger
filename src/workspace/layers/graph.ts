@@ -52,6 +52,7 @@ const WALL_TOOLS = new Set(["move", "draw", "erase"]);
 import { currentSettings } from "../settingsState";
 import type { DrawPoint } from "../dragGesture";
 import {
+  dissolvingWalls,
   draggedNode,
   hoveredNode,
   hoveredWall,
@@ -264,6 +265,29 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
       context.lineWidth = ERASE_WIDTH_PX;
       context.stroke();
     }
+  }
+
+  /*
+    The walls a click would remove by dissolving the region under the pointer, in Erase's colour and
+    at Erase's width, because it is the same act on more walls.
+
+    Only against the graph they were found on: the indices name walls in that graph and no other, and
+    a derive landing between the hover and this frame would otherwise mark a scatter of unrelated ones.
+  */
+  const dissolving = dissolvingWalls();
+  if (dissolving !== null && dissolving.graph === graph) {
+    context.beginPath();
+    for (const index of dissolving.edges) {
+      const edge = graph.edges[index];
+      const from = edge ? at(edge.a) : undefined;
+      const to = edge ? at(edge.b) : undefined;
+      if (!from || !to) continue;
+      context.moveTo(x(from.x), y(from.y));
+      context.lineTo(x(to.x), y(to.y));
+    }
+    context.strokeStyle = eraseColour();
+    context.lineWidth = ERASE_WIDTH_PX;
+    context.stroke();
   }
 
   /*

@@ -32,8 +32,8 @@
  * arrows around a *vertex* rather than a second hand, so the two cannot be confused.
  *
  * The rest draw the thing they do to the linework: a block covering a stroke, a nib laying one down,
- * a stroke with a gap ringed in it, two ends joined, one struck out, and a broken wall with the piece
- * that would mend it dashed in.
+ * a stroke with a gap ringed in it, two ends joined, one struck out, a broken wall with the piece
+ * that would mend it dashed in, and a whole room's walls dashed and struck out.
  */
 
 const ICONS: Readonly<Record<string, string>> = {
@@ -50,8 +50,6 @@ const ICONS: Readonly<Record<string, string>> = {
   move: '<circle cx="12" cy="12" r="2.4" /><path d="M12 3.4v3.2M12 17.4v3.2M3.4 12h3.2M17.4 12h3.2" /><path d="M10.6 4.8 12 3.4l1.4 1.4M10.6 19.2 12 20.6l1.4-1.4M4.8 10.6 3.4 12l1.4 1.4M19.2 10.6 20.6 12l-1.4 1.4" />',
   // Two ends joined, which is what drawing a wall is.
   draw: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" />',
-  // A curved arrow turning back on itself. The pair is mirrored rather than rotated, so undo and
-  // redo read as opposites at a glance rather than as the same shape at two angles.
   /*
     A group's own settings, and the one glyph here that opens something rather than doing
     something.
@@ -67,6 +65,8 @@ const ICONS: Readonly<Record<string, string>> = {
   // What is drawn, and how it looks. An eye: the one group that changes nothing about the
   // document and only what you can see of it.
   view: '<path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12z" /><circle cx="12" cy="12" r="3" />',
+  // A curved arrow turning back on itself. The pair is mirrored rather than rotated, so undo and
+  // redo read as opposites at a glance rather than as the same shape at two angles.
   undo: '<path d="M4.5 9.5h9a5.5 5.5 0 0 1 0 11H8" /><path d="M8.2 5.2 3.9 9.5l4.3 4.3" />',
   redo: '<path d="M19.5 9.5h-9a5.5 5.5 0 0 0 0 11H16" /><path d="M15.8 5.2l4.3 4.3-4.3 4.3" />',
   /*
@@ -77,6 +77,13 @@ const ICONS: Readonly<Record<string, string>> = {
   mend: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17l2.6-2.6" /><path d="M14.4 9.6 17 7" /><path d="M10.8 13.2l2.4-2.4" stroke-dasharray="1.2 1.6" />',
   // The same wall, struck out.
   erase: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" stroke-dasharray="2.4 2.2" /><path d="M8.4 8.4l7.2 7.2M15.6 8.4l-7.2 7.2" />',
+  /*
+    Erase's sibling for a whole room (user, 2026-09-16): four walls dashed between their corners and
+    struck through the middle. The corner vertices are what keep a dashed square from reading as a
+    selection marquee, which is the risk every candidate for this glyph carried.
+  */
+  dissolve:
+    '<circle cx="5" cy="5" r="1.8" /><circle cx="19" cy="5" r="1.8" /><circle cx="19" cy="19" r="1.8" /><circle cx="5" cy="19" r="1.8" /><path d="M7 5h10M19 7v10M17 19H7M5 17V7" stroke-dasharray="2.2 2" /><path d="M9.6 9.6l4.8 4.8M14.4 9.6l-4.8 4.8" />',
 };
 
 /**

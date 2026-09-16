@@ -312,6 +312,26 @@ export function removeEdge(graph: WallGraph, index: number): EditResult {
 }
 
 /**
+ * Delete several walls at once — what dissolving a region does.
+ *
+ * One filter rather than `removeEdge` in a loop, and not only for speed: every removal shifts the
+ * indices after it, so a loop would have to delete from the highest index down or delete the wrong
+ * walls. `removeEdge`'s reasons hold unchanged — no sweep, vertices left behind for the compaction
+ * after the gesture, and an index out of range simply matches nothing.
+ */
+export function removeEdges(graph: WallGraph, indices: Iterable<number>): EditResult {
+  const doomed = new Set(indices);
+  return {
+    graph: {
+      nodes: graph.nodes,
+      edges: doomed.size === 0 ? graph.edges : graph.edges.filter((_, at) => !doomed.has(at)),
+    },
+    splits: 0,
+    overlaps: 0,
+  };
+}
+
+/**
  * The nearest wall within `radius` of a point, or `null` — the erase tool's query.
  *
  * Distance to the *segment*, not to its ends: a GM aims at the middle of a wall, which is the part

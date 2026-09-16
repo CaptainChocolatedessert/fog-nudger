@@ -1,5 +1,5 @@
 /**
- * The wall tools: moving a point, drawing a wall, erasing one.
+ * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, dissolving a region.
  *
  * **The first things in this project that change the GM's own work rather than a setting.** Every
  * control before them turns a number and re-derives; these change the graph, and it stays changed
@@ -16,12 +16,12 @@
  * undiscoverable. This surface has had that weakness since the point probe went in: nothing on it
  * says the map is interactive at all.
  *
- * ## Two of the three still decide by looking
+ * ## All but Draw decide by looking
  *
- * Move takes a press only when a vertex is under it, and erase only when a wall is. So a drag on
- * empty map still pans in both, and Ctrl still pans anywhere. **Draw is the exception and takes
- * every press**, because a wall has to be able to start on empty map — that is the case the shell's
- * brush branch already anticipated.
+ * Move takes a press only when a vertex is under it, Erase only when a wall is, Mend only inside a
+ * ring and Dissolve only inside a region. So a drag anywhere else still pans, and Ctrl still pans
+ * anywhere. **Draw is the exception and takes every press**, because a wall has to be able to start
+ * on empty map — that is the case the shell's brush branch already anticipated.
  *
  * ## Live walls, faces on release
  *
@@ -42,8 +42,10 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { compactNodes, type WallGraph } from "../trace/wallGraph";
-import { nearestEdge, removeEdge, type EditResult } from "../trace/planarOps";
+import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { applyMends, type Mend } from "../trace/mends";
+import { dissolutionAt, type Dissolution } from "../trace/dissolve";
+import { buildWallFaces, type WallFaces } from "../trace/wallFaces";
 import {
   applyDraw,
   applyDrag,
@@ -76,7 +78,7 @@ import { saveEditedWalls } from "./stage";
 */
 
 /** Which verb a press means. */
-export type WallTool = "move" | "draw" | "erase" | "mend";
+export type WallTool = "move" | "draw" | "erase" | "mend" | "dissolve";
 
 /**
  * How close a press has to be to a vertex to grab it, to a wall to erase it, and to a vertex to
@@ -158,6 +160,30 @@ let busy = false;
 let pressedMend: { readonly mend: Mend; readonly graph: WallGraph } | null = null;
 /** Whether the pointer is inside a mend's ring, so the cursor changes only when that does. */
 let hoveredMend = false;
+/**
+ * Dissolving: the region under the pointer, the walls a click would remove, and the graph they were
+ * found on. Removed on release, as an erase is, so the highlight is exactly what goes.
+ */
+let hoveredRegion: HoveredRegion | null = null;
+
+interface HoveredRegion {
+  readonly dissolution: Dissolution;
+  readonly graph: WallGraph;
+}
+
+/**
+ * The regions of the graph a dissolve aims at, traversed once per graph rather than per pointer move.
+ *
+ * Keyed on the graph object, which an edit or a derive replaces rather than mutates, so a traversal
+ * can never be asked about a graph it was not built from — its half-edge ids would name other walls.
+ */
+let regionsOf: { readonly graph: WallGraph; readonly faces: WallFaces } | null = null;
+
+function regionUnder(graph: WallGraph, point: MapPoint): HoveredRegion | null {
+  if (regionsOf?.graph !== graph) regionsOf = { graph, faces: buildWallFaces(graph) };
+  const dissolution = dissolutionAt(graph, regionsOf.faces, { x: point.x, y: point.y });
+  return dissolution ? { dissolution, graph } : null;
+}
 
 export function currentTool(): WallTool {
   return tool;
@@ -170,6 +196,7 @@ export function setTool(next: WallTool): void {
   hovered = null;
   hoveredEdge = null;
   hoveredMend = false;
+  hoveredRegion = null;
   setGrabTarget(false);
   /*
     The search runs from the moment the tool is picked up, as the ink tool's does: it has one thing to
@@ -203,6 +230,14 @@ export function hoveredNode(): number | null {
 /** The wall a click would erase, for the layer to mark before it goes. */
 export function hoveredWall(): number | null {
   return hoveredEdge;
+}
+
+/**
+ * The walls a click would remove by dissolving the region under the pointer, and the graph they are
+ * indices into — so the layer can refuse to mark them against any other.
+ */
+export function dissolvingWalls(): { readonly graph: WallGraph; readonly edges: readonly number[] } | null {
+  return hoveredRegion && { graph: hoveredRegion.graph, edges: hoveredRegion.dissolution.edges };
 }
 
 /** The wall being drawn: the fixed end and the end following the cursor, or `null`. */
@@ -257,6 +292,15 @@ function start(point: MapPoint): boolean {
     return true;
   }
 
+  // Outside every region there is nothing to dissolve, so the press declines and pans.
+  if (tool === "dissolve") {
+    const found = regionUnder(graph, point);
+    if (!found) return false;
+    hoveredRegion = found;
+    invalidate();
+    return true;
+  }
+
   /*
     Mend takes a press only inside a ring, and the accept happens on release, as an erase does — so a
     press that turns into a drag is still a click on the ring rather than the start of something.
@@ -305,6 +349,12 @@ function move(point: MapPoint): void {
       { x: point.x, y: point.y },
       ERASE_RADIUS_PX * point.perPixel,
     );
+    invalidate();
+    return;
+  }
+
+  if (tool === "dissolve") {
+    hoveredRegion = regionUnder(graph, point);
     invalidate();
     return;
   }
@@ -374,6 +424,23 @@ function end(): void {
     if (target === null) return;
     commit(removeEdge(graph, target), "erased a wall", "erasing a wall", graph);
     hoveredEdge = null;
+    return;
+  }
+
+  if (tool === "dissolve") {
+    const target = hoveredRegion;
+    clearGesture();
+    invalidate();
+    // Found on walls a derive has since replaced: its indices name walls that are no longer drawn.
+    if (!target || target.graph !== graph) return;
+    const count = target.dissolution.edges.length;
+    commit(
+      removeEdges(graph, target.dissolution.edges),
+      `dissolved a region, removing ${count} wall segment${count === 1 ? "" : "s"}`,
+      "dissolving a region",
+      graph,
+    );
+    hoveredRegion = null;
     return;
   }
 
@@ -456,6 +523,7 @@ function commit(
       // What is under the pointer, worked out against the graph as it is now.
       hovered = null;
       hoveredEdge = null;
+      hoveredRegion = null;
       if (lastPointer) hover({ ...lastPointer, perPixel: lastPerPixel, modifier: false });
       invalidate();
     });
@@ -464,10 +532,11 @@ function commit(
 function hover(point: MapPoint | null): void {
   const graph = editableGraph();
   if (!point || !graph) {
-    if (hovered === null && hoveredEdge === null && !hoveredMend) return;
+    if (hovered === null && hoveredEdge === null && !hoveredMend && hoveredRegion === null) return;
     hovered = null;
     hoveredEdge = null;
     hoveredMend = false;
+    hoveredRegion = null;
     setGrabTarget(false);
     invalidate();
     return;
@@ -479,6 +548,22 @@ function hover(point: MapPoint | null): void {
     const found = nearestEdge(graph, { x: point.x, y: point.y }, ERASE_RADIUS_PX * point.perPixel);
     if (found === hoveredEdge) return;
     hoveredEdge = found;
+    setGrabTarget(found !== null);
+    invalidate();
+    return;
+  }
+
+  /*
+    A crosshair inside a region, where a press will dissolve it; the hand outside every region, where
+    it pans. Repainted only when the region under the pointer changes — the highlight is the same
+    picture everywhere inside one.
+  */
+  if (tool === "dissolve") {
+    const found = regionUnder(graph, point);
+    const unchanged =
+      found?.graph === hoveredRegion?.graph && found?.dissolution.face === hoveredRegion?.dissolution.face;
+    if (unchanged) return;
+    hoveredRegion = found;
     setGrabTarget(found !== null);
     invalidate();
     return;

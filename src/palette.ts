@@ -68,8 +68,8 @@ export const PALETTE_DEFAULTS = {
    *
    * It earns its alarm value by being rare. It was doing three jobs — the default ink, the emitted
    * wall lines in the preview, and destructive previews — and the first two moved to `ink` and
-   * `structure`. The erase highlight and the doomed spurs share it because they answer the same
-   * question: *what does the thing I am about to do remove?*
+   * `structure`. The erase highlight, the walls a dissolve would take and the doomed spurs share it
+   * because they answer the same question: *what does the thing I am about to do remove?*
    */
   destructive: "#dc2626",
 

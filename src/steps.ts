@@ -252,6 +252,19 @@ export const TOOLS: readonly ToolChoice[] = [
     because it has controls of its own and the blurb is the line above them.
   */
   { id: "mend", label: "Mend", band: "walls", drag: "edit", hint: "" },
+  /*
+    Delete the walls around a region with one click (user, 2026-09-16). `edit`, like the others: it
+    takes a press inside a region and declines one outside every region, which pans. No controls, so
+    the hint is the only sentence on screen about it — and the second half is the part a GM could not
+    guess, since "around" could as easily mean everything the region touches.
+  */
+  {
+    id: "dissolve",
+    label: "Dissolve region",
+    band: "walls",
+    drag: "edit",
+    hint: "Click inside a region to remove the walls around it. Regions inside it keep theirs.",
+  },
 ];
 
 
