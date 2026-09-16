@@ -19,11 +19,13 @@
  * want the same 24×24 house style and the same guarantee about arriving, so they are drawn here
  * rather than in a second place with a second set of conventions to keep in step.
  *
- * ## The house style, matched exactly
+ * ## The house style
  *
- * 24×24, `fill="none"`, `stroke="currentColor"`, 1.6 wide, round caps and joins — which is what
- * `nudge-action.svg` already uses. `currentColor` is the part that matters: a selected tool inverts
- * to dark-on-accent and the glyph follows without a second rule anywhere.
+ * 24×24, `fill="none"`, `stroke="currentColor"`, round caps and joins — which is what
+ * `nudge-action.svg` already uses — but **2 wide rather than its 1.6**, for the reason on `toolIcon`.
+ * `currentColor` is the part that matters: a selected tool inverts to dark-on-accent and the glyph
+ * follows without a second rule anywhere. **One line is heavier on purpose**: the ink in the Gaps
+ * glyph, at 4.
  *
  * ## What each one says
  *
@@ -32,8 +34,9 @@
  * arrows around a *vertex* rather than a second hand, so the two cannot be confused.
  *
  * The rest draw the thing they do to the linework: a block covering a stroke, a nib laying one down,
- * a stroke with a gap ringed in it, two ends joined, one struck out, two loose wall ends ringed where
- * a mend would join them, and a whole room's walls dashed and struck out.
+ * two heavy strokes of ink ringed where a gap parts them, two ends joined, one struck out, two loose
+ * wall ends ringed where a mend would join them, and a whole room's walls dashed and struck out.
+ * **The two gap tools mirror each other** — ink running into the ring, walls ending in it.
  */
 
 const ICONS: Readonly<Record<string, string>> = {
@@ -44,8 +47,17 @@ const ICONS: Readonly<Record<string, string>> = {
     '<path d="M3 18h18" stroke-dasharray="2 2.6" /><rect x="5" y="6" width="14" height="7" rx="1.6" /><path d="M8.5 9.5h7" />',
   // A nib putting a line down.
   ink: '<path d="M4 20l1.2-3.6L15.6 6a2 2 0 0 1 2.8 2.8L8 19.2 4.4 20.4z" /><path d="M14.2 7.4l2.4 2.4" />',
-  // A stroke with a gap in it, ringed the way the search rings one on the map.
-  gaps: '<path d="M3 12h5" /><path d="M16 12h5" /><circle cx="12" cy="12" r="4.2" stroke-dasharray="2.2 2" />',
+  /*
+    Two heavy strokes of ink stopping short of each other inside a dashed ring, the way the search
+    rings a gap on the map.
+
+    **Drawn as Mend's mirror** (user, 2026-09-16): the same ring at the same size, with ink running in
+    where Mend has walls ending in vertex dots, so the two gap tools read as one act on two documents.
+    **The strokes are 4 wide, twice every other glyph's line**, and that is the cost chosen: it is what
+    says *ink* rather than *wall* while staying outline-only — solid blobs were the other way to say
+    it, and would have been the first filled shapes in the strip.
+  */
+  gaps: '<path d="M2.5 12H8" stroke-width="4" /><path d="M16 12h5.5" stroke-width="4" /><circle cx="12" cy="12" r="7" stroke-dasharray="2.2 2" />',
   // A vertex with somewhere to go. Arrows around a point, so it cannot read as a second hand.
   move: '<circle cx="12" cy="12" r="2.4" /><path d="M12 3.4v3.2M12 17.4v3.2M3.4 12h3.2M17.4 12h3.2" /><path d="M10.6 4.8 12 3.4l1.4 1.4M10.6 19.2 12 20.6l1.4-1.4M4.8 10.6 3.4 12l1.4 1.4M19.2 10.6 20.6 12l-1.4 1.4" />',
   // Two ends joined, which is what drawing a wall is.
@@ -75,8 +87,8 @@ const ICONS: Readonly<Record<string, string>> = {
     **Not Draw's wall with a break in it**, which it was until 2026-09-16: that kept Draw's diagonal and
     its end dots, so at strip size the difference was a few pixels in the middle and a room found the
     two hard to tell apart (user). Level rather than diagonal, and ringed, so its outline is unlike
-    every other wall tool's. **Deliberately kin to Gaps** a band above — the same act on the ink rather
-    than on the walls — and the vertex dots are what say walls.
+    every other wall tool's. **Deliberately mirrored by Gaps** a band above — the same act on the ink
+    rather than on the walls — and the vertex dots are what say walls.
   */
   mend: '<path d="M2.5 12H7" /><path d="M17 12h4.5" /><circle cx="8.6" cy="12" r="1.6" /><circle cx="15.4" cy="12" r="1.6" /><circle cx="12" cy="12" r="7" stroke-dasharray="2.2 2" />',
   // The same wall, struck out.
