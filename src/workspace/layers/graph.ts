@@ -1,16 +1,17 @@
 /**
  * The graph layer: the walls, and — where they can be grabbed — a handle at every point in them.
  *
- * **Drawn in both modes, from two sources, and the difference is whether it can be touched.** In the
- * editor it is the stored document: nothing upstream of it applies, and every point carries a handle
- * because every point can be moved. In the ink mode it is what the current reading would save,
- * fitted exactly as the save would fit it, and it carries **no handles at all** — a handle that moves
- * nothing would be a lie about what is there, which is the same rule that hides one on an orphaned
- * vertex.
+ * **Always drawn, from one of two sources.** When the stored graph carries hand edits — or nothing has
+ * been derived yet — it is the stored document; otherwise it is the current derivation, fitted
+ * exactly as a first edit would adopt it. `regions.ts` decides which, in the one predicate the rooms
+ * layer reads too, so the walls and the rooms can never be drawn from different graphs.
  *
- * One layer rather than two, because they are one picture: the last thing stage one shows and the
- * first thing the editor shows have to be the same, or the hand-off between the modes is a surprise
- * rather than a continuation.
+ * **Handles only for the tools that use them** — Move, Draw and Erase. With anything else in hand a
+ * dot at every vertex is decoration that hides the walls, and a handle that moves nothing would be a
+ * lie about what is there, which is the same rule that hides one on an orphaned vertex.
+ *
+ * (This described two modes, the ink mode's graph with no handles and the editor's with all of them.
+ * There has been one surface since 2026-09-14, and the tool in hand decides the handles.)
  *
  * ## Graph units, so there is no raster to agree with
  *
@@ -136,7 +137,7 @@ function degrees(graph: WallGraph): number[] {
 }
 
 /**
- * The graph on screen: the document in the editor, what a save would store in the ink mode.
+ * The graph on screen: the stored document or the current derivation, by `regions.ts`'s one predicate.
  *
  * Asked once per frame rather than held, so nothing has to be told when a derive lands or a gesture
  * writes. Both sources are already module state that changes wholesale.
@@ -304,14 +305,6 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     context.stroke();
   }
 
-  /*
-    Handles only where they can be grabbed, which is the editor.
-
-    In the ink mode this same graph is a *preview*: it is what saving would store, and the next
-    derive replaces it wholesale. Dots on it would offer a gesture that does not exist there — the
-    step pans — and the record's rule is that a handle which moves nothing is a lie about what is
-    present. The walls themselves are the whole of what that step has to show.
-  */
   /*
     Handles follow the **tool**, not a mode.
 

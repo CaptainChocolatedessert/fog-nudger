@@ -179,6 +179,19 @@ describe("the step declaration", () => {
     }
   });
 
+  it("keys every tool layer by a tool that exists, since the strip looks it up by tool id", () => {
+    /*
+      The regression for 2026-09-16. The mend tool's layer went in keyed `mends` — the layer's name —
+      where the strip looks the table up by the tool in hand, whose id is `mend`. The test above
+      passed, because it reads only the values, and picking up the tool would have drawn no rings.
+      One mutation, the key restored to the layer's name: caught.
+    */
+    const toolIds = new Set(TOOLS.map((tool) => tool.id));
+    for (const key of Object.keys(TOOL_LAYERS)) {
+      expect(toolIds.has(key), key).toBe(true);
+    }
+  });
+
   it("keeps the question layers out of the other two sources", () => {
     /*
       A layer that is always on cannot also be a question's: the question would be answered

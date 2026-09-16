@@ -162,7 +162,8 @@ function verbRow(kind: PaintKind): HTMLElement {
 
   **The cost, stated:** "Cover" hinted that suppression is *additive* — you lay something over the
   map rather than deleting from it, and nothing of the map is lost. That hint is gone from the verb.
-  What carries it now is the tool's own name, its blurb, and the amber the strokes are drawn in.
+  What carries it now is the tool's own name, its blurb, and the subtractive colour the strokes are
+  drawn in.
 */
 const PAINT_VERB = "Draw";
 const ERASE_VERB = "Erase";

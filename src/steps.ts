@@ -15,21 +15,23 @@
  *
  * The step used to be a free-form `section` string on each control, declared "presentation only,
  * nothing may switch on it" precisely because a control moved between headings for tidiness must
- * not change what it recomputes. **That rule is now replaced rather than kept**, because a step
- * carries real behaviour: it decides which layers the canvas shows and what a plain drag means. The
- * protection that replaces it is that the four declarations stay separate, with a test pinning that
- * none is read from another.
+ * not change what it recomputes. That rule was replaced when a step carried real behaviour — which
+ * layers the canvas showed and what a plain drag meant — and the protection that replaced it stands:
+ * the four declarations stay separate, with a test pinning that none is read from another.
  *
- * They are *not* required to disagree everywhere. Every *sliding* parameter in the Ink step happens
+ * They are *not* required to disagree everywhere. Every *sliding* parameter in the Ink group happens
  * to be a pipeline parameter today — the tools' own widths and gap settings are `tool`, and sit in
- * the pinned head — and that is a fact about today's parameters rather than a rule. Pinning it would
- * fail the day a step legitimately holds one of each, which is exactly what the independence is for.
+ * each tool's own drawer — and that is a fact about today's parameters rather than a rule. Pinning it
+ * would fail the day a group legitimately holds one of each, which is exactly what the independence
+ * is for.
  *
  * ## What a step is
  *
- * A mode, not a group of sliders. A step may have no parameters at all — picking the map, placing a
- * door — and it still owns what is painted and what a drag does. That is why the list below is not
- * derived from the parameters.
+ * **A group of settings and the tools that act on the same thing — no longer a mode** (2026-09-14).
+ * It was a mode, owning what was painted and what a drag meant; both went to the tool in hand, and the
+ * picture is now the same whichever group is open. What a step still decides is where a control is
+ * drawn, which tools sit under its name in the strip, and what its Defaults button resets. A step may
+ * have no parameters at all, which is why the list below is not derived from them.
  *
  * Pure: no DOM, no SDK.
  */
@@ -65,14 +67,13 @@ export type StepId = "map" | "ink" | "walls" | "view";
 /**
  * What the canvas can draw over the map.
  *
- * A group declares which of these it shows, and they legitimately differ: Ink paints the binary
- * mask, Walls paints coloured faces and the centrelines that bound them over it, and Map paints
- * nothing, because its question is which image rather than what was read from it. Nothing is drawn
- * "because it exists" — a layer is on screen because the drawer open over it is about it.
+ * Three ways a layer is asked for, declared below and each total: **always**, from the moment there is
+ * a map; **with a tool**, while the tool that owns it is in hand; and **with a question**, while one
+ * is on screen. No group decides what is drawn any more — that stopped on 2026-09-14, when a group
+ * stopped being a mode — and `steps.test.ts` asserts the three sources cover every layer exactly once.
  *
- * `regions` is the one drawn in **two** steps, which is what dissolving the Regions step means: the
- * partition is a consequence of a graph rather than a subject of its own, so it is drawn wherever a
- * graph is.
+ * (This said a group declared which layers it showed, and that `regions` was drawn in two steps. Both
+ * described the surface before the drawer.)
  */
 /*
   `skeleton` was here, and went when the Walls step started drawing the fitted graph instead
@@ -91,8 +92,7 @@ export const LAYERS = ["ink", "paint", "gaps", "mends", "regions", "graph", "del
  *
  * **What made the old arrangement necessary was that a group was a mode.** It is not; the tool
  * is. So the picture is constant and the only marks that come and go belong to the thing in your
- * hand — which today is exactly one layer, the gap finder's rings, and they mean nothing when it
- * is not running.
+ * hand — the tool layers below.
  */
 export const ALWAYS_LAYERS = ["ink", "regions", "graph"] as const;
 
@@ -112,8 +112,10 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
   suppress: "paint",
   ink: "paint",
   gaps: "gaps",
-  // The proposed mends and their rings, which mean nothing while the mend tool is not in hand.
-  mends: "mends",
+  // The proposed mends and their rings, which mean nothing while the mend tool is not in hand. Keyed
+  // by the tool's id, `mend`, and not by the layer's name — keying it `mends` drew nothing, and
+  // `steps.test.ts` now checks every key is a tool.
+  mend: "mends",
 };
 
 /**
@@ -135,21 +137,16 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
 export const QUESTION_LAYERS = ["delta"] as const;
 
 /*
-  One rule about `paint`, because it is the layer that does not follow the convention.
+  A rule about `paint` and the ink it sits on.
 
-  Everything else here is drawn only in the step that is about it. The GM's two hand-made layers are
-  drawn **wherever the ink is drawn** — Ink and Walls — and the reason is that a picture of the ink
-  that leaves out what the GM has done to it is a picture of something that no longer exists
-  downstream. The concrete bite is the Walls step: its skeleton is thinned from the whole composite,
-  so without both colours the centreline and the ink under it visibly disagree.
+  The two hand-made layers do not compete for the ink's own channel. The mask is drawn in the ink's
+  colour and they in the subtractive and additive colours, which rests on the rule that what the map
+  said and what we did to it must never look alike (`DESIGN.md` §8). They are a tool layer because
+  the ink layer already draws the composite, so the edits are in the picture as ink; drawn apart is
+  what a brush needs, and only while one is in hand.
 
-  `gaps` is drawn in exactly one step, Ink, which is where its tool runs. It was in Walls too while
-  the search ran on every recompose and there was always something to show; on demand, that step
-  would carry an empty layer in the ordinary case.
-
-  They do not compete for the ink's own channel. The mask is drawn in the GM's chosen colour and
-  these two in fixed colours of their own, which is the same arrangement the gap fill has and rests
-  on the same rule: what the map said and what we did to it must never look alike (`DESIGN.md` §8).
+  (This used to say `paint` was drawn wherever the ink was and `gaps` in the Ink step alone — the
+  per-step layers the drawer replaced.)
 */
 
 export type LayerId = (typeof LAYERS)[number];
@@ -233,9 +230,14 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Draw",
     band: "walls",
     drag: "edit",
+    /*
+      "This colour", printed in the colour, rather than the colour's name. The palette is retunable,
+      and a hue named in prose is a copy of it nothing can keep honest — the review legend's rule, and
+      the same in every blurb below.
+    */
     hint:
-      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>cyan</b> where it " +
-      "would attach; <b>Shift</b> leaves it loose. <b>Ctrl</b> pans, Escape abandons.",
+      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>this colour</b> " +
+      "where it would attach; <b>Shift</b> leaves it loose. <b>Ctrl</b> pans, Escape abandons.",
   },
   {
     id: "erase",
@@ -415,7 +417,7 @@ export const STEPS: readonly Step[] = [
         // no longer calls by that name.
         blurb:
           "Drag over marks the trace should <b>ignore</b> &mdash; hatching, a printed floor grid, " +
-          "a compass rose. Your strokes show in <b class='suppress-key'>amber</b>, and none of the " +
+          "a compass rose. Your strokes show in <b class='suppress-key'>this colour</b>, and none of the " +
           "map is lost. <b>Shift</b> erases, <b>Ctrl</b> pans.",
         parameters: ["suppressBrushPx"],
       },
@@ -424,7 +426,7 @@ export const STEPS: readonly Step[] = [
         title: "Add ink",
         blurb:
           "Drag to draw linework the map lacks. Goes in <b>last of everything</b>, so no filter " +
-          "above can take it away again. Shows in <b class='addink-key'>cyan</b>. <b>Shift</b> " +
+          "above can take it away again. Shows in <b class='addink-key'>this colour</b>. <b>Shift</b> " +
           "erases, <b>Ctrl</b> pans.",
         parameters: ["inkBrushPx"],
       },
@@ -441,7 +443,7 @@ export const STEPS: readonly Step[] = [
         */
         blurb:
           "Searches for places a wall stops short and rings each in " +
-          "<b class='gap-key'>cyan</b>. <b>Click inside a ring</b> to close that gap, or use the " +
+          "<b class='gap-key'>this colour</b>. <b>Click inside a ring</b> to close that gap, or use the " +
           "button below for all of them. A <b>dashed</b> ring is not offered. Dragging pans.",
         parameters: ["gapFillPx", "gapTravelPx"],
       },
@@ -456,9 +458,9 @@ export const STEPS: readonly Step[] = [
 
       **It draws the graph after simplification, not the pixel skeleton** (user, 2026-09-05): *"the
       last step of the ink mode displays the graph, post simplification. Saving out of ink mode
-      pushes that graph."* That makes the last thing stage one shows and the first thing the editor
-      shows one picture, which is what a hand-off between two modes has to be — and it is the honest
-      one, because the fitted polyline is what gets stored and the one-pixel skeleton never was.
+      pushes that graph."* The reason given then — one picture across a hand-off between two modes —
+      went with the modes. The one that stands is that it is the honest picture: the fitted polyline
+      is what gets stored and the one-pixel skeleton never was.
 
       **The skeleton layer went with that change**, rather than being drawn beside it. It showed a
       coarser version of the same centreline, and drawing both would put two answers to one question
@@ -524,11 +526,10 @@ export const STEPS: readonly Step[] = [
     id: "view",
     title: "View",
     /*
-      The only thing in both modes, which is what a persistent group is.
-
-      Its controls describe the partition, and the partition is drawn in each mode's last step. A
-      group that is never entered is the one place a control can sit and be reachable from both
-      without either mode claiming it.
+      Outside the cascade, which is what a persistent group is: it changes nothing about the
+      document, only how the picture is drawn. It was the one group in both modes, when there were
+      two; with one surface, what is left of that is the ordering — Map, Ink and Walls are the work,
+      and View is not part of it.
     */
     /*
       The one step blurb kept, cut to the half a label cannot carry.
@@ -725,7 +726,7 @@ export function stepControls(step: StepId): readonly Control[] {
  * Which steps a parameter appears in.
  *
  * Almost always one, and the declaration says so by naming it plainly; a list is how a control that
- * genuinely belongs to both modes says so. Read through here rather than off the map, so a future
+ * genuinely belongs to more than one group would say so. Read through here rather than off the map, so a future
  * second member cannot be missed by one of the two callers above.
  */
 export function stepsOf(name: SettingName): readonly StepId[] {
