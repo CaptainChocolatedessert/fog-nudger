@@ -3041,6 +3041,10 @@ turns the bounded flood into a shortest path.
 - **Proposals in the additive colour**, the palette's colour for content being put in.
 - **Accept-all is one undo step.**
 
+- **Each mend is ringed and accepted by a click inside its ring**, as the ink tool's gaps are, with the
+  same sizing rule. The flaw this tool is for leaves a mend a pixel or two long at map-wide zoom — too
+  small to see or hit — and a ring with an 11-screen-pixel floor is what keeps a four-pixel gap
+  clickable in the ink tool already.
 - **Two sliders, as the ink tool has**: the largest gap to look for, and how far apart along the walls
   the two sides must be. A fixed ratio in place of the second was considered; kept as two, to be
   revisited if the second never gets used.
