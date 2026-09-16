@@ -43,6 +43,7 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { compactNodes, type WallGraph } from "../trace/wallGraph";
 import { nearestEdge, removeEdge, type EditResult } from "../trace/planarOps";
+import { applyMends, type Mend } from "../trace/mends";
 import {
   applyDraw,
   applyDrag,
@@ -56,6 +57,14 @@ import {
   type DrawPoint,
   type Grab,
 } from "./dragGesture";
+import { describeMends, mendAt } from "./mendGesture";
+import {
+  currentMends,
+  mendSearchActive,
+  refreshMendSearch,
+  startMendSearch,
+  stopMendSearch,
+} from "./mendSearch";
 import { editableGraph } from "./regions";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
 import { saveEditedWalls } from "./stage";
@@ -67,7 +76,7 @@ import { saveEditedWalls } from "./stage";
 */
 
 /** Which verb a press means. */
-export type WallTool = "move" | "draw" | "erase";
+export type WallTool = "move" | "draw" | "erase" | "mend";
 
 /**
  * How close a press has to be to a vertex to grab it, to a wall to erase it, and to a vertex to
@@ -145,6 +154,10 @@ let lastPerPixel = 0;
 let lastPointer: { u: number; v: number; x: number; y: number } | null = null;
 /** A write is in flight, so nothing new may start on top of it. */
 let busy = false;
+/** The mend a press landed on, and the walls it was found on. Accepted on release. */
+let pressedMend: { readonly mend: Mend; readonly graph: WallGraph } | null = null;
+/** Whether the pointer is inside a mend's ring, so the cursor changes only when that does. */
+let hoveredMend = false;
 
 export function currentTool(): WallTool {
   return tool;
@@ -156,7 +169,19 @@ export function setTool(next: WallTool): void {
   clearGesture();
   hovered = null;
   hoveredEdge = null;
+  hoveredMend = false;
   setGrabTarget(false);
+  /*
+    The search runs from the moment the tool is picked up, as the ink tool's does: it has one thing to
+    show and no reason to make the GM ask for it. Putting the tool down drops the rings, so none is
+    ever on screen while something else is in hand and cannot act on it.
+  */
+  if (next === "mend") {
+    const found = startMendSearch();
+    say(found === null ? "there are no walls on screen to search" : describeMends(found));
+  } else {
+    stopMendSearch();
+  }
   invalidate();
 }
 
@@ -199,6 +224,7 @@ function clearGesture(): void {
   travelled = false;
   armedBeforePress = false;
   pressedAt = null;
+  pressedMend = null;
 }
 
 function start(point: MapPoint): boolean {
@@ -228,6 +254,19 @@ function start(point: MapPoint): boolean {
     if (found === null) return false;
     hoveredEdge = found;
     invalidate();
+    return true;
+  }
+
+  /*
+    Mend takes a press only inside a ring, and the accept happens on release, as an erase does — so a
+    press that turns into a drag is still a click on the ring rather than the start of something.
+    Anywhere else declines, and the press pans.
+  */
+  if (tool === "mend") {
+    const mends = currentMends();
+    const index = mendAt(mends, point.x, point.y, point.perPixel);
+    if (index === null) return false;
+    pressedMend = { mend: mends[index]!, graph };
     return true;
   }
 
@@ -289,7 +328,7 @@ function cancel(): void {
  * drawing tools use for "not that one".
  */
 function escape(): boolean {
-  if (!anchor && !grab) return false;
+  if (!anchor && !grab && !pressedMend) return false;
   cancel();
   say("cancelled");
   return true;
@@ -338,6 +377,17 @@ function end(): void {
     return;
   }
 
+  if (tool === "mend") {
+    const pressed = pressedMend;
+    clearGesture();
+    invalidate();
+    // The walls changed under the press — a derive landed — so the mend was found on walls that are
+    // no longer on screen, and adding it would put a wall where no ring now is.
+    if (!pressed || pressed.graph !== graph) return;
+    commit(applyMends(graph, [pressed.mend]), mendedMessage(1), "mending a gap", graph);
+    return;
+  }
+
   /*
     Drawing finishes on the release only when the press actually travelled.
 
@@ -370,7 +420,12 @@ function end(): void {
  * differ between them: the graph is stored before what is in hand changes, so a failed write leaves
  * the GM with what they had.
  */
-function commit(result: EditResult, message: string, undoLabel: string, from: WallGraph): void {
+function commit(
+  result: EditResult,
+  message: string | (() => string),
+  undoLabel: string,
+  from: WallGraph,
+): void {
   /*
     Compacted here and nowhere else, which is what makes renumbering safe.
 
@@ -388,7 +443,7 @@ function commit(result: EditResult, message: string, undoLabel: string, from: Wa
   // to be a button.
   void saveEditedWalls(graph, undoLabel, from)
     .then(() => {
-      say(message);
+      say(typeof message === "function" ? message() : message);
     })
     .catch((error: unknown) => {
       const detail = describeError(error);
@@ -409,9 +464,10 @@ function commit(result: EditResult, message: string, undoLabel: string, from: Wa
 function hover(point: MapPoint | null): void {
   const graph = editableGraph();
   if (!point || !graph) {
-    if (hovered === null && hoveredEdge === null) return;
+    if (hovered === null && hoveredEdge === null && !hoveredMend) return;
     hovered = null;
     hoveredEdge = null;
+    hoveredMend = false;
     setGrabTarget(false);
     invalidate();
     return;
@@ -456,10 +512,71 @@ function hover(point: MapPoint | null): void {
     return;
   }
 
+  if (tool === "mend") {
+    // A crosshair inside a ring, where a press will act; the hand everywhere else, where it will pan.
+    const over = mendAt(currentMends(), point.x, point.y, point.perPixel) !== null;
+    if (over === hoveredMend) return;
+    hoveredMend = over;
+    setGrabTarget(over);
+    return;
+  }
+
   const found = grabAt(graph, point.x, point.y, GRAB_RADIUS_PX * point.perPixel)?.id ?? null;
   if (found === hovered) return;
   hovered = found;
   setGrabTarget(found !== null);
+  invalidate();
+}
+
+/**
+ * What the state line says once a mend is saved: how many went in, and how many are still on offer.
+ *
+ * Computed after the save rather than before, because accepting changes the walls and the search
+ * re-runs against them — the count left is the new search's, not the old one's minus what went.
+ */
+function mendedMessage(count: number): () => string {
+  return () => {
+    const left = currentMends().length;
+    return `mended ${count} gap${count === 1 ? "" : "s"} · ${left} left`;
+  };
+}
+
+/**
+ * Accept every mend on offer, as one edit and so one step of undo.
+ *
+ * The reason the search earns a button (user, 2026-09-16, as for the ink tool): on a map with many
+ * small breaks, mending each by hand is the cost the search exists to remove.
+ */
+export function mendEveryGapShown(): void {
+  if (busy || tool !== "mend") return;
+  const graph = editableGraph();
+  const mends: readonly Mend[] = graph ? currentMends() : [];
+  if (!graph || mends.length === 0) {
+    say("nothing to mend — no gaps in the walls are on offer");
+    return;
+  }
+  commit(applyMends(graph, mends), mendedMessage(mends.length), "mending every gap shown", graph);
+}
+
+/**
+ * A mend slider was released: search again, and say what it found. Silent when the tool is not in
+ * hand, since there are no rings to change.
+ */
+export function refreshMends(): void {
+  if (!mendSearchActive()) return;
+  const found = refreshMendSearch();
+  if (found !== null) say(describeMends(found));
+  invalidate();
+}
+
+/**
+ * Put the mend search down without choosing another wall tool — for when the strip moves to a tool
+ * outside the Walls band, which does not come through `setTool` here.
+ */
+export function putDownMends(): void {
+  if (!mendSearchActive()) return;
+  stopMendSearch();
+  hoveredMend = false;
   invalidate();
 }
 

@@ -105,7 +105,7 @@ describe("readouts that depend on a measurement", () => {
   });
 
   /*
-    These two ask to report where the handle is rather than what the value is.
+    These four ask to report where the handle is rather than what the value is.
 
     Their stored unit is graph units, which is the graph's own and not a number a GM can hold on to —
     and neither was the per-ten-thousand spelling that came before it. What the
@@ -113,13 +113,20 @@ describe("readouts that depend on a measurement", () => {
     serves. The rendering itself is `settingRows`; what belongs here is that the declaration asks.
   */
   it("asks for a position readout on every control stored in graph units", () => {
-    for (const control of [spurs, simplify]) {
+    const mendControls = CONTROLS.filter((control) => control.name.startsWith("mend"));
+    expect(mendControls).toHaveLength(2);
+    for (const control of [spurs, simplify, ...mendControls]) {
       expect(control.readout, control.name).toBe("position");
     }
   });
 
   it("leaves every other control to the shared formatter", () => {
-    const byPosition = new Set(["spurPruneGraphUnits", "simplifyGraphUnits"]);
+    const byPosition = new Set([
+      "spurPruneGraphUnits",
+      "simplifyGraphUnits",
+      "mendReachGraphUnits",
+      "mendTravelGraphUnits",
+    ]);
     for (const control of CONTROLS) {
       if (byPosition.has(control.name)) continue;
       expect(control.readout, control.name).toBeUndefined();
@@ -196,7 +203,11 @@ describe("the control declaration", () => {
       whatever it liked as long as prose underneath explained it.
 
       What the surface needs is the opposite: a label that carries the control on its own, and a
-      hint only where nothing else can say the thing. Two qualify today, and they are named.
+      hint only where nothing else can say the thing. Three qualify today, and they are named.
+
+      **The third arrived on 2026-09-16** with the mend tool, and its argument is in `controls.ts`: the
+      mend tool's same-wall distance has the ink tool's label and the ink tool's backwards direction,
+      so it has the ink tool's sentence.
 
       **Named rather than counted, and the cap was tried first.** A `<= 3` against two hints passed a
       mutation that added a third, which is precisely the change this exists to stop: one free slot
@@ -210,7 +221,7 @@ describe("the control declaration", () => {
       expect(control.label.length, control.name).toBeGreaterThan(0);
     }
     const hinted = CONTROLS.filter((control) => control.hint.length > 0).map((it) => it.name);
-    expect(hinted).toEqual(["gapFillPx", "gapTravelPx"]);
+    expect(hinted).toEqual(["gapFillPx", "gapTravelPx", "mendTravelGraphUnits"]);
   });
 
   it("names each parameter at most once", () => {

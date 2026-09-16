@@ -121,8 +121,9 @@ export interface Control {
  * stricter threshold finding less ink needs no explaining. Likewise the spur limit, which is *the
  * longest dead end to remove* because "spur" is this project's word and not a GM's.
  *
- * **Two hints survive**, and each says something neither a name nor a number can: that a gap
- * proposal is not applied until it is accepted, and which way the same-wall distance leans.
+ * **Three hints survive**, and each says something neither a name nor a number can: that a gap
+ * proposal is not applied until it is accepted, and which way the same-wall distance leans — once for
+ * the ink tool and once for the mend tool, which asks the same question of the walls.
  *
  * One list rather than one per surface: which stage a control belongs to is read from the stage
  * declaration in `settings.ts`, which is the same declaration the pipeline's cache invalidation
@@ -262,6 +263,32 @@ export const CONTROLS: readonly Control[] = [
     // the derive, so turning it back down puts the detail straight back — and the price of a derive
     // when the walls carry hand edits is priced by the mark and the dialog, not by a note here.
     hint: "",
+    readout: "position",
+    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
+  },
+  /*
+    The mend tool's two, labelled as the ink tool's are (user, 2026-09-16): they are the same two
+    questions asked of the walls instead of the ink. Positions on a log track like the other graph
+    controls, with the pixels beside them where a reading has given a raster to count in.
+  */
+  {
+    name: "mendReachGraphUnits",
+    label: "Largest gap to look for",
+    scale: "log",
+    hint: "",
+    readout: "position",
+    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
+  },
+  {
+    name: "mendTravelGraphUnits",
+    label: "Same-wall distance",
+    scale: "log",
+    /*
+      The one hint the mend tool has, and the ink tool's same-wall hint earns its place for the same
+      reason: no name says what "along the walls" means, and the direction runs backwards — a shorter
+      distance proposes more. Same label, same trap, same sentence.
+    */
+    hint: "How far apart a gap's two sides may be measured <b>along the walls</b>. Lower proposes more.",
     readout: "position",
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },

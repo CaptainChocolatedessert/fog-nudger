@@ -56,7 +56,7 @@ import {
 import { reviewRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
-import { setTool as setWallTool, type WallTool } from "./wallEdit";
+import { putDownMends, setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { proposeLayers } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
@@ -130,6 +130,9 @@ function apply(next: Tool): void {
       `currentTool`.
     */
     setPaintTool(next === "pan" ? "none" : (next as "suppress" | "ink" | "gaps"));
+    // The one piece of wall-tool state that is not harmless to keep: a running search would go on
+    // re-running against every change to the walls with no rings on screen to show for it.
+    putDownMends();
   }
   setDrag(dragFor(next));
   requestPaintMode(next === "suppress" || next === "ink" || next === "gaps");
@@ -316,11 +319,13 @@ export function setTool(next: Tool): void {
  * painting, and an armed brush under a panel is a press waiting to happen. It also settles the
  * collision cleanly: a tool's own controls and a group's controls can never both want the drawer.
  *
- * ## The two kinds have to look different
+ * ## The two kinds do not need telling apart
  *
- * Two things highlighted at once is the cost of one column, and it is paid by shape rather than by
- * colour: a panel is its group's **name**, a verb is a **glyph**. There is never a question which
- * highlight means what, and the strip stays readable as *what is armed* at a glance.
+ * This said they did — that two things lit at once was the cost of one column, paid by shape: a
+ * panel its group's **name**, a verb a **glyph**. Both are glyphs since 2026-09-14, and a pressed
+ * panel and an armed verb draw identically. What settled it was not a new distinction (user,
+ * 2026-09-15): *"You click on what you want and it might open a drawer of settings or it might pick
+ * up a tool. The two being mixed isn't confusing to me."* Two highlights are two true statements.
  *
  * ## The order is the pipeline
  *

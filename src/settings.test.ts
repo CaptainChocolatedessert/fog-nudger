@@ -6,6 +6,7 @@ import {
   isDefault,
   normaliseSettings,
   SETTING_LIMITS,
+  seededGraphUnitsFromPixels,
   seededSimplifyGraphUnits,
 } from "./settings";
 
@@ -94,6 +95,40 @@ describe("normaliseSettings", () => {
     // A default outside its control's range would be silently rewritten the first time the workspace
     // saved, which reads as the extension changing a setting nobody touched.
     expect(normaliseSettings(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe("seededGraphUnitsFromPixels", () => {
+  /*
+    The mend tool's starting distances: a pixel figure turned into graph units by the raster's own
+    pixels per unit, so 20 pixels is 20 pixels of wall on any map.
+
+    Two mutations on 2026-09-16 — multiplying where it divides, and no floor — two caught.
+  */
+  it("turns raster pixels into graph units at the raster's own scale", () => {
+    // To three significant figures, as the straightening seed rounds, so a slider lands on a value it
+    // can show rather than on a long tail of digits.
+    expect(seededGraphUnitsFromPixels("mendReachGraphUnits", 20, 3300)).toBeCloseTo(20 / 3300, 4);
+    expect(seededGraphUnitsFromPixels("mendReachGraphUnits", 20, 751)).toBeCloseTo(20 / 751, 4);
+    expect(seededGraphUnitsFromPixels("mendTravelGraphUnits", 40, 3300)).toBeCloseTo(40 / 3300, 4);
+  });
+
+  it("stays inside the control's track, and never on its off position", () => {
+    const { floor, max } = SETTING_LIMITS.mendReachGraphUnits;
+    expect(seededGraphUnitsFromPixels("mendReachGraphUnits", 0.001, 100000)).toBe(floor);
+    expect(seededGraphUnitsFromPixels("mendReachGraphUnits", 20, 10)).toBe(max);
+  });
+
+  it("falls back to the static default with nothing to convert by", () => {
+    expect(seededGraphUnitsFromPixels("mendReachGraphUnits", 20, 0)).toBe(
+      DEFAULT_SETTINGS.trace.mendReachGraphUnits,
+    );
+  });
+
+  it("has static defaults that are the seeds on the test map, so the fallback is the same stretch", () => {
+    // Before a reading lands the static figure stands; on the 3300px test map it is what a seed gives.
+    expect(DEFAULT_SETTINGS.trace.mendReachGraphUnits).toBeCloseTo(20 / 3300, 3);
+    expect(DEFAULT_SETTINGS.trace.mendTravelGraphUnits).toBeCloseTo(40 / 3300, 3);
   });
 });
 

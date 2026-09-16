@@ -192,6 +192,27 @@ export interface TraceSettings {
    * move together, and what is left is a corner cut across a doorway, which is visible.
    */
   readonly simplifyGraphUnits: number;
+  /**
+   * The mend tool's largest gap to look for, **in graph units**. Zero proposes nothing.
+   *
+   * The graph's counterpart of `gapFillPx`, with the same label. A mend is a wall proposed across a
+   * break in the derived walls — a wall line that thinned out in the ink — and `trace/mends.ts`
+   * carries what one is and what it may join.
+   *
+   * **Seeded per map** at the equivalent of 20 raster pixels, where the ink tool's default is 12:
+   * thinning pulls each free end back about half an ink width, so a break is wider in the graph than
+   * it was in the ink (user, 2026-09-16; reasoning, to be checked in a room).
+   */
+  readonly mendReachGraphUnits: number;
+  /**
+   * How far apart along the walls a mend's two sides must be, **in graph units**. Zero switches the
+   * test off and proposes every gap within reach.
+   *
+   * The graph's counterpart of `gapTravelPx`, with the same label: two sides the walls already join
+   * within this are one piece of wall with a kink in it. **Seeded per map** at 40 raster pixels, the
+   * ink tool's own default.
+   */
+  readonly mendTravelGraphUnits: number;
   /*
     `editSimplifyFraction` was here, and it went when straightening became one control (2026-09-14).
 
@@ -341,10 +362,17 @@ export const DEFAULT_SETTINGS: Settings = {
       denominated in them: 0.25 x 5.7px on a 3300px raster is 4.3e-4 of the map's longer side.
 
       **Only a fallback.** A fixed figure comes out sub-pixel on a small map, so the real starting
-      value is seeded per map from its reading — `seedSimplify.ts` — and this is what stands until
+      value is seeded per map from its reading — `seedDefaults.ts` — and this is what stands until
       one has landed.
     */
     simplifyGraphUnits: 4e-4,
+    /*
+      20 and 40 raster pixels on the 3300px test map, and **only fallbacks**: both are seeded per map
+      from its raster once a reading lands, for the reason straightening is — a fixed figure means a
+      different stretch of wall on every map.
+    */
+    mendReachGraphUnits: 6e-3,
+    mendTravelGraphUnits: 1.2e-2,
   },
   review: {
     fillOpacity: 0.22,
@@ -418,8 +446,15 @@ export const SETTING_LIMITS = {
   // The half-ink-width cap is retired (user, 2026-09-06); the top of the track is meant to reach
   // obviously useless values, the same as the two ink filters. See the block above for the unit.
   simplifyGraphUnits: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
-  // The same track as the ink mode's, because it is the same quantity measured the same way. What
-  // differs is the default and what applying it costs, both of which live elsewhere.
+  /*
+    The mend tool's two, on log tracks in graph units like the other two graph controls — but with a
+    **declared** top rather than one measured off the graph, because what they measure is a gap and
+    the graph has no longest gap to measure. A tenth of the map's longer side is 330 raster pixels on
+    the test map and 75 on a 751px one, past the ink tool's own 80px top on both; the same-wall
+    distance reaches four times as far, a little past the ink tool's ratio.
+  */
+  mendReachGraphUnits: { min: 0, max: 0.1, step: 0.0001, floor: 2e-4 },
+  mendTravelGraphUnits: { min: 0, max: 0.4, step: 0.0001, floor: 2e-4 },
   fillOpacity: { min: 0, max: 1, step: 0.02 },
   strokeSquares: { min: 0, max: 0.3, step: 0.01 },
   // Runs past a doorway on purpose, like the two filters above it: at the top end whole doorways
@@ -520,6 +555,11 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   suppressBrushPx: "read",
   inkBrushPx: "read",
   simplifyGraphUnits: "derive",
+  // Filed `read` as every tool control is, which `stages.test.ts` pins: a tool control's stage is
+  // never spent — its kind is what decides — and one convention for all of them is what keeps the
+  // re-read prompt from being argued control by control. A mend setting destroys nothing.
+  mendReachGraphUnits: "read",
+  mendTravelGraphUnits: "read",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
 };
@@ -593,6 +633,8 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   suppressBrushPx: "tool",
   inkBrushPx: "tool",
   simplifyGraphUnits: "pipeline",
+  mendReachGraphUnits: "tool",
+  mendTravelGraphUnits: "tool",
   fillOpacity: "display",
   strokeSquares: "display",
 };
@@ -608,7 +650,7 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
  * `rasterPerUnit` is raster pixels per graph unit, which is what turns a pixel figure into one.
  *
  * Pure, and clamped into the control's own range so a wild measurement cannot store an unusable
- * value. `seedSimplify.ts` carries why seeding a default is not the same thing as a threshold that
+ * value. `seedDefaults.ts` carries why seeding a default is not the same thing as a threshold that
  * moves with a measurement.
  */
 export function seededSimplifyGraphUnits(inkWidth: number, rasterPerUnit: number): number {
@@ -619,6 +661,27 @@ export function seededSimplifyGraphUnits(inkWidth: number, rasterPerUnit: number
   // land there: off is a state a GM chooses, not one they are given.
   const floor = limits.floor ?? limits.min;
   return Math.min(limits.max, Math.max(floor, Number(wanted.toPrecision(3))));
+}
+
+/**
+ * A length in raster pixels as a starting value for a graph-unit setting, clamped into its track.
+ *
+ * What the mend tool's two settings are seeded to on a map that has never had them chosen: 20 and 40
+ * raster pixels, converted by `rasterPerUnit` — raster pixels per graph unit, which is exact, where
+ * a fixed figure in graph units would be a different stretch of wall on every map.
+ *
+ * Never the off position, for the reason the straightening seed is not: off is a state a GM chooses.
+ */
+export function seededGraphUnitsFromPixels(
+  name: SettingName,
+  pixels: number,
+  rasterPerUnit: number,
+): number {
+  const limits = SETTING_LIMITS[name];
+  const fallback = readParameter(DEFAULT_SETTINGS, name);
+  if (!(pixels > 0) || !(rasterPerUnit > 0)) return fallback;
+  const floor = "floor" in limits && limits.floor > 0 ? limits.floor : limits.min;
+  return Math.min(limits.max, Math.max(floor, Number((pixels / rasterPerUnit).toPrecision(3))));
 }
 
 /** Every parameter belonging to one stage, in `SETTING_LIMITS`' declaration order. */
@@ -847,6 +910,12 @@ export function normaliseSettings(raw: unknown): Settings {
         t.spurPruneGraphUnits,
       ),
       simplifyGraphUnits: clamp(trace.simplifyGraphUnits, "simplifyGraphUnits", t.simplifyGraphUnits),
+      mendReachGraphUnits: clamp(trace.mendReachGraphUnits, "mendReachGraphUnits", t.mendReachGraphUnits),
+      mendTravelGraphUnits: clamp(
+        trace.mendTravelGraphUnits,
+        "mendTravelGraphUnits",
+        t.mendTravelGraphUnits,
+      ),
     },
     review: {
       fillOpacity: clamp(review.fillOpacity, "fillOpacity", r.fillOpacity),
@@ -902,10 +971,15 @@ export function describeSettings(settings: Settings): string {
     `min island ${trace.minIslandPx}px, ` +
     // Spur pruning belongs in the summary more than most: it is the one control here that can erode
     // the entire graph at its top end, and it went missing when the smallest-room term was removed.
-    `prune ${trace.spurPruneGraphUnits.toExponential(2)} of the map, ` +
-    `simplify ${trace.simplifyGraphUnits.toExponential(2)} of the map; ` +
+    `prune ${trace.spurPruneGraphUnits.toExponential(2)} graph units, ` +
+    `simplify ${trace.simplifyGraphUnits.toExponential(2)} graph units; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
-    `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
+    `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}; ` +
+    `mends ${
+      trace.mendReachGraphUnits === 0
+        ? "off"
+        : `up to ${trace.mendReachGraphUnits.toExponential(2)}, travel ${trace.mendTravelGraphUnits.toExponential(2)} graph units`
+    }` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
   );
 }

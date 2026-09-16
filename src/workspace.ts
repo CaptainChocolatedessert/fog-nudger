@@ -53,10 +53,11 @@ import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
+import { registerMendsLayer } from "./workspace/layers/mends";
 import { registerDeltaLayer } from "./workspace/layers/delta";
 import { registerRegenerateReview } from "./workspace/regenerateGuard";
 import { registerRegionsLayer } from "./workspace/layers/regions";
-import { registerSimplifySeed } from "./workspace/seedSimplify";
+import { registerDefaultSeeds } from "./workspace/seedDefaults";
 import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/colourRows";
@@ -64,6 +65,7 @@ import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderToolControls } from "./workspace/paintControls";
+import { renderMendControls } from "./workspace/mendControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation } from "./workspace/regions";
@@ -128,14 +130,15 @@ onReading((result) => {
 registerRegionInvalidation();
 
 /*
-  Seed the simplification tolerance from the first reading that measures an ink width.
+  Seed the per-map defaults — the simplification tolerance and the mend tool's two distances — from
+  the first reading of a map.
 
   Registered here rather than inside the Walls step because it belongs to the *reading*, not to any
   step, and because a step's body is rebuilt on every accordion click — a subscription there leaks a
   listener per click. It is deliberately order-independent of the invalidation above: it invalidates
   the partition itself rather than relying on running first.
 */
-registerSimplifySeed();
+registerDefaultSeeds();
 
 /*
   The canvas stack, in draw order.
@@ -166,6 +169,8 @@ registerGapsLayer();
 registerRegionsLayer();
 // Last, so the graph sits over the rooms it makes rather than under them.
 registerGraphLayer();
+// Over the walls, so a proposed mend sits on top of the break it would close.
+registerMendsLayer();
 /*
   Last, so the delta draws over the walls it is about.
 
@@ -240,6 +245,7 @@ registerStepContent("map", renderMapPicker);
   hint already sits for the same reason.
 */
 registerToolContent(renderToolControls);
+registerToolContent(renderMendControls);
 /*
   The rail redraws when the tool changes, which it did not until now.
 

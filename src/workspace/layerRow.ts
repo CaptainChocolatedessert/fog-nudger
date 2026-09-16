@@ -55,6 +55,7 @@ const NAMES: Readonly<Record<LayerId, string>> = {
   ink: "Ink",
   paint: "Your edits",
   gaps: "Gaps",
+  mends: "Mends",
   regions: "Rooms",
   graph: "Walls",
   delta: "Your wall changes",

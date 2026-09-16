@@ -1,5 +1,19 @@
 /**
- * Seeding the simplification tolerance from the measured ink width, once per map.
+ * Seeding the defaults that cannot be one number on every map, once per map, from its reading.
+ *
+ * Three today: the simplification tolerance, from the measured ink width, and the mend tool's two
+ * distances, from the raster. All three are stored in graph units, and all three are one module
+ * because the rule that decides whether a value may be seeded — *untouched means equal to the static
+ * default* — is one rule, and two copies of it would be two places for it to drift.
+ *
+ * ## Why the mend tool's are seeded too — 2026-09-16
+ *
+ * Its two settings are the graph's counterparts of the ink tool's gap sliders, whose 12px and 40px
+ * defaults have been good (user). Those are raster pixels, and a fixed figure in graph units would
+ * be a different stretch of wall on every map — the straightening default's own history, below. So
+ * each starts at a pixel figure converted by raster pixels per graph unit: **20** for the largest
+ * gap, since thinning pulls each free end back about half an ink width and a break is wider in the
+ * graph than in the ink, and **40** for the same-wall distance.
  *
  * ## The problem this solves, found in a room
  *
@@ -36,18 +50,22 @@ import { devLog } from "../devlog";
 import { lastInkWidth, lastRasterPerGraphUnit } from "../pipeline";
 import {
   DEFAULT_SETTINGS,
+  readParameter,
   SETTING_LIMITS,
+  seededGraphUnitsFromPixels,
   seededSimplifyGraphUnits,
   writeParameter,
+  type SettingName,
 } from "../settings";
 import { renderPanel } from "./drawer";
 import { onReading } from "./reading";
 import { invalidateRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 
-export function registerSimplifySeed(): void {
+export function registerDefaultSeeds(): void {
   onReading(() => {
     seed();
+    seedMends();
     // Never the reason a reading is marked failed. A listener returning false means a step could not
     // take the mask and the surface would be half-updated; this only ever writes a setting.
     return true;
@@ -95,3 +113,44 @@ function seed(): void {
     );
   }
 }
+
+/**
+ * The mend tool's two distances, each seeded only while it is still at its static default.
+ *
+ * Nothing is invalidated: they are tool settings, which change no picture until the tool runs, and
+ * a search already running is told through `wallEdit` the same way a slider release tells it.
+ */
+function seedMends(): void {
+  const rasterPerUnit = lastRasterPerGraphUnit();
+  if (rasterPerUnit === null) return;
+
+  const seeds: readonly (readonly [SettingName, number])[] = [
+    ["mendReachGraphUnits", MEND_REACH_PX],
+    ["mendTravelGraphUnits", MEND_TRAVEL_PX],
+  ];
+  let settings = currentSettings();
+  const changed: string[] = [];
+  for (const [name, pixels] of seeds) {
+    const current = readParameter(settings, name);
+    if (current !== readParameter(DEFAULT_SETTINGS, name)) continue;
+    const value = seededGraphUnitsFromPixels(name, pixels, rasterPerUnit);
+    if (value === current) continue;
+    settings = writeParameter(settings, name, value);
+    changed.push(`${name} ${value.toExponential(2)} (${pixels}px)`);
+  }
+  if (changed.length === 0) return;
+
+  setSettings(settings);
+  void persistSettings();
+  renderPanel();
+  devLog(
+    "info",
+    `workspace: the mend tool's distances were at their defaults and have been seeded from the ` +
+      `map's raster at ${Math.round(rasterPerUnit)} pixels to the graph unit — ${changed.join(", ")}. ` +
+      `Move a slider to choose your own.`,
+  );
+}
+
+/** The mend tool's starting distances in raster pixels. `seedMends` says why these two. */
+const MEND_REACH_PX = 20;
+const MEND_TRAVEL_PX = 40;

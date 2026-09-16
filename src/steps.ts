@@ -80,7 +80,7 @@ export type StepId = "map" | "ink" | "walls" | "view";
   drawing both would have put two answers to one question on the canvas -- and the graph is the
   honest one, because it is what gets stored.
 */
-export const LAYERS = ["ink", "paint", "gaps", "regions", "graph", "delta"] as const;
+export const LAYERS = ["ink", "paint", "gaps", "mends", "regions", "graph", "delta"] as const;
 
 /**
  * What the map shows from the moment one is chosen — user, 2026-09-14.
@@ -112,6 +112,8 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
   suppress: "paint",
   ink: "paint",
   gaps: "gaps",
+  // The proposed mends and their rings, which mean nothing while the mend tool is not in hand.
+  mends: "mends",
 };
 
 /**
@@ -242,6 +244,12 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "edit",
     hint: "Click a wall to remove it, <b>one segment at a time</b>. The highlight shows what would go.",
   },
+  /*
+    The graph's gap tool (user, 2026-09-16). `edit`, like the other three: it takes a press inside a
+    ring and declines everything else, which falls through to a pan. Its hint is its group's blurb,
+    because it has controls of its own and the blurb is the line above them.
+  */
+  { id: "mend", label: "Mend", band: "walls", drag: "edit", hint: "" },
 ];
 
 
@@ -476,6 +484,21 @@ export const STEPS: readonly Step[] = [
       real and is the one to watch in a room** -- a wall this step's own filter severed no longer
       announces itself, and finding it means running the Gaps tool one step up.
     */
+    groups: [
+      {
+        tool: "mend",
+        title: "Mend",
+        /*
+          Mechanics only, as the ink tool's is. It does not name a colour: the palette is retunable
+          and a word for a hue is a copy nothing can keep honest.
+        */
+        blurb:
+          "Looks for places the walls stop short and proposes a wall across each, ringed. " +
+          "<b>Click inside a ring</b> to mend that gap, or use the button below for all of them. " +
+          "Dragging pans.",
+        parameters: ["mendReachGraphUnits", "mendTravelGraphUnits"],
+      },
+    ],
   },
   /*
     The Regions step was here, and it is GONE (user, 2026-09-05).
@@ -571,6 +594,9 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
   */
   spurPruneGraphUnits: "walls",
   simplifyGraphUnits: "walls",
+  // The mend tool's own two, drawn in its drawer rather than in the group's.
+  mendReachGraphUnits: "walls",
+  mendTravelGraphUnits: "walls",
   /*
     How the partition is drawn, in the group that is never entered.
 

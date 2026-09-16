@@ -671,6 +671,8 @@ the grid *silently*.
 | Brush widths | px | what the GM is aiming with, on screen |
 | Straightening | graph units | acts on the graph, and outlives the reading |
 | Longest dead end to remove | graph units | same |
+| Mend: largest gap to look for | graph units | a gap between walls, measured on the graph |
+| Mend: same-wall distance | graph units | a distance travelled along the walls |
 
 **Nothing in the pipeline depends on the grid.** The one control that did — the deleted smallest-room
 filter — depended on it *squared*, so a grid off by four put it off by sixteen.
@@ -1243,10 +1245,11 @@ here" means. Erasing and merging leave vertices no wall uses; the layer skips th
 that moves nothing would be a lie — and the snap query has to skip them too, or drawing catches on
 points nobody can see.
 
-### The three verbs
+### The three verbs, and Mend
 
 A drag can only mean one thing, so the editor has a sticky tool picker: **Move**, **Draw**, **Erase**,
-Move by default. The alternative — hiding draw and erase behind modifier keys — was rejected for
+Move by default. **Mend** joined them on 2026-09-16 — it proposes walls across breaks rather than
+taking a gesture, and §10 carries it. The alternative — hiding draw and erase behind modifier keys — was rejected for
 putting a destructive action on an unannounced click and leaving both verbs undiscoverable.
 
 - **Two of the three decide by looking.** Move takes a press only when a vertex is under it and Erase
@@ -1414,7 +1417,7 @@ a graph too large to write.
 side is 1.3px on a 3300px map and 0.30px on a 751px one — sub-pixel, so very nearly no simplification,
 and on that small map it produced a graph too large to write. So once a reading lands, a tolerance
 still at its static default is set to a quarter of the measured ink width, converted by raster pixels
-per graph unit; `seedSimplify.ts` carries why seeding a start is not a threshold moving with a
+per graph unit; `seedDefaults.ts` carries why seeding a start is not a threshold moving with a
 measurement.
 
 **Both keys were renamed on 2026-09-16**, to `simplifyGraphUnits` and `spurPruneGraphUnits`, when their
@@ -1991,7 +1994,7 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 **Separate what a drag does from what controls you are reading.**
 
 - **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
-  probe), ink (suppress, add, gaps), walls (move, draw, erase). One click to switch, and switching a
+  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend). One click to switch, and switching a
   tool does not move the controls.
 - **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
   the group's own name in the strip. It slides out **beside** the strip rather than under it, is only
@@ -2382,7 +2385,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**867 tests across 61 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**896 tests across 63 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2755,6 +2758,19 @@ served. **What a room has to check**, on the non-square test map:
   centre, which the ring's hit test refused until the same day.
 - **The fog lands where the rooms are** after a push, including on a map stretched out of proportion.
 
+**The mend tool is built and has never run in a room — 2026-09-16** (§10, *The mend tool*). A desk
+checked the search, the accept, the rings and the seed — seventeen mutations, seventeen caught — and
+that the workspace loads with **Mend** in the Walls band. **What a room has to check:**
+
+- **Whether the proposals are the breaks.** The whole quality question, and only a look answers it:
+  whether the mends land on walls that thinned out, and how many land on things that are not breaks.
+- **Whether 20 and 40 pixels are the right starting distances**, which rest on reasoning about how far
+  thinning pulls a free end back.
+- **Whether the split-the-difference direction lands where a GM would have drawn the wall.**
+- **The ring**: easy to hit, and the crosshair inside it.
+- **Accepting**: one mend and *Mend every gap shown* each one step of undo, the search re-running
+  after, and the lock appearing on the controls that would rebuild the walls.
+
 **One sweep is waiting deliberately.** Two comments describe code that moved — `reading.ts` argues a
 recompose needs no blanking *because the ink layer draws the base*, which stopped being true on
 2026-09-14, and `layers/paint.ts` says the paint is drawn in the Walls step. Neither causes a defect
@@ -3045,7 +3061,7 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Two features unimplemented, and one still needs a conversation before code
+### One feature unimplemented, and one built from a conversation
 
 **1. The small-area-face tool.** Wanted eventually, and **not designed**: *it's not obvious how it
 should work.*
@@ -3070,12 +3086,12 @@ The questions to start from, offered as a starting point and not as an agenda:
   nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or a
   different action has not been asked.
 
-**2. A graph-side gap tool — wanted, being designed (2026-09-16), not yet built.**
+**2. The mend tool, the graph's gap tool — built 2026-09-16, never run in a room.**
 
 The idea: pair free endpoints by graph distance, which is exact where a pixel closing is a guess, and
 turns the bounded flood into a shortest path.
 
-**Decided so far (user, 2026-09-16):**
+**Decided (user, 2026-09-16):**
 
 - **What it is for: flaws in the derived graph**, such as a wall line that thinned out and left a break
   in the walls. **Not doorways.** It may find some in some drawing styles, but it is not a door tool
@@ -3114,11 +3130,47 @@ turns the bounded flood into a shortest path.
   rather than argued: the heading alone skids along a wall met at a shallow angle, and the
   perpendicular alone ignores which way the broken wall was going.
 
-**Leaning, not yet decided:** one side of a mend must be a **free end** (a node with one wall), since a
-wall that stops is what a break looks like in a graph. Each free end proposes at most one mend, and
-mends are paired off so no end is used twice and none cross a wall or each other. "Nearby" is within
-the largest-gap slider for all three kinds of target. Accepting re-runs the search, as the ink tool
+**As built** — `trace/mends.ts` is the search and the accept, pure and tested; the tool is a fourth
+wall tool beside Move, Draw and Erase, so an accepted mend saves through the one path every wall edit
 does.
+
+- **One side is always a free end** (a node with one wall): a wall that stops is what a break looks
+  like in a graph, and two nodes with walls on both sides are whole walls running close together.
+  "Nearby" is within the largest-gap slider for all three kinds of target.
+- **Each end ranks its own candidates by kind, then by score** — length stretched by how far off the
+  end's heading the target lies, doubling square to it and trebling straight behind, so alignment ranks
+  and never rejects.
+- **They are then taken best first across the whole graph, and by kind before score there too.** Each
+  end is used once, and a mend that would cross a wall or a mend already taken is skipped, its end
+  falling back to its next choice. *By kind across ends* was a call made in building rather than one
+  the user made: it means two ends joined to each other win over a shorter mend onto a wall that would
+  cross them, on the argument that an end joined to an end is the stronger evidence of a break. A
+  fixture pins it.
+- **Accepting splits every wall a mend lands on first, then adds the walls.** This is load-bearing,
+  and it was measured rather than argued. Adding a wall whose end lands inside another already splits
+  the other — but at the point the crossing test computes along it, sharing the new wall's end only if
+  the two quantise to the same float32. **Over 19,061 random mends, adding each that way left 7,926
+  ending beside the vertex they were meant to share** — drawn closed, and open. Splitting at the
+  landing first left none. The first fixture written for it was a horizontal wall that attached either
+  way, which is how a mutation removing the split survived it; a deterministic sweep replaced it.
+- **Rings use the ink tool's floor and padding**, centred on the middle of each mend, and the layer
+  draws what the hit test answers. A press inside a ring accepts on release, as an erase does; a press
+  anywhere else pans.
+- **The search re-runs when the walls change and when a mend slider is released — not while one is
+  dragged.** Tool settings apply live as the handle moves, and searching a large map on every pixel of
+  a drag is work nobody is looking at; the ink tool re-runs on release for the same reason. Picking the
+  tool up searches at once and says the count; putting it down, or picking a tool outside the Walls
+  band, drops the rings.
+- **The two settings are filed `read`**, as every tool control is and a test pins, and are `tool` in
+  kind, so they rebuild nothing and lock nothing. **Both are seeded per map** at 20 and 40 raster
+  pixels, alongside straightening's seed, in `seedDefaults.ts` — one module because *untouched means
+  equal to the static default* is one rule.
+- **The same-wall distance carries a hint**, the third on the surface, with the ink tool's sentence:
+  same label, same backwards direction. Another call made in building; the named-hints test was
+  updated to say so.
+
+**Seventeen mutations across the search, the rings and the seed, seventeen caught** — two of them only
+after the tests were strengthened, which is recorded in the test file.
 
 **It does not replace the pixel tool, and this is the thing most likely to be got wrong.** A **scanner
 artefact** — a thin light line across a scanned map — severs linework in *pixel* space, before any
@@ -3284,6 +3336,7 @@ closed outright.
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one — and the two queries the tools aim with |
 | `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
+| `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
 | `trace/probePoint.ts` | the one surviving diagnostic |
 | `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses |
@@ -3329,14 +3382,18 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   slider's release and a group's Defaults) · `settingsState.ts`
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
   pickers) · `graphScale.ts` ·
-  `seedSimplify.ts`
+  `seedDefaults.ts` (**the per-map defaults** — straightening from the ink width, the mend tool's two
+  distances from the raster)
 - **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag, and
   **anchors the drawer**, because it is the module that knows where its own buttons are) ·
-  `toolIcons.ts` (seven inline glyphs) · `wallEdit.ts` and `paintTool.ts` (the pointer events) ·
+  `toolIcons.ts` (the strip's and the undo pair's glyphs, inline) · `wallEdit.ts` and `paintTool.ts`
+  (the pointer events — Mend's press and accept are `wallEdit`'s) ·
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
-  untouched**) · `paintControls.ts` (the tool in hand, drawn into **its own drawer**) ·
-  `paintState.ts` · `gapSearch.ts`
+  untouched**) · `mendGesture.ts` (a mend's ring and which one a click lands in — pure and tested) ·
+  `paintControls.ts` (the tool in hand, drawn into **its own drawer**) · `mendControls.ts` (the mend
+  tool's drawer) · `paintState.ts` · `gapSearch.ts` · `mendSearch.ts` (the mend search, following the
+  walls on screen and the settings on release)
 - **Acting on the document** — `undoAction.ts` (the undo/redo pair in the rail head, and their
   keystrokes) · `undoHistory.ts` (**the one
   stack, for the graph and the painted ink both**: entries are labelled closures, so it never learns
@@ -3354,6 +3411,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `layers/gaps.ts` (proposals, ringed) · `layers/regions.ts` (the partition as vector paths) ·
   `layers/graph.ts` (the walls, with handles only for the tools that can use them) ·
   `layers/delta.ts` (what a regenerate would take and bring back, while the question is up) ·
+  `layers/mends.ts` (the proposed mends, dashed, and their rings, while the tool is in hand) ·
   `bitmap.ts`
 
 ---

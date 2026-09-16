@@ -24,6 +24,7 @@ import {
   type SettingName,
 } from "../settings";
 import { refreshGapSearch } from "./paintTool";
+import { refreshMends } from "./wallEdit";
 import { requestReread } from "./reading";
 import { invalidateRegions, repruneRegions } from "./regions";
 import { invalidate } from "./shell";
@@ -45,7 +46,11 @@ export function recomputeFor(names: readonly SettingName[]): void {
     settings beside them are the stale-diagnostic failure in miniature. Re-running is cheap by
     comparison with a re-read and is what the GM is asking for by moving the slider at all.
   */
-  if (names.some((name) => PARAMETER_KIND[name] === "tool")) refreshGapSearch();
+  if (names.some((name) => PARAMETER_KIND[name] === "tool")) {
+    refreshGapSearch();
+    // The mend search likewise, and for the same reason. Each is silent unless its own tool is in hand.
+    refreshMends();
+  }
 
   const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
   /*
