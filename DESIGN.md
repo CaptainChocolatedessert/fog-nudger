@@ -1842,9 +1842,14 @@ produced it is what this had to answer. The pipeline, the emit path and the stor
 this was a rework of the surface only.
 
 **All of it is built**: the tool strip and its glyphs, the rail (**a drawer since 2026-09-14** — see
-below), the pinned rail head,
-the hand-edit count and the warning it prices, one page with one panel button, undo, the derive
-indicators, the markup palette, the layer toggles and the colour pickers.
+below), one page with one panel button, undo, the derive indicators, the markup palette, the layer
+toggles and the colour pickers.
+
+> Two things in this list were **removed** rather than built on: the **pinned rail head**, whose shape
+> survived into the drawer as four fixed children with three hidden and had to be cut back to one
+> slot; and the **hand-edit count**, replaced by a mark with no number and, at the moment a rebuild is
+> offered, the delta drawn on the map. A number could not survive a session anyway — it lived in
+> memory, so a map edited last week opened at zero.
 
 ### Two lessons the first room taught
 
@@ -2314,7 +2319,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**852 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**853 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2657,11 +2662,26 @@ the most informative thing that can happen to this project.
 
 ### Where to pick this up
 
-**Everything the rooms found is fixed.** Six decisions were open; the first is **answered and built**
-(below), which settles two of the three that waited on it.
+**Everything the rooms have found is fixed**, including the four from 2026-09-15 — the wall tools
+drawing no walls, the layer switches appearing in every drawer, the ink layer opening on the base
+instead of the composite, and the rooms layer's red wall lines. The fifth, *changing parameters on the
+walls shouldn't delete ink edits*, had two causes and both are closed: the undo stack cleared
+wholesale, and the first wall edit never going on the stack at all.
+
+**What is built and has never run in a room:** the **delta** — the walls a rebuild would take, in
+amber, and the ones it would bring back, in cyan — and the **review** that draws it. Both need a map
+with a derived graph and hand edits on it, which is the one state that does not exist outside Owlbear.
+Everything about them checked so far is the state machine, not the picture.
 
 **The one check nobody has run:** View's **Defaults** restoring all five colours. The rows themselves
 have been looked at; that button has not been pressed.
+
+**One sweep is waiting deliberately.** Two comments describe code that moved — `reading.ts` argues a
+recompose needs no blanking *because the ink layer draws the base*, which stopped being true on
+2026-09-14, and `layers/paint.ts` says the paint is drawn in the Walls step. Neither causes a defect
+anybody can name today, but that is the shape behind four of the five the rooms found: **a
+justification that was true when written and quietly stopped being true when the thing it described
+moved.** It is held until after a room, so a room test is not sitting behind a refactor.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
@@ -2957,6 +2977,13 @@ interface says so.
   degenerate ring contributes nothing to any area total — but that is a statement about us, not about
   Skia's stroker or Owlbear's storage. The count is already reported, so it is cheap to look at.
 - **Switching maps.** The picker's *listing* is exercised; the reload path is not.
+- **The stage side of undo has no tests at all.** The stack itself is well covered — the tagging went
+  in under eight mutations, eight caught — but `stage.ts` has none, so the way back from an edit, the
+  entry that the document-creating first edit now pushes, and the three clearing rules are all held up
+  by `tsc`, the rest of the suite, and a browser driven by hand. It writes through the SDK and nothing
+  here mocks that. **The cheap route, if this is ever worth closing, is to split the decision from the
+  write**: *which write does this restore make, and what do `saved` and `base` become* is pure, and the
+  SDK call is the only part that is not.
 - **A large map, with the dev log running.** A 52.9-megapixel map is the only one that can answer three
   things: why closing it was slow (the decoded-source-versus-budget note in `rasterPlan.ts` is the
   first candidate and is explicitly unproven), whether gap rings land correctly at a reduction factor
