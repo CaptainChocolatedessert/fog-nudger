@@ -469,8 +469,9 @@ describe("applyMends", () => {
     *crossing predicate* computes along it, and it reuses the new wall's end only if the two quantise
     to the same float32. They often do not: **measured on 2026-09-16 over 19,061 random mends, adding
     each by `insertEdge` alone left 7,926 ending beside the vertex they were meant to share** — drawn
-    closed, and open. The first fixture written for this was horizontal and attached either way, which
-    is how a mutation removing the split survived it. Splitting at the landing first gives the mend a
+    closed, and open. The two fixtures written for this first — the horizontal wall above, then a
+    slanted one picked by hand — attached either way, which is how a mutation removing the split
+    survived them. Splitting at the landing first gives the mend a
     vertex to reach by its exact coordinate; `applyMends` left none detached over the same set.
   */
   it("attaches every mend to the wall it lands on, at any angle", () => {

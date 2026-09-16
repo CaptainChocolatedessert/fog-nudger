@@ -2385,7 +2385,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**896 tests across 63 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**897 tests across 63 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2401,8 +2401,16 @@ invisible. It costs almost nothing to keep.
 
   It has repeatedly found tests asserting less than their names claimed — including one the record
   believed was a check's own failure test, which never ran that check at all.
-- **A fixture that is easy to read can be too symmetric to fail.** A tangent test on a horizontal run
-  cannot detect a search being disabled when the fallback is `(1, 0)` — the right answer for that
+
+  **A mutation that survives is a question about the case, not only about the test — and the answer
+  is a measurement.** Removing the mend tool's split-first step survived its fixture, and the tempting
+  reading was that the step guards something vanishingly rare. A random sweep said otherwise: without
+  it, 7,926 of 19,061 mends ended beside the vertex they should share (2026-09-16). An estimate of
+  rarity is reasoning; a sweep over the input space is the check.
+- **A fixture that is easy to read can be too symmetric to fail.** The mend tool's first two landing
+  fixtures — a horizontal wall, then a slanted one picked by hand — both attached with or without the
+  step they were written for. A tangent test on a horizontal run cannot detect a search being
+  disabled when the fallback is `(1, 0)` — the right answer for that
   fixture. One rewritten shared-wall test turned out to have a *straight* divider, so the shared wall
   simplified to two nodes that are pinned whichever way the fitting is done, and nothing was left to
   drift.
@@ -2416,6 +2424,16 @@ invisible. It costs almost nothing to keep.
   is a control that silently is not there. `elementIds.test.ts` checks every literal `getElementById`
   against the page that hosts it; a selector built from a template is still unguarded, and the answer
   there is structural — do not reach across a module boundary with one.
+
+  **Keys are contracts too, and a test that reads only values cannot see them.** The mend tool's layer
+  went into `TOOL_LAYERS` keyed by the layer's name where the strip looks it up by the tool's id, so
+  picking up the tool drew nothing — and the test over that table walked its values (2026-09-16). It
+  checks the keys now.
+
+  **A class that is set is not a selector that matches.** A sweep that compares the classes a
+  stylesheet styles against the classes the code sets cleared `button.tool-band` because `.tool-band`
+  was live — on a `<p>`, so every rule scoped to a button was dead (2026-09-15). The sweep finds names
+  nothing sets; the element a selector needs has to be read.
 - **Diagnostics that fire unconditionally are worth their noise.** One that only fires when something
   is known to be wrong cannot distinguish "fine" from "never ran".
 - **Say what a check *is* the first time it comes up.** None of them is self-explanatory, and an
@@ -2677,8 +2695,7 @@ Named in advance so they are recognised rather than discovered.
 hand, generate the graph, edit the walls, put it on the map. Dynamic Fog respects a moved wall, and the
 fog on the table is what the GM edited.
 
-**Everything structural holds.** Euler's identity has held on every derive of a real map, in both
-modes. Placement is confirmed correct in all four corners, and rotation pivots about the bounding-box
+**Everything structural holds.** Euler's identity has held on every derive of a real map. Placement is confirmed correct in all four corners, and rotation pivots about the bounding-box
 centre.
 
 ### The partition has been judged, and it is good — 2026-09-13
@@ -2700,109 +2717,84 @@ manually to finish it, but that's because they are not drawn on the map itself."
 premise holding rather than failing: §1 says the output is a **proposal** a GM corrects, and ink that
 does not exist cannot be read. The interesting part is not that hand insertion was needed — it is
 **which tool the work was done with**, because drawing ink before the derive and drawing walls after
-it sit on opposite sides of the save, which is the seam the parked workflow conversation is about.
+it sat on opposite sides of the save. (That seam was answered on 2026-09-14 by deleting the save:
+decision 1 below.)
 
 **The most informative thing that can happen to this project is now a second map**, one whose style
 differs from the first.
 
-### The surface redesign is built and unproven
+### The surface redesign is built, and has been used
 
-**§7a is complete** — one workspace instead of two, a tool strip holding the verb, a rail that no
-longer forces one section shut, undo, the derive indicators, the markup palette, the layer toggles and
-the colour pickers.
+**§7a is complete** — one workspace instead of two, a tool strip holding the verb, the drawer that
+replaced the rail, undo, the derive indicators, the markup palette, the layer switches and the colour
+pickers, and no save between reading the map and editing its walls.
 
 It came out of using the thing: the accordion made switching tasks expensive, and the two doors into
 the workspace read as artificial. Both turned out to have one cause — the mode boundary ran across the
 grain of the task, and what it was protecting is a property of the document rather than a place.
 
-**The most useful next thing was a real session of map correction, end to end**, as the only way to
-judge a surface rebuilt around a guess about how the work actually flows. **The first half of that
-has now happened** and the list it returned is below.
-
-**What it did not do is judge the partition.** That session looked at the surface — where controls
-are, what is greyed, what reads badly — and never got as far as going room by room and saying whether
-these are the rooms a GM would have drawn. So the oldest open question is still open, and it is still
-the most informative thing that can happen to this project.
-
-**Nothing after the room's list depends on that list**, and nothing after it is urgent.
+**Rooms on 2026-09-13, -14 and -15 went through the whole surface**, and everything they found is
+fixed. The partition was judged in the first of them (above). What has been built since the last room
+is the next section's list.
 
 ### Where to pick this up
 
-**Everything the rooms have found is fixed**, including the four from 2026-09-15 — the wall tools
-drawing no walls, the layer switches appearing in every drawer, the ink layer opening on the base
-instead of the composite, and the rooms layer's red wall lines. The fifth, *changing parameters on the
-walls shouldn't delete ink edits*, had two causes and both are closed: the undo stack cleared
-wholesale, and the first wall edit never going on the stack at all.
+**The next thing is a room**, and there is a lot waiting for one. Three builds have landed since the
+last — graph units, the mend tool, and the delta's review from the day before — and none has been
+looked at on a real map. Everything below was checked at a desk as far as a desk can: `tsc`, the suite
+with mutation counts recorded beside the tests, a build, and the workspace loading clean.
 
-**What is built and has never run in a room:** the **delta** — the walls a rebuild would take, in
-amber, and the ones it would bring back, in cyan — and the **review** that draws it. Both need a map
-with a derived graph and hand edits on it, which is the one state that does not exist outside Owlbear.
-Everything about them checked so far is the state machine, not the picture.
+**First, before anything else will work: clear the stored graph.** Graphs saved before graph units
+(format version 3) are refused, not converted, so the test map's saved walls will not load. *Remove
+ours* in the panel clears them, and the map derives fresh. The prune and straightening sliders come
+back at their defaults, because both settings were renamed with their unit, and straightening reseeds.
 
-**The one check nobody has run:** View's **Defaults** restoring all five colours. The rows themselves
-have been looked at; that button has not been pressed.
+**Graph units** (§5, *What is stored*) — on the non-square test map:
 
-**Graph units are built and have never run in a room — 2026-09-16.** The wall graph moved from
-fractions of each side to units of the map's longer side (§5, *What is stored*). What a desk checked:
-`tsc`, the suite with the conversions pinned on non-square and capped rasters — thirteen mutations,
-thirteen caught — a build, and the workspace loading clean on the dev server with the new module
-served. **What a room has to check**, on the non-square test map:
-
-- **A stored graph is refused.** Version 3 graphs do not load; *Remove ours* clears one, and the map
-  derives fresh. The two renamed settings come back at their defaults, and straightening reseeds.
 - **The walls and rooms sit on the ink**, not stretched along one axis — the drawing moved from two
   scales to one.
 - **The frame lands on the map's edge**, on the short side as well as the long one.
-- **Hit radii feel the same up and down as across** for Move, Draw and Erase — they were short on the
-  map's shorter axis before — and **a click inside an ink gap ring accepts it** above and below the
-  centre, which the ring's hit test refused until the same day.
+- **Hit radii feel the same up and down as across** for Move, Draw and Erase, and **a click inside an
+  ink gap ring accepts it** above and below the centre — the ring's hit test refused those until
+  2026-09-16.
 - **The fog lands where the rooms are** after a push, including on a map stretched out of proportion.
 
-**The mend tool is built and has never run in a room — 2026-09-16** (§10, *The mend tool*). A desk
-checked the search, the accept, the rings and the seed — seventeen mutations, seventeen caught — and
-that the workspace loads with **Mend** in the Walls band. **What a room has to check:**
+**The mend tool** (§10, *The mend tool*):
 
 - **Whether the proposals are the breaks.** The whole quality question, and only a look answers it:
-  whether the mends land on walls that thinned out, and how many land on things that are not breaks.
+  whether mends land on walls that thinned out, and how many land on things that are not breaks.
 - **Whether 20 and 40 pixels are the right starting distances**, which rest on reasoning about how far
   thinning pulls a free end back.
-- **Whether the split-the-difference direction lands where a GM would have drawn the wall.**
-- **The ring**: easy to hit, and the crosshair inside it.
+- **Whether split-the-difference lands where a GM would have drawn the wall.**
+- **The rings** appear when the tool is picked up — the first commit drew none, a key typo §8 records
+  — are easy to hit, and show the crosshair inside.
 - **Accepting**: one mend and *Mend every gap shown* each one step of undo, the search re-running
   after, and the lock appearing on the controls that would rebuild the walls.
 
-**One sweep is waiting deliberately.** Two comments describe code that moved — `reading.ts` argues a
-recompose needs no blanking *because the ink layer draws the base*, which stopped being true on
-2026-09-14, and `layers/paint.ts` says the paint is drawn in the Walls step. Neither causes a defect
-anybody can name today, but that is the shape behind four of the five the rooms found: **a
-justification that was true when written and quietly stopped being true when the thing it described
-moved.** It is held until after a room, so a room test is not sitting behind a refactor.
+**The delta and its review** (decision 1): the walls a rebuild would take and bring back, drawn on
+the map while the question is in the drawer. It needs a derived graph with hand edits on it, which is
+the one state that does not exist outside Owlbear, so what has been checked is the state machine and
+not the picture.
 
-**The stylesheet's share of that has been done — 2026-09-15.** `workspace.html` still carried the
-surface the drawer replaced: the whole `.step` family — a section border, a header, its dimmed and
-open states, and the rule that hid a closed group's body — plus `button.tool-band`'s five rules,
-`#view-group` and `.layer-caption`. Around a hundred lines, matching nothing, and the comments over
-them argued for an accordion this surface has not had since the redesign. **Deleting them changes no
-pixel**, which is the point and also the reason they survived: a rule that matches nothing is
-invisible in the browser and reads as current in the file.
+**View's Defaults** restoring all five colours: the rows have been looked at; that button has not been
+pressed.
 
-**What found them was a selector sweep** — pull every id and class the stylesheet styles, then ask
-whether anything in `src/` or the markup ever sets it. **It is worth knowing what that misses.** It
-compares *names*, so it cleared `button.tool-band` on the strength of a live `.tool-band` — and the
-caption that wears the class is a `<p>`, so every `button.tool-band` rule had been dead since the
-captions stopped being pressable. The band was found by reading the code beside it, not by the sweep.
-**A class that is set is not a selector that matches**, and only the second one is what a rule needs.
+**Held until after a room, deliberately.** Comments that describe code which has since moved, so that a
+room test is not sitting behind a change:
 
-**One thing the deletions surfaced and did not settle.** `wallsMark()` sizes itself at 13px through
-SVG `width`/`height` **attributes**, and the mark now rides on a group's settings button, where
-`button.tool svg` sets 1.4rem in **CSS** — which wins, because a presentation attribute loses to any
-author rule. **Measured on the dev server, 2026-09-15**: the same mark is 13.0px outside a tool button
-and **18.19px inside one**, exactly the 18.19px of the tool glyph beside it. The dead
-`button.tool-band .walls-mark` rule had asked for 11px in the old band button, so every size the mark
-has ever been told to be in the strip is smaller than the one it gets.
+- `reading.ts` argues a recompose needs no blanking *because the ink layer draws the base*, which
+  stopped being true on 2026-09-14; `layers/paint.ts` says the paint is drawn in the Walls step.
+- **The walls layer's red "doomed" marks** justify themselves by a prune *button* that no longer
+  exists. This one is more than a word: whether marking what a limit would take on the saved graph is
+  still the right behaviour, now that pruning is a live slider that regenerates, needs looking at.
 
-**This is a measurement, not a defect**, and it is deliberately not being chased now (user,
-2026-09-16) — decision 7 below holds it for later.
+That shape is behind four of the five defects the rooms found: **a justification that was true when
+written and quietly stopped being true when the thing it described moved.** Most of the stale comments
+the last two days turned up have been corrected; these are the ones left.
+
+**Still open and not urgent:** per-colour opacity, which wants a conversation before code (decision 6),
+and the walls mark's size in the strip (decision 7). And the thing that is not a decision at all: **a
+second map**, in a style unlike the first.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
@@ -3142,17 +3134,18 @@ does.
   and never rejects.
 - **They are then taken best first across the whole graph, and by kind before score there too.** Each
   end is used once, and a mend that would cross a wall or a mend already taken is skipped, its end
-  falling back to its next choice. *By kind across ends* was a call made in building rather than one
-  the user made: it means two ends joined to each other win over a shorter mend onto a wall that would
-  cross them, on the argument that an end joined to an end is the stronger evidence of a break. A
-  fixture pins it.
+  falling back to its next choice. *By kind across ends* means two ends joined to each other win over
+  a shorter mend onto a wall that would cross them, on the argument that an end joined to an end is
+  the stronger evidence of a break. Proposed in building and agreed (user, 2026-09-16); a fixture pins
+  it.
 - **Accepting splits every wall a mend lands on first, then adds the walls.** This is load-bearing,
   and it was measured rather than argued. Adding a wall whose end lands inside another already splits
   the other — but at the point the crossing test computes along it, sharing the new wall's end only if
   the two quantise to the same float32. **Over 19,061 random mends, adding each that way left 7,926
   ending beside the vertex they were meant to share** — drawn closed, and open. Splitting at the
-  landing first left none. The first fixture written for it was a horizontal wall that attached either
-  way, which is how a mutation removing the split survived it; a deterministic sweep replaced it.
+  landing first left none. The two fixtures written for it first — a horizontal wall, then a slanted
+  one picked by hand — attached either way, which is how a mutation removing the split survived them;
+  a deterministic sweep replaced the second.
 - **Rings use the ink tool's floor and padding**, centred on the middle of each mend, and the layer
   draws what the hit test answers. A press inside a ring accepts on release, as an erase does; a press
   anywhere else pans.
@@ -3166,8 +3159,11 @@ does.
   pixels, alongside straightening's seed, in `seedDefaults.ts` — one module because *untouched means
   equal to the static default* is one rule.
 - **The same-wall distance carries a hint**, the third on the surface, with the ink tool's sentence:
-  same label, same backwards direction. Another call made in building; the named-hints test was
+  same label, same backwards direction. Proposed in building and agreed; the named-hints test was
   updated to say so.
+- **Both tracks have a declared top** — a tenth of the map's longer side for the gap, four tenths for
+  the same-wall distance — because the graph has no longest gap to measure one off. Also proposed in
+  building and agreed, as was re-running on release rather than while dragging.
 
 **Seventeen mutations across the search, the rings and the seed, seventeen caught** — two of them only
 after the tests were strengthened, which is recorded in the test file.
