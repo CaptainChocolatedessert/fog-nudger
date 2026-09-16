@@ -32,8 +32,8 @@
  * arrows around a *vertex* rather than a second hand, so the two cannot be confused.
  *
  * The rest draw the thing they do to the linework: a block covering a stroke, a nib laying one down,
- * a stroke with a gap ringed in it, two ends joined, one struck out, a broken wall with the piece
- * that would mend it dashed in, and a whole room's walls dashed and struck out.
+ * a stroke with a gap ringed in it, two ends joined, one struck out, two loose wall ends ringed where
+ * a mend would join them, and a whole room's walls dashed and struck out.
  */
 
 const ICONS: Readonly<Record<string, string>> = {
@@ -70,11 +70,15 @@ const ICONS: Readonly<Record<string, string>> = {
   undo: '<path d="M4.5 9.5h9a5.5 5.5 0 0 1 0 11H8" /><path d="M8.2 5.2 3.9 9.5l4.3 4.3" />',
   redo: '<path d="M19.5 9.5h-9a5.5 5.5 0 0 0 0 11H16" /><path d="M15.8 5.2l4.3 4.3-4.3 4.3" />',
   /*
-    Draw's wall, broken, with the mend dashed across the break: dashed because a mend is proposed until
-    it is accepted, which is how the layer draws one. Erase is the other dashed wall, and the struck
-    cross is what tells them apart.
+    Two loose wall ends facing each other inside a dashed ring, which is what the tool puts on the map.
+
+    **Not Draw's wall with a break in it**, which it was until 2026-09-16: that kept Draw's diagonal and
+    its end dots, so at strip size the difference was a few pixels in the middle and a room found the
+    two hard to tell apart (user). Level rather than diagonal, and ringed, so its outline is unlike
+    every other wall tool's. **Deliberately kin to Gaps** a band above — the same act on the ink rather
+    than on the walls — and the vertex dots are what say walls.
   */
-  mend: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17l2.6-2.6" /><path d="M14.4 9.6 17 7" /><path d="M10.8 13.2l2.4-2.4" stroke-dasharray="1.2 1.6" />',
+  mend: '<path d="M2.5 12H7" /><path d="M17 12h4.5" /><circle cx="8.6" cy="12" r="1.6" /><circle cx="15.4" cy="12" r="1.6" /><circle cx="12" cy="12" r="7" stroke-dasharray="2.2 2" />',
   // The same wall, struck out.
   erase: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" stroke-dasharray="2.4 2.2" /><path d="M8.4 8.4l7.2 7.2M15.6 8.4l-7.2 7.2" />',
   /*
