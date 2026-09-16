@@ -3045,6 +3045,16 @@ turns the bounded flood into a shortest path.
   same sizing rule. The flaw this tool is for leaves a mend a pixel or two long at map-wide zoom — too
   small to see or hit — and a ring with an 11-screen-pixel floor is what keeps a four-pixel gap
   clickable in the ink tool already.
+- **A proposed mend is dashed, in the additive colour**, as a wall being drawn already is: solid means
+  it exists and dashed means it is proposed, and accepted mends become ordinary solid walls. The cost:
+  at map-wide zoom a short mend is too small for dashes to read, and the ring carries it there.
+- **Defaults of 20px and 40px, set per map** when a map is first read, as the straightening default is
+  — divided by the raster width, which is exact. A single fixed fraction was ruled out by that
+  default's own history on a small map. 20 rather than the ink tool's 12 because thinning pulls each
+  free end back about half an ink width, so a break is wider in the graph than in the ink (reasoning,
+  to be checked in a room).
+- **Pruning can widen or remove a gap before this tool sees it**, since each half of a broken wall is a
+  dead end. Accepted as it is.
 - **Two sliders, as the ink tool has**: the largest gap to look for, and how far apart along the walls
   the two sides must be. A fixed ratio in place of the second was considered; kept as two, to be
   revisited if the second never gets used.
