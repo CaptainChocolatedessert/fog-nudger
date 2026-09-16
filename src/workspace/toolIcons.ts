@@ -35,7 +35,7 @@
  *
  * The rest draw the thing they do to the linework: a brush swiping ink away, a pen laying it down,
  * two heavy strokes of ink ringed where a gap parts them, two ends joined, one struck out, two loose
- * wall ends ringed where a mend would join them, and a whole room's walls dashed and struck out.
+ * wall ends ringed where a mend would join them, and a room with a slash through each of its walls.
  * **The two gap tools mirror each other** — ink running into the ring, walls ending in it.
  */
 
@@ -109,12 +109,19 @@ const ICONS: Readonly<Record<string, string>> = {
   // The same wall, struck out.
   erase: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" stroke-dasharray="2.4 2.2" /><path d="M8.4 8.4l7.2 7.2M15.6 8.4l-7.2 7.2" />',
   /*
-    Erase's sibling for a whole room (user, 2026-09-16): four walls dashed between their corners and
-    struck through the middle. The corner vertices are what keep a dashed square from reading as a
-    selection marquee, which is the risk every candidate for this glyph carried.
+    A room with a single slash through each of its walls: every wall goes (user, 2026-09-16).
+
+    **Where the mark sits says what goes**, and Suppress region is the other half of that: the same
+    room with a cross in the middle, where the room is struck and its walls stay. So both draw their
+    walls solid and the marks alone tell them apart. This was the room dashed and crossed in the middle
+    for its first day, which is the mark Suppress region takes; a dashed wall is how this surface draws
+    one that is going, and the tool that keeps its walls could not wear that.
+
+    A slash rather than a cross on each wall, because four crosses blurred into a spiky square at strip
+    size. **The cost:** one slash says "delete" less strongly than a cross does.
   */
   dissolve:
-    '<circle cx="5" cy="5" r="1.8" /><circle cx="19" cy="5" r="1.8" /><circle cx="19" cy="19" r="1.8" /><circle cx="5" cy="19" r="1.8" /><path d="M7 5h10M19 7v10M17 19H7M5 17V7" stroke-dasharray="2.2 2" /><path d="M9.6 9.6l4.8 4.8M14.4 9.6l-4.8 4.8" />',
+    '<circle cx="5" cy="5" r="1.8" /><circle cx="19" cy="5" r="1.8" /><circle cx="19" cy="19" r="1.8" /><circle cx="5" cy="19" r="1.8" /><path d="M7 5h10M19 7v10M17 19H7M5 17V7" /><path d="M10 7l4-4M10 21l4-4M3 14l4-4M17 14l4-4" />',
 };
 
 /**

@@ -3102,9 +3102,11 @@ region *is* deleting the walls that bound it. The questions it was carried with,
   freestanding (user, 2026-09-16).
 
 **Named** *Dissolve region*, after the map-making operation that merges areas by deleting the
-boundaries between them, and drawn as Erase's glyph for a whole room: four walls dashed between corner
-vertices and struck through. The corner vertices are what keep a dashed square from reading as a
-selection marquee. *Clear* was ruled out by *Clear everything* in the panel, *Merge* by being this
+boundaries between them, and drawn as **a room with a single slash through each wall** (user, same
+day): where the mark sits says what goes. The room with a cross in the middle and its walls solid is
+kept for *Suppress region*, decided and not yet built, which strikes the room and keeps the walls. It
+was that room dashed and crossed for its first day; a dashed wall is how the surface draws one that is
+going, so the tool that keeps its walls could not take it as it stood. *Clear* was ruled out by *Clear everything* in the panel, *Merge* by being this
 project's word for its worst failure, and *Erase room* by guessing intent — the region may be a table.
 
 **As built** — `trace/dissolve.ts` is the decision, pure and tested; the tool is a fifth wall tool, so
