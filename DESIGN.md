@@ -2683,6 +2683,34 @@ anybody can name today, but that is the shape behind four of the five the rooms 
 justification that was true when written and quietly stopped being true when the thing it described
 moved.** It is held until after a room, so a room test is not sitting behind a refactor.
 
+**The stylesheet's share of that has been done — 2026-09-15.** `workspace.html` still carried the
+surface the drawer replaced: the whole `.step` family — a section border, a header, its dimmed and
+open states, and the rule that hid a closed group's body — plus `button.tool-band`'s five rules,
+`#view-group` and `.layer-caption`. Around a hundred lines, matching nothing, and the comments over
+them argued for an accordion this surface has not had since the redesign. **Deleting them changes no
+pixel**, which is the point and also the reason they survived: a rule that matches nothing is
+invisible in the browser and reads as current in the file.
+
+**What found them was a selector sweep** — pull every id and class the stylesheet styles, then ask
+whether anything in `src/` or the markup ever sets it. **It is worth knowing what that misses.** It
+compares *names*, so it cleared `button.tool-band` on the strength of a live `.tool-band` — and the
+caption that wears the class is a `<p>`, so every `button.tool-band` rule had been dead since the
+captions stopped being pressable. The band was found by reading the code beside it, not by the sweep.
+**A class that is set is not a selector that matches**, and only the second one is what a rule needs.
+
+**One thing the deletions surfaced and did not settle.** `wallsMark()` sizes itself at 13px through
+SVG `width`/`height` **attributes**, and the mark now rides on a group's settings button, where
+`button.tool svg` sets 1.4rem in **CSS** — which wins, because a presentation attribute loses to any
+author rule. **Measured on the dev server, 2026-09-15**: the same mark is 13.0px outside a tool button
+and **18.19px inside one**, exactly the 18.19px of the tool glyph beside it. The dead
+`button.tool-band .walls-mark` rule had asked for 11px in the old band button, so every size the mark
+has ever been told to be in the strip is smaller than the one it gets.
+
+**This is a measurement, not a defect.** Whether a mark the size of the glyph it sits beside is wrong
+is a question only a look can answer — it may read as a second icon rather than as a mark on one, or
+it may be fine. Nothing here changed it either way, and it wants an eye in a room before a number is
+picked.
+
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
 
@@ -2767,10 +2795,12 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   *"it's easy to miss those buttons down on the bar"*). The bar was chosen because the question
   arrives from two places — a locked slider inside a drawer and a marked tool in the strip — and it
   is the one piece of furniture both can reach. Reachable from both turned out to mean near neither,
-  which is **the open question this record already carries about the state line**: a message about a
-  press arriving as far from the press as the window allows is what once made three working buttons
-  read as dead. The fix is placement, not emphasis — colouring the bar louder would have treated the
-  same defect as a visibility problem.
+  which is **the same defect the state line had** (decision 2 above, fixed the day before): a message
+  about a press arriving as far from the press as the window allows is what once made three working
+  buttons read as dead. The fix is placement, not emphasis — colouring the bar louder would have
+  treated the same defect as a visibility problem. **Twice in two days**, which is worth reading as a
+  pattern rather than as two incidents: this surface's default gravity puts a response in the bar,
+  and the bar is nowhere near the rail almost everything is pressed in.
 
   So the drawer, which is where a press already puts things. It costs the two buttons stacking rather
   than sitting side by side, and a locked slider's own drawer being taken over by the question about
@@ -2811,11 +2841,25 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   pending press, and the legend takes its two colours from the palette rather than from a hardcoded
   hue.
 
-2. **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
-  control that writes to it is in the left rail, so a message about a press arrives as far from the
-  press as the window allows. This is what made three working buttons read as dead. Gating them
-  removed the need for that particular message; the placement is unchanged and affects every other
-  message on the surface.
+2. ~~**The state line is in the wrong place.**~~ **Fixed on 2026-09-14, recorded here on 2026-09-15.**
+
+  **What it was.** The line sat bottom-right of a full-screen window while every control that writes
+  to it is in the left rail, so a message about a press arrived as far from the press as the window
+  allows. That is what made three working buttons read as dead.
+
+  **What answered it: the bar stopped being only the buttons.** The bar now spans the bottom as a
+  three-column grid — the message in the left track, the actions centred on the *window* rather than
+  on whatever is left of it, and nothing on the right. So the line sits directly under the rail that
+  writes to it, and the message and the actions are one piece of furniture rather than two things
+  kept from colliding by arithmetic. The old clearance arithmetic and the `:has()` rule that relaxed
+  it when the controls were hidden are both gone; the grid track does the bounding.
+
+  It stays **outside `#panel`**, which is the constraint that did not change: it has to remain
+  visible with the controls hidden, or a slow close reads as a hang.
+
+  **What that establishes.** The placement is fixed and the surface has been in rooms since — the
+  five findings of 2026-09-15 include nothing about it. That is absence of a complaint, not a test:
+  nobody has been asked whether a message now lands where they are looking.
 
 3. **The ink-width readouts state a guess too confidently.** The measured ink width is a programmatic
   estimate and several readouts quote it as though it were a fact. One candidate: if a line of text

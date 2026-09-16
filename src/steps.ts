@@ -667,10 +667,10 @@ export function stepParameters(step: StepId): readonly SettingName[] {
 /**
  * Whether a step holds any control that would rebuild the wall graph.
  *
- * **What the rail's mark is hung on**, and it is asked of the parameters rather than hardcoded to
+ * **What the strip's mark is hung on**, and it is asked of the parameters rather than hardcoded to
  * Ink and Walls — so a control moving between groups carries its consequences with it rather than
  * leaving the mark behind on the group it left. `regeneratesWalls` is the per-parameter half;
- * `workspace/wallsMark.ts` is the drawing.
+ * `workspace/regenerateGuard.ts` is the drawing.
  */
 export function stepRegeneratesWalls(step: StepId): boolean {
   return stepParameters(step).some(regeneratesWalls);

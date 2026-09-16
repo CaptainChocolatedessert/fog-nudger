@@ -127,8 +127,8 @@
         are in the same place whether or not something is open. The map stays visible above and
         below whatever is being read. And `--drawer-top` puts it level with the button that opened
         it, so the thing you pressed and the thing that appeared are plainly the same subject — set
-        from the button's own position in `accordion.ts`, because only the strip knows where its
-        buttons are.
+        from the button's own position by the strip (`toolPalette.ts`), because only the strip knows
+        where its buttons are; `drawer.ts` only applies the number it is handed.
       */
       #panel {
         position: fixed;
@@ -419,55 +419,16 @@
         color: #9aa0c8;
       }
       /*
-        A group's name, which is also the button that opens its drawer.
+        A group's settings button. Same glyph shape as a verb, so the column reads as one kind of
+        control; it is told apart by being the only glyph above a group's tools rather than by a
+        treatment of its own.
 
-        **Deliberately not glyph-shaped.** Two things can be highlighted in this column at once — an
-        armed verb and an open panel — and they are told apart by *shape* rather than by colour: a
-        panel is a word, a verb is a picture. Nothing has to be learned for the strip to keep
-        answering "what is armed" at a glance.
+        **The band caption above it is not a button**, and the rules that styled it as one went on
+        2026-09-15 — `button.tool-band` had stopped matching anything, because the caption is a `<p>`
+        and pressing a group is the glyph's job. `.tool-band` above is what actually styles it.
       */
-      /* A group's settings button. Same glyph shape as a verb, so the column reads as one kind of
-         control; it is told apart by being the only glyph above a group's tools rather than by a
-         treatment of its own. */
       button.tool.params {
         margin-bottom: 0.15rem;
-      }
-      button.tool-band {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.2rem;
-        width: 100%;
-        padding: 0.25rem 0.1rem;
-        border: 0;
-        border-radius: 0.3rem;
-        background: transparent;
-        font: inherit;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #9aa0c8;
-        cursor: pointer;
-      }
-      button.tool-band:hover:not(:disabled) {
-        color: #e8e9f5;
-        background: rgba(187, 153, 255, 0.1);
-      }
-      /* The open drawer, named. An underline rather than a fill, so it cannot be mistaken for the
-         armed verb's pressed glyph two rows down. */
-      button.tool-band[aria-pressed="true"] {
-        color: #bb99ff;
-        box-shadow: inset 0 -2px 0 #bb99ff;
-      }
-      /* The same 0.65 every other inactive thing on this surface uses, measured against the 3:1
-         floor for non-text UI. */
-      button.tool-band:disabled {
-        opacity: 0.65;
-        cursor: default;
-      }
-      button.tool-band .walls-mark {
-        width: 11px;
-        height: 11px;
       }
       .tool-rule {
         height: 1px;
@@ -508,7 +469,7 @@
         font-weight: 600;
       }
       /*
-        **0.65, matching a locked accordion header, and both numbers are measured.** At 0.4 a disabled
+        **0.65, the surface's one value for "inactive", and both numbers are measured.** At 0.4 a disabled
         glyph computed to 2.74:1 against the strip — under the 3:1 floor for non-text marks — and in
         the state a GM meets first, before a map or a graph, most of the column is disabled. 0.65 is
         5.35:1: plainly inactive beside a live glyph, and legible. One value for "inactive" across the
@@ -578,16 +539,6 @@
       #layer-row:empty {
         display: none;
       }
-      /* Styled as the tool strip's band captions are, so the surface has one look for "this word
-         names the row after it" rather than two. */
-      .layer-caption {
-        align-self: center;
-        margin-right: 0.15rem;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #9aa0c8;
-      }
       button.layer {
         padding: 0.2rem 0.45rem;
         border-radius: 0.3rem;
@@ -640,7 +591,7 @@
         background: rgba(187, 153, 255, 0.14);
         color: #e8e9f5;
       }
-      /* The same 0.65 the tool strip and the locked headers use, which is the one value for
+      /* The same 0.65 the tool strip uses, which is the one value for
          "inactive" on this surface and is measured against the 3:1 floor. */
       button.history:disabled {
         opacity: 0.65;
@@ -648,70 +599,22 @@
       }
 
       /* ----------------------------------------------------------------------------------------
-         The groups, as a rail rather than an exclusive accordion.
+         What a group puts in the drawer: its blurb, its sub-headings, its rows and its actions.
 
-         Every header stays on screen in order, so the cascade is a shape rather than something to
-         remember. **Several may be expanded at once**, which is what the tool strip bought: while a
-         step bound the drag, exclusivity was what kept "one meaning for a press" true, and forcing
-         one section shut to read another made the commonest move in the job expensive.
+         There is no rail of headers here any more. The groups were an accordion of `.step` sections
+         with their own headers, dimming and open state; the strip took over naming a group and the
+         drawer took over showing one, so a group is now a body and nothing else. The header rules
+         went with the headers on 2026-09-15 — they had already stopped matching anything, because
+         nothing sets `.step`.
          ---------------------------------------------------------------------------------------- */
-      .step {
-        border-top: 1px solid rgba(187, 153, 255, 0.18);
-      }
-      .step:last-of-type {
-        border-bottom: 1px solid rgba(187, 153, 255, 0.18);
-      }
-      .step-header {
-        display: block;
-        width: 100%;
-        padding: 0.6rem 0.1rem;
-        border: 0;
-        background: transparent;
-        color: #9aa0c8;
-        font: inherit;
-        font-size: 0.82rem;
-        font-weight: 600;
-        letter-spacing: 0.07em;
-        text-transform: uppercase;
-        text-align: left;
-        cursor: pointer;
-      }
-      .step-header:hover:not(:disabled) {
-        color: #e8e9f5;
-      }
       /*
-        A group the map gate has not opened yet. Dimmed rather than hidden, so the order of what is
-        coming is visible from the first frame — the rail's order is the cascade, and a cascade with
-        its later half missing does not teach it.
+        The mark: a miniature wall graph on anything whose controls would rebuild walls the GM has
+        changed by hand — a row's name in the drawer, and a group or tool button in the strip.
+        `regenerateGuard.ts` draws it, and carries why it is this and not a count.
 
-        **0.65 rather than 0.4, and the number is measured.** At 0.4 the header computed to 2.17:1
-        against the panel, which is below even the 3:1 floor for non-text UI — so a heading that
-        exists precisely to be *read* while inactive could not be. 0.65 lands at 3.74:1: still
-        unmistakably disabled beside a live header at 7.26:1, and legible.
+        Baseline-aligned rather than floated, so it reads as part of the name it sits beside rather
+        than as a badge stuck to it — a badge is what made it look like a modifier on the tool.
       */
-      .step.locked > .step-header {
-        opacity: 0.65;
-        cursor: default;
-      }
-      /* The open step is named in the accent colour and marked down the edge, because an accordion
-         header is a weaker "you are here" than a selected tab and needs the help. */
-      .step.open > .step-header {
-        color: #bb99ff;
-        box-shadow: inset 2px 0 0 #bb99ff;
-        padding-left: 0.6rem;
-      }
-      /*
-        The mark: a miniature wall graph on the header of any group whose controls would rebuild
-        walls the GM has changed by hand. `wallsMark.ts` carries why it is this and not a count.
-
-        Baseline-aligned rather than floated, so it reads as part of the heading rather than as a
-        badge stuck to it — a badge is what made it look like a modifier on the tool.
-      */
-      .step-header.marked {
-        display: flex;
-        align-items: center;
-        gap: 0.45rem;
-      }
       .walls-mark {
         flex: none;
         /* Optically centred against uppercase letterforms, which sit above the baseline. */
@@ -763,9 +666,6 @@
         color: #e8e9f5;
         font-weight: 600;
       }
-      .step:not(.open) > .step-body {
-        display: none;
-      }
       .step-body {
         padding: 0 0 0.4rem 0.6rem;
       }
@@ -777,11 +677,7 @@
         color: #9aa0c8;
       }
 
-      #view-group {
-        margin-top: 0.4rem;
-      }
-
-      /* A step's own actions, at the end of its body. */
+      /* A group's own actions, at the end of its body. */
       .step-actions {
         display: flex;
         gap: 0.4rem;
@@ -1061,31 +957,24 @@
         font-size: 0.75rem;
         color: #9aa0c8;
         /*
-          Capped and wrapping, rather than growing left across the whole window.
+          Clipped to its own track, rather than growing across the whole window.
 
-          Most of what lands here is a short figure, but the point probe answers in whole sentences —
-          and an unbounded line ran the full width of the map, which is a banner across the thing the
-          GM is looking at. The middle bound keeps it clear of the controls on the left however wide
-          the window is; the outer one stops a narrow window producing a negative width, which CSS
-          discards as invalid — leaving exactly the unbounded line this is here to prevent.
+          Most of what lands here is a short figure, but the point probe answers in whole sentences,
+          and an unbounded line ran the full width of the map — a banner across the thing the GM is
+          looking at. The grid track is what bounds it now: it cannot collide with the buttons,
+          because it has a column of its own, and the cap stops a long answer pushing the centre
+          track off centre.
+
+          **The clearance arithmetic this used to carry is gone, and so is the `:has()` rule that
+          relaxed it when the controls were hidden.** Both existed to keep a floating line clear of
+          a panel it no longer shares an edge with.
         */
-        /* The grid track bounds it now, so the old clearance arithmetic is gone — it cannot
-           collide with the buttons, because it has a column of its own. What is left is a cap on
-           how much of that column a long answer may use: the point probe replies in whole
-           sentences, and an unbounded one would push the centre track off centre. */
         max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         text-align: left;
       }
-      /*
-        With the controls hidden there is no panel to stay clear of, so the middle bound has
-        nothing to do and the line was narrower than it needed to be. Only the outer guards
-        remain. `:has()` is the whole mechanism; where it is unsupported the line simply keeps
-        the tighter cap, which is the safe direction.
-      */
-
       #state.bad {
         color: #ff8080;
       }
