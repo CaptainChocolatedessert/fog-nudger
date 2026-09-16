@@ -3,20 +3,25 @@
 An [Owlbear Rodeo](https://www.owlbear.rodeo/) extension: **trace a map image into the fog regions
 you reveal room by room.**
 
-> **Pre-release.** The pipeline runs end to end and has been run on real maps: it reads the scene's
-> map image, reads the linework into a graph of wall centrelines, derives the enclosed regions as
-> the faces of that graph, fits their boundaries and places them on the map. Placement is confirmed
-> correct. **What is still unproven is whether the partition it finds is the one a GM wants** — that
-> is judged by looking, and the looking has barely started.
+> **Pre-release.** The pipeline runs end to end on real maps: it reads the scene's map image, reads
+> the linework into a graph of wall centrelines, and derives the enclosed regions as the faces of
+> that graph, placed on the map. On the map it has been judged against, the rooms it finds are the
+> ones a GM would draw. **Maps in other styles have not been tried** — hatched stonework, a printed
+> floor grid, a scan — and those are where reading the linework is expected to be hardest.
 >
 > Everything is reviewed *before* it is written. A full-screen workspace draws the map, the ink it
-> read, the wall centrelines it found and the regions it would produce, so a partition can be judged
-> and the settings tuned without touching the scene. Putting it on the map is then one deliberate
-> action, and it replaces whatever the previous run left — so the tool owns its own fog and nothing
-> else, but a hand edit to those shapes does not survive the next run.
+> read, the walls it found and the regions they make, so the result can be judged and corrected
+> without touching the scene. Closing the workspace puts it on the map, and so does a button for
+> doing that mid-session. Each push replaces what the last one wrote — so the tool owns its own fog
+> and nothing else, but a hand edit to those shapes in Owlbear does not survive the next push.
 >
-> Editing belongs in the workspace, which has a wall editor: move a point, draw a wall, erase one, and
-> one-shot operations to straighten every wall, prune the dead ends, or wall the map's edge.
+> Corrections happen at two levels, and Undo covers both.
+>
+> - **The ink**: paint out linework that is not a wall, paint in a wall the map does not draw, and
+>   accept proposed repairs where a drawn wall has a gap in it.
+> - **The walls**: move a point, draw a wall, erase one, accept proposed mends where a wall breaks
+>   off, or dissolve a region to remove the walls around it. Sliders straighten the walls and prune
+>   short dead ends as they are derived, and one button adds walls around the map's edge.
 
 ## The idea
 
