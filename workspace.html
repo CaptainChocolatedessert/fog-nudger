@@ -469,11 +469,14 @@
         font-weight: 600;
       }
       /*
-        **0.65, the surface's one value for "inactive", and both numbers are measured.** At 0.4 a disabled
-        glyph computed to 2.74:1 against the strip — under the 3:1 floor for non-text marks — and in
-        the state a GM meets first, before a map or a graph, most of the column is disabled. 0.65 is
-        5.35:1: plainly inactive beside a live glyph, and legible. One value for "inactive" across the
-        surface rather than a second, dimmer one here.
+        **0.65, and both numbers are measured.** At 0.4 a disabled glyph computed to 2.74:1 against
+        the strip — under the 3:1 floor for non-text marks — and in the state a GM meets first,
+        before a map or a graph, most of the column is disabled. 0.65 is 5.35:1: plainly inactive
+        beside a live glyph, and legible.
+
+        **It is not the surface's only dimming value**: locked sliders and drawer buttons use 0.5 and
+        bar buttons 0.45, none of them measured. They were judged fine as they are (2026-09-16), so
+        the scatter is recorded rather than unified.
       */
       button.tool:disabled {
         opacity: 0.65;
@@ -591,8 +594,8 @@
         background: rgba(187, 153, 255, 0.14);
         color: #e8e9f5;
       }
-      /* The same 0.65 the tool strip uses, which is the one value for
-         "inactive" on this surface and is measured against the 3:1 floor. */
+      /* The same 0.65 the tool strip uses, since these are glyph buttons on the same dark ground —
+         and that value is measured against the 3:1 floor. */
       button.history:disabled {
         opacity: 0.65;
         cursor: default;

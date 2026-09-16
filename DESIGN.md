@@ -2294,22 +2294,32 @@ contrast against a particular map, and every change is now a trip through the op
 colour picker — slower, and a worse place to compare two candidates. What is bought is that a category
 is a category: five rows, one shape, and nothing to learn about why one of them is special.
 
-### The measured typography finding, still half outstanding
+### The measured typography finding — judged, and left as it is
 
-**Contrast is settled.** `0.65` is the one value for "inactive" on this surface — locked headers,
-disabled tools, the undo pair — measured at 3.7:1 and better against a 3:1 floor for non-text UI. The
-`0.4` it replaced computed to 2.2:1 and 2.7:1, which is under the floor for something whose whole
-purpose is to be read while inactive.
+**Contrast: `0.65` for a disabled glyph, and it is measured.** The tool strip's disabled tools and the
+undo pair use it, at 5.35:1 against the strip for a glyph — over the 3:1 floor for non-text UI, where
+the `0.4` it replaced computed to 2.7:1. (The 3.7:1 figure this used to quote was the locked accordion
+header against the panel, which no longer exists.)
 
-**Size is not.** The base is 13px, control hints are **9.9px** and the state line **9.8px**. A 14px
-base with an 11px floor costs nothing and the rail scrolls already. The tool strip's band captions are
-at the 11px floor; the hints and the state line are not, and the base is unchanged — it alters the look
-of every control at once, which is worth a GM seeing before it lands.
+**It is not the only value, and this used to say it was.** Locked sliders and the buttons inside a
+drawer dim to `0.5`, and a disabled bar button to `0.45`. None of those was measured. Recorded rather
+than unified, for the reason below.
 
-**One half of this finding is void**, and it is the half that argued for raising the hints: it read
-*"the hints are where every control's explanation lives"*, which stopped being true when the labels
-took over that job. Two controls carry a hint at all. The state line still carries what it always did,
-so the floor is still worth having — on its own merits rather than that one.
+**Size: below the floor, and fine** (user, 2026-09-16: *"All of the text sizes look fine to me."*).
+Measured on 2026-09-15 against a 13px base: the band captions at **11px**, a group's blurb at
+**10.4px**, the map name and the undo label at **10.14px**, and the state line at **9.75px**. The
+proposal was a 14px base with an 11px floor for the smallest text, held back because it changes the
+look of every control at once and wanted a GM's eye first. **That eye has been given and the answer
+was no change.**
+
+**What the floor was standing in for was that look**, so the look retires it. It does not establish
+that 11px never matters: the band captions went up to it because a room found them hard to read at
+9.1px of uppercase (2026-09-10), and that stays true. Two observations, not a rule — small uppercase
+was too small, and everything on the surface today is not.
+
+**Standardising was left optional, and not done.** The stylesheet carries a scatter of near-identical sizes
+(0.72, 0.75, 0.76, 0.78 and 0.8rem) and three dimming values, which reads as drift rather than intent.
+Collapsing them would tidy the file and move pixels a GM has just approved, so the scatter stays.
 
 ### What does not change
 
@@ -2890,10 +2900,10 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   something a GM necessarily thinks of as a room, so the name was guessing at why they were
   pressing it. §7a carries what that cost to learn.
 
-6. **Two visual changes that want a GM's eye before they land.** **Per-colour opacity**, which may not
-   fit the design language — that is the conversation, and it is explicitly not to be built before it.
-   And the **14px base size** from §7a's measured typography note, left alone because it changes the
-   look of every control at once.
+6. **Per-colour opacity wants a GM's eye before it lands**, because it may not fit the design
+   language — that is the conversation, and it is explicitly not to be built before it. The **14px
+   base size** that shared this item is ~~open~~ **settled 2026-09-16 as no change**: the eye was
+   given and every size on the surface looks fine. §7a's typography note carries the figures.
 
 **And the thing that is not a decision at all: a second map.** The reading is least proven on styles
 unlike the one that has been tried — hatched stonework, a printed floor grid, a scan, walls drawn as
@@ -2912,8 +2922,9 @@ these are here so the reason survives the enforcement.
 - **A control offered where its presses do nothing is a control that lies.** The tool strip always
   obeyed this; the wall actions did not, and answered a press by writing to a state line in the
   opposite corner of the window. Gate before the press, and say why the gate is down.
-- **`0.65` is the one value for "inactive"** on this surface — locked headers, disabled tools, the
-  undo pair. It is measured against the 3:1 contrast floor; 0.4 was below it.
+- **`0.65` is the measured value for a disabled glyph** — the tool strip and the undo pair, at 5.35:1
+  against the 3:1 contrast floor, where 0.4 was below it. Locked sliders and drawer buttons use 0.5
+  and bar buttons 0.45, unmeasured; §7a says why they were left.
 - **The undo stack is cleared when the map it describes goes, and not otherwise.** A different map
   — or a different raster under an open brush — invalidates both documents at once, so those clear
   everything; discarding the wall graph clears that document's entries alone. **Pushing clears
