@@ -2757,26 +2757,27 @@ is the next section's list.
 **The next thing is a room.** Graph units, the mend tool and the delta's review have been **used** in
 one since they landed and appear to work (user, 2026-09-16: *"I haven't tested them carefully, but
 I've used them."*) — so their lists below are what careful checking would look at, not a record of
-nothing known. **Dissolve region** landed after that and has not been in a room at all. Everything was
+nothing known. **Dissolve region** landed after that and has been in one since, in part. Everything was
 checked at a desk as far as a desk can: `tsc`, the suite with mutation counts recorded beside the
 tests, a build, and the workspace loading clean.
 
 **A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
 they are refused, not converted. *Remove ours* in the panel clears one, and the map derives fresh.
 
-**Dissolve region** (§10, *Dissolve region*):
+**Dissolve region** (§10, *Dissolve region*). **Confirmed in a room (user, 2026-09-16):** the
+highlight follows the pointer from region to region, pillars and rooms inside keep their walls on a
+real map, and one click is one step of undo. Not yet looked at:
 
-- **The highlight** — the walls a click would take, in red, appearing as the pointer enters a region,
-  changing as it crosses into another, and gone outside every region, where a press pans.
-- **The rule on real walls**: a pillar or a room inside keeps its walls, a stub hanging in goes, and a
-  room touching the outer wall at one point keeps its walls.
-- **Accepting**: one click is one step of undo, *Undo dissolving a region*; on a map never edited the
-  first dissolve adopts the derivation, and the locks appear on the controls that rebuild the walls.
+- **The rest of the rule on real walls**: a stub hanging in goes, and a room touching the outer wall at
+  one point keeps its walls.
+- **The first dissolve on a map never edited** adopts the derivation, and the locks appear on the
+  controls that rebuild the walls.
 - **A room on a building's edge** opens to the outside when dissolved, and the fills of every room it
   merged with vanish. Expected, and worth seeing once, since it is the largest thing one click here
   can do.
-- **Hover on a large graph.** The traversal is rebuilt once per edit rather than per pointer move, and
-  the region lookup is a bounding-box pass over the regions; neither is measured on a real map.
+- **Hover on a large graph**, which is deliberately left for now (user). The traversal is rebuilt once
+  per edit rather than per pointer move, and the region lookup is a bounding-box pass over the
+  regions; neither is measured on a real map.
 
 **Graph units** (§5, *What is stored*) — on the non-square test map:
 
@@ -3084,8 +3085,8 @@ these are here so the reason survives the enforcement.
 
 ### Two tools built from conversations
 
-**1. Dissolve region — built 2026-09-16, never run in a room.** Click inside a region and the walls
-around it go.
+**1. Dissolve region — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
+pick this up* has which part). Click inside a region and the walls around it go.
 
 This is **the small-area-face tool**, which stood here as wanted and undesigned, and it is the
 smallest-room control returning in the form this record already said was correct. That control was
