@@ -3021,10 +3021,31 @@ The questions to start from, offered as a starting point and not as an agenda:
   nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or a
   different action has not been asked.
 
-**2. A graph-side gap tool — wanted, and not yet built.**
+**2. A graph-side gap tool — wanted, being designed (2026-09-16), not yet built.**
 
 The idea: pair free endpoints by graph distance, which is exact where a pixel closing is a guess, and
 turns the bounded flood into a shortest path.
+
+**Decided so far (user, 2026-09-16):**
+
+- **What it is for: flaws in the derived graph**, such as a wall line that thinned out and left a break
+  in the walls. **Not doorways.** It may find some in some drawing styles, but it is not a door tool
+  and is not to be designed as one.
+- **An accepted proposal is a drawn wall**, no different from one drawn by hand once it is placed. So
+  it is a hand edit, and everything a hand edit brings comes with it: the first one adopts the
+  derivation as the document, the controls that regenerate walls lock, and the delta shows it going
+  if a regenerate is agreed. That existing machinery is how the interface says what the paragraph
+  below asks for — nothing new is needed to say it.
+- **Units native to the graph** — fractions of the map, like every other stored graph quantity.
+- **Proposals in the additive colour**, the palette's colour for content being put in.
+- **Accept-all is one undo step.**
+
+**Leaning, from the discussion that produced these:** one side of a proposal must be a **free end**
+(a node with one wall), since a wall that stops is what a break looks like in a graph; the other side
+may be a free end, a vertex, or a point partway along a segment. Each free end proposes at most one,
+chosen by distance and by direction — a wall that stops most likely continues the way it was going —
+and proposals are paired off so no end is used twice and none cross a wall or each other. Accepting
+re-runs the search, as the ink tool does.
 
 **It does not replace the pixel tool, and this is the thing most likely to be got wrong.** A **scanner
 artefact** — a thin light line across a scanned map — severs linework in *pixel* space, before any
@@ -3036,9 +3057,10 @@ mend on the graph leaves two edges that happen to meet. Two tools, two faults.
 **One property to design in from the start: the two differ in durability.** The pixel tool writes what
 the GM accepts into the added-ink layer, which is an *input* and survives a re-derive. A graph tool
 adds an **edge**, which lives in the wall graph and does not — so mending a gap on the graph flips the
-document from purely-derived to edited, and should count toward the hand-edit total like any other
-wall edit. Same conceptual tool, opposite durability, and the GM has no way to know that unless the
-interface says so.
+document from purely-derived to edited, like any other wall edit. (This said it "should count toward
+the hand-edit total"; the count is gone, and the comparison against the stored base sees a mended
+gap with nothing added.) Same conceptual tool, opposite durability, and the GM has no way to know
+that unless the interface says so.
 
 ### Carried open questions
 
