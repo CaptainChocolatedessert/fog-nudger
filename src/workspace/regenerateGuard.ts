@@ -1,8 +1,32 @@
 /**
- * What would rebuild the walls, marked on the control that would do it — and the one question asked
- * before it can.
+ * Ask, by putting the answer on the map and the two replies in the bar.
  *
- * ## The mark is on the thing that causes it, not on the group holding that thing
+ * ## It was a dialog, and a dialog could not be answered — user, 2026-09-15
+ *
+ * The modal asked two questions at once. *Do you understand what this costs* is a yes or no and a box
+ * is the right shape for it. *Is what it costs acceptable* can only be answered by looking — panning,
+ * zooming, finding the wall you drew across the corridor and deciding whether you mind — and a modal
+ * exists precisely to stop you doing anything else. It drew the delta behind itself and lightened its
+ * own backdrop to compensate, which was the compromise showing; needing to **pan** is where it
+ * stopped holding (*"maybe the dialog isn't the right idea if there is interaction needed"*).
+ *
+ * So there is no dialog on this path. Pressing the lock's key puts the delta on the map and the two
+ * answers in the bar, and the surface stays entirely live while the GM looks. **Nothing is pending
+ * while they do**: the walls are exactly as they were, so wandering off and arming some other tool is
+ * a perfectly good answer and simply takes the marks down.
+ *
+ * That is this project's own rule one step further on. `confirmDialog.ts` already argues that a
+ * dialog is a bad way to make a boundary visible, because it arrives *after* the gesture, and that
+ * the boundary should be shown first by disabling what would cross it and saying why. The lock and
+ * its mark are that first half. This is the second: it shows what is behind the boundary rather than
+ * describing it.
+ *
+ * **Two costs, and they are real.** The destructive action is no longer behind a modal, so a stray
+ * click can reach it — which is why it sits at the far end of the bar from everything else, fenced,
+ * and is the only urgent chip on screen. And this is a **mode**, on a surface that has been shedding
+ * them; the mildest kind, since it changes nothing and leaves on any other action, but one.
+ *
+ * ## What the mark is on, and why it is not on the group
  *
  * It was on the group, which is a proxy and an inaccurate one (user, 2026-09-14). **Ink holds nine
  * controls and five of them regenerate**: the two brush widths and the two gap settings recompute
@@ -40,26 +64,13 @@
  *
  * **Blue and not red**, which is where this started: red is reserved for destruction and earns its
  * alarm by being rare, while this can be worn for a whole session.
- *
- * ## The question shows its own answer — 2026-09-15
- *
- * While the dialog is up, the **delta** is on the map: what the GM added in amber because it
- * would go, what they erased in cyan because it would come back. That is what the record meant
- * by retiring the count — *"fourteen tells a GM nothing they can act on"* — and the words in the
- * body were standing in for it until now.
- *
- * The dialog asks to be shown through, which it does not do anywhere else. A backdrop that hides
- * the picture the question is about would make the picture pointless.
- *
- * DOM for the glyph; `stage.ts` for the question and for the consent.
  */
 
-import { confirmAction } from "../confirmDialog";
 import { describeError } from "../describeError";
 import { regeneratesWalls, type SettingName } from "../settings";
 import { stepRegeneratesWalls, TOOLS, type StepId } from "../steps";
 import { say } from "./shell";
-import { discardWalls, wallsEdited } from "./stage";
+import { discardWalls, onStageChange, wallsEdited } from "./stage";
 import { showWallDelta } from "./layers/delta";
 
 /** Whether a group holds anything that would rebuild the walls — the summary on its own glyph. */
@@ -85,7 +96,66 @@ export function toolIsMarked(tool: string): boolean {
 }
 
 /**
- * Ask, and on agreement throw the stored graph away so the question is answered for good.
+ * What the GM came to do, held while they decide whether it is worth the walls.
+ *
+ * **The walls are not pending; the press is**, and the difference is the whole argument for this
+ * shape. Nothing has happened to the document, so leaving costs nothing — but a GM who reached for
+ * Add ink meant to reach for Add ink, and making them press it twice would turn a confirmation into
+ * an errand. A locked slider has no `then`: unlocking is the entire act.
+ */
+interface Review {
+  readonly what: string;
+  readonly then: (() => void) | null;
+}
+
+let review: Review | null = null;
+
+const listeners: (() => void)[] = [];
+
+/** Told when the review opens or closes, so the bar can show or hide its two answers. */
+export function onRegenerateReview(listener: () => void): void {
+  listeners.push(listener);
+}
+
+/** What is being reviewed, or `null`. Read by the bar to decide what its buttons say. */
+export function regenerateReview(): Review | null {
+  return review;
+}
+
+function announce(): void {
+  for (const listener of listeners) listener();
+}
+
+/**
+ * Put the question up: the delta on the map, the answers in the bar.
+ *
+ * Takes what the GM was trying to do rather than returning whether they may. **The old signature was
+ * a promise of a yes or a no**, which is what a modal can offer and this cannot: there is no moment
+ * at which this function knows the answer, because the surface goes on working while the answer is
+ * being decided. A caller hands over what to do if the answer turns out to be yes.
+ */
+export function reviewRegenerate(what: string, then?: () => void): void {
+  review = { what, then: then ?? null };
+  const marked = showWallDelta(true);
+  say(
+    marked
+      ? `${what} would build these walls again from the map — look at what changes, then choose`
+      : `${what} would build these walls again from the map`,
+  );
+  announce();
+}
+
+/** Take the question down, leaving the walls as they are. */
+export function keepWallChanges(): void {
+  if (!review) return;
+  review = null;
+  showWallDelta(false);
+  say("kept your wall changes — nothing was touched");
+  announce();
+}
+
+/**
+ * Agree: throw the stored graph away, then do whatever the press was for.
  *
  * **Consent is the document going rather than a flag recording that consent was given.** A flag is a
  * second statement of the same fact and can disagree with it; an absent graph cannot. With nothing
@@ -93,70 +163,89 @@ export function toolIsMarked(tool: string): boolean {
  * is the state a map that has never been edited is already in, so there is one path rather than a
  * consented one beside it.
  *
- * Returns whether the caller may go ahead. A failed discard answers **no**, so a GM is never left
- * with a setting that has moved against a document that has not.
+ * A failed discard leaves the review **up**, so the GM is never left with a setting that has moved
+ * against a document that has not — and the marks on the map still describe the walls exactly, which
+ * is what makes staying up the honest state rather than a stuck one.
  */
-export async function confirmRegenerate(what: string): Promise<boolean> {
-  /*
-    Up before the question and down in a `finally`, so no path leaves the marks on the map after
-    the dialog has gone — including the thrown one, where the walls are still exactly as the
-    delta describes them and a stale picture would be the only thing saying otherwise.
-  */
-  const marked = showWallDelta(true);
+export async function acceptRegenerate(): Promise<void> {
+  const pending = review;
+  if (!pending) return;
+
   try {
-    const ok = await confirmAction({
-      title: "Generate the walls again, discarding your changes to them?",
-      body: [
-        `${what} is one of the things the walls are derived from, so using it builds them again ` +
-          "from the map. Anything you moved, drew or erased by hand is not in what replaces " +
-          "them, and it cannot be undone afterwards.",
-        /*
-          The legend, and it names the marks rather than counting them.
-
-          It also admits they may be off screen, which is the one thing a picture cannot say
-          about itself: a GM who edited a corner and then zoomed elsewhere is looking at an
-          unchanged map, and *nothing to lose* and *nothing in view* are the same image.
-        */
-        "The ink you painted is safe: suppression and added ink are inputs to the reading, so they " +
-          "survive it. Only changes made to the walls themselves go.",
-      ].concat(
-        /*
-          The legend, and it names the marks rather than counting them.
-
-          It also admits they may be off screen, which is the one thing a picture cannot say about
-          itself: a GM who edited a corner and then zoomed elsewhere is looking at an unchanged map,
-          and *nothing to lose* and *nothing in view* are the same image. The counts go to the dev
-          log, where a number is a diagnostic rather than the instrument this feature replaced.
-        */
-        marked
-          ? [
-              "On the map: what would go is marked in amber, and what you erased is in cyan " +
-                "because it would come back. Pan or zoom out if you cannot see any — they are " +
-                "wherever you made them.",
-            ]
-          : [],
-      ),
-      confirmLabel: "Generate them again",
-      destructive: true,
-      reveal: marked,
-    });
-    if (!ok) {
-      say("kept your wall changes — nothing was touched");
-      return false;
-    }
-
-    try {
-      await discardWalls();
-      return true;
-    } catch (error) {
-      const detail = describeError(error);
-      say(`could not discard the walls, so nothing changed: ${detail}`, "bad");
-      console.error("Fog Nudger — discarding the walls failed", error);
-      return false;
-    }
-  } finally {
-    showWallDelta(false);
+    await discardWalls();
+  } catch (error) {
+    const detail = describeError(error);
+    say(`could not discard the walls, so nothing changed: ${detail}`, "bad");
+    console.error("Fog Nudger — discarding the walls failed", error);
+    return;
   }
+
+  review = null;
+  showWallDelta(false);
+  announce();
+  pending.then?.();
+}
+
+/**
+ * Bind the two answers, and the ways out that are not a press.
+ *
+ * `onStageChange` closes a review the walls have moved out from under — an undo taking the last hand
+ * edit back is the reachable one, and it leaves a delta describing a difference that no longer
+ * exists. The marks would be the stale diagnostic this project keeps paying for, and the question
+ * would be asking about nothing.
+ */
+export function registerRegenerateReview(): void {
+  document.getElementById("regenerate-go")?.addEventListener("click", () => {
+    void acceptRegenerate();
+  });
+  document.getElementById("regenerate-keep")?.addEventListener("click", keepWallChanges);
+
+  /*
+    Escape answers "keep", and stops there.
+
+    The shell's own Escape closes the workspace, which is what the dialog used to intercept while it
+    was up. Without this, the reflex that dismissed the old prompt would now shut the surface.
+  */
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (!review || event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      keepWallChanges();
+    },
+    true,
+  );
+
+  onStageChange(() => {
+    if (review && !wallsEdited()) keepWallChanges();
+  });
+
+  onRegenerateReview(paint);
+  paint();
+}
+
+/** Show or hide the pair, and name what is being decided. */
+function paint(): void {
+  const host = document.getElementById("regenerate-review");
+  if (host) host.hidden = review === null;
+
+  const legend = document.getElementById("regenerate-legend");
+  if (legend) {
+    /*
+      The key names no colour, and is printed in them instead.
+
+      A sentence saying "what goes is in amber" is a copy of a value the GM can retune — the palette
+      publishes every role as a custom property so the page and the canvas cannot disagree, and a
+      hue's *name* in prose is the one form of that copy no property can keep honest.
+    */
+    legend.innerHTML = review
+      ? 'On the map: <b class="going">what goes</b> · <b class="coming">what comes back</b>'
+      : "";
+  }
+
+  const go = document.getElementById("regenerate-go");
+  if (go) go.title = review ? `${review.what} rebuilds the walls, discarding your changes` : "";
 }
 
 /**

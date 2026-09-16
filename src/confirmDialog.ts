@@ -23,7 +23,14 @@
  * A dialog is a bad way to make a boundary visible — it appears *after* the GM has committed to the
  * gesture, and one that appears often trains them to dismiss it. So the boundary is shown first by
  * disabling what would cross it and saying why; this is the second half, for the deliberate action
- * they went looking for. Two uses, both irreversible: deriving the graph, and discarding it.
+ * they went looking for — clearing everything in a scene, clearing or discarding a paint layer,
+ * putting items on the map.
+ *
+ * **The one it lost is the sharpest reading of that rule.** The regenerate question left for the bar
+ * on 2026-09-15, because pricing it honestly means drawing the walls at stake on the map and letting
+ * the GM pan around them, and a modal is the thing that stops them. What is left here are questions a
+ * box can actually hold: each of them prices its act in a sentence, and none of them needs looking at
+ * anything to answer.
  *
  * ## Escape and the way out
  *
@@ -51,11 +58,6 @@ const STYLES = `
   place-items: center;
   background: rgba(6, 7, 16, 0.72);
 }
-#confirm.reveal {
-  place-items: end center;
-  background: rgba(6, 7, 16, 0.28);
-}
-#confirm.reveal .confirm-panel { margin-bottom: 4.5rem; }
 #confirm .confirm-panel {
   max-width: 30rem;
   margin: 1rem;
@@ -105,19 +107,17 @@ export interface ConfirmOptions {
   readonly confirmLabel: string;
   /** Marks the confirming button as the destructive one, which is what colours it. */
   readonly destructive?: boolean;
-  /**
-   * Keep what is behind this legible, because the answer is back there.
-   *
-   * The regenerate question draws the walls it would destroy **on the map**, and the ordinary
-   * backdrop is 72% of near-black over exactly that — so the picture the dialog is pointing at
-   * would be the one thing the dialog hid. This lightens the backdrop and moves the panel out
-   * of the middle, which is where a map's interesting part usually is.
-   *
-   * **Not the default**, and the dimming it gives up is doing real work everywhere else: a
-   * modal that does not look modal is one a GM answers without reading.
-   */
-  readonly reveal?: boolean;
 }
+
+/*
+  A `reveal` flag was here for a day (2026-09-15), lightening the backdrop and moving the panel aside
+  so the regenerate question could draw the walls it would destroy on the map behind itself.
+
+  It went with the question. A dialog you can see through is answering *is this acceptable*, which
+  needs panning and zooming to answer at all — and a modal exists to prevent exactly that. That
+  question is the bar's now; see `workspace/regenerateGuard.ts`. What is left here asks only things a
+  box can hold, which is what the note above about using this sparingly was always driving at.
+*/
 
 /**
  * Ask, and resolve to what they chose.
@@ -134,9 +134,6 @@ export function confirmAction(options: ConfirmOptions): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const host = document.createElement("div");
     host.id = HOST_ID;
-    // A class rather than inline styles, so the two rules it switches on stay beside the ones they
-    // override and a reader of the stylesheet can see the whole of what "reveal" means in one place.
-    if (options.reveal) host.classList.add("reveal");
 
     const panel = document.createElement("div");
     panel.className = "confirm-panel";

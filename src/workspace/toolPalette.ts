@@ -52,7 +52,7 @@ import {
   setDrawerTop,
   showingLayers,
 } from "./drawer";
-import { confirmRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
+import { reviewRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { setTool as setWallTool, type WallTool } from "./wallEdit";
@@ -385,12 +385,26 @@ export function render(): void {
         }
         button.disabled = !usable(choice);
         button.addEventListener("click", () => {
-          void pressTool(choice.id as Tool);
+          pressTool(choice.id as Tool);
         });
-        // Split out so the question can be awaited before the tool is armed — asking after would be
-        // asking with paint already down, which is the one place a prompt cannot honestly go.
-        const pressTool = async (id: Tool): Promise<void> => {
-          if (toolIsMarked(id) && !(await confirmRegenerate(choice.label))) return;
+        /*
+          A marked tool puts the question up **instead of** arming, and hands over the arming to
+          run if the answer turns out to be yes.
+
+          It used to await a dialog, which is what a dialog can offer and the review cannot:
+          there is no moment at which the press knows the answer, because the GM is panning the
+          map while they decide. What has not changed is that the question comes **before** the
+          tool is in hand — asking afterwards would be asking with paint already down, which is
+          the one place a prompt cannot honestly go.
+        */
+        const pressTool = (id: Tool): void => {
+          if (toolIsMarked(id)) {
+            reviewRegenerate(choice.label, () => armTool(id));
+            return;
+          }
+          armTool(id);
+        };
+        const armTool = (id: Tool): void => {
           setTool(id);
           /*
             The drawer follows the press, including when the answer is "nothing".

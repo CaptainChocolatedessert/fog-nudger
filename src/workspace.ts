@@ -54,6 +54,7 @@ import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerDeltaLayer } from "./workspace/layers/delta";
+import { registerRegenerateReview } from "./workspace/regenerateGuard";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerSimplifySeed } from "./workspace/seedSimplify";
 import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
@@ -172,6 +173,8 @@ registerGraphLayer();
   the blue centreline they lie exactly on top of would hide most of each one.
 */
 registerDeltaLayer();
+// The two answers the delta is drawn for, in the bar rather than in a box over the map.
+registerRegenerateReview();
 /*
   The one tool on this surface that changes the GM's own work rather than a setting.
 

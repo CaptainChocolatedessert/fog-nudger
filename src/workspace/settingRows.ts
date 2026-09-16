@@ -41,7 +41,7 @@ import {
   setSettings,
 } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
-import { confirmRegenerate, controlIsMarked, wallsMark } from "./regenerateGuard";
+import { controlIsMarked, reviewRegenerate, wallsMark } from "./regenerateGuard";
 
 /**
  * The track a control's slider runs over.
@@ -194,7 +194,9 @@ export function settingRow(control: Control): HTMLElement {
     key.append(wallsMark());
     key.title = `${control.label} rebuilds the walls, discarding your changes to them`;
     key.setAttribute("aria-label", `Unlock ${control.label}`);
-    key.addEventListener("click", () => void confirmRegenerate(control.label));
+    // No follow-up handed over: unlocking is the entire act here, where a marked *tool* press
+    // still wants arming once the answer comes back.
+    key.addEventListener("click", () => reviewRegenerate(control.label));
     name.append(key);
   }
   top.append(name, readout);

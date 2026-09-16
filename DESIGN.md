@@ -2718,11 +2718,38 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   the tool layers' rule: what turns it on is the thing it is about, so a second handle would be a
   way to answer the question by hiding it.
 
-  **The dialog had to learn to stand aside.** Its backdrop is 72% of near-black across the whole
-  window, which is exactly the picture this draws — so `confirmAction` takes a `reveal` flag that
-  lightens the backdrop and moves the panel out of the middle. Only the regenerate question passes
-  it; the dimming is doing real work everywhere else, because a modal that does not look modal is
-  one a GM answers without reading.
+  **And the dialog went with it, the same day.** Panning is required to answer the question, and a
+  modal is the thing that prevents panning (user: *"maybe the dialog isn't the right idea if there
+  is interaction needed"*). The prompt was asking two questions at once: *do you understand what
+  this costs*, which a box holds fine, and *is what it costs acceptable*, which can only be answered
+  by looking around the map. It had already compromised once — drawing the delta behind itself and
+  lightening its own backdrop — and the `reveal` flag that did that is gone again.
+
+  What replaces it is a **review state**. Pressing the lock's key puts the delta on the map and two
+  answers in the bar; the surface stays entirely live. Nothing is pending while the GM looks, because
+  nothing has happened: the walls are exactly as they were, so wandering off and arming another tool
+  is a perfectly good answer and simply takes the marks down. This is `confirmDialog.ts`'s own rule
+  one step on — *show the boundary first by disabling what would cross it and saying why* — except
+  that it now shows what is behind the boundary rather than describing it.
+
+  **The press is pending, not the walls.** A marked *tool* hands over what to do if the answer is
+  yes, so agreeing regenerates and arms the tool in one go, as the dialog did. A locked slider hands
+  over nothing: unlocking is the whole act.
+
+  **Two costs, stated.** The destructive action is no longer behind a modal, so a stray click can
+  reach it — which is why it sits at the far end of the bar from everything else, fenced by a
+  hairline, and is the only urgent chip on screen. And it is a **mode**, on a surface that has been
+  shedding them; the mildest kind, since it changes nothing and leaves on any other action, but one.
+
+  Escape answers *keep*, and is stopped there — the shell's own Escape closes the workspace, and the
+  reflex that used to dismiss the prompt would otherwise shut the surface. A failed discard leaves
+  the review up, which is the honest state rather than a stuck one: the marks still describe the
+  walls exactly.
+
+  **The legend names no colour.** It prints *what goes* and *what comes back* in the palette's own
+  `subtractive` and `additive`, read as custom properties. Saying "amber" in prose is a copy of a
+  value the GM can retune, and it is the one form of that copy no published property can keep
+  honest.
 
   **The counts go to the dev log, not to the dialog.** A delta can be entirely outside the view — a
   GM who edited a corner and then zoomed elsewhere is looking at an unchanged map — and *nothing to
@@ -2730,10 +2757,12 @@ and try a reopen before diagnosing anything. `CLAUDE.md` says why.
   that the marks are wherever the edits were. Putting a number in the dialog would be reinstating
   the instrument this whole feature replaced.
 
-  **Unproven.** The layer has not been in a room: it needs a map, a derived graph and hand edits on
-  it, none of which exists outside Owlbear. What has been checked from a desk is that the page loads
-  the new module without error and that `reveal` puts the panel at the foot of the window over a
-  backdrop light enough to see through.
+  **Unproven.** The delta itself has not been in a room: it needs a map, a derived graph and hand
+  edits on it, none of which exists outside Owlbear. The **review** has been driven from a desk, and
+  what that establishes is the state machine rather than the picture — the pair appears and hides,
+  Escape answers *keep* without closing the workspace, a failed discard leaves the review up and
+  does not run the pending press, and the legend takes its two colours from the palette rather than
+  from a hardcoded hue.
 
 2. **The state line is in the wrong place.** It sits bottom-right of a full-screen window while every
   control that writes to it is in the left rail, so a message about a press arrives as far from the
@@ -3053,8 +3082,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
   own limit at zero — pure and tested)
 - **What is drawn** — `regenerateGuard.ts` (**the mark and the gate**: which control or tool would
-  rebuild the walls, the one question asked before it can, and the glyph that says so — per control
-  rather than per group, since Ink holds nine controls and five regenerate) · `layerToggles.ts` (pure and tested: groups
+  rebuild the walls, the glyph that says so — per control rather than per group, since Ink holds nine
+  controls and five regenerate — and the **review state** the question is asked in, which is a delta
+  on the map and two answers in the bar rather than a dialog) · `layerToggles.ts` (pure and tested: groups
   propose, the GM disposes, a tool may only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
   the values and is pure)
 - **Layers** — `layers/ink.ts` · `layers/paint.ts` (repainting only the rectangle a stroke changed) ·

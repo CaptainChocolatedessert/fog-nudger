@@ -962,9 +962,40 @@
         border-color: rgba(255, 212, 121, 0.75);
         color: #ffd479;
       }
-      #exit-anyway[hidden] {
-        display: none;
+      /*
+        The regenerate review: the two answers, and the legend for the marks on the map.
+
+        First in the group and fenced off, so the destructive one is as far as this bar can put
+        it from Close at the other end — it is no longer behind a modal, and what used to be a
+        misread dialog is now a mis-aimed click.
+
+        The chip's amber is the bar's own — `.urgent`, shared with *Exit anyway* — and not the map's
+        `subtractive`, which the GM can retune. They read alike at the defaults and that is worth
+        having, but the legend beside it is the thing actually keyed to the marks.
+      */
+      #regenerate-review {
+        display: flex;
+        gap: 0.35rem;
+        align-items: center;
       }
+      #regenerate-legend {
+        margin: 0 0.15rem 0 0;
+        font-size: 0.78rem;
+        white-space: nowrap;
+        color: #9aa0c8;
+      }
+      /*
+        The key is the words themselves, in the colours they describe.
+
+        Naming a hue in prose — "what goes is in amber" — is a second copy of a value the GM can
+        retune: `applyPalette` publishes every role as a custom property precisely so the page and
+        the canvas cannot drift, and a hardcoded colour *name* drifts in a way no property can fix.
+        Colouring the words instead means the legend is self-describing and has nothing to keep in
+        step.
+      */
+      #regenerate-legend b { font-weight: 600; }
+      #regenerate-legend .going { color: var(--subtractive, #f59e0b); }
+      #regenerate-legend .coming { color: var(--additive, #06b6d4); }
 
       /*
         The confirmation, drawn by us rather than by Owlbear.
@@ -1128,6 +1159,21 @@
         <!-- The middle track, so the buttons are centred on the window rather than on whatever is
              left of it after the message. -->
         <div id="bar-actions">
+          <!--
+            Shown only while the GM is looking at what a regenerate would cost.
+
+            **This replaced a dialog** (user, 2026-09-15: *"maybe the dialog isn't the right idea
+            if there is interaction needed"*). The question is not *are you sure* — the control
+            was locked and they pressed its key, which is already deliberate. It is *is this
+            acceptable*, and the only way to answer it is to pan around the map and look, which
+            is the one thing a modal exists to prevent.
+          -->
+          <div id="regenerate-review" hidden>
+            <p id="regenerate-legend"></p>
+            <button class="chip urgent" id="regenerate-go">Generate them again</button>
+            <button class="chip" id="regenerate-keep">Keep my changes</button>
+            <span class="bar-split" aria-hidden="true"></span>
+          </div>
           <p id="map-name" title="The map being traced">Loading…</p>
           <div id="history-row">
             <button class="history" id="undo" disabled title="Nothing to undo"></button>
