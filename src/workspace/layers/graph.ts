@@ -83,9 +83,10 @@ const HANDLE_RADIUS = 3;
  *
  * **Grabbable** is the answer to a question nobody can otherwise ask: a press either moves a vertex
  * or pans, and without this the GM finds out which by doing it. **Moving** marks the one point the
- * gesture is carrying. **Joining** is the one §8 actually demands — a merge is not undoable and the
- * boundary has to be visible *before* it is crossed, so the target changes colour and grows while
- * there is still a chance to move away or hold Shift.
+ * gesture is carrying. **Joining** is the one §8 actually demands — the boundary has to be visible
+ * *before* it is crossed, so the target changes colour and grows while there is still a chance to
+ * move away or hold Shift. (This said a merge "is not undoable"; undo reaches it now, and the rule
+ * stands on the better reason, which is that Undo only helps a GM who noticed what the release did.)
  */
 const HOVER_RADIUS = 5;
 const ACTIVE_FILL = "#ffcc00";
@@ -100,8 +101,12 @@ const MERGE_RADIUS = 6;
  * changes which rooms exist, so what is about to happen is on screen before the click that does it.
  * It said an erase "cannot be undone", which stopped being true when undo arrived; the rule stands on
  * the better reason, which is that Undo only helps a GM who noticed what went.
- * Red for the one that removes and green for the one that adds, which is the only pair of meanings
- * on this canvas that a colour can carry without being learned.
+ *
+ * The palette's destructive colour for the one that removes and its additive colour for the one that
+ * adds. **Not red against green**, which this used to say was the one pair a colour can carry without
+ * being learned: it is the classic pair a colour-vision deficiency cannot separate, and the palette
+ * folded "adds" into the additive family for exactly that reason. Both are read from the palette, so
+ * the actual hues are whatever the GM has set.
  */
 const eraseColour = () => colourFor("destructive");
 const ERASE_WIDTH_PX = 5;
