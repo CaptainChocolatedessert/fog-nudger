@@ -2066,11 +2066,18 @@ for a recompose. That is what keeps the stack free of both owners, and so free o
 union type would have forced.
 
 **No confirmation, and the reason is structural.** Mixing the two raised the question of an undo that
-loses downstream work, since walls are derived from ink. It cannot arise: the stack is cleared when
-walls are saved from the Walls step and when the map changes, so everything on it happened since the
-last save; undo is last-in-first-out, so it returns to a state that existed; and undoing a stroke
-changes the *preview* partition, where the **saved** graph is replaced only by a save — the thing that
-cleared the stack. **If that clearing rule is relaxed, a confirmation is what has to replace it.**
+loses downstream work, since walls are derived from ink. It cannot arise, and the argument no longer
+leans on any clearing rule — which is what let the clearing be narrowed twice in one day without a
+confirmation appearing anywhere. **Undo is last-in-first-out**, so it returns to a state that existed.
+And **the two documents are independent in the direction that matters**: undoing a stroke moves the
+*preview* partition and never the stored graph, and undoing a wall edit moves the graph and never the
+ink. Neither can reach across and destroy the other's work.
+
+> This used to read *the stack is cleared when walls are saved and when the map changes, so
+> everything on it happened since the last save*, and warned that relaxing that rule meant a
+> confirmation had to replace it. The rule was relaxed and no confirmation was needed, because the
+> clearing was never what made this safe — it was standing in front of the independence argument
+> above.
 
 **Two details a room will notice if they are wrong.** A paint undo **reopens the paint mode** if the
 brush has been put down, because putting it down releases the working copies — and that is exactly
@@ -2828,8 +2835,11 @@ these are here so the reason survives the enforcement.
   opposite corner of the window. Gate before the press, and say why the gate is down.
 - **`0.65` is the one value for "inactive"** on this surface — locked headers, disabled tools, the
   undo pair. It is measured against the 3:1 contrast floor; 0.4 was below it.
-- **The undo stack is cleared when walls are saved and when the map changes**, and that is what makes
-  undoing a stroke safe without a confirmation. `undoHistory.ts` carries the argument.
+- **The undo stack is cleared when the map it describes goes, and not otherwise.** A different map
+  — or a different raster under an open brush — invalidates both documents at once, so those clear
+  everything; discarding the wall graph clears that document's entries alone. **Pushing clears
+  nothing**, since 2026-09-15: a push is an emit rather than a save, and an emit has no business
+  invalidating history. `undoHistory.ts` and `stage.ts` carry the arguments.
 
   **It is cleared per document since 2026-09-15**, and that narrowing is the fix for a real defect
   (room: *"changing parameters on the walls shouldn't delete ink edits"*). Discarding the wall graph

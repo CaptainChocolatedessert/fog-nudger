@@ -252,10 +252,32 @@ export async function discardWalls(): Promise<void> {
 }
 
 /**
- * Cross into stage two: store this graph and close the reading.
+ * Adopt the derivation on screen as the stored document, which is what a push does on its way out.
  *
- * Written before the local state changes, so a failed write leaves the GM in stage one with their
- * controls live rather than in a stage two the scene does not agree with.
+ * Written before the local state changes, so a failed write leaves the GM with their controls live
+ * rather than in a state the scene does not agree with.
+ *
+ * ## It cleared the undo history, and that was the old model talking — user, 2026-09-15
+ *
+ * The line said *restoring one would put back walls derived from ink the GM has since changed*, and
+ * it rested on two things that have both stopped being true.
+ *
+ * **The scene is not a source of truth.** This project once assumed walls would go into the scene
+ * and be read back to edit — *"now, though, we've gotten invested in keeping a lot of metadata, so
+ * when you reopen the workspace it doesn't read anything back from the scene"*. Nothing reads
+ * geometry back; our own items are found only to be replaced or removed. **A push is an emit, not a
+ * save**, and an emit has no business invalidating the document's history.
+ *
+ * **And a restored graph can no longer lie about what it is.** The hazard was a document claiming
+ * to be a derivation while not being a function of the current ink, which nothing could detect
+ * while the derivation it came from was not stored. The base moved into the scene beside it, and
+ * the way back now carries **both halves as one thing** — so restoring puts back a consistent pair
+ * and the mark stays honest. The reason is spent twice over.
+ *
+ * So this clears nothing. Every entry still describes a state that existed and can be returned to.
+ * **What it does leave is the scene holding walls the workspace no longer agrees with** if the GM
+ * undoes afterwards — which is already true of every edit made after a push, since nothing here has
+ * ever pushed by itself.
  */
 export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
   if (!mapId) throw new Error("no map is nominated, so there is nothing to derive a graph against");
@@ -264,11 +286,6 @@ export async function saveDerivedWalls(graph: WallGraph): Promise<void> {
   // The base moves with it: from here the document *is* the derivation, so the comparison the mark
   // asks finds nothing until the GM touches a wall.
   base = graph;
-  // A derive replaces the graph wholesale, so whatever was edited into the last one is gone and the
-  // new one is a pure function of the ink again. The history goes with it: those snapshots describe
-  // a graph that is no longer on screen, and restoring one would put back walls derived from ink the
-  // GM has since changed.
-  clearUndo();
   announce();
   devLog("info", `stage: saved — ${graph.nodes.length} nodes, ${graph.edges.length} segments`);
 }
