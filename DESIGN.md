@@ -1983,8 +1983,23 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
   disturbs the other. Borrowed from Procreate, which mixes the two in one strip and is not read as
   a category error precisely because tapping *Adjustments* does not put your brush down.
 
-  **They are told apart by shape, not colour**: a panel is a word, a verb is a glyph. That is what
-  pays for two things being highlighted at once, which is the cost of one column.
+  **They do not need to be told apart, and that is why mixing them costs nothing** (user,
+  2026-09-15): *"You click on what you want and it might open a drawer of settings or it might pick
+  up a tool. The two being mixed isn't confusing to me."* The column is a list of things to press,
+  and what each one does is its own business. Two highlights at once are two true statements — one
+  drawer is open, one tool is in hand — not an ambiguity anything has to resolve.
+
+  **This corrects what this section used to argue**, and the difference is worth keeping. It claimed
+  the two were told apart by *shape* — a panel a word, a verb a glyph — and that the shape was what
+  **paid for** two things being lit in one column. That treated the mixing as a debt. It is not one:
+  the answer is not a better distinction but that the question does not arise.
+
+  The shape distinction was real until 2026-09-14, when *One drawer per thing pressed* made the group
+  opener a glyph like the verbs and left the caption an unpressable word. Its pressed state — an
+  underline rather than a fill, written *"so it cannot be mistaken for the armed verb's pressed glyph
+  two rows down"* — went with it, and the stylesheet kept the orphaned rules until 2026-09-15.
+  **Measured the day they were deleted**: a pressed panel and an armed verb compute to the same fill,
+  the same text colour and no box-shadow on either. Nobody had raised it in the rooms between.
 
   **One exception, and it is deliberate** (user, 2026-09-14): opening a panel puts the verb back to
   **Pan**. The verbs here are little fixes where the parameters are the main event, so a GM who has
@@ -1992,9 +2007,9 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
   an open panel is a press waiting to happen. It also settles the collision cleanly: a tool's own
   controls and a group's controls can never both want the drawer.
 
-  **Nothing open is still a state**, and a better one than before: pressing the open group's name
-  shuts the drawer entirely and the strip slides to the window edge, leaving the map plain. That
-  used to be a hard-won exception to the accordion; it is now what the mechanism does anyway.
+  **Nothing open is still a state**, and a better one than before: pressing the open group's button
+  again shuts the drawer entirely and the strip slides to the window edge, leaving the map plain.
+  That used to be a hard-won exception to the accordion; it is now what the mechanism does anyway.
 
 Switching what you are doing and switching what you are reading stop being the same gesture, which is
 the whole of the complaint.
@@ -2004,9 +2019,9 @@ hand-off went with the split: saving used to offer to open the editor, because t
 on another page and invisible from the reading controls. They are on this one now, so there is
 nowhere to hand off to.
 
-**The commit action moves into the persistent bar**, beside the way out. It is the surface's whole
-purpose and should not be a step's footer — today it sits at the foot of the third accordion section
-and closing commits nothing, so a GM can tune for twenty minutes, press Escape and get nothing.
+**The commit action moved into the persistent bar**, beside the way out. It is the surface's whole
+purpose and should not be a step's footer — it used to sit at the foot of the third accordion section
+with closing committing nothing, so a GM could tune for twenty minutes, press Escape and get nothing.
 
 **The graph is simply always derived and drawn.** There is no "generate" act to perform.
 
