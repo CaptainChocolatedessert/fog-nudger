@@ -68,7 +68,8 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **bridge** | an edge with the same face on both sides. A stub wall is one. Bridges emit as lines. |
 | **spur** | a wall run with a free end. What pruning removes. |
 | **sliver** | a cycle enclosing no lattice point — sub-pixel, an artefact of junction clusters. |
-| **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink* — a place the drawing failed to close a wall. What merges two rooms. **Not a doorway**, which is a real opening and the tool's known false positive. |
+| **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink* — a place the drawing failed to close a wall. What merges two rooms. **Not a doorway**, which is a real opening and the tool's known false positive. **In the graph** the same fault is a break in the walls: two pieces close in space and far apart *measured along the walls*. |
+| **mend** | a proposed wall that closes a gap in the graph, and the act of accepting one. Once accepted it is an ordinary drawn wall. **Not a bridge** — a mend usually closes a loop and splits a region in two, which is the opposite of what a bridge is. |
 
 ### The stages — and the surface words for them are **retired**
 
@@ -3040,12 +3041,22 @@ turns the bounded flood into a shortest path.
 - **Proposals in the additive colour**, the palette's colour for content being put in.
 - **Accept-all is one undo step.**
 
-**Leaning, from the discussion that produced these:** one side of a proposal must be a **free end**
-(a node with one wall), since a wall that stops is what a break looks like in a graph; the other side
-may be a free end, a vertex, or a point partway along a segment. Each free end proposes at most one,
-chosen by distance and by direction — a wall that stops most likely continues the way it was going —
-and proposals are paired off so no end is used twice and none cross a wall or each other. Accepting
-re-runs the search, as the ink tool does.
+- **Two sliders, as the ink tool has**: the largest gap to look for, and how far apart along the walls
+  the two sides must be. A fixed ratio in place of the second was considered; kept as two, to be
+  revisited if the second never gets used.
+- **What a mend attaches to, in order of preference.** A nearby **free end** first, even when a segment
+  is nearer. Failing that, a nearby existing **vertex**. Only then a **point on a segment**, which
+  splits it. The ink tool has no equivalent: pixels do not distinguish a wall's end from its middle.
+- **The direction of a mend onto a segment splits the difference** between the free end's own heading
+  and the perpendicular to that segment, and the mend lands where that line meets it. To be tried
+  rather than argued: the heading alone skids along a wall met at a shallow angle, and the
+  perpendicular alone ignores which way the broken wall was going.
+
+**Leaning, not yet decided:** one side of a mend must be a **free end** (a node with one wall), since a
+wall that stops is what a break looks like in a graph. Each free end proposes at most one mend, and
+mends are paired off so no end is used twice and none cross a wall or each other. "Nearby" is within
+the largest-gap slider for all three kinds of target. Accepting re-runs the search, as the ink tool
+does.
 
 **It does not replace the pixel tool, and this is the thing most likely to be got wrong.** A **scanner
 artefact** — a thin light line across a scanned map — severs linework in *pixel* space, before any
