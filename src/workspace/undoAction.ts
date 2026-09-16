@@ -75,8 +75,28 @@ let running: string | null = null;
  *
  * Named rather than bare, because "Undo pruning the dead ends" says what you are about to get back
  * where "Undo" asks you to remember what you last did — and the whole reason this is needed is that
- * a GM has just done something whose effect they misjudged. The name is in the tooltip because the
- * button is a glyph: the strip made the same trade, for the same reason, in the same place.
+ * a GM has just done something whose effect they misjudged.
+ *
+ * ## The undo name is beside the button, not only inside its tooltip — room, 2026-09-15
+ *
+ * It was a tooltip alone, on the strip's argument: a glyph needs the name somewhere, and hover is
+ * where a glyph's name goes. That is right for a **mode**, which you pick once and then hold. It is
+ * wrong here, and a room showed why — four presses in a row, none of them hovered, each one taking
+ * a brush stroke off a map while the GM was trying to take back a wall edit. *"Sometimes I thought
+ * undo wasn't working, so I probably clicked multiple times."*
+ *
+ * **A tooltip cannot answer a question the GM does not know they have.** They were not asking what
+ * the button does; they were sure they knew. The name in the open is the only thing in that
+ * sequence that would have stopped the second press.
+ *
+ * **The undo side only.** One element says one thing, and redo keeps its tooltip — a stated cost,
+ * and the smaller one: redo follows an undo the GM has just watched, so what it would put back is
+ * the thing they were looking at a moment ago.
+ *
+ * **The label, never the tag.** Entries carry an opaque tag so the history can forget one
+ * document's without learning what it holds, and printing it here would make it meaningful and
+ * take that back. The words already separate them: *erasing a wall* and *drawing added ink* are
+ * not going to be confused.
  */
 function paint(): void {
   for (const direction of DIRECTIONS) {
@@ -86,6 +106,15 @@ function paint(): void {
     button.disabled = label === null || running !== null;
     button.title =
       label === null ? `Nothing to ${direction.verb.toLowerCase()}` : `${direction.verb} ${label}`;
+  }
+
+  const line = document.getElementById("history-label");
+  if (line) {
+    const next = undoLabel();
+    line.textContent = next ?? "";
+    // The full text where the bar has clipped it, which is the one thing the tooltip is still
+    // good for here.
+    line.title = next ?? "";
   }
 }
 

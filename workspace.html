@@ -906,6 +906,20 @@
         Truncated rather than wrapped: it is a reminder of which image is under everything rather
         than something to read, and the whole name is in the title for the once it matters.
       */
+      /*
+        Dimmed and clipped like the map name beside it: this is context for the pair of buttons,
+        not a message. The state line is where messages go, and one more thing competing with it
+        for the eye is what the bar cannot afford.
+      */
+      #history-label {
+        margin: 0 0.15rem;
+        max-width: 12rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.78rem;
+        color: #9aa0c8;
+      }
       #map-name {
         margin: 0 0.25rem 0 0;
         max-width: 14rem;
@@ -1167,6 +1181,16 @@
           <div id="history-row">
             <button class="history" id="undo" disabled title="Nothing to undo"></button>
             <button class="history" id="redo" disabled title="Nothing to redo"></button>
+            <!--
+              What the next undo would take back, in the open rather than in a tooltip.
+
+              **A room pressed undo four times without reading it** (2026-09-15). The walls did not
+              move, because the edit they were trying to take back had never gone on the stack, so
+              each press reached past it and took a brush stroke instead. The name was there the
+              whole time — on hover. A tooltip cannot answer a question the GM does not know they
+              have, and the answer is the one thing that would have stopped the second press.
+            -->
+            <p id="history-label"></p>
           </div>
           <!--
             The commit, beside the way out, because it is the surface's whole purpose and was at

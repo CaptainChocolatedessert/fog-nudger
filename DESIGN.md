@@ -2850,11 +2850,24 @@ these are here so the reason survives the enforcement.
   `WallGraph` has no such value, and nothing was missing from the store, which already clears both
   keys together.
 
-  What this does **not** fix, and it is parked rather than solved: the stack is still one stack
-  across two documents, so undo after a wall edit can still walk into the painted ink once the wall
-  entries run out. The tags are on every entry, so scoping the *button* is a UI question rather than
-  a machinery one — user, 2026-09-15: *"that's a tricky UI challenge, when we undo something we
-  can't see."*
+  **One undo track, never scoped to the tool in hand** (user, 2026-09-15). The stack holds both
+  documents and stays strictly last-in-first-out across them, so undo after a wall edit can still
+  walk into the painted ink once the wall entries run out. Scoping it to whatever the tool is about
+  was considered and rejected: it makes the button's meaning depend on a mode, and *take back the
+  last thing I did* is the one promise undo makes.
+
+  What answers the risk instead is **saying what the next press will do, in the open**. The name was
+  always there and always in a tooltip, on the tool strip's argument that a glyph's name goes on
+  hover. That is right for a mode, which you pick once and hold; it is wrong for a reflex. A room
+  pressed undo four times without hovering anything, and each press took a brush stroke while they
+  were trying to take back a wall edit. **A tooltip cannot answer a question the GM does not know
+  they have** — they were not asking what the button does, they were sure they knew.
+
+  So the undo side's label sits beside the pair, dimmed and clipped like the map name. Redo keeps
+  its tooltip: one element says one thing, and redo follows an undo the GM has just watched. And it
+  prints the **label**, never the tag — the tag is opaque so the history can forget one document's
+  entries without learning what it holds, and showing it would make it meaningful and take that
+  back. The words already separate them.
 
 ### Two features unimplemented, and one still needs a conversation before code
 
