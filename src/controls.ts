@@ -49,14 +49,14 @@ export interface Measured {
   /** Raster pixels per grid square, or `null` before any run. */
   readonly pxPerSquare: number | null;
   /**
-   * The raster the last reading used, in pixels across, or `null` before any run.
+   * Raster pixels per graph unit for the last reading, or `null` before any run.
    *
-   * What turns a fraction of the map back into pixels, for the two controls whose stored unit is a
-   * fraction. Nullable for the same reason as the density: until a reading lands there is no raster,
-   * and a readout that invented one would be reporting a guess in the voice of a measurement. (It
-   * gave a second reason once — that the wall editor never runs a reading — and the editor is gone.)
+   * What turns a value in graph units back into pixels, for the controls stored in them. Nullable
+   * for the same reason as the density: until a reading lands there is no raster, and a readout that
+   * invented one would be reporting a guess in the voice of a measurement. (It gave a second reason
+   * once — that the wall editor never runs a reading — and the editor is gone.)
    */
-  readonly rasterWidth: number | null;
+  readonly rasterPerUnit: number | null;
 }
 
 /*
@@ -76,13 +76,13 @@ export interface Control {
   /**
    * Report **where the handle is**, one to a hundred, instead of what the value is.
    *
-   * For the controls whose stored unit is a fraction of the map. That unit is the only one both modes
-   * can speak, and it is not negotiable — but "0.00043" beside a slider is not a number anybody can
+   * For the controls whose stored unit is graph units — the map's longer side is 1. That unit is not
+   * negotiable, since it is the graph's own — but "0.00043" beside a slider is not a number anybody can
    * read, and neither was the per-ten-thousand spelling that replaced it (user, 2026-09-07: *"an
    * arbitrary large number and log scale don't make sense to the user"*).
    *
    * What a GM actually wants from that readout is to **remember a setting and come back to it**, and
-   * a position on the track serves that where a logarithmic fraction does not.
+   * a position on the track serves that where a logarithmic figure does not.
    *
    * **The cost, stated: the number is a position, so it can drift.** The top of these tracks is
    * measured off the graph when the step opens, and the graph changes as walls are pruned and
@@ -135,15 +135,15 @@ export interface Control {
  * opacity led the Ink step on the same argument until it was removed (2026-09-09).
  */
 /**
- * A fraction of the map in raster pixels, which is the unit a GM can actually feel.
+ * A value in graph units, in raster pixels — the unit a GM can actually feel.
  *
  * It needs the raster the last reading used, so it says nothing until one has landed. The stored
- * unit stays a fraction regardless — that is what keeps the setting from depending on a measurement —
- * and this is the readout being generous where it can.
+ * unit stays graph units regardless — that is what keeps the setting from depending on a
+ * measurement — and this is the readout being generous where it can.
  */
-function inRasterPixels(value: number, { rasterWidth }: Measured): string {
-  if (rasterWidth === null || rasterWidth <= 0) return "";
-  return `${(value * rasterWidth).toFixed(1)}px`;
+function inRasterPixels(value: number, { rasterPerUnit }: Measured): string {
+  if (rasterPerUnit === null || rasterPerUnit <= 0) return "";
+  return `${(value * rasterPerUnit).toFixed(1)}px`;
 }
 
 /**
@@ -218,7 +218,7 @@ export const CONTROLS: readonly Control[] = [
       value <= 0 ? "propose every gap" : `${Math.round(value)}px along the ink`,
   },
   {
-    name: "spurPruneFraction",
+    name: "spurPruneGraphUnits",
     // A spur is a wall run with a free end, and "spur" is vocabulary from `DESIGN.md` rather than
     // anything a GM brought with them. The label says the whole of what the number means.
     label: "Longest dead end to remove",
@@ -255,7 +255,7 @@ export const CONTROLS: readonly Control[] = [
     hint: "",
   },
   {
-    name: "simplifyFraction",
+    name: "simplifyGraphUnits",
     label: "Straightening",
     scale: "log",
     // The editor had a second copy of this, applied once by a button. One control now: it is part of

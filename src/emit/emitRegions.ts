@@ -35,6 +35,7 @@ import { readGridDpi, readMapBounds, resolveTraceMap } from "../map/mapImage";
 import type { Point } from "../map/placement";
 import { describeWallFaces } from "../trace/wallFaces";
 import type { WallGraph } from "../trace/wallGraph";
+import { graphExtent } from "../trace/graphUnits";
 import { wallEmission } from "./wallEmission";
 import {
   ACCEPTED_FILL_OPACITY,
@@ -190,7 +191,11 @@ async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
   const map = await resolveTraceMap();
   if (!map) return "No map is nominated — nothing to put on the map.";
   const [bounds, dpi] = await Promise.all([readMapBounds(map), readGridDpi()]);
-  const emission = wallEmission(graph, bounds, dpi);
+  // The image's own pixel size, which is what graph units are defined against — not the world box,
+  // which a GM may have stretched out of proportion. The trace takes the same figure from the decoded
+  // image, so the two sides agree on what one unit is.
+  const extent = graphExtent(map.image.width, map.image.height);
+  const emission = wallEmission(graph, bounds, dpi, extent);
 
   const check = emission.faces.eulerHolds
     ? "check holds"

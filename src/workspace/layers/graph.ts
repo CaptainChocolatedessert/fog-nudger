@@ -12,12 +12,12 @@
  * first thing the editor shows have to be the same, or the hand-off between the modes is a surprise
  * rather than a continuation.
  *
- * ## Map fractions, so there is no raster to agree with
+ * ## Graph units, so there is no raster to agree with
  *
- * The wall graph is stored in fractions of the map's own extent, which is exactly the space the
- * shell hands a painter — the map's draw rectangle. So a point multiplies by the draw width and
- * lands where it belongs, with no scale factor to derive and no raster to be consistent with. The
- * other layers all carry one; this one cannot get it wrong because it has none.
+ * The wall graph is stored in graph units, where the map image's longer side is 1 — and the shell
+ * draws the map at the image's own aspect. So a point multiplies by the **longer drawn side** and
+ * lands where it belongs, on both axes, with no scale factor to derive and no raster to be consistent
+ * with.
  *
  * ## Cased lines, learned the expensive way
  *
@@ -27,9 +27,9 @@
  * reads against dark ink and pale paper alike, which is the only pair of backgrounds a wall is drawn
  * against.
  *
- * Blue rather than the wall lines' red, because red already means something on this canvas: the
- * Regions layer draws the walls that emit as `LINE` items in it, and that distinction is worth
- * keeping visible while the graph is drawn over the same picture.
+ * Blue, the palette's structure colour. It used to be argued against the rooms layer's red wall
+ * lines, which were removed on 2026-09-15; the reason that stands is the palette's own, that red is
+ * reserved for what is about to be destroyed.
  */
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
@@ -59,7 +59,7 @@ import {
   snapTarget,
 } from "../wallEdit";
 
-/** Kept distinct from the wall lines' red and from the six proposal colours. */
+/** The palette's structure colour, kept distinct from the six room colours. */
 const wallColour = () => colourFor("structure");
 /**
  * What pruning would take, in the colour this canvas already uses for "about to go".
@@ -164,7 +164,7 @@ function doomed(graph: WallGraph): DoomedSpurs {
     is the one the button acts on, and the one that can have drifted from the limit by being edited.
   */
   if (!showingSaved()) return NOTHING_DOOMED;
-  const limit = currentSettings().trace.spurPruneFraction;
+  const limit = currentSettings().trace.spurPruneGraphUnits;
   if (!(limit > 0)) return NOTHING_DOOMED;
 
   if (doomedFor && doomedFor.graph === graph && doomedFor.limit === limit) return doomedFor.doomed;
@@ -185,8 +185,10 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const graph = graphOnCanvas();
   if (!graph || graph.edges.length === 0) return;
 
-  const x = (fraction: number): number => view.x + fraction * drawWidth;
-  const y = (fraction: number): number => view.y + fraction * drawHeight;
+  // Graph units to screen: the longer drawn side is one unit on both axes.
+  const long = Math.max(drawWidth, drawHeight);
+  const x = (units: number): number => view.x + units * long;
+  const y = (units: number): number => view.y + units * long;
 
   /*
     Where a vertex is *drawn*, which during a drag is not where it is stored.
@@ -338,8 +340,8 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
 function paintHandles(
   context: CanvasRenderingContext2D,
   graph: WallGraph,
-  x: (fraction: number) => number,
-  y: (fraction: number) => number,
+  x: (units: number) => number,
+  y: (units: number) => number,
   at: (id: number) => Vector2 | undefined,
   /**
    * Vertices pruning would take, drawn red like the walls they belong to.

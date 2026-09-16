@@ -17,9 +17,13 @@
  *
  * ## What it adds, and where
  *
- * Four segments at the map's own extent: (0,0) to (1,0) to (1,1) to (0,1) and back. Those are exact
- * in the document's float32 coordinates, so the frame lands on the map's boundary rather than near
- * it, and nothing downstream needs a tolerance for it having been placed approximately.
+ * Four segments at the map's own extent: (0,0) to (w,0) to (w,h) to (0,h) and back, where `w × h` is
+ * the map's size in graph units — the longer side 1 and the other its share of it. The extent is
+ * quantised to float32 the way every coordinate is, so the frame lands on the map's boundary rather
+ * than near it, and nothing downstream needs a tolerance for it having been placed approximately.
+ *
+ * **The extent is passed in**, because the document does not know the map's aspect: that is a
+ * property of the image, and the caller is the one holding the image.
  *
  * **Crossings are split, like every other edit.** A wall running off the edge of the map meets the
  * frame, and `insertEdge` cuts both at the meeting point — which is what makes the exterior a single
@@ -31,16 +35,20 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
+import type { GraphExtent } from "./graphUnits";
 import { documentPoint, type WallGraph } from "./wallGraph";
 import { insertEdge } from "./planarOps";
 
-/** The map's four corners, in the document's own units. */
-const CORNERS: readonly Vector2[] = [
-  { x: 0, y: 0 },
-  { x: 1, y: 0 },
-  { x: 1, y: 1 },
-  { x: 0, y: 1 },
-];
+/** The map's four corners, in graph units, for a map whose extent is `extent`. */
+function corners(extent: GraphExtent): readonly Vector2[] {
+  const far = documentPoint(extent.x, extent.y);
+  return [
+    { x: 0, y: 0 },
+    { x: far.x, y: 0 },
+    { x: far.x, y: far.y },
+    { x: 0, y: far.y },
+  ];
+}
 
 export interface FramingResult {
   readonly graph: WallGraph;
@@ -63,16 +71,17 @@ export interface FramingResult {
  * **Tested by counting, not by matching.** A frame contributes at least one segment lying wholly
  * along each of the four edges; anything less is ordinary linework that happens to touch the border.
  */
-export function alreadyFramed(graph: WallGraph): boolean {
+export function alreadyFramed(graph: WallGraph, extent: GraphExtent): boolean {
+  const far = documentPoint(extent.x, extent.y);
   const onEdge = { left: false, right: false, top: false, bottom: false };
   for (const edge of graph.edges) {
     const a = graph.nodes[edge.a];
     const b = graph.nodes[edge.b];
     if (!a || !b) continue;
     if (a.x === 0 && b.x === 0) onEdge.left = true;
-    if (a.x === 1 && b.x === 1) onEdge.right = true;
+    if (a.x === far.x && b.x === far.x) onEdge.right = true;
     if (a.y === 0 && b.y === 0) onEdge.top = true;
-    if (a.y === 1 && b.y === 1) onEdge.bottom = true;
+    if (a.y === far.y && b.y === far.y) onEdge.bottom = true;
   }
   return onEdge.left && onEdge.right && onEdge.top && onEdge.bottom;
 }
@@ -85,12 +94,13 @@ export function alreadyFramed(graph: WallGraph): boolean {
  * drawing tool snaps: a wall that merely *ends* where another begins is two points agreeing until one
  * moves.
  */
-export function addFrameWalls(graph: WallGraph): FramingResult {
-  if (alreadyFramed(graph)) {
+export function addFrameWalls(graph: WallGraph, extent: GraphExtent): FramingResult {
+  if (alreadyFramed(graph, extent)) {
     return { graph, splits: 0, overlaps: 0, alreadyFramed: true };
   }
 
-  const closed = [...CORNERS, CORNERS[0]!].map((corner) => documentPoint(corner.x, corner.y));
+  const around = corners(extent);
+  const closed = [...around, around[0]!].map((corner) => documentPoint(corner.x, corner.y));
   const result = insertEdge(graph, closed);
   return {
     graph: result.graph,

@@ -6,14 +6,18 @@
  * it is deliberately only a source: the shapes, the wall lines, the deletion, the batching and the
  * provenance are all the existing ones, because those are where the hard-won behaviour lives.
  *
- * ## Placement reuses the raster's own path, at a raster of one by one
+ * ## Placement reuses the raster's own path, at a raster the size of the extent
  *
- * A wall graph is stored in fractions of the map's extent, and `createPlacement` maps a raster
- * linearly onto the map's world bounds — so a **1×1 raster is exactly fraction space**, and the
- * ordinary placement puts a fraction where it belongs with no second implementation to keep in step.
+ * A wall graph is stored in graph units, and `createPlacement` maps a raster linearly onto the map's
+ * world bounds — so a **raster of `extent.x` by `extent.y` is exactly graph-unit space**, and the
+ * ordinary placement puts a point where it belongs with no second implementation to keep in step.
  * That matters more than the lines it saves: this project's placement carries per-axis scaling and a
- * stated position on rotation, and a parallel "fractions to world" routine would be a second opinion
- * about all of it. The workspace's partition layer already leans on the same identity.
+ * stated position on rotation, and a parallel "graph units to world" routine would be a second
+ * opinion about all of it.
+ *
+ * Per-axis scaling is what keeps a stretched map working. A GM who drags a map out of proportion in
+ * Owlbear changes its world box and not its image, so the graph's extent stays the image's and each
+ * axis stretches to the box — the fog follows the map, as it did when the unit was a fraction.
  *
  * ## What cannot be done here, and is reported instead
  *
@@ -38,6 +42,7 @@ import {
 import { placeRegions } from "../map/placeRegions";
 import { COMMAND_CAP } from "../trace/simplify";
 import { buildWallFaces, wallSegments, type WallFaces } from "../trace/wallFaces";
+import type { GraphExtent } from "../trace/graphUnits";
 import type { WallGraph } from "../trace/wallGraph";
 import type { StageableRegion } from "./fogShapes";
 
@@ -60,15 +65,18 @@ export interface WallEmission {
  * `dpi` is world units per grid square, and it only decides the size written into an item's **name**
  * and provenance. Nothing about the geometry depends on the grid, which is the standing rule — a GM
  * who never set a grid gets a wrong-looking number in a label rather than fog in the wrong place.
+ *
+ * `extent` is the map image's size in graph units, from the image's own pixel size.
  */
 export function wallEmission(
   graph: WallGraph,
   bounds: WorldBounds,
   dpi: number,
+  extent: GraphExtent,
 ): WallEmission {
   const faces = buildWallFaces(graph);
-  // One by one, because the rings are already fractions of the map. See the note above.
-  const placement = createPlacement(bounds, 1, 1);
+  // A raster the size of the extent, because the rings are already in graph units. See the note above.
+  const placement = createPlacement(bounds, extent.x, extent.y);
 
   const worldWidth = Math.abs(bounds.max.x - bounds.min.x);
   const worldHeight = Math.abs(bounds.max.y - bounds.min.y);
@@ -83,9 +91,11 @@ export function wallEmission(
 
   const regions: StageableRegion[] = placed.map((region, index) => {
     const face = faces.faces[index]!;
-    // Fraction² to world to grid squares. The doubled signed area halves, and a hole's negative
-    // term is already in the sum, so a room with a courtyard reports the floor it actually has.
-    const worldArea = (Math.abs(face.doubleArea) / 2) * worldWidth * worldHeight;
+    // Graph units² to world to grid squares: one graph unit is the box's width over the extent's
+    // along x, and likewise along y. The doubled signed area halves, and a hole's negative term is
+    // already in the sum, so a room with a courtyard reports the floor it actually has.
+    const worldArea =
+      (Math.abs(face.doubleArea) / 2) * (worldWidth / extent.x) * (worldHeight / extent.y);
     return {
       id: index,
       placed: region,

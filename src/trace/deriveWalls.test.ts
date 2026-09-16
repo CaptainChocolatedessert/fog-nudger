@@ -13,12 +13,19 @@ import { describe, expect, it } from "vitest";
 
 import { maskFromRows } from "./fixtures";
 import { deriveWalls, type DeriveWallsOptions } from "./deriveWalls";
+import { graphExtent } from "./graphUnits";
 import { commandCount } from "../geometry/ring";
 
-const BASE: DeriveWallsOptions = {
+const BASE = {
   tolerance: 0.5,
   maxTolerance: 4,
 };
+
+/** Derive from a text fixture, into the fixture's own extent — the raster *is* the image here. */
+function derive(rows: readonly string[], options: Omit<DeriveWallsOptions, "extent">) {
+  const mask = maskFromRows(rows);
+  return deriveWalls(mask, { ...options, extent: graphExtent(mask.width, mask.height) });
+}
 
 const TWO_ROOMS = [
   "......................",
@@ -83,7 +90,7 @@ const ROOM_WITH_STUB = [
 
 describe("what deriving produces", () => {
   it("hands out a graph, a fit for every edge, and the document they make", () => {
-    const result = deriveWalls(maskFromRows(TWO_ROOMS), BASE);
+    const result = derive(TWO_ROOMS, BASE);
 
     // One fitted polyline per edge, positionally aligned — which is what lets the build reuse the
     // graph's own node ids for the ends rather than approximating them a second time.
@@ -95,7 +102,7 @@ describe("what deriving produces", () => {
   it("finds both rooms, and nothing for the space around them", () => {
     // Two rooms sharing a wall. The outside is the arrangement's unbounded face: no polygon, not
     // emitted, and therefore fogged and unrevealable — which is what a map's exterior should be.
-    expect(deriveWalls(maskFromRows(TWO_ROOMS), BASE).faces.faces).toHaveLength(2);
+    expect(derive(TWO_ROOMS, BASE).faces.faces).toHaveLength(2);
   });
 
   /*
@@ -107,7 +114,7 @@ describe("what deriving produces", () => {
     was harmless; under the graph they are coincident, and this is what keeps them so.
   */
   it("gives two rooms the identical points along the wall they share", () => {
-    const result = deriveWalls(maskFromRows(TWO_ROOMS), BASE);
+    const result = derive(TWO_ROOMS, BASE);
     const rings = result.faces.faces.flatMap((face) => face.rings);
 
     const keyed = rings.map((ring) => new Set(ring.map((p) => `${p.x},${p.y}`)));
@@ -129,8 +136,8 @@ describe("what deriving produces", () => {
     ring, and it is still in the document.
   */
   it("keeps a stub wall", () => {
-    const plain = deriveWalls(maskFromRows(TWO_ROOMS), BASE);
-    const stubbed = deriveWalls(maskFromRows(ROOM_WITH_STUB), BASE);
+    const plain = derive(TWO_ROOMS, BASE);
+    const stubbed = derive(ROOM_WITH_STUB, BASE);
     expect(stubbed.faces.bridges).toBeGreaterThan(0);
     expect(stubbed.faces.walls.length).toBeGreaterThan(0);
     expect(plain.faces.eulerHolds && stubbed.faces.eulerHolds).toBe(true);
@@ -138,7 +145,7 @@ describe("what deriving produces", () => {
 
   it("leaves no sliver behind at any tolerance", () => {
     for (const tolerance of [0, 0.5, 2]) {
-      const result = deriveWalls(maskFromRows(TWO_ROOMS), { ...BASE, tolerance });
+      const result = derive(TWO_ROOMS, { ...BASE, tolerance });
       expect(result.sliversLeft, `tolerance ${tolerance}`).toBe(0);
       expect(result.graph.stats.orphans, `tolerance ${tolerance}`).toBe(0);
       expect(result.faces.eulerHolds, `tolerance ${tolerance}`).toBe(true);
@@ -163,7 +170,7 @@ describe("meeting the command cap", () => {
       the band around everything — carrying far more commands than either room, and it was what
       tripped the cap first.
     */
-    const result = deriveWalls(maskFromRows(TWO_ROOMS), {
+    const result = derive(TWO_ROOMS, {
       ...BASE,
       tolerance: 0.1,
       maxTolerance: 16,
@@ -182,7 +189,7 @@ describe("meeting the command cap", () => {
     either would leave the map with a room the fog does not cover.
   */
   it("reports a face that still will not fit, and keeps it whole", () => {
-    const result = deriveWalls(maskFromRows(STEPPED), {
+    const result = derive(STEPPED, {
       ...BASE,
       tolerance: 0.1,
       maxTolerance: 0.1,
@@ -204,7 +211,7 @@ describe("meeting the command cap", () => {
     would hang rather than fail if it went.
   */
   it("does not spin when asked for no simplification at all", () => {
-    const result = deriveWalls(maskFromRows(STEPPED), {
+    const result = derive(STEPPED, {
       tolerance: 0,
       maxTolerance: 4,
       maxCommands: 4,

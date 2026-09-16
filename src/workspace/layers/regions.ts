@@ -31,7 +31,6 @@
 
 import { PROPOSAL_COLOURS } from "../../emit/fogShapes";
 import {
-  currentRaster,
   currentRegions,
   outlineUnitsPerSquare,
   regionsShowing,
@@ -57,28 +56,26 @@ const MIN_STROKE_PX = 1;
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const regions = currentRegions();
-  const raster = currentRaster();
-  if (regions.length === 0 || !raster || !regionsShowing()) return;
+  if (regions.length === 0 || !regionsShowing()) return;
 
-  // The rings are in the trace's raster, and the map fills the same rectangle the ink is drawn into
-  // — so one scale factor puts the partition exactly over the ink it was derived from.
-  const scaleX = drawWidth / raster.width;
-  const scaleY = drawHeight / raster.height;
+  // The rings are in graph units, and the map is drawn at the image's own aspect — so the longer
+  // drawn side is one unit on both axes, and one scale puts the partition exactly over the ink.
+  const scale = Math.max(drawWidth, drawHeight);
 
   const settings = currentSettings();
   /*
     The width is read live and the *unit* is asked for, which is the split that matters.
 
-    A grid square is a different number of ring units in the two stages — raster pixels in one,
-    fractions of the map in the other — and only the partition's own module knows which space its
-    rings are in. Reading the setting here keeps the outline responding to the slider without a
-    re-derive; asking for the conversion keeps the two stages from needing a branch in the painter.
+    A grid square is a number of graph units that only a trace can measure, and only the
+    partition's own module knows whether one has. Reading the setting here keeps the outline
+    responding to the slider without a re-derive; asking for the conversion keeps that knowledge
+    out of the painter.
   */
   const strokeInRingUnits = settings.review.strokeSquares * outlineUnitsPerSquare();
 
   context.save();
   context.lineJoin = "round";
-  context.lineWidth = Math.max(MIN_STROKE_PX, strokeInRingUnits * scaleX);
+  context.lineWidth = Math.max(MIN_STROKE_PX, strokeInRingUnits * scale);
 
   regions.forEach((region, index) => {
     const colour = PROPOSAL_COLOURS[index % PROPOSAL_COLOURS.length]!;
@@ -87,8 +84,8 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     for (const ring of region.rings) {
       if (ring.length === 0) continue;
       ring.forEach((point, at) => {
-        const x = view.x + point.x * scaleX;
-        const y = view.y + point.y * scaleY;
+        const x = view.x + point.x * scale;
+        const y = view.y + point.y * scale;
         if (at === 0) context.moveTo(x, y);
         else context.lineTo(x, y);
       });

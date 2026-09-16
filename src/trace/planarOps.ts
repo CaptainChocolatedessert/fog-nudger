@@ -181,7 +181,7 @@ function idsFor(points: readonly Vector2[], nodes: Vector2[]): number[] {
 /**
  * Add a wall as a run of points, splitting whatever it crosses.
  *
- * The points are in map fractions. **Whether they attach to existing nodes is the caller's
+ * The points are in graph units. **Whether they attach to existing nodes is the caller's
  * decision** — the tool snaps within a radius the GM can see and passes the snapped position.
  * Nothing here second-guesses that by proximity; an exact coordinate match reuses a node, and
  * anything else is a new one.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { emptyMask, type BinaryMask } from "./binarize";
 import { deriveWalls } from "./deriveWalls";
+import { graphExtent } from "./graphUnits";
 import { findCrossings } from "./planarGraph";
 
 /**
@@ -93,6 +94,7 @@ describe("the graph derivation over generated linework", () => {
         const result = deriveWalls(randomInk(width, height, rng(seed), runs), {
           tolerance: 0,
           maxTolerance: 0,
+          extent: graphExtent(width, height),
         });
 
         /*
@@ -192,6 +194,7 @@ describe("the graph derivation over generated linework", () => {
       const removed = deriveWalls(randomInk(40, 30, rng(seed), 22), {
         tolerance: 0.5,
         maxTolerance: 4,
+        extent: graphExtent(40, 30),
       }).sliversRemoved;
       if (removed > 0) seedsWithSlivers += 1;
     }

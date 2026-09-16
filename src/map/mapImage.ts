@@ -311,7 +311,8 @@ export async function readGridDpi(): Promise<number> {
  * The map's world box, without decoding a pixel of it.
  *
  * `loadMapRaster` asks for the same thing on its way to the raster, and stage two needs only this
- * half: a wall graph is fractions of the map, so the box is the whole of the transform. Split out
+ * half: a wall graph is in graph units, so the box and the image's pixel size — which the item
+ * carries without anything being decoded — are the whole of the transform. Split out
  * rather than duplicated, because two places asking Owlbear where the map is would be two chances to
  * ask about slightly different things.
  */

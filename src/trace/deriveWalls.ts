@@ -43,6 +43,7 @@
 import { commandCount } from "../geometry/ring";
 import type { BinaryMask } from "./binarize";
 import { resolveFaces, type FittedEdge } from "./faces";
+import type { GraphExtent } from "./graphUnits";
 import { buildWallFaces, type WallFaces } from "./wallFaces";
 import { buildWallGraph, type WallGraphBuild } from "./wallGraph";
 import { labelSpace, type LabelledSpace } from "./label";
@@ -53,6 +54,13 @@ import { buildSkeletonGraph, type SkeletonGraph } from "./skeletonGraph";
 export interface DeriveWallsOptions {
   /** Douglas–Peucker tolerance in raster pixels. */
   readonly tolerance: number;
+  /**
+   * The map image's size in graph units, which the wall graph is built into.
+   *
+   * From the **image**, not from `ink`: a capped raster is floored and can be a pixel off the image's
+   * aspect, and the document is meant to describe the map rather than our raster. `graphUnits.ts`.
+   */
+  readonly extent: GraphExtent;
   /** Ceiling the tolerance may escalate to. */
   readonly maxTolerance: number;
   /** Overridable only so tests can drive escalation on a fixture small enough to read. */
@@ -153,7 +161,7 @@ export function deriveWalls(
   let tolerance = options.tolerance;
   let escalations = 0;
   let fittedEdges = fitEdges(graph, tolerance);
-  let walls = buildWallGraph(graph, fittedEdges);
+  let walls = buildWallGraph(graph, fittedEdges, options.extent);
   let faces = buildWallFaces(walls.graph);
 
   /*
@@ -164,7 +172,7 @@ export function deriveWalls(
     tolerance = Math.min(tolerance * 2, ceiling);
     escalations += 1;
     fittedEdges = fitEdges(graph, tolerance);
-    walls = buildWallGraph(graph, fittedEdges);
+    walls = buildWallGraph(graph, fittedEdges, options.extent);
     faces = buildWallFaces(walls.graph);
   }
   const fitMs = performance.now() - fitStarted;

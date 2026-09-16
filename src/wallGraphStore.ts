@@ -25,7 +25,7 @@
  *
  * ## It records which map it is for
  *
- * The graph's coordinates are fractions of *a* map, and nothing in them says which. A GM who derives
+ * The graph's coordinates are graph units of *a* map, and nothing in them says which. A GM who derives
  * a graph and then nominates a different image would otherwise have the first map's walls silently
  * reinterpreted over the second. So the stored value is a small wrapper — the map's id beside the
  * encoded graph — and a mismatch reads as "no graph for this map" rather than as a graph.

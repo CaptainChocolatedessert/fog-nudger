@@ -3,11 +3,11 @@
  *
  * ## Why the top is not a constant
  *
- * Spur pruning and edge simplification are both denominated in fractions of the map, because that is
- * the unit that outlives the raster, which a value re-applied on every derive has to — a graph has no raster and no
- * ink width, so anything measured off the reading is unavailable to it.
+ * Spur pruning and edge simplification are both denominated in graph units — the map's longer side is
+ * 1 — because that is the unit that outlives the raster, which a value re-applied on every derive has
+ * to: a graph has no raster and no ink width, so anything measured off the reading is unavailable to it.
  *
- * A fraction of the map is honest and it is a terrible thing to put a fixed ceiling on. Two maps of
+ * A graph unit is honest and it is a terrible thing to put a fixed ceiling on. Two maps of
  * the same pixel size can carry 3px linework or 12px, and every setting a GM wants sits within a few
  * multiples of the map's own ink. A ceiling generous enough for the coarse map puts the whole useful
  * range of the fine one in the first percent of the track. So the top is **measured**: the longest
@@ -49,14 +49,14 @@ import { largestBend, longestRun, type WallGraph } from "../trace/wallGraph";
 
 interface Tops {
   /**
-   * The longest wall run, in map fractions. Zero when there is nothing to prune.
+   * The longest wall run, in graph units. Zero when there is nothing to prune.
    *
    * **Every run, not only those with a free end today.** Pruning cascades, so a run between two
    * junctions now can be a dead end three rounds later; a top measured from today's spurs alone was
    * too short to reach exactly those, which is what left long walls standing at the far right.
    */
   readonly spur: number;
-  /** The largest single-vertex bend, in map fractions. Zero when there is nothing to straighten. */
+  /** The largest single-vertex bend, in graph units. Zero when there is nothing to straighten. */
   readonly bend: number;
 }
 
@@ -110,7 +110,7 @@ export function graphScaleTop(name: SettingName): number | null {
   if (tops === null) return null;
   // One simplification key since 2026-09-14; the second copy went with the button that applied it.
   const top =
-    name === "spurPruneFraction" ? tops.spur : name === "simplifyFraction" ? tops.bend : 0;
+    name === "spurPruneGraphUnits" ? tops.spur : name === "simplifyGraphUnits" ? tops.bend : 0;
   return top > 0 ? top : null;
 }
 

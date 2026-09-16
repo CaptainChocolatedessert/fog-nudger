@@ -80,7 +80,7 @@ import type { WallGraph } from "./wallGraph";
 export interface WallCycle {
   /** Half-edge ids in walk order. Edge `e` has half-edges `2e` (a→b) and `2e+1` (b→a). */
   readonly halfEdges: readonly number[];
-  /** The origin of each half-edge, closing implicitly. Map fractions. */
+  /** The origin of each half-edge, closing implicitly. Graph units. */
   readonly points: readonly Vector2[];
   /** Shoelace, doubled, signed. Positive encloses; negative faces outward; zero is all slit. */
   readonly doubleArea: number;

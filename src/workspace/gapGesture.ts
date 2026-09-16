@@ -10,8 +10,8 @@
  * A gap is a handful of raster pixels — sub-pixel on screen with a whole map in view, which is
  * precisely the situation the search exists for. So the ring is drawn in **screen** space at a
  * minimum size, and the thing a GM aims at is that ring. Hit-testing the pixels instead would make
- * every mark unclickable at the zoom where they are found, and hit-testing a fixed distance in map
- * fractions would drift from what is drawn at every zoom level.
+ * every mark unclickable at the zoom where they are found, and hit-testing a fixed distance on the
+ * map would drift from what is drawn at every zoom level.
  *
  * That is the same rule the wall tools follow, and the same one a room enforced there: what the
  * layer draws and what the query answers must agree, because between them they are what "there is
@@ -40,16 +40,34 @@ export const RING_MIN_RADIUS = 11;
 export const RING_PADDING = 6;
 
 /**
+ * Screen pixels per raster pixel, the same on both axes.
+ *
+ * `perPixel` is graph units per screen pixel, and a graph unit is the map's longer side — so the
+ * raster's longer side is one graph unit too. That is what makes one number right in both
+ * directions, and it is the scale the layer draws the ring at, since the map is drawn at the image's
+ * own aspect.
+ *
+ * **It was the raster's width, and that was a real distortion** until 2026-09-16: `perPixel` has
+ * always come from the longer drawn side, so on a portrait map the radius here disagreed with the
+ * radius drawn, and the offsets below — which divided a fraction of each side by it — made the
+ * clickable area an ellipse, squashed by the map's aspect on whichever axis was the shorter.
+ */
+function screenPerRasterPixel(raster: MarkRaster, perPixel: number): number {
+  const long = Math.max(raster.width, raster.height);
+  return long > 0 && perPixel > 0 ? 1 / long / perPixel : 0;
+}
+
+/**
  * The radius a mark's ring is drawn at, in screen pixels.
  *
- * `perPixel` is map fractions per screen pixel, so this converts the mark's span — which is in
- * *raster* pixels — into screen pixels by way of the raster's width. The floor then applies in the
- * space the ring is actually drawn in.
+ * The mark's span is in *raster* pixels, so it converts to screen pixels at the raster's own scale.
+ * The floor then applies in the space the ring is actually drawn in.
  */
 export function ringRadius(mark: GapMark, raster: MarkRaster, perPixel: number): number {
-  // One raster pixel as a fraction of the map, then as screen pixels.
-  const screenPerRasterPixel = raster.width > 0 ? 1 / raster.width / perPixel : 0;
-  return Math.max(RING_MIN_RADIUS, (mark.span / 2) * screenPerRasterPixel + RING_PADDING);
+  return Math.max(
+    RING_MIN_RADIUS,
+    (mark.span / 2) * screenPerRasterPixel(raster, perPixel) + RING_PADDING,
+  );
 }
 
 /**
@@ -73,6 +91,7 @@ export function markAt(
   perPixel: number,
 ): number | null {
   if (raster.width <= 0 || raster.height <= 0 || perPixel <= 0) return null;
+  const scale = screenPerRasterPixel(raster, perPixel);
 
   let best: number | null = null;
   let bestDistance = Infinity;
@@ -81,9 +100,9 @@ export function markAt(
     const mark = marks[i]!;
     if (!mark.fillable) continue;
 
-    // The mark's centre as a fraction of the map, then the offset in screen pixels.
-    const dx = (mark.x / raster.width - u) / perPixel;
-    const dy = (mark.y / raster.height - v) / perPixel;
+    // The click in raster pixels — `u` and `v` are fractions of each side — then the offset on screen.
+    const dx = (mark.x - u * raster.width) * scale;
+    const dy = (mark.y - v * raster.height) * scale;
     const distance = Math.hypot(dx, dy);
     const radius = ringRadius(mark, raster, perPixel);
     if (distance > radius || distance >= bestDistance) continue;

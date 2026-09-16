@@ -30,10 +30,10 @@ function sampleValues(name: (typeof CONTROLS)[number]["name"]): number[] {
 const NONSENSE = ["NaN", "Infinity", "undefined", "null", "[object"];
 
 /** Nothing read yet — the state a workspace opens in. */
-const MEASURED_NONE: Measured = { pxPerSquare: null, rasterWidth: null };
+const MEASURED_NONE: Measured = { pxPerSquare: null, rasterPerUnit: null };
 
 /** The test map's own figures, so a passing sweep is about a plausible map. */
-const MEASURED_MAP: Measured = { pxPerSquare: 51, rasterWidth: 3300 };
+const MEASURED_MAP: Measured = { pxPerSquare: 51, rasterPerUnit: 3300 };
 
 function sweep(measured: Measured, label: string): void {
   for (const control of CONTROLS) {
@@ -59,7 +59,7 @@ describe("every control's readout", () => {
     // squares, and `=== null` does not catch a zero — so the division that followed printed
     // "Infinity". `lastPixelsPerSquare` nulls a zero at source now; this is the type's own contract
     // holding rather than one caller remembering to.
-    sweep({ pxPerSquare: 0, rasterWidth: 0 }, "zero measurements");
+    sweep({ pxPerSquare: 0, rasterPerUnit: 0 }, "zero measurements");
   });
 
   it("says nothing nonsensical on a real measurement", () => {
@@ -71,15 +71,15 @@ describe("every control's readout", () => {
   it("says nothing nonsensical on a negative measurement either", () => {
     // Not reachable from the pipeline, and asserted because `Measured` permits it: a readout is a
     // pure function of what it is handed, and it should not be the caller's job to know that.
-    sweep({ pxPerSquare: -1, rasterWidth: -1 }, "negative measurements");
+    sweep({ pxPerSquare: -1, rasterPerUnit: -1 }, "negative measurements");
   });
 });
 
 describe("readouts that depend on a measurement", () => {
   const gapFill = CONTROLS.find((control) => control.name === "gapFillPx")!;
-  const spurs = CONTROLS.find((control) => control.name === "spurPruneFraction")!;
+  const spurs = CONTROLS.find((control) => control.name === "spurPruneGraphUnits")!;
   const stroke = CONTROLS.find((control) => control.name === "minStrokeInkWidths")!;
-  const simplify = CONTROLS.find((control) => control.name === "simplifyFraction")!;
+  const simplify = CONTROLS.find((control) => control.name === "simplifyGraphUnits")!;
 
   it("drops the grid-square clause when there is no pixel density", () => {
     expect(gapFill.derive!(12, MEASURED_NONE)).not.toContain("of a square");
@@ -90,7 +90,7 @@ describe("readouts that depend on a measurement", () => {
   /*
     The two graph-derived controls say nothing at all without a raster.
 
-    They are stored as a fraction of the map, and turning that back into pixels needs the raster the
+    They are stored in graph units, and turning that back into pixels needs the raster the
     last reading used. Until one lands the readout goes quiet rather than inventing one. Both are
     checked, because two controls sharing a formatter is exactly where one of them gets left behind.
   */
@@ -105,21 +105,21 @@ describe("readouts that depend on a measurement", () => {
   });
 
   /*
-    These three ask to report where the handle is rather than what the value is.
+    These two ask to report where the handle is rather than what the value is.
 
-    Their stored unit is a fraction of the map, which is the only one both modes can speak and not one
-    a GM can hold on to — and neither was the per-ten-thousand spelling that came before it. What the
+    Their stored unit is graph units, which is the graph's own and not a number a GM can hold on to —
+    and neither was the per-ten-thousand spelling that came before it. What the
     readout is for is remembering a setting and coming back to it, which a position on the track
     serves. The rendering itself is `settingRows`; what belongs here is that the declaration asks.
   */
-  it("asks for a position readout on every control stored as a map fraction", () => {
+  it("asks for a position readout on every control stored in graph units", () => {
     for (const control of [spurs, simplify]) {
       expect(control.readout, control.name).toBe("position");
     }
   });
 
   it("leaves every other control to the shared formatter", () => {
-    const byPosition = new Set(["spurPruneFraction", "simplifyFraction"]);
+    const byPosition = new Set(["spurPruneGraphUnits", "simplifyGraphUnits"]);
     for (const control of CONTROLS) {
       if (byPosition.has(control.name)) continue;
       expect(control.readout, control.name).toBeUndefined();
@@ -150,15 +150,15 @@ describe("readouts that depend on a measurement", () => {
       two different measurements must produce two different sentences, or the number in them is not
       coming from the measurement.
     */
-    // The two stored as a fraction of the map report against the raster.
+    // The two stored in graph units report against the raster.
     for (const control of [spurs, simplify]) {
-      const small = control.derive!(4e-4, { pxPerSquare: 51, rasterWidth: 1600 });
-      const large = control.derive!(4e-4, { pxPerSquare: 51, rasterWidth: 3300 });
+      const small = control.derive!(4e-4, { pxPerSquare: 51, rasterPerUnit: 1600 });
+      const large = control.derive!(4e-4, { pxPerSquare: 51, rasterPerUnit: 3300 });
       expect(small, control.name).not.toBe(large);
     }
     for (const control of [gapFill]) {
-      const coarse = control.derive!(12, { pxPerSquare: 20, rasterWidth: 3300 });
-      const fine = control.derive!(12, { pxPerSquare: 80, rasterWidth: 3300 });
+      const coarse = control.derive!(12, { pxPerSquare: 20, rasterPerUnit: 3300 });
+      const fine = control.derive!(12, { pxPerSquare: 80, rasterPerUnit: 3300 });
       expect(coarse, control.name).not.toBe(fine);
     }
   });
@@ -166,7 +166,7 @@ describe("readouts that depend on a measurement", () => {
   it("says a control that is off is off, whatever has been measured", () => {
     // Zero is off, and it has to read as off rather than as "0px, 0.00 of a square" — a GM scanning
     // for which controls are doing something reads the readout, not the slider position.
-    // Not the two stored as a map fraction: they say "off" through `format` instead, which the
+    // Not the two stored in graph units: they say "off" through `format` instead, which the
     // raster test above pins. A control cannot be in both lists without saying it twice.
     for (const control of [gapFill]) {
       for (const measured of [MEASURED_NONE, MEASURED_MAP]) {

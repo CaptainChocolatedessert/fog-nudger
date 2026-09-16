@@ -38,6 +38,7 @@ import {
   type View,
 } from "../probe/viewTransform";
 import type { Drag, LayerId } from "../steps";
+import { graphExtent, type GraphExtent } from "../trace/graphUnits";
 import { workspaceModalId } from "./workspaceControl";
 
 /**
@@ -291,6 +292,18 @@ export function setMapImage(image: HTMLImageElement | null): void {
   dirty = true;
 }
 
+/**
+ * The map's size in graph units, or `null` with no map drawn.
+ *
+ * From the image this surface draws, which is the decoded map at its own pixel size — the figure the
+ * trace defines graph units against too, so a frame drawn here lands where a derivation would put
+ * the map's edge.
+ */
+export function mapExtent(): GraphExtent | null {
+  if (!mapImage || !(mapImage.naturalWidth > 0) || !(mapImage.naturalHeight > 0)) return null;
+  return graphExtent(mapImage.naturalWidth, mapImage.naturalHeight);
+}
+
 function fitMap(): void {
   if (!mapImage) return;
   const { width, height } = viewportSize();
@@ -374,20 +387,28 @@ export function onMapClick(listener: (u: number, v: number) => void): void {
   clickListeners.push(listener);
 }
 
-/** A position on the map, as the tools want it: fractions, plus what a screen pixel is worth. */
+/**
+ * A position on the map, as the tools want it: in both of the map's spaces, plus what a screen pixel
+ * is worth.
+ *
+ * `u` and `v` are **fractions of each side**, which is what a raster wants — a paint layer or the gap
+ * search turns them into its own pixels per axis. `x` and `y` are **graph units**, the map's longer
+ * side being 1, which is what the wall graph is stored in. Both are given rather than one derived from
+ * the other at every call site, because only this file knows the size the map is drawn at.
+ */
 export interface MapPoint {
   readonly u: number;
   readonly v: number;
+  readonly x: number;
+  readonly y: number;
   /**
-   * Map fractions per screen pixel, so a tool can ask for a target a constant size under the cursor.
+   * Graph units per screen pixel, so a tool can ask for a target a constant size under the cursor.
    *
-   * **One number for both axes, and that is a stated approximation.** Fraction space is square and
-   * the map generally is not, so a circle on screen is an ellipse in fractions. Taken from the
-   * *longer* drawn side, which makes a screen-derived radius land at or inside what was asked for
-   * rather than outside it — up to the map's aspect ratio smaller on the short axis, which on the
-   * test map is about a fifth. Conservative is the right direction here: the radius decides whether
-   * a drag merges two vertices, and a merge that happens when the GM did not mean it is worse than
-   * one they have to aim for.
+   * **One number for both axes, and exactly right on both** since 2026-09-16. It was taken from the
+   * longer drawn side when the graph was stored in fractions of each side, which made it a stated
+   * approximation — a circle on screen was an ellipse in fractions, about a fifth short on the short
+   * axis of the test map. Graph units *are* the longer side, so the approximation is gone rather than
+   * re-argued.
    */
   readonly perPixel: number;
   /**
@@ -535,7 +556,15 @@ if (canvas instanceof HTMLCanvasElement) {
     const u = (event.clientX - view.x) / drawWidth;
     const v = (event.clientY - view.y) / drawHeight;
     if (u < 0 || v < 0 || u > 1 || v > 1) return null;
-    return { u, v, perPixel: 1 / Math.max(drawWidth, drawHeight), modifier: event.shiftKey };
+    const long = Math.max(drawWidth, drawHeight);
+    return {
+      u,
+      v,
+      x: (event.clientX - view.x) / long,
+      y: (event.clientY - view.y) / long,
+      perPixel: 1 / long,
+      modifier: event.shiftKey,
+    };
   };
 
   // Where the press landed and whether it has moved since, which is what separates a click from a
@@ -619,10 +648,13 @@ if (canvas instanceof HTMLCanvasElement) {
       if (mapImage) {
         const drawWidth = mapImage.naturalWidth * view.scale;
         const drawHeight = mapImage.naturalHeight * view.scale;
+        const long = Math.max(drawWidth, drawHeight);
         activeDragHandler()?.move({
           u: (event.clientX - view.x) / drawWidth,
           v: (event.clientY - view.y) / drawHeight,
-          perPixel: 1 / Math.max(drawWidth, drawHeight),
+          x: (event.clientX - view.x) / long,
+          y: (event.clientY - view.y) / long,
+          perPixel: 1 / long,
           modifier: event.shiftKey,
         });
       }

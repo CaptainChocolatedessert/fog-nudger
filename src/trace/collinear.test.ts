@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { documentPoint, buildWallGraph } from "./wallGraph";
+import { graphExtent } from "./graphUnits";
 import { dropCollinear } from "./simplify";
 import type { FittedEdge } from "./faces";
 import type { SkeletonGraph } from "./skeletonGraph";
@@ -101,7 +102,7 @@ describe("buildWallGraph applies it", () => {
 
   it("stores one segment for a straight run and reports what it dropped", () => {
     const { graph, fitted } = straightRun();
-    const built = buildWallGraph(graph, fitted);
+    const built = buildWallGraph(graph, fitted, graphExtent(graph.width, graph.height));
 
     expect(built.collinear).toBe(8);
     expect(built.graph.edges).toHaveLength(1);
@@ -125,7 +126,7 @@ describe("buildWallGraph applies it", () => {
       edges: [{ a: 0, b: 1, points }],
     } as unknown as SkeletonGraph;
 
-    const built = buildWallGraph(graph, [{ points }]);
+    const built = buildWallGraph(graph, [{ points }], graphExtent(graph.width, graph.height));
     expect(built.collinear).toBe(0);
     expect(built.graph.edges).toHaveLength(4);
   });

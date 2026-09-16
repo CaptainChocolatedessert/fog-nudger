@@ -25,6 +25,7 @@ import {
   wallRuns,
   type WallGraph,
 } from "./wallGraph";
+import { graphExtent } from "./graphUnits";
 
 /** Two rooms sharing a wall, plus a stub hanging off the bottom. */
 const TWO_ROOMS = [
@@ -49,7 +50,7 @@ function wallGraphFrom(rows: readonly string[], tolerance = 1): WallGraph {
   const fitted = resolved.graph.edges.map((edge) => ({
     points: simplifyPolyline(edge.points, tolerance),
   }));
-  return buildWallGraph(resolved.graph, fitted).graph;
+  return buildWallGraph(resolved.graph, fitted, graphExtent(resolved.graph.width, resolved.graph.height)).graph;
 }
 
 describe("compactNodes", () => {
@@ -119,6 +120,59 @@ describe("compactNodes", () => {
 });
 
 describe("buildWallGraph", () => {
+  /*
+    Raster pixels into graph units — the map's longer side is 1 — per axis against the raster.
+
+    Added with the unit on 2026-09-16. The fixtures below are all square rasters, where every unit
+    this document has ever used gives the same numbers, so nothing else in this file can tell graph
+    units from fractions of each side. Two mutations — fractions of each side, and dividing by the
+    raster's longer side — two caught, one by each of these tests.
+  */
+  it("puts a non-square raster into graph units, the longer side 1 and the other its share", () => {
+    const derived = {
+      width: 200,
+      height: 100,
+      nodes: [
+        { x: 0, y: 0 },
+        { x: 200, y: 100 },
+      ],
+      edges: [{ a: 0, b: 1, points: [{ x: 0, y: 0 }, { x: 100, y: 50 }, { x: 200, y: 100 }] }],
+    } as unknown as Parameters<typeof buildWallGraph>[0];
+    // A bend at the middle, so the interior point is stored rather than dropped as collinear.
+    const fitted = [{ points: [{ x: 0, y: 0 }, { x: 100, y: 40 }, { x: 200, y: 100 }] }];
+
+    const built = buildWallGraph(derived, fitted, graphExtent(200, 100));
+
+    expect(built.graph.nodes).toContainEqual({ x: 0, y: 0 });
+    expect(built.graph.nodes).toContainEqual({ x: 1, y: 0.5 });
+    // 100 of 200 across and 40 of 100 down: half the long side, and 0.4 of the short one's 0.5.
+    expect(built.graph.nodes).toContainEqual({ x: 0.5, y: Math.fround(0.2) });
+  });
+
+  it("puts a capped raster's far edge exactly on the image's extent, not a pixel short", () => {
+    /*
+      A capped raster is the image divided by an integer factor and floored, so its aspect can be a
+      pixel off the image's: 3301 by 2551 at factor 2 is 1650 by 1275. Dividing by the raster's own
+      longer side would leave the far corner at 1275/1650, short of the image's 2551/3301. Converting
+      per axis against the raster and scaling to the image's extent puts it on the edge.
+    */
+    const extent = graphExtent(3301, 2551);
+    const derived = {
+      width: 1650,
+      height: 1275,
+      nodes: [
+        { x: 0, y: 0 },
+        { x: 1650, y: 1275 },
+      ],
+      edges: [{ a: 0, b: 1, points: [{ x: 0, y: 0 }, { x: 1650, y: 1275 }] }],
+    } as unknown as Parameters<typeof buildWallGraph>[0];
+
+    const built = buildWallGraph(derived, [{ points: derived.edges[0]!.points }], extent);
+
+    expect(built.graph.nodes[1]).toEqual({ x: extent.x, y: extent.y });
+    expect(extent.y).not.toBe(Math.fround(1275 / 1650));
+  });
+
   it("drops a wall that simplification laid on top of another, and counts it", () => {
     /*
       The defect a room found on 2026-09-05, in the shape it actually took.
@@ -161,7 +215,7 @@ describe("buildWallGraph", () => {
       { points: [{ x: 10, y: 50 }, { x: 90, y: 50 }] },
     ];
 
-    const built = buildWallGraph(derived, fitted);
+    const built = buildWallGraph(derived, fitted, graphExtent(derived.width, derived.height));
 
     expect(built.graph.edges).toHaveLength(1);
     expect(built.duplicates).toBe(1);
@@ -180,7 +234,11 @@ describe("buildWallGraph", () => {
     } as unknown as Parameters<typeof buildWallGraph>[0];
 
     // No direction, so nothing can sort it into a rotation and the traversal cannot use it.
-    const built = buildWallGraph(derived, [{ points: [{ x: 10, y: 50 }, { x: 10, y: 50 }] }]);
+    const built = buildWallGraph(
+      derived,
+      [{ points: [{ x: 10, y: 50 }, { x: 10, y: 50 }] }],
+      graphExtent(derived.width, derived.height),
+    );
 
     expect(built.graph.edges).toEqual([]);
     expect(built.zeroLength).toBe(1);

@@ -9,7 +9,7 @@
  *
  * ## Radii arrive already converted
  *
- * The caller passes distances in map fractions, having turned screen pixels into them. That keeps
+ * The caller passes distances in graph units, having turned screen pixels into them. That keeps
  * the two concerns apart: how big a target should *feel* is a question about a surface and a zoom
  * level, and what falls inside it is a question about a graph.
  *

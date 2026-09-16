@@ -6,20 +6,22 @@
  * is renumbered behind the GM's back, so a moved vertex is just a stored coordinate rather than a
  * thing that has to be found again in a freshly derived graph.
  *
- * ## Coordinates are FRACTIONS OF THE MAP, not raster pixels
+ * ## Coordinates are GRAPH UNITS, not raster pixels
  *
- * Changed 2026-09-03 (user), and the reason is a trap this project has already written down once.
+ * **The map image's longer side is 1** (user, 2026-09-16), so a node is `{ x, y }` inside an extent
+ * of `1 × h/w` or `w/h × 1`. `graphUnits.ts` carries the unit and why it replaced fractions of each
+ * side: those made one number mean two lengths, depending on direction.
+ *
+ * Not raster pixels either, and that decision (2026-09-03, user) stands for the reason it was made.
  * `rasterPlan.ts` records that *the sibling's real trap was denominating its parameters in raster
  * pixels, which made the raster load-bearing forever* — and the raster here is an artefact of our own
  * memory budget, not of the map. A 52.9-megapixel map caps to half size for reasons that have
  * nothing to do with its content. Storing the GM's **work** in that space is the same trap one level
  * worse, because a parameter can be re-tuned and their editing cannot.
  *
- * So a node is `{ x, y }` in 0–1 of the map's own extent. That is independent of the megapixel cap,
- * independent of the source image's pixel dimensions, and converts to world at emit time from the
+ * Graph units are independent of the megapixel cap, and they convert to world at emit time from the
  * map's *current* bounds — so moving or scaling the map in Owlbear carries the fog with it, which
- * absolute world coordinates would not. The point probe already speaks in fractions of the map for
- * the same reason.
+ * absolute world coordinates would not.
  *
  * **Stored as float32, and quantised to float32 on the way in.** `Math.fround` at every point a
  * coordinate enters the document means storing and reloading is *exact* rather than nearly so, which
@@ -62,12 +64,13 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import type { FittedEdge } from "./faces";
+import type { GraphExtent } from "./graphUnits";
 import { dropCollinear } from "./simplify";
 import { spursToPrune, type PrunableRun } from "./spurs";
 import type { SkeletonGraph } from "./skeletonGraph";
 
 export interface WallGraph {
-  /** Every vertex, in 0–1 of the map's extent. Position in this list is the id. */
+  /** Every vertex, in graph units — the map's longer side is 1. Position in this list is the id. */
   readonly nodes: readonly Vector2[];
   /** One segment each. A wall is a run of these, chained through degree-2 nodes. */
   readonly edges: readonly WallEdge[];
@@ -114,7 +117,7 @@ export interface WallGraphBuild {
 }
 
 /**
- * Bumped whenever the byte layout changes.
+ * Bumped whenever the byte layout **or the meaning of a coordinate** changes.
  *
  * Durable data in someone's scene, so a format change has to be *detectable*. A version that does
  * not match is refused, which costs the GM their stored graph once; reading old bytes under new
@@ -122,8 +125,14 @@ export interface WallGraphBuild {
  *
  * Version 1 was a lattice walk of the pixel-chain graph; version 2 was polylines in raster pixels.
  * Neither was ever deployed or written to a scene, so nothing needs migrating from them.
+ *
+ * **Version 3 was deployed** and did reach scenes: segments in fractions of each side. Version 4 has
+ * the same bytes in graph units, so a version 3 graph would decode cleanly and be wrong on every
+ * non-square map — which is exactly the case the bump exists for. It is refused rather than converted
+ * (user, 2026-09-16): the only scenes holding one are the author's, and converting would need the
+ * map's aspect, which a version 3 document does not record.
  */
-const FORMAT_VERSION = 3;
+const FORMAT_VERSION = 4;
 
 /**
  * A coordinate as the document holds it.
@@ -136,7 +145,7 @@ export function documentCoordinate(value: number): number {
   return Math.fround(value);
 }
 
-/** A point in map fractions, quantised the way the document holds them. */
+/** A point in graph units, quantised the way the document holds them. */
 export function documentPoint(x: number, y: number): Vector2 {
   return { x: documentCoordinate(x), y: documentCoordinate(y) };
 }
@@ -149,15 +158,24 @@ export function documentPoint(x: number, y: number): Vector2 {
  * reusable rather than approximated. So the shared points are exactly the derived graph's own nodes,
  * and each fitted polyline becomes a run of segments between them.
  *
- * Raster pixels go in and map fractions come out; `graph.width`/`height` are the raster that gives
- * the division, and are not stored, because the whole point is that the document does not know what
- * raster it came from.
+ * Raster pixels go in and graph units come out. `graph.width`/`height` are the raster and `extent` is
+ * the map image's size in graph units; neither is stored, because the whole point is that the
+ * document does not know what raster it came from.
+ *
+ * **Per axis against the raster, then scaled to the extent** — not divided by the raster's longer
+ * side. A capped raster is floored, so its aspect can be a pixel off the image's; converting per axis
+ * puts the raster's far edge exactly on the extent's, where one divisor would leave it short on one
+ * side.
  */
-export function buildWallGraph(graph: SkeletonGraph, fitted: readonly FittedEdge[]): WallGraphBuild {
-  const width = Math.max(1, graph.width);
-  const height = Math.max(1, graph.height);
+export function buildWallGraph(
+  graph: SkeletonGraph,
+  fitted: readonly FittedEdge[],
+  extent: GraphExtent,
+): WallGraphBuild {
+  const scaleX = extent.x / Math.max(1, graph.width);
+  const scaleY = extent.y / Math.max(1, graph.height);
   const nodes: Vector2[] = graph.nodes.map((node) =>
-    documentPoint(node.x / width, node.y / height),
+    documentPoint(node.x * scaleX, node.y * scaleY),
   );
   const edges: WallEdge[] = [];
 
@@ -217,7 +235,7 @@ export function buildWallGraph(graph: SkeletonGraph, fitted: readonly FittedEdge
     let previous = edge.a;
     for (let p = 1; p < points.length - 1; p++) {
       const id = nodes.length;
-      nodes.push(documentPoint(points[p]!.x / width, points[p]!.y / height));
+      nodes.push(documentPoint(points[p]!.x * scaleX, points[p]!.y * scaleY));
       keep(previous, id);
       previous = id;
     }
@@ -370,13 +388,13 @@ export interface WallPruning {
   readonly removed: number;
   /** Segments those runs held — what the document actually loses. */
   readonly segments: number;
-  /** Total length removed, in fractions of the map. */
+  /** Total length removed, in graph units. */
   readonly length: number;
   readonly rounds: number;
 }
 
 /**
- * Prune the dead-end walls shorter than `limit`, measured along the wall in map fractions.
+ * Prune the dead-end walls shorter than `limit`, measured along the wall in graph units.
  *
  * ## Why this is on the fitted graph rather than on the skeleton
  *
@@ -442,7 +460,7 @@ export interface DoomedSpurs {
   readonly vertices: ReadonlySet<number>;
   /** Whole wall runs those segments make up. */
   readonly runs: number;
-  /** Total length, in map fractions. */
+  /** Total length, in graph units. */
   readonly length: number;
   readonly rounds: number;
 }

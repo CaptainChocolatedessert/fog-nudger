@@ -30,7 +30,7 @@ import { describeError } from "../describeError";
 import { addFrameWalls } from "../trace/frameWalls";
 import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
 import { controlsLive } from "./settingsState";
-import { say } from "./shell";
+import { mapExtent, say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
 
 const BUTTON_ID = "frame-action";
@@ -91,7 +91,15 @@ async function run(button: HTMLButtonElement): Promise<void> {
     return;
   }
 
-  const framed = addFrameWalls(graph);
+  // The map's own size in graph units, which the document does not record — the frame goes where
+  // the image's edge is.
+  const extent = mapExtent();
+  if (!extent) {
+    say("no map is drawn, so there is no edge to wall", "bad");
+    return;
+  }
+
+  const framed = addFrameWalls(graph, extent);
   if (framed.alreadyFramed) {
     // Said plainly rather than done silently: pressing a button and seeing nothing happen reads as a
     // broken button, where "it is already there" is an answer.

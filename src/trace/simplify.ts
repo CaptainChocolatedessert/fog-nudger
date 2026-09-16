@@ -66,7 +66,7 @@ export const COMMAND_CAP = 8192;
  * keeps it. The cross product of the two differences is a product and a subtraction of integers, which
  * is exact.
  *
- * On float coordinates — the wall graph is float32 map fractions — exactness simply makes this
+ * On float coordinates — the wall graph is float32 graph units — exactness simply makes this
  * find fewer triples. It is never wrong, only conservative, which is the right direction.
  *
  * ## Why a straight wall is not as common as it sounds

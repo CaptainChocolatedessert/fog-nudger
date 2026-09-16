@@ -32,7 +32,8 @@ function mark(x: number, y: number, span = 4, fillable = true): GapMark {
  */
 const RASTER = { width: 1000, height: 400 };
 /**
- * Map fractions per screen pixel, chosen so the map is 500 screen pixels across.
+ * Graph units per screen pixel, chosen so the map is 500 screen pixels across — its longer side, which
+ * is what a graph unit is.
  *
  * Two raster pixels to one screen pixel, which is the zoom the search is actually used at: a gap is
  * a handful of raster pixels and the GM is looking at the map as a whole.
@@ -57,6 +58,19 @@ describe("how big a ring is", () => {
     // 400 raster pixels is 200 screen pixels across, so 100 of radius, plus the padding.
     expect(big).toBeCloseTo(106);
   });
+
+  it("is the size drawn on a portrait map too, not only a landscape one", () => {
+    /*
+      The regression for 2026-09-16. The scale came from the raster's **width** while `perPixel` came
+      from the longer drawn side, which agree only when the width is the longer side. On a map taller
+      than wide the ring hit-tested at two and a half times the radius the layer drew.
+
+      This and the next test: two mutations restoring each old formula, two caught.
+    */
+    const tall = { width: 400, height: 1000 };
+    // The same 400 raster pixels at the same two-to-one zoom: 200 screen pixels, 100 of radius.
+    expect(ringRadius(mark(200, 500, 400), tall, PER_PIXEL)).toBeCloseTo(106);
+  });
 });
 
 describe("which ring a click lands in", () => {
@@ -80,6 +94,22 @@ describe("which ring a click lands in", () => {
 
     expect(markAt(marks, RASTER, u + 0.02, v, PER_PIXEL)).toBe(0);
     expect(markAt(marks, RASTER, u + 0.03, v, PER_PIXEL)).toBeNull();
+  });
+
+  it("reaches as far up and down as it does across, because the ring is a circle on screen", () => {
+    /*
+      The other half of the 2026-09-16 regression. `u` and `v` are fractions of each side and
+      `perPixel` is one number for both axes, so dividing a fraction by it measured the vertical
+      offset in the wrong unit: on this map, two and a half times too far. A click inside the drawn
+      ring above or below its centre was refused.
+    */
+    const marks = [mark(500, 200)];
+    const { u, v } = mapAt(500, 200);
+    // The floor is 11 screen pixels, which is 22 raster pixels at this zoom, whichever way you go.
+    const down = (rasterPixels: number) => v + rasterPixels / RASTER.height;
+
+    expect(markAt(marks, RASTER, u, down(20), PER_PIXEL)).toBe(0);
+    expect(markAt(marks, RASTER, u, down(24), PER_PIXEL)).toBeNull();
   });
 
   it("never picks a guess, and does not pick something else instead of one", () => {

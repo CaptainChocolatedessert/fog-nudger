@@ -201,7 +201,7 @@ function announce(): void {
 /**
  * The map the loaded graph belongs to.
  *
- * Held so an edit writes it back under the same map. A graph's coordinates are fractions of *a* map
+ * Held so an edit writes it back under the same map. A graph's coordinates are in units of *a* map
  * and say nothing about which, so the association is part of what is stored.
  */
 let mapId: string | null = null;
@@ -218,7 +218,7 @@ export async function loadStage(forMap: string | null): Promise<{ readonly corru
   const { graph, base: storedBase, corrupt } = await readWallGraph(forMap);
   saved = graph;
   base = storedBase;
-  // A different map's history describes a different document. Fractions of *a* map say nothing about
+  // A different map's history describes a different document. Units of *a* map say nothing about
   // which, so restoring one here would put one map's walls onto another.
   clearUndo();
   announce();

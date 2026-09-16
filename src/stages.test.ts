@@ -96,9 +96,9 @@ describe("what re-reads the map", () => {
   it("excludes pruning, which re-applies to a graph already in hand", () => {
     // A pipeline parameter of the reading stage, and still not a re-read: the reason `isSkeletonOnly`
     // exists. Its own prompt claimed it "decides what counts as ink", which it does not.
-    expect(PARAMETER_KIND.spurPruneFraction).toBe("pipeline");
-    expect(PARAMETER_STAGE.spurPruneFraction).toBe("read");
-    expect(rereadsTheMap("spurPruneFraction")).toBe(false);
+    expect(PARAMETER_KIND.spurPruneGraphUnits).toBe("pipeline");
+    expect(PARAMETER_STAGE.spurPruneGraphUnits).toBe("read");
+    expect(rereadsTheMap("spurPruneGraphUnits")).toBe(false);
   });
 
   it("excludes every tool control, whatever stage it is filed under", () => {

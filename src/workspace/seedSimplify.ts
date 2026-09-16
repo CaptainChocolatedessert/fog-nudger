@@ -1,10 +1,10 @@
 /**
- * Seeding the simplification tolerance from the measured ink width, once, in the ink mode.
+ * Seeding the simplification tolerance from the measured ink width, once per map.
  *
  * ## The problem this solves, found in a room
  *
- * The tolerance is stored as a fraction of the map, because that is the only unit both modes can
- * speak. A *default* in that unit cannot be right on every map: 4e-4 is 1.3px on a 3300px raster and
+ * The tolerance is stored in graph units, because the GM's graph outlives any one reading of the map.
+ * A *default* in that unit cannot be right on every map: 4e-4 is 1.3px on a 3300px raster and
  * **0.30px on a 751px one** — sub-pixel, which is very nearly no simplification, and on Barrow Mound
  * it produced 2,273 vertices against 510 at a sane setting. Clicking through the defaults on a small
  * map gave a graph too large for a scene write to carry.
@@ -17,14 +17,13 @@
  *
  * The standing rule is that a threshold moving with a measurement changes the result invisibly, and
  * this does not violate it. The measurement decides where the value *starts*; from that moment it is
- * an ordinary stored absolute fraction that the GM can see on the slider and change, and that a
+ * an ordinary stored absolute value that the GM can see on the slider and change, and that a
  * re-run reproduces exactly. The old arrangement — where the stored number *was* a multiple of a
  * measurement — is the thing that rule forbids, and it is what the unit change removed.
  *
- * ## Only in the ink mode, and only while the value is untouched
+ * ## Only once a reading has landed, and only while the value is untouched
  *
- * The editor has no reading and therefore no ink width, which is the whole reason the stored unit is
- * a fraction; it also has no simplification control of this key. So this is the ink mode's alone.
+ * The ink width and the raster both come from a reading, so nothing is seeded before one.
  *
  * **The cost, stated: "untouched" is read as "equal to the static default", and those are not the
  * same thing.** A GM who deliberately sets the slider to exactly 4e-4 will have it re-seeded on the
@@ -34,11 +33,11 @@
  */
 
 import { devLog } from "../devlog";
-import { lastInkWidth, lastRasterWidth } from "../pipeline";
+import { lastInkWidth, lastRasterPerGraphUnit } from "../pipeline";
 import {
   DEFAULT_SETTINGS,
   SETTING_LIMITS,
-  seededSimplifyFraction,
+  seededSimplifyGraphUnits,
   writeParameter,
 } from "../settings";
 import { renderPanel } from "./drawer";
@@ -58,16 +57,16 @@ export function registerSimplifySeed(): void {
 function seed(): void {
 
   const settings = currentSettings();
-  if (settings.trace.simplifyFraction !== DEFAULT_SETTINGS.trace.simplifyFraction) return;
+  if (settings.trace.simplifyGraphUnits !== DEFAULT_SETTINGS.trace.simplifyGraphUnits) return;
 
   const inkWidth = lastInkWidth();
-  const rasterWidth = lastRasterWidth();
-  if (inkWidth === null || rasterWidth === null) return;
+  const rasterPerUnit = lastRasterPerGraphUnit();
+  if (inkWidth === null || rasterPerUnit === null) return;
 
-  const value = seededSimplifyFraction(inkWidth, rasterWidth);
-  if (value === settings.trace.simplifyFraction) return;
+  const value = seededSimplifyGraphUnits(inkWidth, rasterPerUnit);
+  if (value === settings.trace.simplifyGraphUnits) return;
 
-  setSettings(writeParameter(settings, "simplifyFraction", value));
+  setSettings(writeParameter(settings, "simplifyGraphUnits", value));
   void persistSettings();
   /*
     Invalidated explicitly rather than relying on the reading's own listeners to do it afterwards.
@@ -84,10 +83,11 @@ function seed(): void {
   devLog(
     "info",
     `workspace: simplification was at its default and has been seeded from the map — ` +
-      `${value.toExponential(2)} of the map, a quarter of the measured ${inkWidth.toFixed(1)}px ` +
-      `ink width on a ${rasterWidth}px raster. Move the slider to choose your own.`,
+      `${value.toExponential(2)} graph units, a quarter of the measured ${inkWidth.toFixed(1)}px ` +
+      `ink width at ${Math.round(rasterPerUnit)} raster pixels to the unit. Move the slider to ` +
+      `choose your own.`,
   );
-  if (value >= SETTING_LIMITS.simplifyFraction.max) {
+  if (value >= SETTING_LIMITS.simplifyGraphUnits.max) {
     devLog(
       "warn",
       "workspace: the seeded tolerance hit the storage ceiling, which means the measured ink width " +

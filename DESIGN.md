@@ -60,7 +60,8 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **the reading** | binarise + polarity + ink width — the expensive first half of the pipeline, cached on its own. |
 | **skeleton** | the ink thinned to one-pixel centrelines. A raster, not a graph. |
 | **skeleton graph** (`SkeletonGraph`) | the skeleton chained into nodes and edges, still in raster pixels, edges still carrying their pixel chains. An intermediate, thrown away once the walls are fitted. |
-| **wall graph** (`WallGraph`) | the fitted graph, stored in scene metadata in fractions of the map. **The GM's own work**, and the project's document. Nothing re-derives it. |
+| **wall graph** (`WallGraph`) | the fitted graph, stored in scene metadata in graph units. **The GM's own work**, and the project's document. Nothing re-derives it. |
+| **graph unit** | the wall graph's one unit of length: **the map image's longer side is 1**, so the map spans `1 × h/w` or `w/h × 1`. The same length in every direction, which fractions of each side were not. |
 | **face** | a cycle of the graph traversal — the abstract thing. |
 | **region** / **room** | a face we emit as a fog shape. The GM-facing word. |
 | **wall** | a *run* of segments chained through degree-2 nodes — what a GM thinks they are editing. |
@@ -648,12 +649,14 @@ parameter**.
   a good unit when it is good, and there is no way to know from inside which case you are in.
 - **Raster pixels stop meaning the same thing only when the megapixel budget bites**, which is
   reported and rare — and they are always *exactly* what they say for the run in front of you.
-- **Fractions of the map** are independent of the raster, the source image's size and the grid, which
-  is what makes them the only unit the wall editor can speak: it pulls a graph from metadata and has
-  neither a raster nor a measurement.
+- **Graph units** — the map image's longer side is 1 — are independent of the raster and the grid,
+  which is what lets a value outlive any one reading: the GM's graph is kept in them, and a setting
+  that acts on the graph has to be too. They replaced **fractions of each side** on 2026-09-16, which
+  had the same independence and one flaw: on a map that is not square one number meant two lengths,
+  so a vertical wall measured about 29% longer than a horizontal one on the test map.
 
 So the rule is: **prefer ink width where the parameter is genuinely about the linework's own scale;
-otherwise prefer pixels; use fractions of the map where a value must outlive the raster; use grid
+otherwise prefer pixels; use graph units where a value must outlive the raster; use grid
 squares only where the quantity really is a distance on the map's own grid.** Nothing may depend on
 the grid *silently*.
 
@@ -666,8 +669,8 @@ the grid *silently*.
 | Largest gap to look for | px | a threshold that moved with a measurement would change what is proposed invisibly |
 | Same-wall distance | px | a distance travelled across the image |
 | Brush widths | px | what the GM is aiming with, on screen |
-| Straightening | fraction of the map | must be expressible in both modes |
-| Longest dead end to remove | fraction of the map | same |
+| Straightening | graph units | acts on the graph, and outlives the reading |
+| Longest dead end to remove | graph units | same |
 
 **Nothing in the pipeline depends on the grid.** The one control that did — the deleted smallest-room
 filter — depended on it *squared*, so a grid off by four put it off by sixteen.
@@ -1046,11 +1049,33 @@ from earlier stages is the price.
 stored**, which is what makes add and delete tractable — change an edge, re-traverse, and the faces
 fall out. **Node ids are the only identity the document has.**
 
-- **Coordinates are FRACTIONS OF THE MAP.** The raster is an artefact of our own memory budget rather
-  than of the map, so a document denominated in it goes stale when a budget constant moves. Fractions
-  are independent of the raster *and* of the source image's size, and convert to world at emit time
-  from the map's **current** bounds — so moving or scaling the map in Owlbear carries the fog with
-  it, which absolute world coordinates would not.
+- **Coordinates are GRAPH UNITS: the map image's longer side is 1.** The raster is an artefact of our
+  own memory budget rather than of the map, so a document denominated in it goes stale when a budget
+  constant moves. Graph units are independent of the raster, and convert to world at emit time from
+  the map's **current** bounds — so moving or scaling the map in Owlbear carries the fog with it,
+  which absolute world coordinates would not.
+
+  **Fractions of each side until 2026-09-16** (user). Those had every property above and one flaw: on
+  a map that is not square, one number meant two lengths, so everything that measures — the prune
+  limit, straightening, the measured tops of both tracks, every hit radius a tool turns from screen
+  pixels — was skewed by the map's aspect. On the test map a vertical wall measured about 29% longer
+  than a horizontal one of the same pixel length.
+
+  **The extent comes from the image, not the raster.** A capped raster is the image divided by an
+  integer factor and floored, so its aspect can be a pixel off; the build converts per axis against
+  the raster and scales to the image's extent, which puts the raster's far edge exactly on the map's.
+  The document does not record the extent — whoever holds the map image supplies it: the trace from
+  the decoded image, the push from the map item's pixel size, the frame button from the drawn image.
+
+  **Placement uses the extent as a raster size.** `createPlacement` maps a raster linearly onto the
+  world box, so a raster of `extent.x × extent.y` *is* graph-unit space, with per-axis scaling intact —
+  which is what keeps a map a GM has stretched out of proportion in Owlbear working.
+
+  **Format version 4.** The bytes did not change, which is exactly why the version had to: a version 3
+  graph would decode cleanly and be wrong on every non-square map. Version 3 was deployed, and stored
+  graphs from it are **refused rather than converted** (user, 2026-09-16) — the only scenes holding one
+  are the author's, and converting needs the aspect a version 3 document never recorded. *Remove ours*
+  in the panel clears one.
 - **float32, quantised with `Math.fround` on the way in**, so the round trip is exact rather than
   nearly so and nothing downstream needs a tolerance for storage having moved a number.
 - **Segments, not polylines**, so **every vertex is a node** and a junction cannot hide at an interior
@@ -1063,7 +1088,7 @@ fall out. **Node ids are the only identity the document has.**
 - **A checksum (FNV-1a over the body)**, because this format lost the integrity check a lattice walk
   had for free. A flipped bit in a lattice step threw the walk off its end node; a flipped bit in a
   *coordinate* is a different, entirely plausible coordinate.
-- **The store records which map the graph is for.** Fractions of *a* map say nothing about which, so a
+- **The store records which map the graph is for.** Graph units of *a* map say nothing about which, so a
   mismatch reads as "no graph here": nominating a second image drops the GM into stage one for it
   without touching the first map's work. One graph at a time; per-map keys are the fix if it ever
   matters.
@@ -1330,11 +1355,11 @@ deleting a whole edge takes one pixel further into every pruned junction. The ta
 
 ### The graph-derived tracks
 
-Both simplification and pruning need a unit both modes can speak, and the editor has neither a raster
-nor an ink width. **The answer is to denominate the stored value in fractions of the map, and to
-measure the top of the slider's track off the graph itself.**
+Both simplification and pruning act on the graph, which outlives any reading and so has neither a
+raster nor an ink width of its own. **The answer is to denominate the stored value in graph units, and
+to measure the top of the slider's track off the graph itself.**
 
-- **A log scale**, from a **pinned floor** — a small fraction of the map — to a **graph-derived top**:
+- **A log scale**, from a **pinned floor** — a small length in graph units — to a **graph-derived top**:
   the longest wall run for pruning, the largest bend for simplification, re-measured when the tool
   opens and held for that opening.
 - **The floor is PINNED, not the observed minimum**, and the reason is sharp: **both tools delete from
@@ -1353,7 +1378,7 @@ measure the top of the slider's track off the graph itself.**
 ceiling generous enough for one puts the whole useful range of the other in the first percent.
 
 **These are the exception to "a threshold that moves with a measurement changes the result invisibly",
-and it is worth saying why it is not one.** The *stored* value is an absolute fraction and nothing
+and it is worth saying why it is not one.** The *stored* value is an absolute length and nothing
 moves it. What is measured is the **top of the track**, so a re-measurement moves the handle and never
 the setting.
 
@@ -1379,16 +1404,23 @@ Three details that were each learned the hard way:
 is no longer exactly `v`, so a drag away and back would otherwise rewrite the setting.
 
 **One key for simplification, since 2026-09-14.** There were two — `simplifyFraction` and
-`editSimplifyFraction` — on the argument that different defaults is what says two things are
+`editSimplifyFraction`, as they were then named — on the argument that different defaults is what says two things are
 different settings. That was true while the editor applied its own by a button against a document
 with nothing behind it. With one live slider the ink mode's answer is the only one: a *fitting
 parameter*, re-applied on every derive, whose sane non-zero start is what stops a fresh map producing
 a graph too large to write.
 
-**A stated gap: the default is a fixed fraction, and that is less map-independent than an ink width.**
-4e-4 of the map is 1.3px on a 3300px map and 0.30px on a smaller one — sub-pixel, so very nearly no
-simplification. It is close enough because linework is drawn to be legible at a printed size, and it is
-the price of a unit both modes speak.
+**The default is seeded per map, because a fixed one is not map-independent.** 4e-4 of the longer
+side is 1.3px on a 3300px map and 0.30px on a 751px one — sub-pixel, so very nearly no simplification,
+and on that small map it produced a graph too large to write. So once a reading lands, a tolerance
+still at its static default is set to a quarter of the measured ink width, converted by raster pixels
+per graph unit; `seedSimplify.ts` carries why seeding a start is not a threshold moving with a
+measurement.
+
+**Both keys were renamed on 2026-09-16**, to `simplifyGraphUnits` and `spurPruneGraphUnits`, when their
+unit changed from a fraction of each side. The rule is that a unit change is a rename and never a
+reinterpretation, so a stored value falls back to the default rather than being read in the new unit;
+resetting both sliders on every map was accepted (user).
 ---
 
 ## 6. Emitting
@@ -2116,7 +2148,7 @@ nothing, so a click never fills the stack with entries that undo to the state th
 the document as it was, and two events make it describe something else: a **derive** replaces the
 graph with a fresh function of the ink, and **loading another map** replaces it entirely. Restoring
 across either would put back walls belonging to a graph the GM is no longer looking at — and since a
-graph is stored in fractions of *a* map with nothing saying which, that would not look wrong until it
+graph is stored in graph units of *a* map with nothing saying which, that would not look wrong until it
 reached the scene.
 
 ### What draws: everything, from the moment there is a map — 2026-09-14
@@ -2350,7 +2382,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**853 tests across 60 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**867 tests across 61 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2707,6 +2739,22 @@ Everything about them checked so far is the state machine, not the picture.
 **The one check nobody has run:** View's **Defaults** restoring all five colours. The rows themselves
 have been looked at; that button has not been pressed.
 
+**Graph units are built and have never run in a room — 2026-09-16.** The wall graph moved from
+fractions of each side to units of the map's longer side (§5, *What is stored*). What a desk checked:
+`tsc`, the suite with the conversions pinned on non-square and capped rasters — thirteen mutations,
+thirteen caught — a build, and the workspace loading clean on the dev server with the new module
+served. **What a room has to check**, on the non-square test map:
+
+- **A stored graph is refused.** Version 3 graphs do not load; *Remove ours* clears one, and the map
+  derives fresh. The two renamed settings come back at their defaults, and straightening reseeds.
+- **The walls and rooms sit on the ink**, not stretched along one axis — the drawing moved from two
+  scales to one.
+- **The frame lands on the map's edge**, on the short side as well as the long one.
+- **Hit radii feel the same up and down as across** for Move, Draw and Erase — they were short on the
+  map's shorter axis before — and **a click inside an ink gap ring accepts it** above and below the
+  centre, which the ring's hit test refused until the same day.
+- **The fog lands where the rooms are** after a push, including on a map stretched out of proportion.
+
 **One sweep is waiting deliberately.** Two comments describe code that moved — `reading.ts` argues a
 recompose needs no blanking *because the ink layer draws the base*, which stopped being true on
 2026-09-14, and `layers/paint.ts` says the paint is drawn in the Walls step. Neither causes a defect
@@ -3016,7 +3064,7 @@ The questions to start from, offered as a starting point and not as an agenda:
 - **A threshold, or a click?** A sweep over everything under an area is what the deleted control was. A
   click on the face you actually want gone is the exact, local, visible version — but it is one click
   per sliver where a split may leave many.
-- **What unit is the area in?** Fractions of the map squared means nothing to a GM; grid squares needs
+- **What unit is the area in?** Graph units squared means nothing to a GM; grid squares needs
   a pixels-per-square figure the editor does not have.
 - **A face bounded partly by a stub is not a merge.** Deleting a bridge deletes the stub and merges
   nothing, because the same face is already on both sides of it. Whether that is wanted, refused, or a
@@ -3037,7 +3085,7 @@ turns the bounded flood into a shortest path.
   derivation as the document, the controls that regenerate walls lock, and the delta shows it going
   if a regenerate is agreed. That existing machinery is how the interface says what the paragraph
   below asks for — nothing new is needed to say it.
-- **Units native to the graph** — fractions of the map, like every other stored graph quantity.
+- **Units native to the graph** — graph units, like every other stored graph quantity.
 - **Proposals in the additive colour**, the palette's colour for content being put in.
 - **Accept-all is one undo step.**
 
@@ -3049,7 +3097,7 @@ turns the bounded flood into a shortest path.
   it exists and dashed means it is proposed, and accepted mends become ordinary solid walls. The cost:
   at map-wide zoom a short mend is too small for dashes to read, and the ring carries it there.
 - **Defaults of 20px and 40px, set per map** when a map is first read, as the straightening default is
-  — divided by the raster width, which is exact. A single fixed fraction was ruled out by that
+  — converted by raster pixels per graph unit, which is exact. A single fixed figure was ruled out by that
   default's own history on a small map. 20 rather than the ink tool's 12 because thinning pulls each
   free end back about half an ink width, so a break is wider in the graph than in the ink (reasoning,
   to be checked in a room).
@@ -3236,6 +3284,7 @@ closed outright.
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one — and the two queries the tools aim with |
 | `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
+| `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
 | `trace/probePoint.ts` | the one surviving diagnostic |
 | `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses |
 
@@ -3243,7 +3292,7 @@ closed outright.
 
 `map/mapImage.ts` list, nominate, resolve and load · `map/mapChoice.ts` the unnominated-map rule, split
 out so it can be tested · `map/placement.ts`, `map/placeRegions.ts`, `map/rasterPlan.ts` raster-to-world
-placement, reused at a 1×1 raster because that *is* fraction space · `emit/fogShapes.ts` the shape items
+placement, reused at a raster the size of the map's extent because that *is* graph-unit space · `emit/fogShapes.ts` the shape items
 and the four emission constants · `emit/wallLines.ts` the wall `LINE`s · `emit/wallEmission.ts` the
 wall graph's faces placed in the world · `emit/emitRegions.ts` batch it into the scene ·
 `geometry/ring.ts` ring maths · `wallGraphStore.ts` and `inkPaintStore.ts` the two metadata documents — the

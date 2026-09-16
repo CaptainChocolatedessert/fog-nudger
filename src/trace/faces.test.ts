@@ -26,6 +26,7 @@ import { describe, expect, it } from "vitest";
 import { resolveFaces, walkCycles } from "./faces";
 import { maskFromRows } from "./fixtures";
 import { buildWallGraph } from "./wallGraph";
+import { graphExtent } from "./graphUnits";
 import { buildWallFaces } from "./wallFaces";
 import { buildSkeletonGraph, type SkeletonGraph } from "./skeletonGraph";
 import { simplifyPolyline } from "./simplify";
@@ -49,7 +50,7 @@ function cleaned(rows: readonly string[]): SkeletonGraph {
 function facesOf(rows: readonly string[]) {
   const graph = cleaned(rows);
   const fitted = graph.edges.map((edge) => ({ points: simplifyPolyline(edge.points, 0) }));
-  return buildWallFaces(buildWallGraph(graph, fitted).graph);
+  return buildWallFaces(buildWallGraph(graph, fitted, graphExtent(graph.width, graph.height)).graph);
 }
 
 /** Areas as a share of the map, largest first, rounded so a fixture can state them. */

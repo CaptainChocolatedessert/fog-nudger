@@ -49,7 +49,7 @@ import { documentPoint, type WallGraph } from "./wallGraph";
 /**
  * How close to a segment's end a crossing has to be before it counts as being *at* the end.
  *
- * Measured as a fraction along the segment, and coordinates are themselves fractions of the map, so
+ * Measured as a fraction along the segment, and coordinates are themselves graph units, so
  * this is loose in the only direction that matters. On a 10,000-pixel map a pixel is 1e-4 of the
  * width; this is a millionth of a *segment*, so it can only ever absorb a crossing already
  * indistinguishable from the endpoint.

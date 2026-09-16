@@ -106,11 +106,12 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const delta = showing;
   if (!delta) return;
 
-  // Map fractions to screen, the same arithmetic the graph layer uses and for the same reason: a
-  // wall graph is stored in fractions of the map's own extent, which is exactly the rectangle a
-  // painter is handed. There is no raster here to be consistent with.
-  const x = (u: number): number => view.x + u * drawWidth;
-  const y = (v: number): number => view.y + v * drawHeight;
+  // Graph units to screen, the same arithmetic the graph layer uses and for the same reason: the map
+  // is drawn at the image's own aspect, so the longer drawn side is one unit on both axes. There is
+  // no raster here to be consistent with.
+  const long = Math.max(drawWidth, drawHeight);
+  const x = (units: number): number => view.x + units * long;
+  const y = (units: number): number => view.y + units * long;
 
   const trace = (segments: readonly { readonly a: Vector2; readonly b: Vector2 }[]): void => {
     context.beginPath();

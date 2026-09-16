@@ -124,9 +124,9 @@ let drawHover: DrawPoint | null = null;
 let travelled = false;
 /** Whether a wall was already part-drawn when this press landed — the second click of a pair. */
 let armedBeforePress = false;
-let pressedAt: { u: number; v: number } | null = null;
+let pressedAt: { x: number; y: number } | null = null;
 /**
- * Map fractions per screen pixel, from the last event that carried one.
+ * Graph units per screen pixel, from the last event that carried one.
  *
  * Kept because the release has no position of its own — the tool has been told where the far end is
  * on every move, and handing `end` a fresh point would invite a second, subtly different answer
@@ -142,7 +142,7 @@ let lastPerPixel = 0;
  * the pointer rather than carried over. That is also the more correct answer: the graph just
  * changed, and what is under the cursor may genuinely be something else now.
  */
-let lastPointer: { u: number; v: number } | null = null;
+let lastPointer: { u: number; v: number; x: number; y: number } | null = null;
 /** A write is in flight, so nothing new may start on top of it. */
 let busy = false;
 
@@ -206,14 +206,14 @@ function start(point: MapPoint): boolean {
   const graph = editableGraph();
   if (!graph) return false;
 
-  pressedAt = { u: point.u, v: point.v };
-  lastPointer = { u: point.u, v: point.v };
+  pressedAt = { x: point.x, y: point.y };
+  lastPointer = { u: point.u, v: point.v, x: point.x, y: point.y };
   travelled = false;
   armedBeforePress = anchor !== null;
   lastPerPixel = point.perPixel;
 
   if (tool === "move") {
-    const found = grabAt(graph, point.u, point.v, GRAB_RADIUS_PX * point.perPixel);
+    const found = grabAt(graph, point.x, point.y, GRAB_RADIUS_PX * point.perPixel);
     if (!found) return false;
     grab = found;
     dragState = { at: graph.nodes[found.id]!, snapTo: null };
@@ -224,7 +224,7 @@ function start(point: MapPoint): boolean {
   }
 
   if (tool === "erase") {
-    const found = nearestEdge(graph, { x: point.u, y: point.v }, ERASE_RADIUS_PX * point.perPixel);
+    const found = nearestEdge(graph, { x: point.x, y: point.y }, ERASE_RADIUS_PX * point.perPixel);
     if (found === null) return false;
     hoveredEdge = found;
     invalidate();
@@ -232,7 +232,7 @@ function start(point: MapPoint): boolean {
   }
 
   // Draw takes every press: a wall has to be able to start on empty map.
-  const landed = drawPoint(graph, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+  const landed = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
   if (!anchor) {
     anchor = landed;
     reach = landed;
@@ -248,14 +248,14 @@ function move(point: MapPoint): void {
   const graph = editableGraph();
   if (!graph) return;
   lastPerPixel = point.perPixel;
-  lastPointer = { u: point.u, v: point.v };
-  if (pressedAt && (Math.abs(point.u - pressedAt.u) > 0.002 || Math.abs(point.v - pressedAt.v) > 0.002)) {
+  lastPointer = { u: point.u, v: point.v, x: point.x, y: point.y };
+  if (pressedAt && (Math.abs(point.x - pressedAt.x) > 0.002 || Math.abs(point.y - pressedAt.y) > 0.002)) {
     travelled = true;
   }
 
   if (tool === "move") {
     if (!grab) return;
-    dragState = dragTo(graph, grab, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    dragState = dragTo(graph, grab, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
     invalidate();
     return;
   }
@@ -263,7 +263,7 @@ function move(point: MapPoint): void {
   if (tool === "erase") {
     hoveredEdge = nearestEdge(
       graph,
-      { x: point.u, y: point.v },
+      { x: point.x, y: point.y },
       ERASE_RADIUS_PX * point.perPixel,
     );
     invalidate();
@@ -271,7 +271,7 @@ function move(point: MapPoint): void {
   }
 
   if (!anchor) return;
-  reach = drawPoint(graph, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+  reach = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
   invalidate();
 }
 
@@ -418,9 +418,9 @@ function hover(point: MapPoint | null): void {
   }
 
   lastPerPixel = point.perPixel;
-  lastPointer = { u: point.u, v: point.v };
+  lastPointer = { u: point.u, v: point.v, x: point.x, y: point.y };
   if (tool === "erase") {
-    const found = nearestEdge(graph, { x: point.u, y: point.v }, ERASE_RADIUS_PX * point.perPixel);
+    const found = nearestEdge(graph, { x: point.x, y: point.y }, ERASE_RADIUS_PX * point.perPixel);
     if (found === hoveredEdge) return;
     hoveredEdge = found;
     setGrabTarget(found !== null);
@@ -429,7 +429,7 @@ function hover(point: MapPoint | null): void {
   }
 
   if (tool === "draw") {
-    const landed = drawPoint(graph, point.u, point.v, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    const landed = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
     // The far end keeps following even between clicks, which is what makes the two-click form
     // legible: the wall being drawn is on screen the whole time rather than only while a button is
     // held. With nothing started, the same point is what a press would place.
@@ -456,7 +456,7 @@ function hover(point: MapPoint | null): void {
     return;
   }
 
-  const found = grabAt(graph, point.u, point.v, GRAB_RADIUS_PX * point.perPixel)?.id ?? null;
+  const found = grabAt(graph, point.x, point.y, GRAB_RADIUS_PX * point.perPixel)?.id ?? null;
   if (found === hovered) return;
   hovered = found;
   setGrabTarget(found !== null);

@@ -13,7 +13,7 @@
  */
 
 import { type Control, type Measured } from "../controls";
-import { lastPixelsPerSquare, lastRasterWidth } from "../pipeline";
+import { lastPixelsPerSquare, lastRasterPerGraphUnit } from "../pipeline";
 import {
   PARAMETER_KIND,
   readParameter,
@@ -69,7 +69,7 @@ function trackFor(name: SettingName): ScaleLimits {
  * The number beside the label.
  *
  * A control may ask to report **where its handle is** rather than what its value is, because two of
- * them store a fraction of the map and neither that nor any spelling of it is a number a GM can hold
+ * them store graph units and neither that nor any spelling of it is a number a GM can hold
  * on to. Everything else takes the shared formatter, which knows about steps and off positions and
  * should not be bypassed for taste.
  */
@@ -90,7 +90,7 @@ function format(
 function measured(): Measured {
   return {
     pxPerSquare: lastPixelsPerSquare(),
-    rasterWidth: lastRasterWidth(),
+    rasterPerUnit: lastRasterPerGraphUnit(),
   };
 }
 

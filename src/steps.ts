@@ -569,8 +569,8 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
     needed while the stored graph had nothing to re-derive it from. One live slider now: changing
     it regenerates the walls like any reading change, and the mark and the prompt price that.
   */
-  spurPruneFraction: "walls",
-  simplifyFraction: "walls",
+  spurPruneGraphUnits: "walls",
+  simplifyGraphUnits: "walls",
   /*
     How the partition is drawn, in the group that is never entered.
 

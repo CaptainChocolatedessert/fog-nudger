@@ -49,6 +49,7 @@ import { describeError } from "../describeError";
 import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
 import { isSkeletonOnly, SETTING_LIMITS, type SettingName } from "../settings";
+import { rasterPixelsPerGraphUnit } from "../trace/graphUnits";
 import { buildWallFaces, describeWallFaces, wallSegments } from "../trace/wallFaces";
 import {
   pruneWallGraph,
@@ -86,15 +87,14 @@ let regions: readonly PreviewRegion[] = [];
 /** The walls that emit as lines rather than as part of a ring. Drawn with them, or the preview
  * would show fewer walls than the push writes. */
 let walls: readonly PreviewWall[] = [];
-/**
- * The space the rings are in, which is what the painter scales by.
- *
- * **Always 1×1 now**, in both modes, because both draw a wall graph and a wall graph is stored
- * in fractions of the map's own extent. Kept as a field rather than folded into the painter because
- * it is the painter's contract — the rings are in *some* space and this says which — and because a
- * third source would arrive needing to say so.
- */
-let raster: { readonly width: number; readonly height: number } | null = null;
+/*
+  `raster` was here: the space the rings were in, which the painter scaled by. It was always 1×1 once
+  both sources drew a wall graph, and it was kept on the argument that a third source would arrive
+  needing to say which space it used. With graph units (2026-09-16) a 1×1 raster stopped being true
+  and the honest replacement — the extent — is something the painter does not need, because graph
+  units scale by the longer drawn side on both axes. So the field went rather than being bent into
+  meaning something else, and a third source that is not in graph units will have to say so then.
+*/
 /**
  * Ring units in one grid square, or zero when there is no way to know.
  *
@@ -109,8 +109,8 @@ let raster: { readonly width: number; readonly height: number } | null = null;
  * at all — so there the outline is drawn at its screen-pixel floor. The fills and the shapes, which
  * are what the step is for, are unaffected.
  *
- * **In the ink mode it is not zero**, because a trace has just run and the rings are fractions of the
- * same map that trace divided by.
+ * **Where a trace has run it is not zero**: the trace measured pixels per square on its raster, and
+ * knows how many raster pixels make a graph unit.
  */
 let unitsPerSquare = 0;
 
@@ -240,10 +240,6 @@ export function currentRegions(): readonly PreviewRegion[] {
   return regions;
 }
 
-export function currentRaster(): { readonly width: number; readonly height: number } | null {
-  return raster;
-}
-
 /** Ring units in one grid square; zero means the painter's screen-pixel floor decides. */
 export function outlineUnitsPerSquare(): number {
   return unitsPerSquare;
@@ -312,8 +308,8 @@ let derivation: {
   readonly dropped: number;
   /** Points the derivation dropped for lying exactly on the line between their neighbours. Lossless. */
   readonly collinear: number;
-  /** The trace's raster width, which is what turns a figure in pixels into a map fraction. */
-  readonly rasterWidth: number;
+  /** Raster pixels per graph unit on the trace's raster, which turns a pixel figure into graph units. */
+  readonly rasterPerUnit: number;
   readonly pxPerSquare: number;
 } | null = null;
 
@@ -325,9 +321,9 @@ let derivation: {
  * is a few milliseconds against the second the trace took.
  */
 function publish(from: NonNullable<typeof derivation>, generation: number): void {
-  // Both the limit and the graph are in fractions of the map, so there is nothing to convert —
-  // which is the point of the unit, and what lets the editor run the same operation.
-  const limit = currentSettings().trace.spurPruneFraction;
+  // Both the limit and the graph are in graph units, so there is nothing to convert — which is the
+  // point of the unit.
+  const limit = currentSettings().trace.spurPruneGraphUnits;
   const pruned = pruneWallGraph(from.graph, limit);
 
   preview = pruned.graph;
@@ -344,9 +340,7 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   const faces = buildWallFaces(pruned.graph);
   regions = faces.faces.map((face) => ({ rings: face.rings }));
   walls = wallSegments(pruned.graph, faces).map((points) => ({ points }));
-  // Fractions of the map, exactly as in the editor, so the painter needs no branch either.
-  raster = { width: 1, height: 1 };
-  unitsPerSquare = from.pxPerSquare > 0 ? from.pxPerSquare / from.rasterWidth : 0;
+  unitsPerSquare = from.pxPerSquare > 0 ? from.pxPerSquare / from.rasterPerUnit : 0;
 
   /*
     The same figures the editor says, in the same order, because they now describe the same object.
@@ -495,19 +489,23 @@ async function derive(): Promise<void> {
       the graph, the fitted edges, and the checks over them — a derivation, not a picture.
     */
     /*
-      A grid square as a fraction of the map, which the ink mode can answer and the editor cannot.
+      A grid square in graph units, which a derivation can answer and a stored graph alone cannot.
 
-      The trace measured it in raster pixels and the derivation divided by that raster, so the two cancel.
-      The editor has no trace and leaves this at zero, which is the stated cost recorded above; here
-      the measurement exists, so the outline setting is honoured rather than drawn at its floor.
+      The trace measured it in raster pixels and built the graph against that raster, so dividing by
+      raster pixels per unit converts it exactly. A saved graph with no trace behind it leaves this at
+      zero, which is the stated cost recorded above; here the measurement exists, so the outline
+      setting is honoured rather than drawn at its floor.
     */
     const pxPerSquare = lastPixelsPerSquare() ?? 0;
-    const rasterWidth = Math.max(1, outcome.run.raster.width);
+    const rasterPerUnit = Math.max(
+      1e-9,
+      rasterPixelsPerGraphUnit(outcome.run.raster.width, outcome.run.extent),
+    );
     derivation = {
       graph: stored.graph,
       dropped: stored.duplicates + stored.zeroLength,
       collinear: stored.collinear,
-      rasterWidth,
+      rasterPerUnit,
       pxPerSquare,
     };
     // The picture now shows these deriving-stage settings, so any row that was marked ahead of it
@@ -554,7 +552,6 @@ function clearPartition(): void {
   const generation = requests.latest();
   regions = [];
   walls = [];
-  raster = { width: 1, height: 1 };
   unitsPerSquare = 0;
   preview = null;
   noteGraph(null);
@@ -573,8 +570,6 @@ function derivePartition(graph: WallGraph): void {
   regions = result.faces.map((face) => ({ rings: face.rings }));
   walls = wallSegments(graph, result).map((points) => ({ points }));
   noteGraph(graph);
-  // Fractions of the map, so one unit is the whole map and the painter's scale needs no branch.
-  raster = { width: 1, height: 1 };
   unitsPerSquare = 0;
   preview = null;
 

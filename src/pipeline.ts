@@ -80,6 +80,7 @@ import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import type { FittedEdge } from "./trace/faces";
+import { graphExtent, rasterPixelsPerGraphUnit, type GraphExtent } from "./trace/graphUnits";
 import type { WallGraphBuild } from "./trace/wallGraph";
 import type { WallFaces } from "./trace/wallFaces";
 import type { SkeletonGraph } from "./trace/skeletonGraph";
@@ -126,8 +127,8 @@ const MIN_BLOB_SQUARES = 0.05;
 const BLOB_INK_WIDTHS = 3;
 
 /**
- * Ceiling on the tolerance a region may be escalated to in order to fit the 8192-command cap, as a
- * fraction of the map.
+ * Ceiling on the tolerance a region may be escalated to in order to fit the 8192-command cap, in
+ * graph units.
  *
  * Far past anything a GM would set, deliberately. Only a region whose boundary wraps most of the map
  * ever climbs this far, which in practice means the outside — and DESIGN.md §4 says the outside can
@@ -135,10 +136,10 @@ const BLOB_INK_WIDTHS = 3;
  * setting cannot do is *know* that, so the count of escalations is named in the log rather than
  * trusted to have found the exterior.
  *
- * 0.01 of the map is 33px on the test map's raster, against a 5.7px ink width — the same order the
+ * 0.01 of the map's longer side is 33px on the test map's raster, against a 5.7px ink width — the same order the
  * old eight-ink-widths ceiling was, expressed in the unit the control now uses.
  */
-const MAX_SIMPLIFY_FRACTION = 0.01;
+const MAX_SIMPLIFY_GRAPH_UNITS = 0.01;
 
 /**
  * Everything the reading stage produces, which is everything the deriving stage needs.
@@ -468,27 +469,30 @@ export function lastInkWidth(): number | null {
 }
 
 /**
- * The raster the last reading used, in pixels across.
+ * Raster pixels per graph unit, for the raster the last reading used.
  *
- * For the two controls stored as a fraction of the map: it is what turns one back into pixels for
- * the readout. **Only the ink mode has it** — the editor never runs a reading — which is exactly why
- * the stored unit is a fraction and not this.
+ * For the controls stored in graph units: it is what turns one back into pixels for a readout or a
+ * seeded default. The stored unit is not this, because the raster is an artefact of the megapixel
+ * cap and the GM's graph outlives any one reading.
  *
  * From the mask cache, like the other two, so it survives a reading change with no full trace after
  * it. `null` before anything has been read, and a non-positive width is treated as none for the same
  * reason `lastPixelsPerSquare` treats a zero that way.
  */
-export function lastRasterWidth(): number | null {
-  const width = cachedMask?.plan.width ?? null;
-  return width !== null && width > 0 ? width : null;
+export function lastRasterPerGraphUnit(): number | null {
+  const plan = cachedMask?.plan;
+  if (!plan || !(plan.width > 0)) return null;
+  return rasterPixelsPerGraphUnit(plan.width, graphExtent(plan.sourceWidth, plan.sourceHeight));
 }
 
 export interface TraceRun {
   readonly mapId: string;
   readonly mapName: string;
   readonly dpi: number;
-  /** The raster the trace ran at, which is what the preview scales its rings by. */
+  /** The raster the trace ran at, in pixels. */
   readonly raster: { readonly width: number; readonly height: number };
+  /** The map's size in graph units, from the image. What the wall graph was built into. */
+  readonly extent: GraphExtent;
   /**
    * The document this run would derive, and the faces of it.
    *
@@ -1277,19 +1281,23 @@ export async function runTrace(
   const inkWidth = reading.inkWidth ?? pxPerSquare * 0.1;
 
   /*
-    The tolerance is stored as a fraction of the map and used here in raster pixels.
+    The tolerance is stored in graph units and used here in raster pixels.
 
     It used to be a share of the measured ink width, which the editor cannot know — it has no reading
-    — so the two modes could not have expressed one tolerance between them. A fraction of the map is
+    — so the two modes could not have expressed one tolerance between them. A unit of the map is
     a unit both can speak, and the conversion is this one multiplication, because the raster is a
     linear sampling of the map. The ink width is still measured and still reported beside the figure,
     because it is what a GM judges a tolerance against; it just no longer *denominates* it.
   */
-  const tolerance = settings.trace.simplifyFraction * plan.width;
+  // The map's size in graph units, from the image rather than the raster — `graphUnits.ts` says why.
+  const extent = graphExtent(plan.sourceWidth, plan.sourceHeight);
+  const rasterPerUnit = rasterPixelsPerGraphUnit(plan.width, extent);
+  const tolerance = settings.trace.simplifyGraphUnits * rasterPerUnit;
 
   const derived = deriveWalls(inkMask, {
     tolerance,
-    maxTolerance: MAX_SIMPLIFY_FRACTION * plan.width,
+    maxTolerance: MAX_SIMPLIFY_GRAPH_UNITS * rasterPerUnit,
+    extent,
   });
   const labelled = derived.labelled;
 
@@ -1385,8 +1393,8 @@ export async function runTrace(
   devLog(
     "info",
     `trace: simplified to ${totalVertices} points in ${totalCommands} commands at ` +
-      `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyFraction.toExponential(2)} of ` +
-      `the map, ${(derived.tolerance / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink ` +
+      `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyGraphUnits.toExponential(2)} graph ` +
+      `units, ${(derived.tolerance / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink ` +
       `width, escalated ${derived.escalations} times for the whole map); ` +
       `${derived.walls.collinear} points dropped as exactly collinear, which costs nothing; ` +
       `${derived.walls.duplicates} segments dropped as coincident and ` +
@@ -1418,11 +1426,11 @@ export async function runTrace(
   // arithmetic is testable and is; that the raster's origin is the world box's minimum corner is a
   // claim about Owlbear's conventions, and a flip or a transpose would satisfy every number below.
   //
-  // **Placed from the wall graph's faces at a 1x1 raster**, which is what the emit path does — a saved
-  // graph is stored in fractions of the map, so a one-by-one raster *is* fraction space and the
-  // ordinary placement puts a fraction where it belongs. Before 2026-09-08 this placed the trace's
-  // own regions, which were a second answer to the question the wall graph's faces already answer.
-  const worldPlacement = createPlacement(bounds, 1, 1);
+  // **Placed from the wall graph's faces at a raster the size of the extent**, which is what the emit
+  // path does — the graph is in graph units, so a raster of `extent.x` by `extent.y` *is* graph-unit
+  // space and the ordinary placement puts a point where it belongs. Before 2026-09-08 this placed the
+  // trace's own regions, which were a second answer to the question the wall graph's faces answer.
+  const worldPlacement = createPlacement(bounds, extent.x, extent.y);
   const placed = placeRegions(
     derived.faces.faces.map((face, index) => ({ id: index, rings: face.rings })),
     worldPlacement,
@@ -1499,6 +1507,7 @@ export async function runTrace(
       mapName,
       dpi,
       raster: { width: plan.width, height: plan.height },
+      extent,
       graph: derived.graph,
       fittedEdges: derived.fittedEdges,
       walls: derived.walls,

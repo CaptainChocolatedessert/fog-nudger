@@ -166,7 +166,11 @@ export interface TraceSettings {
    */
   readonly gapTravelPx: number;
   /**
-   * The longest dead-end wall spur pruning will remove, **as a fraction of the map's extent**.
+   * The longest dead-end wall spur pruning will remove, **in graph units** — the map's longer side
+   * is 1.
+   *
+   * **Renamed from `spurPruneFraction` on 2026-09-16** when the unit changed from a fraction of each
+   * side, so a stored value falls back to the default rather than being read in the new unit.
    *
    * A spur is the artefact a ragged ink edge leaves on a centreline; a **stub** is a wall that
    * genuinely stops in mid-air. They are the same shape locally and only length separates them,
@@ -175,9 +179,11 @@ export interface TraceSettings {
    * Destructive out of proportion to its size at the top end: a limit longer than a wall's own arms
    * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
    */
-  readonly spurPruneFraction: number;
+  readonly spurPruneGraphUnits: number;
   /**
-   * Simplification tolerance, **as a fraction of the map's extent**.
+   * Simplification tolerance, **in graph units** — the map's longer side is 1.
+   *
+   * **Renamed from `simplifyFraction` on 2026-09-16**, for the reason the prune limit was.
    *
    * The old `simplifyInkWidths` cap — below half an ink width, so Douglas–Peucker provably could not
    * carry a room's edge past the centre of the wall beside it — is **retired** (user, 2026-09-06:
@@ -185,12 +191,12 @@ export interface TraceSettings {
    * consequences."*). Its original reason went when the graph pivot made both faces of a shared wall
    * move together, and what is left is a corner cut across a doorway, which is visible.
    */
-  readonly simplifyFraction: number;
+  readonly simplifyGraphUnits: number;
   /*
     `editSimplifyFraction` was here, and it went when straightening became one control (2026-09-14).
 
     There were two straighten settings meaning the same thing on opposite terms: this one applied
-    once by a button in the editor, and `simplifyFraction` above re-applied on every derive. The
+    once by a button in the editor, and `simplifyGraphUnits` above re-applied on every derive. The
     justification was real — before the save the graph was a derivation and turning the slider down
     put the detail back, after it the graph was the document and nothing could — and it stopped being
     real when both halves became one surface with one rule: **anything that regenerates the walls
@@ -329,19 +335,16 @@ export const DEFAULT_SETTINGS: Settings = {
     // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a limit longer
     // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
     // graph as fitting produced it, hairs and all.
-    spurPruneFraction: 0,
+    spurPruneGraphUnits: 0,
     /*
       About a quarter of an ink width on the test map, which is what this defaulted to when it was
-      denominated in them: 0.25 x 5.7px on a 3300px raster is 4.3e-4 of the map.
+      denominated in them: 0.25 x 5.7px on a 3300px raster is 4.3e-4 of the map's longer side.
 
-      A fixed fraction is not as map-independent as an ink width, but it is close: linework is drawn
-      to be legible at a given printed size, so its width as a share of the map is fairly stable
-      across scanned maps in a way its width in pixels is not.
+      **Only a fallback.** A fixed figure comes out sub-pixel on a small map, so the real starting
+      value is seeded per map from its reading — `seedSimplify.ts` — and this is what stands until
+      one has landed.
     */
-    simplifyFraction: 4e-4,
-    // Off. The editor's copy deletes vertices the map cannot give back — Undo can, which this used
-    // to deny — so opening the editor must not arrive holding a proposal to destroy detail. The same
-    // reasoning keeps pruning at zero.
+    simplifyGraphUnits: 4e-4,
   },
   review: {
     fillOpacity: 0.22,
@@ -414,7 +417,7 @@ export const SETTING_LIMITS = {
   minIslandPx: { min: 0, max: 300, step: 1 },
   // The half-ink-width cap is retired (user, 2026-09-06); the top of the track is meant to reach
   // obviously useless values, the same as the two ink filters. See the block above for the unit.
-  simplifyFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
+  simplifyGraphUnits: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   // The same track as the ink mode's, because it is the same quantity measured the same way. What
   // differs is the default and what applying it costs, both of which live elsewhere.
   fillOpacity: { min: 0, max: 1, step: 0.02 },
@@ -434,9 +437,9 @@ export const SETTING_LIMITS = {
   /*
     Both graph-derived controls carry a `floor` and a static `max` they will normally never reach.
 
-    **The unit is a fraction of the map**, measured along the wall rather than between its ends. Not
-    raster pixels: the raster is an artefact of the megapixel cap, and the editor has no raster at
-    all — a control the editor cannot denominate is a control the editor cannot have.
+    **The unit is graph units**, measured along the wall rather than between its ends. Not raster
+    pixels: the raster is an artefact of the megapixel cap, and the GM's graph outlives any one
+    reading of the map.
 
     **The `max` here is storage, not the track.** The slider's top end is measured off the graph when
     the step opens — the longest spur, the largest bend — so it adapts to how finely the map was
@@ -451,7 +454,7 @@ export const SETTING_LIMITS = {
     two-slider gap design. And `min` stays 0 because the normaliser clamps into `[min, max]`, so a
     positive `min` would silently raise a stored zero to the floor on every read.
   */
-  spurPruneFraction: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
+  spurPruneGraphUnits: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   // From a single pixel — the finest correction a raster can hold — to wide enough to cover a room
   // in a few strokes. The bottom end is genuinely usable rather than a token: repairing one severed
   // wall is a one-pixel job.
@@ -513,10 +516,10 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   minIslandPx: "read",
   gapFillPx: "read",
   gapTravelPx: "read",
-  spurPruneFraction: "read",
+  spurPruneGraphUnits: "read",
   suppressBrushPx: "read",
   inkBrushPx: "read",
-  simplifyFraction: "derive",
+  simplifyGraphUnits: "derive",
   fillOpacity: "adjust",
   strokeSquares: "adjust",
 };
@@ -586,30 +589,32 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   // what it writes goes into the added-ink layer rather than into a term of the composition.
   gapFillPx: "tool",
   gapTravelPx: "tool",
-  spurPruneFraction: "pipeline",
+  spurPruneGraphUnits: "pipeline",
   suppressBrushPx: "tool",
   inkBrushPx: "tool",
-  simplifyFraction: "pipeline",
+  simplifyGraphUnits: "pipeline",
   fillOpacity: "display",
   strokeSquares: "display",
 };
 
 /**
- * A quarter of the measured ink width, as a fraction of the map.
+ * A quarter of the measured ink width, in graph units.
  *
  * What the simplification tolerance is seeded to on a map that has never had one chosen. A quarter
  * of an ink width is what this control defaulted to for the months it was denominated in ink widths,
- * and it is the figure that means the same thing on every map — which a fixed fraction cannot,
+ * and it is the figure that means the same thing on every map — which a fixed figure cannot,
  * because 4e-4 is 1.3px on a 3300px raster and 0.30px on a 751px one.
+ *
+ * `rasterPerUnit` is raster pixels per graph unit, which is what turns a pixel figure into one.
  *
  * Pure, and clamped into the control's own range so a wild measurement cannot store an unusable
  * value. `seedSimplify.ts` carries why seeding a default is not the same thing as a threshold that
  * moves with a measurement.
  */
-export function seededSimplifyFraction(inkWidth: number, rasterWidth: number): number {
-  const limits = SETTING_LIMITS.simplifyFraction;
-  if (!(inkWidth > 0) || !(rasterWidth > 0)) return DEFAULT_SETTINGS.trace.simplifyFraction;
-  const wanted = (0.25 * inkWidth) / rasterWidth;
+export function seededSimplifyGraphUnits(inkWidth: number, rasterPerUnit: number): number {
+  const limits = SETTING_LIMITS.simplifyGraphUnits;
+  if (!(inkWidth > 0) || !(rasterPerUnit > 0)) return DEFAULT_SETTINGS.trace.simplifyGraphUnits;
+  const wanted = (0.25 * inkWidth) / rasterPerUnit;
   // The floor rather than `min`, because `min` is zero — the off position — and a seed must never
   // land there: off is a state a GM chooses, not one they are given.
   const floor = limits.floor ?? limits.min;
@@ -696,7 +701,7 @@ const POST_READING: readonly SettingName[] = [
   // *pipeline* parameters of the read stage, and they are `tool` parameters now — so naming them
   // here would be naming non-members, and the test that every excluded one still moves the mask
   // fingerprint would fail, correctly.
-  "spurPruneFraction",
+  "spurPruneGraphUnits",
 ];
 
 /**
@@ -715,7 +720,7 @@ const POST_READING: readonly SettingName[] = [
  * The cost this saves is real: a prune sweep costs a branch walk and a face traversal rather than
  * re-binarising the map or recomposing the ink.
  */
-const GRAPH_ONLY: readonly SettingName[] = ["spurPruneFraction"];
+const GRAPH_ONLY: readonly SettingName[] = ["spurPruneGraphUnits"];
 
 /**
  * Whether a parameter changes the graph without changing the mask.
@@ -836,12 +841,12 @@ export function normaliseSettings(raw: unknown): Settings {
       minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
-      spurPruneFraction: clamp(
-        trace.spurPruneFraction,
-        "spurPruneFraction",
-        t.spurPruneFraction,
+      spurPruneGraphUnits: clamp(
+        trace.spurPruneGraphUnits,
+        "spurPruneGraphUnits",
+        t.spurPruneGraphUnits,
       ),
-      simplifyFraction: clamp(trace.simplifyFraction, "simplifyFraction", t.simplifyFraction),
+      simplifyGraphUnits: clamp(trace.simplifyGraphUnits, "simplifyGraphUnits", t.simplifyGraphUnits),
     },
     review: {
       fillOpacity: clamp(review.fillOpacity, "fillOpacity", r.fillOpacity),
@@ -897,8 +902,8 @@ export function describeSettings(settings: Settings): string {
     `min island ${trace.minIslandPx}px, ` +
     // Spur pruning belongs in the summary more than most: it is the one control here that can erode
     // the entire graph at its top end, and it went missing when the smallest-room term was removed.
-    `prune ${trace.spurPruneFraction.toExponential(2)} of the map, ` +
-    `simplify ${trace.simplifyFraction.toExponential(2)} of the map; ` +
+    `prune ${trace.spurPruneGraphUnits.toExponential(2)} of the map, ` +
+    `simplify ${trace.simplifyGraphUnits.toExponential(2)} of the map; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}` +
     (isDefault(settings) ? " (all defaults)" : " (edited)")
