@@ -36,7 +36,7 @@
  * The rest draw the thing they do to the linework: a brush swiping ink away, a pen laying it down,
  * two heavy strokes of ink ringed where a gap parts them, two ends joined, one struck out, two loose
  * wall ends ringed where a mend would join them, a room with a slash through each of its walls, and
- * the same room crossed in the middle.
+ * the same room crossed in the middle, and a wall across between two others with the click on it.
  * **The two gap tools mirror each other** — ink running into the ring, walls ending in it.
  */
 
@@ -130,6 +130,13 @@ const ICONS: Readonly<Record<string, string>> = {
   */
   suppressRegion:
     '<circle cx="5" cy="5" r="1.8" /><circle cx="19" cy="5" r="1.8" /><circle cx="19" cy="19" r="1.8" /><circle cx="5" cy="19" r="1.8" /><path d="M7 5h10M19 7v10M17 19H7M5 17V7" /><path d="M9.6 9.6l4.8 4.8M14.4 9.6l-4.8 4.8" />',
+  /*
+    Two walls with a new wall across between them, and the click as a small solid dot on it (user,
+    2026-09-16). The side walls stop at their vertex rings rather than running through them, so the
+    rings read hollow as every other vertex here does; the click is solid and smaller, because it is a
+    point in the map rather than a vertex of the graph.
+  */
+  span: '<path d="M5 3v7M5 14v7M19 3v7M19 14v7" /><circle cx="5" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /><path d="M7 12h10" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />',
 };
 
 /**

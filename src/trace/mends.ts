@@ -55,7 +55,7 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { insertEdge, type EditResult } from "./planarOps";
+import { insertEdge, splitEdgesAt, type EditResult } from "./planarOps";
 import { segmentMeeting } from "./planarGraph";
 import { documentPoint, nodeDegrees, type WallGraph } from "./wallGraph";
 
@@ -394,48 +394,10 @@ function crossesAnything(graph: WallGraph, mend: Mend, taken: readonly Mend[]): 
  * in turn and is one edit — which is what makes it one step of undo.
  */
 export function applyMends(graph: WallGraph, mends: readonly Mend[]): EditResult {
-  const nodes: Vector2[] = graph.nodes.map((node) => ({ x: node.x, y: node.y }));
-  const landings = new Map<number, Vector2[]>();
-  for (const mend of mends) {
-    if (mend.to.kind !== "segment") continue;
-    const list = landings.get(mend.to.edge) ?? [];
-    list.push(mend.to.at);
-    landings.set(mend.to.edge, list);
-  }
-
-  let splits = 0;
-  const edges: { a: number; b: number }[] = [];
-  graph.edges.forEach((edge, index) => {
-    const points = landings.get(index);
-    if (!points) {
-      edges.push({ a: edge.a, b: edge.b });
-      return;
-    }
-    const p = nodes[edge.a]!;
-    const q = nodes[edge.b]!;
-    const sx = q.x - p.x;
-    const sy = q.y - p.y;
-    const lengthSquared = sx * sx + sy * sy;
-    const ordered = points
-      .map((point) => ({ point, t: ((point.x - p.x) * sx + (point.y - p.y) * sy) / lengthSquared }))
-      .sort((a, b) => a.t - b.t);
-    let previous = edge.a;
-    for (const { point } of ordered) {
-      const quantised = documentPoint(point.x, point.y);
-      const last = nodes[previous]!;
-      // Two mends landing on one point, or a landing that quantised onto the vertex before it.
-      if (last.x === quantised.x && last.y === quantised.y) continue;
-      if (q.x === quantised.x && q.y === quantised.y) continue;
-      nodes.push(quantised);
-      const id = nodes.length - 1;
-      edges.push({ a: previous, b: id });
-      previous = id;
-      splits += 1;
-    }
-    edges.push({ a: previous, b: edge.b });
-  });
-
-  let result: EditResult = { graph: { nodes, edges }, splits, overlaps: 0 };
+  const landings = mends.flatMap((mend) =>
+    mend.to.kind === "segment" ? [{ edge: mend.to.edge, at: mend.to.at }] : [],
+  );
+  let result: EditResult = splitEdgesAt(graph, landings);
   for (const mend of mends) {
     const next = insertEdge(result.graph, [mend.start, mend.end]);
     result = {

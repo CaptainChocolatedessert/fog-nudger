@@ -73,6 +73,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **mend** | a proposed wall that closes a gap in the graph, and the act of accepting one. Once accepted it is an ordinary drawn wall. **Not a bridge** — a mend usually closes a loop and splits a region in two, which is the opposite of what a bridge is. |
 | **dissolve** | removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
 | **mark** | a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. |
+| **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. |
 | **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
 
 ### The stages — and the surface words for them are **retired**
@@ -1253,19 +1254,19 @@ here" means. Erasing and merging leave vertices no wall uses; the layer skips th
 that moves nothing would be a lie — and the snap query has to skip them too, or drawing catches on
 points nobody can see.
 
-### The three verbs, Mend, Dissolve region and Suppress region
+### The three verbs, and the tools that followed
 
 A drag can only mean one thing, so the editor has a sticky tool picker: **Move**, **Draw**, **Erase**,
 Move by default. **Mend** joined them on 2026-09-16 — it proposes walls across breaks rather than
 taking a gesture — and **Dissolve region** the same day, which removes the walls around a region with
-one click, and **Suppress region**, which leaves a region out of the fog with a mark. §10 carries all
-three; Suppress region edits marks rather than walls, and sits with the wall tools because what it
+one click, **Suppress region**, which leaves a region out of the fog with a mark, and **Span**, which
+walls an opening straight across from a click. §10 carries all four; Suppress region edits marks rather than walls, and sits with the wall tools because what it
 decides is which regions the walls make count. The alternative — hiding draw and erase behind modifier keys — was rejected for
 putting a destructive action on an unannounced click and leaving both verbs undiscoverable.
 
 - **All but two decide by looking.** Move takes a press only when a vertex is under it, Erase only
-  when a wall is, Mend only inside a ring and Dissolve region only inside a region, so a plain drag
-  anywhere else still pans. **Draw and Suppress region take every press**: a wall has to be able to
+  when a wall is, Mend only inside a ring, Dissolve region only inside a region and Span only where it
+  has a wall to place, so a plain drag anywhere else still pans. **Draw and Suppress region take every press**: a wall has to be able to
   start on empty map, and a mark can go anywhere, outside every region too. Ctrl pans regardless.
 - **Draw supports both forms.** Press-drag-release puts a wall down in one gesture; press-release then
   click puts one down in two, with the far end re-aimable in between. Neither is more correct — a drag
@@ -2007,7 +2008,7 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 **Separate what a drag does from what controls you are reading.**
 
 - **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
-  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend, dissolve region, suppress region). One click to switch, and switching a
+  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend, dissolve region, suppress region, span). One click to switch, and switching a
   tool does not move the controls.
 - **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
   the group's own name in the strip. It slides out **beside** the strip rather than under it, is only
@@ -2309,7 +2310,7 @@ cannot recur.
 |---|---|---|
 | **Ink** | violet | what the trace read |
 | **Structure** | blue | the wall graph, cased |
-| **Additive** | cyan | your added ink, gap proposals, a snap target |
+| **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed |
 | **Subtractive** | amber | your suppression, and the marks that suppress a region |
 | **Destructive** | red | **reserved** — erase target, the walls a dissolve would take, a mark a click would remove, doomed spurs, nothing else |
 | **Rooms** | a generated cycle | not semantic |
@@ -2398,7 +2399,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**926 tests across 65 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**940 tests across 66 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2425,6 +2426,12 @@ invisible. It costs almost nothing to keep.
   region on both sides and a separate rule by the sign of a loop, and disabling the check survived
   every test — because once a loop of zero area goes, a wall walked out and back is such a loop, and
   the check never decided anything (2026-09-16). It was deleted rather than tested, leaving one rule.
+- **An optimisation is a new implementation, and its oracle has to run again — once, heavier.** Span's
+  search was made fast with a grid of the walls, and the rewrite broke exactness twice in ways every
+  written fixture passed: rays aimed only at vertices within the bound, and rays stopped at the bound
+  when a wall inside it ran beyond (2026-09-16). The random sweep against sampled directions caught
+  both. Run it at its suite size afterwards and once at four times that, since the second fault was 1%
+  on one graph in hundreds.
 - **A sweep has to be shown to reach the case, not only to pass.** Dissolve region's oracle sweep ran
   over the derivation's own random linework and agreed on every region of 510 maps — while keeping
   not a single wall, because skeletons of random ink runs almost never put one closed room inside
@@ -2775,6 +2782,15 @@ tests, a build, and the workspace loading clean.
 **A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
 they are refused, not converted. *Remove ours* in the panel clears one, and the map derives fresh.
 
+**Span** (§10, *Span*) — the newest, and nothing of it has been in a room:
+
+- **Doorways**: a click in a doorway between two wall ends, on its line and a few pixels off it, gets
+  the door; a click in a corridor gets a wall straight across through the click.
+- **The preview** follows the pointer without lag, including in open space outside the walls, where
+  the search is slowest.
+- **Placing**: one click is one step of undo, *Undo spanning an opening*, and the ends join the walls
+  they land on.
+
 **Suppress region — confirmed in a room (user, 2026-09-16), all of it:** placing and removing a mark
 takes the fill away and brings it back, a mark outside every region goes solid once walls enclose it,
 marks survive a slider rebuild, and a suppressed room's walls, pushed as lines, still block sight with
@@ -3099,7 +3115,7 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Three tools built from conversations
+### Four tools built from conversations
 
 **1. Dissolve region — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
 pick this up* has which part). Click inside a region and the walls around it go.
@@ -3336,6 +3352,63 @@ suppressed alone and for a random half at once: 4,103 suppressions, turning 10,7
 - **Marks hide with the Rooms layer**, and so does the tool's ghost — a GM who has switched rooms off
   and picks up the tool sees no preview until they switch it back.
 
+**4. Span — built 2026-09-16, never run in a room.** Click in an opening and a straight wall goes
+across it: the doorway tool, since Dynamic Fog's doors cannot be made from here.
+
+**Decided (user, 2026-09-16):**
+
+- **Through the click, unless near it is far shorter.** The through wall is the shortest whose line
+  passes exactly through the click, ending at the first wall met each way. The near wall is the
+  shortest passing within **12 screen pixels** of the click. The near wall is taken only when it is at
+  most **two-thirds** the length of the through wall. Through alone gives a doorway between two wall
+  ends its door only from a click exactly on the line between them — a pixel off, the wall crosses the
+  room — and near alone would pull a corridor's wall onto a kink beside the click.
+- **No guard against cutting a corner** beside the click, deliberately; the preview shows it first.
+- **Both numbers fixed**, not sliders: *"we should get them right rather than provide controls that
+  are hard to interpret."* The wall is drawn before every click.
+- **A preview**, on hover — agreed on the condition that it is fast, which is measured below.
+- **Named** *Span*, and drawn as two walls with a new wall across between them, their vertex rings
+  hollow and the click a small solid dot on the new wall.
+
+**As built** — `trace/span.ts` is the decision, pure and tested; the tool is a seventh wall tool, and a
+span saves through the one path every wall edit does.
+
+- **Near ends at a vertex**: between two vertices, or square from a vertex onto a wall. That is where a
+  doorway's ends are, and it is a definition rather than a shortcut — a wall between two plain
+  stretches gains nothing from leaving the click.
+- **The through search is exact.** Between two directions aimed at the ends of the walls in reach, the
+  first wall met each way cannot change, so the length is two fixed lines and a bracketed search finds
+  its lowest point. Sampling 2,000 directions never beats it over 400 random graphs.
+- **The shortest through wall under the floor refuses the click**, rather than the next longest being
+  offered — a hairline slit is not a place for a longer diagonal — and it still bounds the near search.
+  Near candidates under the floor are skipped, since those are a fixed set.
+- **Placing splits first, then adds**, by the same `splitEdgesAt` Mend uses, pulled out for both.
+- **The preview is searched at most once a frame.**
+
+**Fast enough, and measured, twice.** Every ray against every wall gave a median of 11ms and a worst
+click of 6.7s on a 10,107-segment graph. A grid of the walls, and two exact windows — two vertices are
+joined near the click only if nearly opposite across it, a square drop only from a wall nearly square
+to the line to the click — brought that graph to a median of 2.1ms and a worst of 170ms, and a
+36,022-segment graph to 9ms and 114ms. The densest graph on record, 5,881 wall segments, could not
+be pushed. **The worst clicks are all in open space**, where nothing bounds the search; the sibling's
+vision work met the same thing — *"the radius is the whole cost"* — so a longest span offered is the
+remedy if a room feels it, and it changes what the tool finds, so it is a decision not taken.
+
+**The grid broke exactness twice on the way, and the sampling oracle caught both** (§8). Aiming only
+at vertices within the bound let a far wall change what a ray met partway through a stretch — and in a
+corridor with no vertex near the click, nothing was searched; stopping each ray at the bound, when a
+wall within it runs beyond it, skipped a stretch holding a wall 1% shorter.
+
+**Eighteen mutations, eighteen caught**, after three survivors were answered — the test file says how.
+
+**Costs, stated:**
+
+- **A click in open space can take a tenth of a second** on a dense graph, as above.
+- **Near a corner, a span can cut the corner**, by the decision above.
+- **A span's end can split two walls at once** where two walls lie closer together than the crossing
+  test's tolerance — measured twice in 3,072 random clicks, both on near-degenerate walls. The span
+  itself stays one uncrossed wall.
+
 ### Carried open questions
 
 - **OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
@@ -3483,12 +3556,13 @@ closed outright.
 | `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
 | `trace/wallGraphDiff.ts` | what the GM changed: two graphs compared by **segment endpoints**, never by node id, so compaction and renumbering cannot affect the answer. A move falls out as a removal plus an addition |
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
-| `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several — and the two queries the tools aim with |
+| `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several, split walls where a new wall will land — and the two queries the tools aim with |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
 | `trace/probePoint.ts` | the one surviving diagnostic |
+| `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph |
 | `trace/suppression.ts` | **suppression**: which regions the marks suppress, the traversal as emitted without them, the mark hit test, and the marks' stored codec |
 | `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses, and `randomWallGraph`, the generator whose shapes nest and touch — what the region tools' sweeps need |
 

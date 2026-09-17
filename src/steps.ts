@@ -279,6 +279,20 @@ export const TOOLS: readonly ToolChoice[] = [
       "Click to mark a region: it gets no fog shape, so it can never be revealed. Its walls stay. " +
       "Click a mark to remove it. <b>Ctrl</b> pans.",
   },
+  /*
+    A straight wall across an opening from a click (user, 2026-09-16) — the doorway tool, since Dynamic
+    Fog's doors cannot be made from here. `edit`: it takes a press only where it has a wall to place,
+    and anywhere else the press pans. The hint says the wall is shown first, because what a click does
+    here is a search the GM cannot predict — through the click, or snapped to a doorway's ends beside
+    it.
+  */
+  {
+    id: "span",
+    label: "Span",
+    band: "walls",
+    drag: "edit",
+    hint: "Click in an opening to wall it straight across. The wall is drawn before you click.",
+  },
 ];
 
 

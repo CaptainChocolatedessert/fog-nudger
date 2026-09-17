@@ -1,5 +1,6 @@
 /**
- * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, dissolving a region.
+ * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, dissolving a region,
+ * suppressing one, and spanning an opening.
  *
  * **The first things in this project that change the GM's own work rather than a setting.** Every
  * control before them turns a number and re-derives; these change the graph, and it stays changed
@@ -16,12 +17,13 @@
  * undiscoverable. This surface has had that weakness since the point probe went in: nothing on it
  * says the map is interactive at all.
  *
- * ## All but Draw decide by looking
+ * ## All but two decide by looking
  *
  * Move takes a press only when a vertex is under it, Erase only when a wall is, Mend only inside a
- * ring and Dissolve only inside a region. So a drag anywhere else still pans, and Ctrl still pans
- * anywhere. **Draw is the exception and takes every press**, because a wall has to be able to start
- * on empty map — that is the case the shell's brush branch already anticipated.
+ * ring, Dissolve only inside a region and Span only where it has a wall to place. So a drag anywhere
+ * else still pans, and Ctrl still pans anywhere. **Draw and Suppress region take every press**: a wall
+ * has to be able to start on empty map, and a mark can go anywhere — the case the shell's brush branch
+ * already anticipated.
  *
  * ## Live walls, faces on release
  *
@@ -43,6 +45,7 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { compactNodes, documentPoint, type WallGraph } from "../trace/wallGraph";
 import { markAt } from "../trace/suppression";
+import { applySpan, findSpan, type Span } from "../trace/span";
 import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { applyMends, type Mend } from "../trace/mends";
 import { dissolutionAt, type Dissolution } from "../trace/dissolve";
@@ -80,7 +83,7 @@ import { saveEditedWalls } from "./stage";
 */
 
 /** Which verb a press means. */
-export type WallTool = "move" | "draw" | "erase" | "mend" | "dissolve" | "suppressRegion";
+export type WallTool = "move" | "draw" | "erase" | "mend" | "dissolve" | "suppressRegion" | "span";
 
 /**
  * How close a press has to be to a vertex to grab it, to a wall to erase it, and to a vertex to
@@ -212,6 +215,64 @@ function sameMarkTarget(left: MarkTarget | null, right: MarkTarget | null): bool
   return "place" in right && left.place.x === right.place.x && left.place.y === right.place.y;
 }
 
+/**
+ * How near the click a span may pass instead of through it, in screen pixels (user, 2026-09-16).
+ *
+ * Fixed, as the two-thirds rule in `trace/span.ts` is: the wall a click would place is on screen
+ * before the click, so there is nothing for a setting to tune that is not already visible.
+ */
+const SPAN_NEAR_PX = 12;
+
+/** Spanning: the wall a click would place where the pointer is, and the graph it was found on. */
+let spanTarget: { readonly span: Span; readonly graph: WallGraph } | null = null;
+/** The pointer position waiting for the next frame's span search, and whether one is booked. */
+let spanPoint: MapPoint | null = null;
+let spanFrame = 0;
+
+function spanAt(graph: WallGraph, point: MapPoint): { readonly span: Span; readonly graph: WallGraph } | null {
+  const span = findSpan(
+    graph,
+    { x: point.x, y: point.y },
+    { near: SPAN_NEAR_PX * point.perPixel, minLength: MIN_WALL_PX * point.perPixel },
+  );
+  return span ? { span, graph } : null;
+}
+
+/**
+ * Search for the span under the pointer at most once a frame.
+ *
+ * The search is milliseconds where a wall runs through the click and can be a hundred where none does,
+ * out in open space (`trace/span.ts` has the figures). Pointer moves arrive faster than frames, so
+ * searching on each would queue work behind itself; this keeps only the latest position and searches
+ * for that when the frame comes.
+ */
+function scheduleSpan(point: MapPoint): void {
+  spanPoint = point;
+  if (spanFrame !== 0) return;
+  spanFrame = requestAnimationFrame(() => {
+    spanFrame = 0;
+    const latest = spanPoint;
+    spanPoint = null;
+    if (!latest || tool !== "span") return;
+    const graph = editableGraph();
+    spanTarget = graph ? spanAt(graph, latest) : null;
+    setGrabTarget(spanTarget !== null);
+    invalidate();
+  });
+}
+
+function dropSpan(): void {
+  spanTarget = null;
+  spanPoint = null;
+  if (spanFrame !== 0) cancelAnimationFrame(spanFrame);
+  spanFrame = 0;
+}
+
+/** The wall a click with Span would place, for the layer to draw before the click. */
+export function pendingSpan(): { readonly span: Span; readonly graph: WallGraph } | null {
+  return spanTarget;
+}
+
 /** What a click with Suppress region would do where the pointer is, for the layer to show first. */
 export function pendingMark(): MarkTarget | null {
   return markTarget;
@@ -273,6 +334,7 @@ export function setTool(next: WallTool): void {
   hoveredMend = false;
   hoveredRegion = null;
   markTarget = null;
+  dropSpan();
   setGrabTarget(false);
   /*
     The search runs from the moment the tool is picked up, as the ink tool's does: it has one thing to
@@ -374,6 +436,13 @@ function start(point: MapPoint): boolean {
     return true;
   }
 
+  // Searched now rather than on the next frame: the press decides between spanning and panning.
+  if (tool === "span") {
+    spanTarget = spanAt(graph, point);
+    invalidate();
+    return spanTarget !== null;
+  }
+
   // Outside every region there is nothing to dissolve, so the press declines and pans.
   if (tool === "dissolve") {
     const found = regionUnder(graph, point);
@@ -444,6 +513,11 @@ function move(point: MapPoint): void {
   if (tool === "suppressRegion") {
     markTarget = markTargetAt(point);
     invalidate();
+    return;
+  }
+
+  if (tool === "span") {
+    scheduleSpan(point);
     return;
   }
 
@@ -529,6 +603,24 @@ function end(): void {
       graph,
     );
     hoveredRegion = null;
+    return;
+  }
+
+  if (tool === "span") {
+    const target = spanTarget;
+    const dragged = travelled;
+    clearGesture();
+    invalidate();
+    // A press that travelled was a drag; and a span found on walls a derive has since replaced names
+    // walls that are no longer drawn.
+    if (!target || dragged || target.graph !== graph) return;
+    commit(
+      applySpan(graph, target.span),
+      target.span.through ? "spanned the opening" : "spanned the opening between the wall ends beside the click",
+      "spanning an opening",
+      graph,
+    );
+    dropSpan();
     return;
   }
 
@@ -623,6 +715,7 @@ function commit(
       hovered = null;
       hoveredEdge = null;
       hoveredRegion = null;
+      dropSpan();
       if (lastPointer) hover({ ...lastPointer, perPixel: lastPerPixel, modifier: false });
       invalidate();
     });
@@ -636,7 +729,8 @@ function hover(point: MapPoint | null): void {
       hoveredEdge === null &&
       !hoveredMend &&
       hoveredRegion === null &&
-      markTarget === null
+      markTarget === null &&
+      spanTarget === null
     ) {
       return;
     }
@@ -645,6 +739,7 @@ function hover(point: MapPoint | null): void {
     hoveredMend = false;
     hoveredRegion = null;
     markTarget = null;
+    dropSpan();
     setGrabTarget(false);
     invalidate();
     return;
@@ -666,6 +761,15 @@ function hover(point: MapPoint | null): void {
     ghost mark follows it — so this repaints on a move, as a wall being drawn does, but not while it
     rests on one mark.
   */
+  /*
+    The wall a click would place, drawn before the click — searched once a frame, so the crosshair and
+    the preview arrive together on the frame the search lands.
+  */
+  if (tool === "span") {
+    scheduleSpan(point);
+    return;
+  }
+
   if (tool === "suppressRegion") {
     const next = markTargetAt(point);
     setGrabTarget(true);

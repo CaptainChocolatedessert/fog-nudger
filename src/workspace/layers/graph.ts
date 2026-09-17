@@ -53,6 +53,7 @@ import { currentSettings } from "../settingsState";
 import type { DrawPoint } from "../dragGesture";
 import {
   dissolvingWalls,
+  pendingSpan,
   draggedNode,
   hoveredNode,
   hoveredWall,
@@ -297,6 +298,40 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     describes something the document already holds, and a solid rubber band would claim the same
     standing as a wall that exists.
   */
+  /*
+    The wall a Span click would place, drawn as a wall being drawn is — dashed, because it is not there
+    yet, and in the additive colour, because it would be put in. Both ends are marked as attaching:
+    a span always lands on a wall, and placing it shares a vertex there.
+
+    Only against the graph it was found on, as the dissolve highlight is.
+  */
+  const spanning = pendingSpan();
+  if (spanning !== null && spanning.graph === graph) {
+    const { from, to } = spanning.span;
+    context.save();
+    context.setLineDash([6, 4]);
+    context.beginPath();
+    context.moveTo(x(from.at.x), y(from.at.y));
+    context.lineTo(x(to.at.x), y(to.at.y));
+    context.strokeStyle = WALL_CASING;
+    context.lineWidth = WALL_WIDTH_PX + 2;
+    context.stroke();
+    context.strokeStyle = drawColour();
+    context.lineWidth = WALL_WIDTH_PX;
+    context.stroke();
+    context.setLineDash([]);
+    for (const end of [from, to]) {
+      context.beginPath();
+      context.arc(x(end.at.x), y(end.at.y), MERGE_RADIUS, 0, Math.PI * 2);
+      context.fillStyle = mergeFill();
+      context.fill();
+      context.strokeStyle = ACTIVE_RIM;
+      context.lineWidth = 1.5;
+      context.stroke();
+    }
+    context.restore();
+  }
+
   const pending = pendingWall();
   if (pending) {
     context.save();
