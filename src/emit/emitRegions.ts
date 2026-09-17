@@ -33,6 +33,7 @@ import { PathOp, type PathCommandLike } from "../geometry/ring";
 import { runTrace } from "../pipeline";
 import { readGridDpi, readMapBounds, resolveTraceMap } from "../map/mapImage";
 import type { Point } from "../map/placement";
+import { readRegionMarks } from "../regionMarksStore";
 import { describeWallFaces } from "../trace/wallFaces";
 import type { WallGraph } from "../trace/wallGraph";
 import { graphExtent } from "../trace/graphUnits";
@@ -195,7 +196,14 @@ async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
   // which a GM may have stretched out of proportion. The trace takes the same figure from the decoded
   // image, so the two sides agree on what one unit is.
   const extent = graphExtent(map.image.width, map.image.height);
-  const emission = wallEmission(graph, bounds, dpi, extent);
+  /*
+    Read from the scene rather than handed in, because a push has two sources and only one of them
+    has a workspace behind it — the same reason the trace reads the paint layers for itself. A mark
+    is written the moment it is placed, so the store is never behind what the GM sees.
+  */
+  const { marks, corrupt } = await readRegionMarks(map.id);
+  if (corrupt) devLog("warn", "emit: the suppression marks could not be read, so nothing is suppressed");
+  const emission = wallEmission(graph, bounds, dpi, extent, marks);
 
   const check = emission.faces.eulerHolds
     ? "check holds"
@@ -208,7 +216,7 @@ async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
     walls: emission.walls,
     note:
       `emit: from the wall graph — ${emission.regions.length} rooms, ` +
-      `${emission.walls.length} wall lines, ${check}`,
+      `${emission.suppressed} suppressed, ${emission.walls.length} wall lines, ${check}`,
     // Says *which* of the two sources this came from, because in stage two a GM has every reason
     // to want it confirmed that what went out was their editing rather than a fresh read.
     summary: emission.faces.eulerHolds

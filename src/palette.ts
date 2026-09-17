@@ -60,7 +60,10 @@ export const PALETTE_DEFAULTS = {
    */
   additive: "#06b6d4",
 
-  /** Ink the GM covered. Warm, because subtraction reads warm, and the only warm mark on the canvas. */
+  /**
+   * What the GM took out: ink they covered, and the marks that leave a region out of the fog. Warm,
+   * because subtraction reads warm, and the only warm marks on the canvas.
+   */
   subtractive: "#f59e0b",
 
   /**
@@ -68,8 +71,9 @@ export const PALETTE_DEFAULTS = {
    *
    * It earns its alarm value by being rare. It was doing three jobs — the default ink, the emitted
    * wall lines in the preview, and destructive previews — and the first two moved to `ink` and
-   * `structure`. The erase highlight, the walls a dissolve would take and the doomed spurs share it
-   * because they answer the same question: *what does the thing I am about to do remove?*
+   * `structure`. The erase highlight, the walls a dissolve would take, the mark a click would remove
+   * and the doomed spurs share it because they answer the same question: *what does the thing I am
+   * about to do remove?*
    */
   destructive: "#dc2626",
 

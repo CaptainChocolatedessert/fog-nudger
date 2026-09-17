@@ -41,7 +41,8 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { compactNodes, type WallGraph } from "../trace/wallGraph";
+import { compactNodes, documentPoint, type WallGraph } from "../trace/wallGraph";
+import { markAt } from "../trace/suppression";
 import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { applyMends, type Mend } from "../trace/mends";
 import { dissolutionAt, type Dissolution } from "../trace/dissolve";
@@ -67,7 +68,8 @@ import {
   startMendSearch,
   stopMendSearch,
 } from "./mendSearch";
-import { editableGraph } from "./regions";
+import { currentMarkStates, editableGraph } from "./regions";
+import { currentMarks, saveMarks } from "./regionMarks";
 import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
 import { saveEditedWalls } from "./stage";
 
@@ -78,7 +80,7 @@ import { saveEditedWalls } from "./stage";
 */
 
 /** Which verb a press means. */
-export type WallTool = "move" | "draw" | "erase" | "mend" | "dissolve";
+export type WallTool = "move" | "draw" | "erase" | "mend" | "dissolve" | "suppressRegion";
 
 /**
  * How close a press has to be to a vertex to grab it, to a wall to erase it, and to a vertex to
@@ -179,6 +181,79 @@ interface HoveredRegion {
  */
 let regionsOf: { readonly graph: WallGraph; readonly faces: WallFaces } | null = null;
 
+/**
+ * How close a press has to be to a mark to remove it, in screen pixels.
+ *
+ * The same reach as Erase's: a mark is a small target, and a press that misses one places another
+ * beside it, which is visible at once and one undo from gone.
+ */
+const MARK_RADIUS_PX = 8;
+
+/**
+ * Suppressing: what a click would do where the pointer is — remove the mark under it, or place one.
+ *
+ * Every press is taken, because a mark can go anywhere (user, 2026-09-16) — outside every region too,
+ * where it suppresses nothing until walls are drawn round it. So the tool acts on release, and a press
+ * that travelled is a drag rather than a click and does nothing; Ctrl pans.
+ */
+export type MarkTarget = { readonly remove: number } | { readonly place: Vector2 };
+
+let markTarget: MarkTarget | null = null;
+
+function markTargetAt(point: MapPoint): MarkTarget {
+  const index = markAt(currentMarks(), { x: point.x, y: point.y }, MARK_RADIUS_PX * point.perPixel);
+  // Quantised here, where a mark is made, so the marks in memory are the numbers storage returns.
+  return index === null ? { place: documentPoint(point.x, point.y) } : { remove: index };
+}
+
+function sameMarkTarget(left: MarkTarget | null, right: MarkTarget | null): boolean {
+  if (left === null || right === null) return left === right;
+  if ("remove" in left) return "remove" in right && left.remove === right.remove;
+  return "place" in right && left.place.x === right.place.x && left.place.y === right.place.y;
+}
+
+/** What a click with Suppress region would do where the pointer is, for the layer to show first. */
+export function pendingMark(): MarkTarget | null {
+  return markTarget;
+}
+
+/** Place or remove a mark, and say what it did. The marks' own document, not the walls'. */
+function commitMark(target: MarkTarget): void {
+  const marks = currentMarks();
+  const removing = "remove" in target;
+  const next = removing
+    ? marks.filter((_, index) => index !== target.remove)
+    : [...marks, target.place];
+  busy = true;
+  say("saving…", "working");
+  void saveMarks(next, removing ? "removing a mark" : "placing a mark")
+    .then(() => {
+      if (removing) {
+        say("removed a mark");
+        return;
+      }
+      // The marks listener has re-applied them by now, so the newest mark's state is current.
+      const placed = currentMarkStates()[next.length - 1];
+      say(
+        placed?.active
+          ? "placed a mark — that region is suppressed"
+          : "placed a mark outside every region, so it suppresses nothing yet",
+      );
+    })
+    .catch((error: unknown) => {
+      const detail = describeError(error);
+      say(`the mark was not saved: ${detail}`, "bad");
+      devLog("error", "workspace: saving a mark failed", detail);
+      console.error("Fog Nudger — saving a suppression mark failed", error);
+    })
+    .finally(() => {
+      busy = false;
+      markTarget = null;
+      if (lastPointer) hover({ ...lastPointer, perPixel: lastPerPixel, modifier: false });
+      invalidate();
+    });
+}
+
 function regionUnder(graph: WallGraph, point: MapPoint): HoveredRegion | null {
   if (regionsOf?.graph !== graph) regionsOf = { graph, faces: buildWallFaces(graph) };
   const dissolution = dissolutionAt(graph, regionsOf.faces, { x: point.x, y: point.y });
@@ -197,6 +272,7 @@ export function setTool(next: WallTool): void {
   hoveredEdge = null;
   hoveredMend = false;
   hoveredRegion = null;
+  markTarget = null;
   setGrabTarget(false);
   /*
     The search runs from the moment the tool is picked up, as the ink tool's does: it has one thing to
@@ -292,6 +368,12 @@ function start(point: MapPoint): boolean {
     return true;
   }
 
+  if (tool === "suppressRegion") {
+    markTarget = markTargetAt(point);
+    invalidate();
+    return true;
+  }
+
   // Outside every region there is nothing to dissolve, so the press declines and pans.
   if (tool === "dissolve") {
     const found = regionUnder(graph, point);
@@ -355,6 +437,12 @@ function move(point: MapPoint): void {
 
   if (tool === "dissolve") {
     hoveredRegion = regionUnder(graph, point);
+    invalidate();
+    return;
+  }
+
+  if (tool === "suppressRegion") {
+    markTarget = markTargetAt(point);
     invalidate();
     return;
   }
@@ -441,6 +529,17 @@ function end(): void {
       graph,
     );
     hoveredRegion = null;
+    return;
+  }
+
+  if (tool === "suppressRegion") {
+    const target = markTarget;
+    const dragged = travelled;
+    clearGesture();
+    invalidate();
+    // A press that travelled was a drag, and a mark is placed by a click.
+    if (!target || dragged) return;
+    commitMark(target);
     return;
   }
 
@@ -532,11 +631,20 @@ function commit(
 function hover(point: MapPoint | null): void {
   const graph = editableGraph();
   if (!point || !graph) {
-    if (hovered === null && hoveredEdge === null && !hoveredMend && hoveredRegion === null) return;
+    if (
+      hovered === null &&
+      hoveredEdge === null &&
+      !hoveredMend &&
+      hoveredRegion === null &&
+      markTarget === null
+    ) {
+      return;
+    }
     hovered = null;
     hoveredEdge = null;
     hoveredMend = false;
     hoveredRegion = null;
+    markTarget = null;
     setGrabTarget(false);
     invalidate();
     return;
@@ -549,6 +657,20 @@ function hover(point: MapPoint | null): void {
     if (found === hoveredEdge) return;
     hoveredEdge = found;
     setGrabTarget(found !== null);
+    invalidate();
+    return;
+  }
+
+  /*
+    A crosshair everywhere, since a click anywhere acts. The picture changes as the pointer moves — a
+    ghost mark follows it — so this repaints on a move, as a wall being drawn does, but not while it
+    rests on one mark.
+  */
+  if (tool === "suppressRegion") {
+    const next = markTargetAt(point);
+    setGrabTarget(true);
+    if (sameMarkTarget(next, markTarget)) return;
+    markTarget = next;
     invalidate();
     return;
   }

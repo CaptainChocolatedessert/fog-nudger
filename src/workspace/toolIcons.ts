@@ -35,7 +35,8 @@
  *
  * The rest draw the thing they do to the linework: a brush swiping ink away, a pen laying it down,
  * two heavy strokes of ink ringed where a gap parts them, two ends joined, one struck out, two loose
- * wall ends ringed where a mend would join them, and a room with a slash through each of its walls.
+ * wall ends ringed where a mend would join them, a room with a slash through each of its walls, and
+ * the same room crossed in the middle.
  * **The two gap tools mirror each other** — ink running into the ring, walls ending in it.
  */
 
@@ -122,6 +123,13 @@ const ICONS: Readonly<Record<string, string>> = {
   */
   dissolve:
     '<circle cx="5" cy="5" r="1.8" /><circle cx="19" cy="5" r="1.8" /><circle cx="19" cy="19" r="1.8" /><circle cx="5" cy="19" r="1.8" /><path d="M7 5h10M19 7v10M17 19H7M5 17V7" /><path d="M10 7l4-4M10 21l4-4M3 14l4-4M17 14l4-4" />',
+  /*
+    The same room crossed in the middle: the room goes, its walls stay (user, 2026-09-16). Dissolve's
+    other half — where the mark sits says what goes — and the cross is also the mark the tool leaves
+    on the map.
+  */
+  suppressRegion:
+    '<circle cx="5" cy="5" r="1.8" /><circle cx="19" cy="5" r="1.8" /><circle cx="19" cy="19" r="1.8" /><circle cx="5" cy="19" r="1.8" /><path d="M7 5h10M19 7v10M17 19H7M5 17V7" /><path d="M9.6 9.6l4.8 4.8M14.4 9.6l-4.8 4.8" />',
 };
 
 /**

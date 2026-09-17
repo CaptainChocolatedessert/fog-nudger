@@ -99,6 +99,14 @@ export interface WallFace {
   readonly cycles: readonly WallCycle[];
   /** Doubled signed area, summed over the cycles. Holes are negative, so this is the net. */
   readonly doubleArea: number;
+  /**
+   * The walls this face's rings cover, as ascending indices into `graph.edges`.
+   *
+   * What the bridge criterion is counted from: a wall emits as a line exactly when no *emitted* face
+   * covers it. Every face is emitted unless one is suppressed, and then the walls it alone covered
+   * have to be found again without it — which needs coverage per face rather than the total.
+   */
+  readonly ringEdges: readonly number[];
 }
 
 export interface WallFaces {
@@ -359,6 +367,7 @@ export function buildWallFaces(graph: WallGraph): WallFaces {
 
   const faces: WallFace[] = faceCycles.map((list) => {
     const rings: Ring[] = [];
+    const ringEdges = new Set<number>();
     for (const index of list) {
       for (const loop of decomposeRings(cycles[index]!, bridgeEdges, originNode, targetNode)) {
         if (loop.length < MIN_RING_POINTS) {
@@ -366,12 +375,20 @@ export function buildWallFaces(graph: WallGraph): WallFaces {
           continue;
         }
         rings.push(loop.map((half) => nodes[originNode(half)]!));
-        for (const half of loop) covered[half >> 1] = 1;
+        for (const half of loop) {
+          covered[half >> 1] = 1;
+          ringEdges.add(sourceOf[half >> 1]!);
+        }
       }
     }
     const faceCycleList = list.map((index) => cycles[index]!);
     const doubleArea = faceCycleList.reduce((total, cycle) => total + cycle.doubleArea, 0);
-    return { rings, cycles: faceCycleList, doubleArea };
+    return {
+      rings,
+      cycles: faceCycleList,
+      doubleArea,
+      ringEdges: [...ringEdges].sort((left, right) => left - right),
+    };
   });
 
   const walls: number[] = [];

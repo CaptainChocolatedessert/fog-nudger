@@ -31,6 +31,7 @@ import { resolveTraceMap } from "../map/mapImage";
 import { advanceTo, renderPanel } from "./drawer";
 import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
+import { loadMarks } from "./regionMarks";
 import { loadStage } from "./stage";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
@@ -106,6 +107,12 @@ export async function loadNominatedMap(opening = false): Promise<void> {
   const stage = await loadStage(result.mapId);
   if (stage.corrupt) {
     say("the saved wall editing could not be read and has been ignored — see the console", "bad");
+  }
+  // After the stage, which clears the undo history for this map: marks are another document of the
+  // same map, and their history went with it.
+  const marked = await loadMarks(result.mapId);
+  if (marked.corrupt) {
+    say("the saved suppression marks could not be read and have been ignored — see the console", "bad");
   }
 
   /*

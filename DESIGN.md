@@ -72,6 +72,8 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink* — a place the drawing failed to close a wall. What merges two rooms. **Not a doorway**, which is a real opening and the tool's known false positive. **In the graph** the same fault is a break in the walls: two pieces close in space and far apart *measured along the walls*. |
 | **mend** | a proposed wall that closes a gap in the graph, and the act of accepting one. Once accepted it is an ordinary drawn wall. **Not a bridge** — a mend usually closes a loop and splits a region in two, which is the opposite of what a bridge is. |
 | **dissolve** | removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
+| **mark** | a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. |
+| **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
 
 ### The stages — and the surface words for them are **retired**
 
@@ -495,6 +497,11 @@ boundary already carries every wall along it, so most walls need no line of thei
 the rest is exact:
 
 > **A wall emits as a line exactly when no emitted face boundary covers it.**
+
+**"Emitted" is load-bearing**, and since 2026-09-16 it is not every face: a **suppressed** region
+(§10) is left out, and the rule is applied to what remains with nothing else changed. A wall it
+shares with an emitted neighbour stays inside the neighbour's shape; a wall it shares only with the
+outside or another suppressed region comes out as a line.
 
 The case that produces it is a **bridge** — an edge with the same face on both sides. A stub wall is
 a bridge, and no region boundary can ever cover one because there is only one region there.
@@ -1246,18 +1253,20 @@ here" means. Erasing and merging leave vertices no wall uses; the layer skips th
 that moves nothing would be a lie — and the snap query has to skip them too, or drawing catches on
 points nobody can see.
 
-### The three verbs, Mend and Dissolve region
+### The three verbs, Mend, Dissolve region and Suppress region
 
 A drag can only mean one thing, so the editor has a sticky tool picker: **Move**, **Draw**, **Erase**,
 Move by default. **Mend** joined them on 2026-09-16 — it proposes walls across breaks rather than
 taking a gesture — and **Dissolve region** the same day, which removes the walls around a region with
-one click; §10 carries both. The alternative — hiding draw and erase behind modifier keys — was rejected for
+one click, and **Suppress region**, which leaves a region out of the fog with a mark. §10 carries all
+three; Suppress region edits marks rather than walls, and sits with the wall tools because what it
+decides is which regions the walls make count. The alternative — hiding draw and erase behind modifier keys — was rejected for
 putting a destructive action on an unannounced click and leaving both verbs undiscoverable.
 
-- **All but Draw decide by looking.** Move takes a press only when a vertex is under it, Erase only
+- **All but two decide by looking.** Move takes a press only when a vertex is under it, Erase only
   when a wall is, Mend only inside a ring and Dissolve region only inside a region, so a plain drag
-  anywhere else still pans. **Draw is the exception and takes every press**, because a wall has to be
-  able to start on empty map. Ctrl pans regardless.
+  anywhere else still pans. **Draw and Suppress region take every press**: a wall has to be able to
+  start on empty map, and a mark can go anywhere, outside every region too. Ctrl pans regardless.
 - **Draw supports both forms.** Press-drag-release puts a wall down in one gesture; press-release then
   click puts one down in two, with the far end re-aimable in between. Neither is more correct — a drag
   is quicker and two clicks are more precise — so both are served.
@@ -1442,9 +1451,9 @@ graph is the document, and staging was the last place still treating the scene a
 
 ### What goes out
 
-- **One filled `PATH` per face**, on `FOG`, `visible: true`, `fillOpacity: 1`, `fillRule: "evenodd"`,
-  no stroke.
-- **One `LINE` per segment of every wall no face boundary covers** (§3's bridge criterion), on `FOG`,
+- **One filled `PATH` per face not suppressed**, on `FOG`, `visible: true`, `fillOpacity: 1`,
+  `fillRule: "evenodd"`, no stroke.
+- **One `LINE` per segment of every wall no emitted face boundary covers** (§3's bridge criterion), on `FOG`,
   `visible: true`, no fill anywhere, at the scene's own fog stroke width and colour.
 
 **A fitted polyline of n points becomes n − 1 items**, so a wall is several Outliner entries and
@@ -1816,8 +1825,9 @@ ahead of the map.
 and nothing else that acts on the scene.
 
 **The two destructive ones differ by how far they reach.** *Remove ours* takes our items and the saved
-wall graph, leaving the reading settings, both painted layers and the map nomination — so a map you
-have painted on still composes your old strokes on the next read. *Clear everything* is the start-over:
+wall graph, leaving the reading settings, both painted layers, the suppression marks and the map
+nomination — so a map you have painted on still composes your old strokes on the next read, and a
+region you marked is still suppressed once walls are derived round it again. *Clear everything* is the start-over:
 the scene as though the extension had never run.
 
 **It lives here rather than on the workspace**, and the argument that decided it is that the workspace
@@ -1997,7 +2007,7 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 **Separate what a drag does from what controls you are reading.**
 
 - **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
-  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend, dissolve region). One click to switch, and switching a
+  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend, dissolve region, suppress region). One click to switch, and switching a
   tool does not move the controls.
 - **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
   the group's own name in the strip. It slides out **beside** the strip rather than under it, is only
@@ -2300,8 +2310,8 @@ cannot recur.
 | **Ink** | violet | what the trace read |
 | **Structure** | blue | the wall graph, cased |
 | **Additive** | cyan | your added ink, gap proposals, a snap target |
-| **Subtractive** | amber | your suppression |
-| **Destructive** | red | **reserved** — erase target, the walls a dissolve would take, doomed spurs, nothing else |
+| **Subtractive** | amber | your suppression, and the marks that suppress a region |
+| **Destructive** | red | **reserved** — erase target, the walls a dissolve would take, a mark a click would remove, doomed spurs, nothing else |
 | **Rooms** | a generated cycle | not semantic |
 
 **Red earns its alarm value by being rare.** It did three jobs — default ink, emitted wall lines in
@@ -2388,7 +2398,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**915 tests across 64 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**926 tests across 65 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2764,6 +2774,19 @@ tests, a build, and the workspace loading clean.
 **A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
 they are refused, not converted. *Remove ours* in the panel clears one, and the map derives fresh.
 
+**Suppress region** (§10, *Suppress region*) — the newest, and nothing of it has been in a room:
+
+- **A click places a mark and its region loses its fill**; the state line counts it as suppressed. A
+  click on the mark removes it and the fill comes back. Each is one step of undo.
+- **The hover**: a dashed ghost follows the pointer, and turns into the existing mark in red over one.
+- **A mark outside every region** is drawn dimmed, and becomes solid once walls are drawn round it.
+- **Marks survive a rebuild**: move a slider that regenerates the walls, and the marks stay and
+  suppress whatever region is under them now.
+- **The push**: a suppressed room writes no shape, and its walls that border nothing emitted arrive as
+  lines — check with Dynamic Fog that they still block sight.
+- **Closing after only a mark changed pushes**, since the marks are part of what the scene is compared
+  against.
+
 **Dissolve region** (§10, *Dissolve region*). **Confirmed in a room (user, 2026-09-16):** the
 highlight follows the pointer from region to region, pillars and rooms inside keep their walls on a
 real map, and one click is one step of undo. Not yet looked at:
@@ -3083,7 +3106,7 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Two tools built from conversations
+### Three tools built from conversations
 
 **1. Dissolve region — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
 pick this up* has which part). Click inside a region and the walls around it go.
@@ -3104,7 +3127,7 @@ region *is* deleting the walls that bound it. The questions it was carried with,
 **Named** *Dissolve region*, after the map-making operation that merges areas by deleting the
 boundaries between them, and drawn as **a room with a single slash through each wall** (user, same
 day): where the mark sits says what goes. The room with a cross in the middle and its walls solid is
-kept for *Suppress region*, decided and not yet built, which strikes the room and keeps the walls. It
+*Suppress region*'s, which strikes the room and keeps the walls. It
 was that room dashed and crossed for its first day; a dashed wall is how the surface draws one that is
 going, so the tool that keeps its walls could not take it as it stood. *Clear* was ruled out by *Clear everything* in the panel, *Merge* by being this
 project's word for its worst failure, and *Erase room* by guessing intent — the region may be a table.
@@ -3255,6 +3278,69 @@ document from purely-derived to edited, like any other wall edit. (This said it 
 the hand-edit total"; the count is gone, and the comparison against the stored base sees a mended
 gap with nothing added.) Same conceptual tool, opposite durability, and the GM has no way to know
 that unless the interface says so.
+
+**3. Suppress region — built 2026-09-16, never run in a room.** Click to leave a mark; a region
+holding one gets no fog shape and its walls stay.
+
+**What it is for**: a region the walls enclose that is not a room — solid rock between rooms, a large
+pillar. It becomes what the outside already is: fogged, and never revealable. That is also why it is
+not the tool for a table inside a room, which would become a permanent hole in the room's fog;
+Dissolve region is.
+
+**Decided (user, 2026-09-16):**
+
+- **A mark is a point in graph units**, and a region is suppressed when it holds one. Regions have no
+  identity across an edit, so the point decides afterwards, and the consequences are the intent:
+  erase or dissolve the wall between a suppressed region and a room and the merged room is
+  suppressed; draw a wall through one and only the side holding the mark stays suppressed.
+- **Marks survive a rebuild of the walls**, landing in whatever region the new walls make. So they are
+  stored beside the walls rather than in them, placing one is not a hand edit, and it locks nothing.
+- **The emit rule is §3's, unchanged**: a wall is a line exactly when no emitted region covers it. A
+  closed room inside nothing, suppressed, emits as a closed chain of lines — **more items than one
+  shape, and that cost is accepted**.
+- **A click places a mark, anywhere; a click on a mark removes it.** Outside every region a mark
+  suppresses nothing until walls are drawn round it, which is why the tool takes every press and a
+  plain drag does not pan — Ctrl does.
+- **Drawn as a cased cross in the subtractive colour, with the Rooms layer**, dimmed when it suppresses
+  nothing. Always drawn, because an unfilled region is also how a room that has leaked to the outside
+  looks, and the mark is what tells the two apart.
+- **Named and drawn as Dissolve region's other half**: the same room, crossed in the middle.
+
+**As built:**
+
+- **`trace/suppression.ts` is the decision**, pure and tested: the regions the marks suppress, found
+  with Dissolve region's own lookup, and the traversal as emitted without them. The traversal now
+  hands out **`ringEdges` per region** — which walls its rings cover — so the walls can be recounted
+  with a region taken out rather than re-walked.
+- **The preview and the push apply it with the same two functions.** The workspace's partition goes
+  through one place for both its sources, and a change to the marks re-applies them to the traversal
+  on screen without walking it again. The push reads the marks from the scene for itself, as the trace
+  reads the paint, since a push has two sources and only one has a workspace behind it.
+- **Stored under its own key**, recording its map, and read all or nothing. **No marks is no key.**
+  *Remove ours* leaves them, as it leaves the paint; *Clear everything* takes them.
+- **Each place or remove is one undo step**, the third kind of entry on the one stack. Rebuilding the
+  walls clears the walls' entries and leaves these; loading another map clears everything.
+- **A mark is quantised when it is placed**, with the same helper a wall's points use, so the marks in
+  memory are the numbers the store hands back.
+- **A press that travels does nothing**: a mark is placed by a click, and the release is where it acts.
+- **The hover shows what a click would do** — a dashed ghost where one would be placed, or the mark
+  under the pointer in the destructive colour — repainting as the ghost moves, as a wall being drawn
+  does.
+- **The room count on the state line** counts emitted rooms and says how many are suppressed.
+
+**Checked against the rule as §3 states it** rather than against the rings: a wall is a line exactly
+when no emitted region lies on either side of it, or the same region lies on both — sides taken from
+the walk, coverage computed from the rings. Over 514 random graphs it agrees for every region
+suppressed alone and for a random half at once: 4,103 suppressions, turning 10,765 walls into lines.
+**Fifteen mutations, fifteen caught**, after three survivors were answered — the test file says how.
+
+**Costs, stated:**
+
+- **A suppressed room is unrevealable for good**, exactly as the outside is — the point of the tool,
+  and the reason it is the wrong one for furniture.
+- **A plain drag does not pan with this tool in hand**, since every press is a mark; Ctrl pans.
+- **Marks hide with the Rooms layer**, and so does the tool's ghost — a GM who has switched rooms off
+  and picks up the tool sees no preview until they switch it back.
 
 ### Carried open questions
 
@@ -3409,7 +3495,8 @@ closed outright.
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
 | `trace/probePoint.ts` | the one surviving diagnostic |
-| `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses |
+| `trace/suppression.ts` | **suppression**: which regions the marks suppress, the traversal as emitted without them, the mark hit test, and the marks' stored codec |
+| `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses, and `randomWallGraph`, the generator whose shapes nest and touch — what the region tools' sweeps need |
 
 ### Scene, emit and state
 
@@ -3418,8 +3505,9 @@ out so it can be tested · `map/placement.ts`, `map/placeRegions.ts`, `map/raste
 placement, reused at a raster the size of the map's extent because that *is* graph-unit space · `emit/fogShapes.ts` the shape items
 and the four emission constants · `emit/wallLines.ts` the wall `LINE`s · `emit/wallEmission.ts` the
 wall graph's faces placed in the world · `emit/emitRegions.ts` batch it into the scene ·
-`geometry/ring.ts` ring maths · `wallGraphStore.ts` and `inkPaintStore.ts` the two metadata documents — the
-first holds **two** keys, the document and the graph as the trace last derived it ·
+`geometry/ring.ts` ring maths · `wallGraphStore.ts`, `inkPaintStore.ts` and `regionMarksStore.ts` the
+three metadata documents — the first holds **two** keys, the document and the graph as the trace last
+derived it ·
 `settingsStore.ts` the settings.
 
 ### Settings and shared UI
@@ -3466,8 +3554,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   walls on screen and the settings on release)
 - **Acting on the document** — `undoAction.ts` (the undo/redo pair in the rail head, and their
   keystrokes) · `undoHistory.ts` (**the one
-  stack, for the graph and the painted ink both**: entries are labelled closures, so it never learns
-  what it is restoring — pure and tested) · `editHistory.ts` (the bounded stack under it, pure and
+  stack, for the graph, the painted ink and the marks**: entries are labelled closures, so it never
+  learns what it is restoring — pure and tested) · `regionMarks.ts` (the suppression marks for the map
+  in hand: loaded with it, saved on every change, undone like any other act) · `editHistory.ts` (the bounded stack under it, pure and
   tested) · `frameAction.ts` (the one wall action left; straighten and prune became live sliders) ·
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
   own limit at zero — pure and tested)

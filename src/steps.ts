@@ -265,6 +265,20 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "edit",
     hint: "Click inside a region to remove the walls around it. Regions inside it keep theirs.",
   },
+  /*
+    Leave a region out of the fog, keeping its walls (user, 2026-09-16). `edit`, and it takes every
+    press, as Draw does: a mark can go anywhere, outside every region too. The hint's second sentence
+    is the consequence a GM would not guess — a suppressed region is fogged for good, like the outside.
+  */
+  {
+    id: "suppressRegion",
+    label: "Suppress region",
+    band: "walls",
+    drag: "edit",
+    hint:
+      "Click to mark a region: it gets no fog shape, so it can never be revealed. Its walls stay. " +
+      "Click a mark to remove it. <b>Ctrl</b> pans.",
+  },
 ];
 
 

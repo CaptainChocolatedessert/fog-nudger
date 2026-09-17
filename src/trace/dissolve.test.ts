@@ -19,9 +19,10 @@ import { deriveWalls } from "./deriveWalls";
 import { dissolutionAt, dissolvedEdges, regionAt, simpleLoops } from "./dissolve";
 import { graphExtent } from "./graphUnits";
 import { findCrossings } from "./planarGraph";
-import { insertEdge, removeEdges } from "./planarOps";
+import { removeEdges } from "./planarOps";
 import { buildWallFaces, containsPoint, type WallFaces } from "./wallFaces";
 import { documentPoint, type WallGraph } from "./wallGraph";
+import { randomWallGraph, seededRandom } from "./fixtures";
 
 /** A graph from plain coordinates, quantised the way the document holds them. */
 function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): WallGraph {
@@ -299,13 +300,8 @@ describe("removeEdges", () => {
   clicked region taken out. A wall goes when the clicked region is on one side and the other side is
   the clicked region again or can reach the outside.
 
-  Two generators feed it, for the reason given on `randomGraph`.
+  Two generators feed it, for the reason given on `randomWallGraph` in `fixtures.ts`.
 */
-
-function rng(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => ((state = (state * 1664525 + 1013904223) >>> 0) / 4294967296);
-}
 
 function randomInk(width: number, height: number, next: () => number, runs: number): BinaryMask {
   const mask = emptyMask(width, height);
@@ -367,63 +363,6 @@ function expectedByReachability(faces: WallFaces, clicked: number): number[] {
   return going.sort((a, b) => a - b);
 }
 
-/**
- * Random rectangles, triangles and single walls on a coarse lattice, added the way Draw adds them.
- *
- * **Not the derivation's generator, and the reason is measured** (2026-09-16). Skeletons of random
- * ink runs gave 510 maps' worth of regions and not one wall kept — linework thinned from pixels almost never puts a
- * closed room inside another, so a sweep over it agreed with the oracle without once reaching the
- * rule this tool exists for. Shapes on an eleven-point lattice nest and share corners, and small
- * triangles hung off an existing vertex are what make the joined inner room common: shapes placed
- * anywhere kept 14 walls from an outer cycle in 400 seeds, and hanging them kept 83. At 1,500 seeds,
- * 1,303 usable, the sweep checks 9,446 regions, keeps 283 walls, and 201 of those are from an outer
- * cycle — the case "the outer cycle goes" gets wrong.
- *
- * An addition that overlaps an existing wall is skipped: a collinear overlap is a legal state to pass
- * through, but not one a traversal describes.
- */
-function randomGraph(next: () => number, shapes: number): WallGraph {
-  const coordinate = () => Math.floor(next() * 11) / 10;
-  const point = (): [number, number] => [coordinate(), coordinate()];
-  // An existing vertex, so a shape can hang off the linework already there — a stem, or a room
-  // touching another at one point. Without these a joined inner room is a coincidence.
-  const existing = (graph: WallGraph): [number, number] => {
-    const node = graph.nodes[Math.floor(next() * graph.nodes.length)]!;
-    return [node.x, node.y];
-  };
-  // A point a short way from another, so a hanging shape stays small enough to fit inside a room.
-  const near = ([x, y]: [number, number]): [number, number] => [
-    x + (Math.floor(next() * 7) - 3) * 0.05,
-    y + (Math.floor(next() * 7) - 3) * 0.05,
-  ];
-  let graph: WallGraph = { nodes: [], edges: [] };
-  for (let i = 0; i < shapes; i++) {
-    const kind = graph.nodes.length === 0 ? next() * 0.4 : next();
-    let points: [number, number][];
-    if (kind < 0.3) {
-      const [x1, x2] = [coordinate(), coordinate()].sort((a, b) => a - b) as [number, number];
-      const [y1, y2] = [coordinate(), coordinate()].sort((a, b) => a - b) as [number, number];
-      if (x1 === x2 || y1 === y2) continue;
-      points = [[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]];
-    } else if (kind < 0.4) {
-      const corners = [point(), point(), point()];
-      points = [...corners, corners[0]!];
-    } else if (kind < 0.7) {
-      const anchor = existing(graph);
-      points = [anchor, near(anchor), near(anchor), anchor];
-    } else if (kind < 0.85) {
-      const anchor = existing(graph);
-      points = [anchor, near(anchor)];
-    } else {
-      points = [point(), point()];
-    }
-    const result = insertEdge(graph, points.map(([x, y]) => ({ x, y })));
-    if (result.overlaps > 0) continue;
-    graph = result.graph;
-  }
-  return graph;
-}
-
 describe("dissolving over generated graphs", () => {
   it("agrees with reachability for every region, including inner rooms joined to the outer wall", () => {
     let regions = 0;
@@ -432,7 +371,7 @@ describe("dissolving over generated graphs", () => {
     let usable = 0;
     const seeds = 1500;
     for (let seed = 1; seed <= seeds; seed++) {
-      const graph = randomGraph(rng(seed), 3 + (seed % 9));
+      const graph = randomWallGraph(seededRandom(seed), 3 + (seed % 9));
       const faces = buildWallFaces(graph);
       // A doubled wall or a crossing is not an embedding the traversal means anything over.
       if (!faces.eulerHolds || findCrossings(graph).length > 0) continue;
@@ -476,7 +415,7 @@ describe("dissolving over generated linework", () => {
     it(`agrees with reachability for every region of ${seeds} random ${width}x${height} maps`, () => {
       let regions = 0;
       for (let seed = 1; seed <= seeds; seed++) {
-        const { walls, faces } = deriveWalls(randomInk(width, height, rng(seed), runs), {
+        const { walls, faces } = deriveWalls(randomInk(width, height, seededRandom(seed), runs), {
           tolerance: 0,
           maxTolerance: 0,
           extent: graphExtent(width, height),
@@ -493,12 +432,12 @@ describe("dissolving over generated linework", () => {
   }
 
   it("finds the region a point is in, agreeing with the emitted rings' even-odd fill", () => {
-    const next = rng(7);
+    const next = seededRandom(7);
     let inside = 0;
     for (let seed = 1; seed <= 60; seed++) {
       const width = 40;
       const height = 30;
-      const { faces } = deriveWalls(randomInk(width, height, rng(seed), 22), {
+      const { faces } = deriveWalls(randomInk(width, height, seededRandom(seed), 22), {
         tolerance: 0,
         maxTolerance: 0,
         extent: graphExtent(width, height),

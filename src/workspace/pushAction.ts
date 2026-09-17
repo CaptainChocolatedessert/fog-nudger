@@ -56,7 +56,9 @@ import { readNominatedMapId } from "../map/mapImage";
 import { encodeWallGraph } from "../trace/wallGraph";
 import { graphsDiffer } from "../trace/wallGraphDiff";
 import { paintRevision } from "../trace/inkPaint";
+import { encodeMarks } from "../trace/suppression";
 import { confirmAction } from "../confirmDialog";
+import { currentMarks } from "./regionMarks";
 import { currentRegions, currentWalls, previewGraph } from "./regions";
 import { saveDerivedWalls, wallGraph, wallsEdited } from "./stage";
 import { controlsLive } from "./settingsState";
@@ -86,7 +88,9 @@ async function fingerprint(): Promise<string> {
   */
   const paint = currentPaint();
   const painted = `${paintRevision(paint.suppress)}/${paintRevision(paint.ink)}`;
-  return `${map ?? "none"}|${JSON.stringify(currentSettings())}|${edits}|${painted}`;
+  // And the suppression marks, which decide which regions go out and which walls become lines.
+  const marked = encodeMarks(currentMarks()).join(",");
+  return `${map ?? "none"}|${JSON.stringify(currentSettings())}|${edits}|${painted}|${marked}`;
 }
 
 /**

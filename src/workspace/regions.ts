@@ -50,7 +50,14 @@ import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
 import { isSkeletonOnly, SETTING_LIMITS, type SettingName } from "../settings";
 import { rasterPixelsPerGraphUnit } from "../trace/graphUnits";
-import { buildWallFaces, describeWallFaces, wallSegments } from "../trace/wallFaces";
+import { regionAt } from "../trace/dissolve";
+import { suppressedRegions, withoutSuppressed } from "../trace/suppression";
+import {
+  buildWallFaces,
+  describeWallFaces,
+  wallSegments,
+  type WallFaces,
+} from "../trace/wallFaces";
 import {
   pruneWallGraph,
   wallRuns,
@@ -60,6 +67,7 @@ import { noteGraph } from "./graphScale";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
+import { currentMarks, onMarksChange } from "./regionMarks";
 import { currentSettings, markApplied, markParametersApplied } from "./settingsState";
 import { invalidate, isClosing, say, whileWorking } from "./shell";
 import { wallGraph, wallsEdited } from "./stage";
@@ -84,8 +92,11 @@ export interface PreviewWall {
 const requests = new MaskRequests();
 let inFlight = false;
 let regions: readonly PreviewRegion[] = [];
-/** The walls that emit as lines rather than as part of a ring. Drawn with them, or the preview
- * would show fewer walls than the push writes. */
+/**
+ * The walls that emit as lines rather than as part of a ring, suppressed regions' walls included.
+ * Not drawn — the walls layer draws every wall — but counted, for the item-budget warning in front of
+ * a push.
+ */
 let walls: readonly PreviewWall[] = [];
 /*
   `raster` was here: the space the rings were in, which the painter scaled by. It was always 1×1 once
@@ -236,6 +247,50 @@ export function currentWalls(): readonly PreviewWall[] {
   return walls;
 }
 
+/**
+ * The traversal on screen and the graph it walked, kept so a change to the marks can be applied
+ * without walking the graph again — a mark changes which regions are drawn, never the regions.
+ */
+let walked: { readonly graph: WallGraph; readonly faces: WallFaces } | null = null;
+
+/** A suppression mark, and whether it lands in a region — a mark outside every region is drawn dimmed. */
+export interface MarkState {
+  readonly point: Vector2;
+  readonly active: boolean;
+}
+
+let marks: readonly MarkState[] = [];
+
+/** The marks as the rooms layer draws them. */
+export function currentMarkStates(): readonly MarkState[] {
+  return marks;
+}
+
+/**
+ * Put a traversal on screen as a push would emit it: suppressed regions left out, the walls recounted.
+ *
+ * **The one place both partitions go through**, the derivation's and the saved graph's, so the
+ * preview and the push leave out the same regions — the emit path applies the marks with the same two
+ * functions. Returns the traversal as emitted, for the summary.
+ */
+function showFaces(graph: WallGraph, faces: WallFaces): WallFaces {
+  walked = { graph, faces };
+  const placed = currentMarks();
+  const suppressed = suppressedRegions(faces, placed);
+  const emitted = withoutSuppressed(graph, faces, suppressed);
+  regions = emitted.faces.map((face) => ({ rings: face.rings }));
+  walls = wallSegments(graph, emitted).map((points) => ({ points }));
+  marks = placed.map((point) => ({ point, active: regionAt(faces, point) !== null }));
+  return emitted;
+}
+
+/** "3 rooms", and how many are suppressed when any are — the figure a GM checks a mark against. */
+function describeRooms(emitted: WallFaces, faces: WallFaces, noun: string): string {
+  const count = `${emitted.faces.length} ${noun}${emitted.faces.length === 1 ? "" : "s"}`;
+  const suppressed = faces.faces.length - emitted.faces.length;
+  return suppressed === 0 ? count : `${count} (${suppressed} suppressed)`;
+}
+
 export function currentRegions(): readonly PreviewRegion[] {
   return regions;
 }
@@ -338,8 +393,7 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   noteGraph(from.graph);
 
   const faces = buildWallFaces(pruned.graph);
-  regions = faces.faces.map((face) => ({ rings: face.rings }));
-  walls = wallSegments(pruned.graph, faces).map((points) => ({ points }));
+  const emitted = showFaces(pruned.graph, faces);
   unitsPerSquare = from.pxPerSquare > 0 ? from.pxPerSquare / from.rasterPerUnit : 0;
 
   /*
@@ -355,7 +409,7 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
     so a failure here means the derivation produced something a traversal cannot mean anything over,
     which is worth a red line rather than a log entry nobody reads.
   */
-  const rooms = `${regions.length} region${regions.length === 1 ? "" : "s"}`;
+  const rooms = describeRooms(emitted, faces, "region");
   lastSummary =
     `${rooms} · ${wallRuns(pruned.graph).length} walls in ` +
     `${pruned.graph.edges.length} segments · ${pruned.graph.nodes.length} points` +
@@ -552,6 +606,8 @@ function clearPartition(): void {
   const generation = requests.latest();
   regions = [];
   walls = [];
+  walked = null;
+  marks = currentMarks().map((point) => ({ point, active: false }));
   unitsPerSquare = 0;
   preview = null;
   noteGraph(null);
@@ -567,13 +623,12 @@ function derivePartition(graph: WallGraph): void {
   const result = buildWallFaces(graph);
   if (!requests.fulfil(generation)) return;
 
-  regions = result.faces.map((face) => ({ rings: face.rings }));
-  walls = wallSegments(graph, result).map((points) => ({ points }));
+  const emitted = showFaces(graph, result);
   noteGraph(graph);
   unitsPerSquare = 0;
   preview = null;
 
-  const rooms = `${regions.length} room${regions.length === 1 ? "" : "s"}`;
+  const rooms = describeRooms(emitted, result, "room");
   const points = graph.nodes.length;
   lastSummary =
     `${rooms} · ${wallRuns(graph).length} walls in ${graph.edges.length} segments · ${points} points` +
@@ -596,5 +651,14 @@ export function registerRegionInvalidation(): void {
       derivation = null;
     requests.request();
     void derive();
+  });
+  /*
+    A mark changes which regions are drawn and nothing about the regions, so the traversal on screen
+    is re-applied rather than walked again — no derive, no request cycle, nothing blanked.
+  */
+  onMarksChange(() => {
+    if (walked) showFaces(walked.graph, walked.faces);
+    else marks = currentMarks().map((point) => ({ point, active: false }));
+    invalidate();
   });
 }

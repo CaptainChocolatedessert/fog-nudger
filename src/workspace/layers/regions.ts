@@ -29,14 +29,20 @@
  * it.
  */
 
+import type { Vector2 } from "@owlbear-rodeo/sdk";
+
 import { PROPOSAL_COLOURS } from "../../emit/fogShapes";
+import { colourFor } from "../palette";
 import {
+  currentMarkStates,
   currentRegions,
   outlineUnitsPerSquare,
   regionsShowing,
 } from "../regions";
 import { currentSettings } from "../settingsState";
 import { addPainter, type Painter } from "../shell";
+import { currentTool } from "../toolPalette";
+import { pendingMark } from "../wallEdit";
 
 /**
  * The outline never gets thinner than this on screen.
@@ -54,13 +60,80 @@ const MIN_STROKE_PX = 1;
   and pale paper alike, which are the only two backgrounds a wall is ever drawn against.
 */
 
-const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
-  const regions = currentRegions();
-  if (regions.length === 0 || !regionsShowing()) return;
+/** Half the length of a mark's arms, and the widths of its core and casing, in screen pixels. */
+const MARK_ARM_PX = 6;
+const MARK_CORE_PX = 2.5;
+const MARK_CASING_PX = 5;
+/** A mark that suppresses nothing, because it lands outside every region. */
+const IDLE_MARK_ALPHA = 0.45;
 
+const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   // The rings are in graph units, and the map is drawn at the image's own aspect — so the longer
   // drawn side is one unit on both axes, and one scale puts the partition exactly over the ink.
   const scale = Math.max(drawWidth, drawHeight);
+  const regions = currentRegions();
+  if (regions.length > 0 && regionsShowing()) paintRegions(context, view, scale);
+  paintMarks(context, view, scale);
+};
+
+/**
+ * The suppression marks, on this layer because they explain a gap in it.
+ *
+ * **Drawn whenever the rooms are**, and switched off with them. An unfilled region is how this
+ * surface shows a room that has leaked to the outside — its loudest failure — and a suppressed room is
+ * unfilled too, so without its mark the two would look the same.
+ *
+ * A cross, as the tool's glyph is, in the palette's subtractive colour, which is what suppression
+ * already wears for ink; solid and cased, because a mark is committed. **Dimmed** when it lands
+ * outside every region and suppresses nothing. And while the tool is in hand, what a click would do:
+ * the mark it would remove in the destructive colour, or a dashed ghost where it would place one.
+ */
+function paintMarks(context: CanvasRenderingContext2D, view: { x: number; y: number }, scale: number): void {
+  const marks = currentMarkStates();
+  const pending = currentTool() === "suppressRegion" ? pendingMark() : null;
+  if (marks.length === 0 && pending === null) return;
+
+  const cross = (point: Vector2) => {
+    const x = view.x + point.x * scale;
+    const y = view.y + point.y * scale;
+    context.beginPath();
+    context.moveTo(x - MARK_ARM_PX, y - MARK_ARM_PX);
+    context.lineTo(x + MARK_ARM_PX, y + MARK_ARM_PX);
+    context.moveTo(x + MARK_ARM_PX, y - MARK_ARM_PX);
+    context.lineTo(x - MARK_ARM_PX, y + MARK_ARM_PX);
+  };
+  const stroke = (colour: string) => {
+    context.strokeStyle = colourFor("casing");
+    context.lineWidth = MARK_CASING_PX;
+    context.stroke();
+    context.strokeStyle = colour;
+    context.lineWidth = MARK_CORE_PX;
+    context.stroke();
+  };
+
+  context.save();
+  context.lineCap = "round";
+  marks.forEach((mark, index) => {
+    const removing = pending !== null && "remove" in pending && pending.remove === index;
+    context.globalAlpha = mark.active || removing ? 1 : IDLE_MARK_ALPHA;
+    cross(mark.point);
+    stroke(colourFor(removing ? "destructive" : "subtractive"));
+  });
+  if (pending !== null && "place" in pending) {
+    context.globalAlpha = 1;
+    context.setLineDash([3, 3]);
+    cross(pending.place);
+    stroke(colourFor("subtractive"));
+  }
+  context.restore();
+}
+
+function paintRegions(
+  context: CanvasRenderingContext2D,
+  view: { x: number; y: number },
+  scale: number,
+): void {
+  const regions = currentRegions();
 
   const settings = currentSettings();
   /*
@@ -122,7 +195,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   */
 
   context.restore();
-};
+}
 
 /** Wire the layer up. Drawn over the ink, since the partition is the thing being judged. */
 export function registerRegionsLayer(): void {

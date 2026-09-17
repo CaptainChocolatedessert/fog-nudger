@@ -32,6 +32,8 @@
  * Pure: no DOM, no SDK. The bounds and the grid are passed in.
  */
 
+import type { Vector2 } from "@owlbear-rodeo/sdk";
+
 import { commandCount, type Ring } from "../geometry/ring";
 import {
   createPlacement,
@@ -41,6 +43,7 @@ import {
 } from "../map/placement";
 import { placeRegions } from "../map/placeRegions";
 import { COMMAND_CAP } from "../trace/simplify";
+import { suppressedRegions, withoutSuppressed } from "../trace/suppression";
 import { buildWallFaces, wallSegments, type WallFaces } from "../trace/wallFaces";
 import type { GraphExtent } from "../trace/graphUnits";
 import type { WallGraph } from "../trace/wallGraph";
@@ -57,6 +60,8 @@ export interface WallEmission {
   readonly walls: readonly PlacedWall[];
   /** The traversal behind it, so the caller can log the check rather than re-deriving to find it. */
   readonly faces: WallFaces;
+  /** Regions left out because a mark suppressed them. */
+  readonly suppressed: number;
 }
 
 /**
@@ -67,14 +72,22 @@ export interface WallEmission {
  * who never set a grid gets a wrong-looking number in a label rather than fog in the wrong place.
  *
  * `extent` is the map image's size in graph units, from the image's own pixel size.
+ *
+ * `marks` are the GM's suppression marks. A region holding one is not emitted, and the walls it alone
+ * covered go out as lines — the bridge criterion with that region out of the emitted set, which is
+ * all suppression changes here. `faces` on the result is the traversal as emitted, so its checks
+ * still describe the whole graph while its regions and walls describe what was written.
  */
 export function wallEmission(
   graph: WallGraph,
   bounds: WorldBounds,
   dpi: number,
   extent: GraphExtent,
+  marks: readonly Vector2[] = [],
 ): WallEmission {
-  const faces = buildWallFaces(graph);
+  const walked = buildWallFaces(graph);
+  const suppressed = suppressedRegions(walked, marks);
+  const faces = withoutSuppressed(graph, walked, suppressed);
   // A raster the size of the extent, because the rings are already in graph units. See the note above.
   const placement = createPlacement(bounds, extent.x, extent.y);
 
@@ -109,5 +122,5 @@ export function wallEmission(
     points: segment.map((point) => toWorldPoint(placement, point.x, point.y)),
   }));
 
-  return { regions, walls, faces };
+  return { regions, walls, faces, suppressed: suppressed.length };
 }
