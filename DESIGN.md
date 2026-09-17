@@ -2767,25 +2767,18 @@ is the next section's list.
 **The next thing is a room.** Graph units, the mend tool and the delta's review have been **used** in
 one since they landed and appear to work (user, 2026-09-16: *"I haven't tested them carefully, but
 I've used them."*) — so their lists below are what careful checking would look at, not a record of
-nothing known. **Dissolve region** landed after that and has been in one since, in part. Everything was
+nothing known. **Dissolve region** landed after that and has been in one since, in part.
+**Suppress region** landed last and passed every room check it was given (below). Everything was
 checked at a desk as far as a desk can: `tsc`, the suite with mutation counts recorded beside the
 tests, a build, and the workspace loading clean.
 
 **A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
 they are refused, not converted. *Remove ours* in the panel clears one, and the map derives fresh.
 
-**Suppress region** (§10, *Suppress region*) — the newest, and nothing of it has been in a room:
-
-- **A click places a mark and its region loses its fill**; the state line counts it as suppressed. A
-  click on the mark removes it and the fill comes back. Each is one step of undo.
-- **The hover**: a dashed ghost follows the pointer, and turns into the existing mark in red over one.
-- **A mark outside every region** is drawn dimmed, and becomes solid once walls are drawn round it.
-- **Marks survive a rebuild**: move a slider that regenerates the walls, and the marks stay and
-  suppress whatever region is under them now.
-- **The push**: a suppressed room writes no shape, and its walls that border nothing emitted arrive as
-  lines — check with Dynamic Fog that they still block sight.
-- **Closing after only a mark changed pushes**, since the marks are part of what the scene is compared
-  against.
+**Suppress region — confirmed in a room (user, 2026-09-16), all of it:** placing and removing a mark
+takes the fill away and brings it back, a mark outside every region goes solid once walls enclose it,
+marks survive a slider rebuild, and a suppressed room's walls, pushed as lines, still block sight with
+Dynamic Fog.
 
 **Dissolve region** (§10, *Dissolve region*). **Confirmed in a room (user, 2026-09-16):** the
 highlight follows the pointer from region to region, pillars and rooms inside keep their walls on a
@@ -3279,7 +3272,8 @@ the hand-edit total"; the count is gone, and the comparison against the stored b
 gap with nothing added.) Same conceptual tool, opposite durability, and the GM has no way to know
 that unless the interface says so.
 
-**3. Suppress region — built 2026-09-16, never run in a room.** Click to leave a mark; a region
+**3. Suppress region — built 2026-09-16, and confirmed in a room the same day.** Click to leave a
+mark; a region
 holding one gets no fog shape and its walls stay.
 
 **What it is for**: a region the walls enclose that is not a room — solid rock between rooms, a large
