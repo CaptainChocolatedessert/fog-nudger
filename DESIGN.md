@@ -2765,98 +2765,69 @@ It came out of using the thing: the accordion made switching tasks expensive, an
 the workspace read as artificial. Both turned out to have one cause — the mode boundary ran across the
 grain of the task, and what it was protecting is a property of the document rather than a place.
 
-**Rooms on 2026-09-13, -14 and -15 went through the whole surface**, and everything they found is
-fixed. The partition was judged in the first of them (above). What has been built since the last room
-is the next section's list.
+**Rooms on 2026-09-13, -14, -15 and -16 went through the whole surface**, and everything they found is
+fixed. The partition was judged in the first of them (above); the tools built on the last are in the
+next section.
 
 ### Where to pick this up
 
-**The next thing is a room.** Graph units, the mend tool and the delta's review have been **used** in
-one since they landed and appear to work (user, 2026-09-16: *"I haven't tested them carefully, but
-I've used them."*) — so their lists below are what careful checking would look at, not a record of
-nothing known. **Dissolve region** landed after that and has been in one since, in part.
-**Suppress region** landed last and passed every room check it was given (below). Everything was
-checked at a desk as far as a desk can: `tsc`, the suite with mutation counts recorded beside the
-tests, a build, and the workspace loading clean.
+**Nothing is broken and nothing is half-built.** The session of 2026-09-16 ended with every change
+committed, `tsc`, 940 tests and a build passing, and the parking lot empty. **The next piece of work is
+the user's to choose** — the list at the end of this section is what is open, not a queue.
+
+**What that session built**, all on `main`:
+
+- **Three wall tools** (§10): *Dissolve region*, *Suppress region* and *Span*. The Walls band is now
+  Move, Draw, Erase, Mend, Dissolve region, Suppress region, Span.
+- **Five glyphs redrawn** to tell apart at strip size (Mend, Gaps, Suppress, Add ink, Dissolve region),
+  with a shared rule for the Ink band: a heavy stroke is ink. `toolIcons.ts` records each choice.
+- **The README** brought up to the current surface.
+
+**24 commits are not pushed**, the oldest from before that session. **A push deploys** the published
+site, so it waits for the user to want the public build to have them — never offer it per change.
+
+**What rooms have confirmed**, so a cold session does not re-ask:
+
+- **Span — all of it** (user, 2026-09-16: *"Everything works very well"*): doorways on and off their
+  line, corridors, the preview keeping up, one click one step of undo.
+- **Suppress region — all of it**: marks placed and removed, a mark going solid once enclosed, marks
+  surviving a rebuild, a suppressed room's walls still blocking sight as lines.
+- **Dissolve region — in part**: the highlight, inner rooms keeping their walls, one step of undo.
+- **Graph units, Mend and the delta's review — used, not checked item by item** (*"I haven't tested
+  them carefully, but I've used them."*).
+- **The redrawn glyphs** — looked at in a room and judged good.
+
+**Unconfirmed, to look at whenever a room is open for another reason** — none is suspected:
+
+- **Dissolve region**: a stub hanging in goes; a room touching the outer wall at one point keeps its
+  walls; the first dissolve on an unedited map adopts the derivation and locks the rebuild controls; a
+  room on a building's edge opens to the outside.
+- **Mend**: whether the proposals are the breaks, whether 20 and 40 pixels are the right starting
+  distances, and whether split-the-difference lands where a GM would draw the wall.
+- **The delta's picture** on a real map — its state machine is checked, the drawing is not.
+- **View's Defaults** restoring all five colours — the button has not been pressed.
 
 **A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
-they are refused, not converted. *Remove ours* in the panel clears one, and the map derives fresh.
+they are refused, not converted, and *Remove ours* in the panel clears one.
 
-**Span** (§10, *Span*) — the newest, and nothing of it has been in a room:
+**Held deliberately, and why:**
 
-- **Doorways**: a click in a doorway between two wall ends, on its line and a few pixels off it, gets
-  the door; a click in a corridor gets a wall straight across through the click.
-- **The preview** follows the pointer without lag, including in open space outside the walls, where
-  the search is slowest.
-- **Placing**: one click is one step of undo, *Undo spanning an opening*, and the ends join the walls
-  they land on.
+- **Stale comments waiting for a quiet moment**, held so a room test was never sitting behind a change
+  — rooms have happened since, so they can go now: `reading.ts` argues a recompose needs no blanking
+  *because the ink layer draws the base*, untrue since 2026-09-14; `layers/paint.ts` says the paint is
+  drawn in the Walls step. **The walls layer's red "doomed" marks** justify themselves by a prune
+  *button* that no longer exists — and whether marking what a limit would take on the saved graph is
+  still right, now that pruning is a live slider that regenerates, is a question for the user rather
+  than a word to change.
+- **A longest span offered** — the remedy if Span's preview ever lags in open space (§10, *Span*). It
+  changes what the tool finds, so it waits for a room to show lag.
+- **Per-colour opacity** wants a conversation before code (decision 6), and **the walls mark's size**
+  in the strip is to be looked at later (decision 7).
+- **The small-region tool is answered** by Dissolve region and is no longer open.
 
-**Suppress region — confirmed in a room (user, 2026-09-16), all of it:** placing and removing a mark
-takes the fill away and brings it back, a mark outside every region goes solid once walls enclose it,
-marks survive a slider rebuild, and a suppressed room's walls, pushed as lines, still block sight with
-Dynamic Fog.
-
-**Dissolve region** (§10, *Dissolve region*). **Confirmed in a room (user, 2026-09-16):** the
-highlight follows the pointer from region to region, pillars and rooms inside keep their walls on a
-real map, and one click is one step of undo. Not yet looked at:
-
-- **The rest of the rule on real walls**: a stub hanging in goes, and a room touching the outer wall at
-  one point keeps its walls.
-- **The first dissolve on a map never edited** adopts the derivation, and the locks appear on the
-  controls that rebuild the walls.
-- **A room on a building's edge** opens to the outside when dissolved, and the fills of every room it
-  merged with vanish. Expected, and worth seeing once, since it is the largest thing one click here
-  can do.
-- **Hover on a large graph**, which is deliberately left for now (user). The traversal is rebuilt once
-  per edit rather than per pointer move, and the region lookup is a bounding-box pass over the
-  regions; neither is measured on a real map.
-
-**Graph units** (§5, *What is stored*) — on the non-square test map:
-
-- **The walls and rooms sit on the ink**, not stretched along one axis — the drawing moved from two
-  scales to one.
-- **The frame lands on the map's edge**, on the short side as well as the long one.
-- **Hit radii feel the same up and down as across** for Move, Draw and Erase, and **a click inside an
-  ink gap ring accepts it** above and below the centre — the ring's hit test refused those until
-  2026-09-16.
-- **The fog lands where the rooms are** after a push, including on a map stretched out of proportion.
-
-**The mend tool** (§10, *The mend tool*):
-
-- **Whether the proposals are the breaks.** The whole quality question, and only a look answers it:
-  whether mends land on walls that thinned out, and how many land on things that are not breaks.
-- **Whether 20 and 40 pixels are the right starting distances**, which rest on reasoning about how far
-  thinning pulls a free end back.
-- **Whether split-the-difference lands where a GM would have drawn the wall.**
-- **The rings** appear when the tool is picked up — the first commit drew none, a key typo §8 records
-  — are easy to hit, and show the crosshair inside.
-- **Accepting**: one mend and *Mend every gap shown* each one step of undo, the search re-running
-  after, and the lock appearing on the controls that would rebuild the walls.
-
-**The delta and its review** (decision 1): the walls a rebuild would take and bring back, drawn on
-the map while the question is in the drawer. It needs a derived graph with hand edits on it, which is
-the one state that does not exist outside Owlbear, so what has been checked is the state machine and
-not the picture.
-
-**View's Defaults** restoring all five colours: the rows have been looked at; that button has not been
-pressed.
-
-**Held until after a room, deliberately.** Comments that describe code which has since moved, so that a
-room test is not sitting behind a change:
-
-- `reading.ts` argues a recompose needs no blanking *because the ink layer draws the base*, which
-  stopped being true on 2026-09-14; `layers/paint.ts` says the paint is drawn in the Walls step.
-- **The walls layer's red "doomed" marks** justify themselves by a prune *button* that no longer
-  exists. This one is more than a word: whether marking what a limit would take on the saved graph is
-  still the right behaviour, now that pruning is a live slider that regenerates, needs looking at.
-
-That shape is behind four of the five defects the rooms found: **a justification that was true when
-written and quietly stopped being true when the thing it described moved.** Most of the stale comments
-the last two days turned up have been corrected; these are the ones left.
-
-**Still open and not urgent:** per-colour opacity, which wants a conversation before code (decision 6),
-and the walls mark's size in the strip (decision 7). And the thing that is not a decision at all: **a
-second map**, in a style unlike the first.
+**And the thing that is not a decision at all: a second map**, in a style unlike the first — hatched
+stonework, a printed floor grid, a scan. The reading is least proven there, and it is where the next
+real finding is.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
@@ -3352,7 +3323,7 @@ suppressed alone and for a random half at once: 4,103 suppressions, turning 10,7
 - **Marks hide with the Rooms layer**, and so does the tool's ghost — a GM who has switched rooms off
   and picks up the tool sees no preview until they switch it back.
 
-**4. Span — built 2026-09-16, never run in a room.** Click in an opening and a straight wall goes
+**4. Span — built 2026-09-16, and confirmed in a room the same day.** Click in an opening and a straight wall goes
 across it: the doorway tool, since Dynamic Fog's doors cannot be made from here.
 
 **Decided (user, 2026-09-16):**
