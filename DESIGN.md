@@ -3473,6 +3473,29 @@ wall within it runs beyond it, skipped a stretch holding a wall 1% shorter.
   test's tolerance — measured twice in 3,072 random clicks, both on near-degenerate walls. The span
   itself stays one uncrossed wall.
 
+### Two ink tools proposed and not built — 2026-09-17
+
+**Both are an existing slider turned into a tool**, which is the move Dissolve region already made
+against the deleted smallest-room filter and which the record judged correct: a threshold decides
+globally and silently, where a click decides one case with the answer drawn first.
+
+- **Small patches of ink** — *Smallest mark to keep*, the island filter, as a gap-finder-style tool:
+  find the candidates, ring them, click one to take it or a button to take them all, and what is
+  accepted goes into the suppression layer as paint.
+- **Thin lines** — *Thinnest stroke to keep*, the morphological opening, the same way.
+
+**Why they belong together, and why now** (user, 2026-09-17): between them they would clear the
+speckling and the halo a blob removal can leave round its edge. A tone flood stops where the tone
+stops, so an anti-aliased or dusty edge can leave a scatter of survivors that no tolerance setting
+cleanly reaches — and those survivors are exactly small patches and thin strokes, which is what these
+two filters already know how to name.
+
+The unfinished-tool costs the two filters carry (§4) are the argument for the tool form rather than
+against it: both deliberately run past useful, and set high enough to kill hatching they eventually
+eat a genuine closet. A click never has to be set high at all.
+
+**Explicitly not now** (user, same day). The blob tool's own full implementation comes first.
+
 ### Carried open questions
 
 - **OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
