@@ -696,11 +696,31 @@ looking can act on, which is the ink layer's own rule about drawing the composit
 *Rejected: marking the map name "(reduced 2×)"* (user, 2026-09-17). *"Downsampling isn't a strange
 thing to do, and a user will understand if they spot it."*
 
-**Held, and worth doing: free the full-resolution image.** The reduced canvas is about 38MB on that
-map and is held *in addition to* the decoded image, which the shell still references — for its pixel
-dimensions alone, which is two numbers. That makes the note above concrete rather than theoretical:
-the budget bounds the raster and the decoded source is the larger of the two on exactly the maps that
-trigger capping, and on this one the surface holds both plus a third of a copy.
+**And the full-resolution decode is released once the reduced one exists — 2026-09-17.** The shell
+held an `HTMLImageElement` for the whole time the workspace was open, and once there is a canvas
+nothing wants it: the geometry wants the image's **pixel size**, which is two numbers, and the
+drawing wants the canvas. About 150MB against the canvas's 38MB on that map, so keeping it was the
+larger cost by four to one.
+
+**What made it possible was splitting two facts that had been one.** `mapImage` answered both *what
+does `drawImage` take* and *how big is the map* — it is `mapSource` and `mapPixels` now, and the
+seven geometry sites that used to read `naturalWidth`/`naturalHeight` read two stored numbers.
+
+- **`removeAttribute("src")`, never `src = ""`.** An empty string resolves against the document URL
+  and the browser fetches *that*; `mapSource.ts` carries the same trap, where it produced a
+  CDN-failure message for something that was not one.
+- **Dropping the reference is the lever; clearing the element is a hint.** Whether the browser then
+  frees the decode also depends on its own image cache, which nothing here can see.
+- **There is no second holder of ours.** `mapSource.ts` builds the element in a local and hands it
+  straight over. The pipeline decodes its own copy for tracing and lets it go when the trace ends,
+  which is a separate and transient one — and it is the pair of those two that `rasterPlan.ts`
+  reasons about.
+
+**This is not the change that note warns against making without a log.** That paragraph is about the
+*budget*, and whether the decoded source should be counted against it. This changes no budget and
+touches no trace: it is a surface that was keeping a full-resolution decode for a session in order to
+read two integers off it.
+
 
 
 ### Units — there is no unit that is always right

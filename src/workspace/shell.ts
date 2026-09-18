@@ -107,26 +107,17 @@ const painters: { readonly layer: LayerId; readonly paint: Painter }[] = [];
 let activeLayers: readonly LayerId[] = [];
 
 let view: View = { scale: 1, x: 0, y: 0 };
-let mapImage: HTMLImageElement | null = null;
 /**
- * The map at the trace's own resolution, when the megapixel budget reduced it — otherwise `null`.
+ * What to draw for the map, and how big the map's own pixels are — two facts, held apart.
  *
- * **What this surface draws, and the reason is the one it was built on** (§7): the map and the mask
- * go into one canvas under one transform so that they register by construction rather than by our
- * arithmetic agreeing with anyone's. Drawing the full-resolution image under raster-sized layers is
- * that arithmetic creeping back in — the effective ratio is `source / floor(source / factor)` rather
- * than the factor itself, so a mask pixel straddles the image's pixel grid by a fraction that drifts
- * across the map. Nothing about that is wrong: the raster genuinely samples the image on a slightly
- * drifting grid, and both the drawing and the graph build invert it exactly. It is only that the map
- * underneath offers a finer grid to compare against, and the comparison reads as a fault.
- *
- * So the finer grid goes. The GM sees the resolution the trace actually read, which is also the
- * honest picture: detail the pipeline never saw is detail no amount of looking can act on.
- *
- * **`null` on every map this project has run.** The budget has never bitten until a 37.7-megapixel
- * map arrived on 2026-09-17, so an uncapped map takes none of this and draws exactly as before.
+ * They used to be one `HTMLImageElement`, which answered both: the thing `drawImage` takes and the
+ * `naturalWidth`/`naturalHeight` every piece of geometry here measures against. Splitting them is
+ * what lets the decoded image go (see `setMapImage`), because the geometry only ever wanted two
+ * numbers.
  */
-let mapBitmap: HTMLCanvasElement | null = null;
+let mapSource: CanvasImageSource | null = null;
+/** The map image's own pixel size. The destination rectangle is this times the scale, always. */
+let mapPixels: { readonly width: number; readonly height: number } | null = null;
 /** The reduction the raster plan chose, so the smoothing threshold can count the pixels the trace saw. */
 let mapFactor = 1;
 let dirty = true;
@@ -239,7 +230,7 @@ function draw(): void {
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.fillStyle = "#0e1020";
   context.fillRect(0, 0, width, height);
-  if (!mapImage) return;
+  if (!mapSource || !mapPixels) return;
 
   /*
     Smoothing off above 1:1.
@@ -256,10 +247,10 @@ function draw(): void {
 
   // The destination is the IMAGE's size, whichever bitmap goes into it. A reduced map occupies the
   // same box at a coarser resolution — which is the whole of the change, and why every other use of
-  // `mapImage` here (the extent, the frame button, fit-to-rectangle, the click mapping) is untouched.
-  const drawWidth = mapImage.naturalWidth * view.scale;
-  const drawHeight = mapImage.naturalHeight * view.scale;
-  context.drawImage(mapBitmap ?? mapImage, view.x, view.y, drawWidth, drawHeight);
+  // the map here (the extent, the frame button, fit-to-rectangle, the click mapping) is untouched.
+  const drawWidth = mapPixels.width * view.scale;
+  const drawHeight = mapPixels.height * view.scale;
+  context.drawImage(mapSource, view.x, view.y, drawWidth, drawHeight);
 
   // Everything else, in the same call shape and therefore in the same place. This is the
   // registration argument in one line: there is no second transform to get wrong.
@@ -327,31 +318,70 @@ export function setMapName(text: string): void {
  * resampling and need not be bit-identical, because what it produces is shown rather than read.
  */
 export function setMapImage(image: HTMLImageElement | null): void {
-  mapImage = image;
-  mapBitmap = null;
+  mapSource = null;
+  mapPixels = null;
   mapFactor = 1;
   dirty = true;
   if (!image || !(image.naturalWidth > 0) || !(image.naturalHeight > 0)) return;
 
-  const plan = planRaster(image.naturalWidth, image.naturalHeight);
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  mapPixels = { width, height };
+  mapSource = image;
+
+  const plan = planRaster(width, height);
   if (!plan.capped) return;
 
   const canvas = document.createElement("canvas");
   canvas.width = plan.width;
   canvas.height = plan.height;
   const context = canvas.getContext("2d");
-  // Nothing to report if a context cannot be had: the full-resolution image is still there and still
-  // correct, and the only loss is the finer grid being back. Falling back beats drawing nothing.
+  // Nothing to report if a context cannot be had: `mapSource` is still the image, still correct, and
+  // the only losses are the finer grid coming back and the memory below not being freed. Falling
+  // back beats drawing nothing.
   if (!context) return;
 
   context.drawImage(image, 0, 0, plan.width, plan.height);
-  mapBitmap = canvas;
+  mapSource = canvas;
   mapFactor = plan.factor;
+
+  /*
+    **And the decoded image is let go here** (user, 2026-09-17).
+
+    This is the one place that held it after the reduction, and once the canvas exists nothing wants
+    it: the geometry wants `mapPixels`, which is two numbers taken above, and the drawing wants the
+    canvas. At four bytes a pixel a 7252×5197 map is about 150MB against the canvas's 38MB, held for
+    the whole time the workspace is open, so keeping it was the larger cost by four to one.
+
+    **What this does and does not establish.** It drops the reference this module owns, which is the
+    only lever available from here — whether the browser then frees the decode also depends on its
+    own image cache, which nothing in this project can see. `mapSource.ts` builds the element in a
+    local and hands it straight over, so there is no second holder of ours; the pipeline decodes its
+    own copy for tracing and releases it when the trace ends, which is a separate and transient one.
+
+    `rasterPlan.ts` reasons about exactly this — that the budget bounds the raster and says nothing
+    about the decoded source, which is the larger of the two on precisely the maps that trigger
+    capping — and warns against acting on it without a log. This is not that: it is not a change to
+    the budget, and it is not about the trace. It is a surface holding a full-resolution decode for a
+    session when it needs two numbers from it.
+  */
+  image.onload = null;
+  image.onerror = null;
+  /*
+    `removeAttribute`, never `src = ""`. An empty string resolves against the document URL and the
+    browser then fetches *that* — `mapSource.ts` carries the same trap, where it produced a CDN
+    failure message for something that was not one. Removing the attribute detaches with no request.
+
+    A hint rather than a guarantee: dropping the reference above is what actually makes the element
+    collectable, and this only stops the element holding its decode while it waits to be collected.
+  */
+  image.removeAttribute("src");
+
   devLog(
     "info",
     `workspace: drawing the map at the trace's raster, ${plan.width}x${plan.height} reduced ` +
-      `${plan.factor}x from ${image.naturalWidth}x${image.naturalHeight} — so the map and every ` +
-      `layer over it are the same resolution`,
+      `${plan.factor}x from ${width}x${height} — so the map and every layer over it are the same ` +
+      `resolution, and the full-resolution decode is released`,
   );
 }
 
@@ -363,12 +393,12 @@ export function setMapImage(image: HTMLImageElement | null): void {
  * the map's edge.
  */
 export function mapExtent(): GraphExtent | null {
-  if (!mapImage || !(mapImage.naturalWidth > 0) || !(mapImage.naturalHeight > 0)) return null;
-  return graphExtent(mapImage.naturalWidth, mapImage.naturalHeight);
+  if (!mapPixels || !(mapPixels.width > 0) || !(mapPixels.height > 0)) return null;
+  return graphExtent(mapPixels.width, mapPixels.height);
 }
 
 function fitMap(): void {
-  if (!mapImage) return;
+  if (!mapPixels) return;
   const { width, height } = viewportSize();
   // Fitted into the space left of the controls, so "fit" means what a GM can actually see rather
   // than what is nominally on screen.
@@ -376,7 +406,7 @@ function fitMap(): void {
   // elements it takes to draw. Measuring only the rail put the map a strip's width off centre.
   const panelWidth = chromeWidth();
   const fitted = fitToViewport(
-    { width: mapImage.naturalWidth, height: mapImage.naturalHeight },
+    { width: mapPixels.width, height: mapPixels.height },
     { width: Math.max(1, width - panelWidth), height },
     24,
   );
@@ -394,8 +424,8 @@ export async function openOnOwlbearsView(bounds: {
   min: { x: number; y: number };
   max: { x: number; y: number };
 }): Promise<void> {
-  const image = mapImage;
-  if (!image) return;
+  const pixels = mapPixels;
+  if (!pixels) return;
   try {
     const [a, b] = await Promise.all([
       OBR.viewport.transformPoint(bounds.min),
@@ -412,7 +442,7 @@ export async function openOnOwlbearsView(bounds: {
     // `fitMap()` when it is non-zero, giving up the no-jump property rather than opening wrong.
     // **Not done, because the premise is unchecked** — whether an Owlbear MAP image can be rotated
     // at all is not established, and the bounds we are handed come from the item's own box.
-    setView(viewFromScreenRect(a, b, { width: image.naturalWidth, height: image.naturalHeight }));
+    setView(viewFromScreenRect(a, b, { width: pixels.width, height: pixels.height }));
   } catch (error) {
     devLog("warn", "workspace: could not inherit Owlbear's view, fitting instead", describeError(error));
     fitMap();
@@ -612,9 +642,9 @@ if (canvas instanceof HTMLCanvasElement) {
 
   /** Where a pointer event landed on the map, or `null` for anywhere else. */
   const mapPointFrom = (event: PointerEvent): MapPoint | null => {
-    if (!mapImage) return null;
-    const drawWidth = mapImage.naturalWidth * view.scale;
-    const drawHeight = mapImage.naturalHeight * view.scale;
+    if (!mapPixels) return null;
+    const drawWidth = mapPixels.width * view.scale;
+    const drawHeight = mapPixels.height * view.scale;
     if (drawWidth <= 0 || drawHeight <= 0) return null;
     const u = (event.clientX - view.x) / drawWidth;
     const v = (event.clientY - view.y) / drawHeight;
@@ -708,9 +738,9 @@ if (canvas instanceof HTMLCanvasElement) {
     if (editing) {
       // Off the map mid-drag is not nothing: the gesture is still running and the vertex has to
       // follow, so the fractions are taken unclamped rather than the move being dropped.
-      if (mapImage) {
-        const drawWidth = mapImage.naturalWidth * view.scale;
-        const drawHeight = mapImage.naturalHeight * view.scale;
+      if (mapPixels) {
+        const drawWidth = mapPixels.width * view.scale;
+        const drawHeight = mapPixels.height * view.scale;
         const long = Math.max(drawWidth, drawHeight);
         activeDragHandler()?.move({
           u: (event.clientX - view.x) / drawWidth,
@@ -754,9 +784,9 @@ if (canvas instanceof HTMLCanvasElement) {
       return;
     }
     endPan();
-    if (!wasClick || !mapImage) return;
-    const u = (event.clientX - view.x) / (mapImage.naturalWidth * view.scale);
-    const v = (event.clientY - view.y) / (mapImage.naturalHeight * view.scale);
+    if (!wasClick || !mapPixels) return;
+    const u = (event.clientX - view.x) / (mapPixels.width * view.scale);
+    const v = (event.clientY - view.y) / (mapPixels.height * view.scale);
     // Outside the map is not a question about the map, and the pipeline's own "outside the raster"
     // answer would be a stranger reading of a click on the surrounding dark.
     if (u < 0 || v < 0 || u > 1 || v > 1) return;
