@@ -3834,7 +3834,9 @@ closed outright.
 | `trace/polarity.ts` | which luminance class is ink |
 | `trace/inkMetrics.ts` | ink width, by erosion |
 | `trace/morphology.ts` | separable open/close, O(1) in the radius |
-| `trace/inkIslands.ts` | the island filter |
+| `trace/inkIslands.ts` | `walkIslands`, the one definition of an 8-connected lump of ink, and the island filter written in terms of it |
+| `trace/inkFlood.ts` | **Suppress blob's decision**: the connected set of map pixels within a tolerance of a clicked one's tone, 8-connected and measured against the seed |
+| `trace/inkProfile.ts` | **what each ink filter would take, band by band** — a granulometry over openings for stroke width, `walkIslands` binned by span for islands, and both placed on their own slider's track |
 | `trace/inkBlobs.ts` | ink component labelling (reporting only) |
 | `trace/inkPaint.ts` | the GM's two raster layers: the brush, the run-length codec, and `composePaint` — the one statement of the stacking order |
 | `trace/gaps.ts` | gap **detection**; it proposes and never fills |
@@ -3902,7 +3904,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
   pickers) · `graphScale.ts` ·
   `seedDefaults.ts` (**the per-map defaults** — straightening from the ink width, the mend tool's two
-  distances from the raster)
+  distances from the raster) · `inkProfiles.ts` (**the two distributions drawn on the ink filters'
+  rails**, asked for a frame after a reading lands rather than inside it)
 - **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag, and
   **anchors the drawer**, because it is the module that knows where its own buttons are) ·
   `toolIcons.ts` (the strip's and the undo pair's glyphs, inline) · `wallEdit.ts` and `paintTool.ts`
@@ -3932,6 +3935,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `layers/graph.ts` (the walls, with handles only for the tools that can use them) ·
   `layers/delta.ts` (what a regenerate would take and bring back, while the question is up) ·
   `layers/mends.ts` (the proposed mends, dashed, and their rings, while the tool is in hand) ·
+  `layers/blob.ts` (what a fill would take, under the pointer — only the box it lies in, since a
+  hover cannot rewrite the whole raster every frame) ·
   `bitmap.ts`
 
 ---
