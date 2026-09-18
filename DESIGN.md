@@ -2893,6 +2893,13 @@ they are refused, not converted, and *Remove ours* in the panel clears one.
 
 **Held deliberately, and why:**
 
+- **The map's information text should say the size it was reduced to** (user, 2026-09-17). The picker
+  reports each image's own resolution, which is the figure a GM can match against the file they
+  imported — and on a map over the megapixel budget that is no longer the resolution anything is
+  *read* at. Now that the workspace draws the reduced version, a GM can see the coarser pixels with
+  nothing on screen saying why. The reduction is already in the dev log; this is putting it where it
+  is looked at.
+
 - **Stale comments waiting for a quiet moment**, held so a room test was never sitting behind a change
   — rooms have happened since, so they can go now: `reading.ts` argues a recompose needs no blanking
   *because the ink layer draws the base*, untrue since 2026-09-14; `layers/paint.ts` says the paint is
