@@ -81,7 +81,7 @@ export type StepId = "map" | "ink" | "walls" | "view";
   drawing both would have put two answers to one question on the canvas -- and the graph is the
   honest one, because it is what gets stored.
 */
-export const LAYERS = ["ink", "paint", "gaps", "mends", "regions", "graph", "delta"] as const;
+export const LAYERS = ["ink", "paint", "gaps", "mends", "blob", "regions", "graph", "delta"] as const;
 
 /**
  * What the map shows from the moment one is chosen — user, 2026-09-14.
@@ -116,6 +116,12 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
   // by the tool's id, `mend`, and not by the layer's name — keying it `mends` drew nothing, and
   // `steps.test.ts` now checks every key is a tool.
   mend: "mends",
+  /*
+    What a fill would take, under the pointer. Tool id on the left, layer id on the right — they are
+    the same word here, which is a coincidence rather than a rule: `mend` maps to `mends`, and keying
+    that entry by the layer's name instead drew nothing at all.
+  */
+  blob: "blob",
 };
 
 /**
@@ -226,15 +232,7 @@ export const TOOLS: readonly ToolChoice[] = [
     **Temporary**: if a room says the fill is not what a GM wants, the tool, its glyph and
     `trace/inkFlood.ts` all go together.
   */
-  {
-    id: "blob",
-    label: "Fill a mark",
-    band: "ink",
-    drag: "brush",
-    hint:
-      "Click a solid mark on the map — a pool, a hole — to suppress it and everything of its tone " +
-      "joined to it. <b>Ctrl</b> pans. A trial: no settings yet, and the dev log says what it took.",
-  },
+  { id: "blob", label: "Fill a mark", band: "ink", drag: "brush", hint: "" },
   {
     id: "move",
     label: "Move",
@@ -505,6 +503,15 @@ export const STEPS: readonly Step[] = [
           "button below for all of them. A <b>dashed</b> ring is not offered. Dragging pans.",
         parameters: ["gapFillPx", "gapTravelPx"],
       },
+      {
+        tool: "blob",
+        title: "Fill a mark",
+        blurb:
+          "Click a solid mark on the map — a pool, a hole — and it stops being ink. The fill is " +
+          "drawn under the pointer before you click. It takes everything of that tone joined to what " +
+          "you click, so a mark touching a wall takes the wall too. <b>Ctrl</b> pans.",
+        parameters: ["blobTolerance"],
+      },
     ],
   },
   {
@@ -635,6 +642,7 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
   inkBrushPx: "ink",
   gapFillPx: "ink",
   gapTravelPx: "ink",
+  blobTolerance: "ink",
   // Both of the controls that shape the graph, together. Pruning decides which walls survive and
   // smoothing decides what shape they are, and the step draws the result of both.
   /*

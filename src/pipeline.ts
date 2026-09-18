@@ -70,7 +70,7 @@ import {
   otsuSplit,
 } from "./trace/luminance";
 import { blur, luminanceField, type ScalarField } from "./trace/field";
-import { BLOB_TONE_TOLERANCE, floodByTone, type FloodResult } from "./trace/inkFlood";
+import { floodByTone, type FloodResult } from "./trace/inkFlood";
 import type { BinaryMask } from "./trace/binarize";
 import type { LabelledSpace } from "./trace/label";
 import type { RasterPlacement, WorldBounds } from "./map/placement";
@@ -407,6 +407,18 @@ export function probeMapFraction(u: number, v: number): string {
 }
 
 /**
+ * A flood, plus the raster it is indexed into — which the caller needs and has no other way to know.
+ *
+ * The raster's size is the one thing a surface asking in map fractions still has to be told, because
+ * the pixel indices are meaningless without it. Handed back with the answer rather than exposed as a
+ * separate question, so the two can never describe different runs.
+ */
+export interface MapFlood extends FloodResult {
+  readonly rasterWidth: number;
+  readonly rasterHeight: number;
+}
+
+/**
  * Flood the map's tone from one point of it, given as a fraction of the map.
  *
  * **The blob tool's spike (2026-09-17)** — see `trace/inkFlood.ts` for what it is and what it is
@@ -422,7 +434,12 @@ export function probeMapFraction(u: number, v: number): string {
  * Answers from the last full run when there is one and from the last reading otherwise, exactly as
  * the probe does, so it says something useful before a partition exists.
  */
-export function floodMapFraction(u: number, v: number): FloodResult | null {
+export function floodMapFraction(
+  u: number,
+  v: number,
+  tolerance: number,
+  options: { readonly quiet?: boolean } = {},
+): MapFlood | null {
   const source = lastRun ?? lastReading;
   if (!source) return null;
 
@@ -431,20 +448,24 @@ export function floodMapFraction(u: number, v: number): FloodResult | null {
   const y = Math.min(rawField.height - 1, Math.max(0, Math.floor(v * rawField.height)));
 
   const started = performance.now();
-  const result = floodByTone(rawField, x, y, BLOB_TONE_TOLERANCE);
+  const result = floodByTone(rawField, x, y, tolerance);
   const millis = performance.now() - started;
   if (!result) return null;
 
-  const { left, top, right, bottom } = result.bounds;
-  devLog(
-    "info",
-    `blob: flood at (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — raster (${x}, ${y}), ` +
-      `seed tone ${result.seedTone.toFixed(3)}, tolerance ${BLOB_TONE_TOLERANCE}; ` +
-      `${result.pixels.length} px in a ${right - left + 1}x${bottom - top + 1} box ` +
-      `(${((result.pixels.length / (rawField.width * rawField.height)) * 100).toFixed(2)}% of the ` +
-      `raster) in ${Math.round(millis)}ms`,
-  );
-  return result;
+  // `quiet` is the hover, which runs once a frame: a line each would bury the log in a picture
+  // nobody has acted on. A press is an act and always says what it did.
+  if (!options.quiet) {
+    const { left, top, right, bottom } = result.bounds;
+    devLog(
+      "info",
+      `blob: flood at (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — raster (${x}, ${y}), ` +
+        `seed tone ${result.seedTone.toFixed(3)}, tolerance ${tolerance.toFixed(3)}; ` +
+        `${result.pixels.length} px in a ${right - left + 1}x${bottom - top + 1} box ` +
+        `(${((result.pixels.length / (rawField.width * rawField.height)) * 100).toFixed(2)}% of the ` +
+        `raster) in ${Math.round(millis)}ms`,
+    );
+  }
+  return { ...result, rasterWidth: rawField.width, rasterHeight: rawField.height };
 }
 
 /**

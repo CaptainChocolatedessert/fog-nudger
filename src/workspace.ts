@@ -49,6 +49,7 @@ import { applyPalette } from "./workspace/palette";
 import { registerLayerRow } from "./workspace/layerRow";
 import { onToolChange, registerToolPalette } from "./workspace/toolPalette";
 import { registerUndoAction } from "./workspace/undoAction";
+import { registerBlobLayer } from "./workspace/layers/blob";
 import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
@@ -158,6 +159,11 @@ registerInkLayer();
 */
 registerPaintLayer();
 registerGapsLayer();
+/*
+  Over the paint and under the partition: a fill preview says what the ink is about to lose, so it
+  belongs with the other marks on the ink rather than over the rooms those marks would change.
+*/
+registerBlobLayer();
 /*
   The partition, under the graph in both modes.
 

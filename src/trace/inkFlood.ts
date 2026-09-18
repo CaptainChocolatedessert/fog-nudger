@@ -43,15 +43,6 @@
 import type { ScalarField } from "./field";
 import type { StrokeBounds } from "./inkPaint";
 
-/**
- * How far from the clicked pixel's tone a pixel may be and still join it, on luminance's own 0..1.
- *
- * **A provisional constant, not a setting.** 0.12 is a starting guess: a black mark on parchment
- * sits near 0.05 and the paper near 0.8, so this is generous about the mark's own variation and
- * nowhere near the ground. It is one line in one file precisely so a room can say "try 0.2".
- */
-export const BLOB_TONE_TOLERANCE = 0.12;
-
 export interface FloodResult {
   /**
    * The raster indices taken, in the order they were reached.

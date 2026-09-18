@@ -197,6 +197,26 @@ export const CONTROLS: readonly Control[] = [
     derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
   },
   {
+    name: "blobTolerance",
+    label: "How alike the tone must be",
+    // Empty, by the rule the hint cull left: the label gives the direction and the readout beside it
+    // gives the quantity, so a sentence here would be restating both. The thing a GM could not guess
+    // — that the fill takes everything of that tone joined to the click, wall included — is the
+    // tool's own blurb rather than this control's, because it is about the press and not the number.
+    hint: "",
+    /*
+      A readout in percent, because tone has no unit a GM holds in their hand.
+
+      Pixels and grid squares are lengths a GM can point at on their own map; 0.12 of luminance is
+      not. What the percentage means is the width of the band either side of the clicked pixel, as a
+      share of black-to-white — which is the one framing that says what raising it will do.
+
+      No derived tail quoting the measured ink width, per the 2026-09-16 removal: nothing here comes
+      from an estimate.
+    */
+    derive: (value) => `within ${(value * 100).toFixed(1)}% of the tone you click`,
+  },
+  {
     name: "gapFillPx",
     label: "Largest gap to look for",
     // One of the two hints kept. Not a direction — the label and the readout give that — but the

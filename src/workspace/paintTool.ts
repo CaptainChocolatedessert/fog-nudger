@@ -36,6 +36,7 @@ import { devLog } from "../devlog";
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
 import { paintPixels, paintStroke, paintedCount } from "../trace/inkPaint";
 import { floodMapFraction } from "../pipeline";
+import { clearBlobPreview, setBlobPreview } from "./layers/blob";
 import { refreshPaintRegion, setBrushPosition } from "./layers/paint";
 import { describeAccepted, describeSearch, markAt } from "./gapGesture";
 import {
@@ -134,6 +135,9 @@ export function setPaintTool(next: PaintTool): void {
   } else {
     clearGapSearch();
   }
+  // The fill preview belongs to the tool that draws it, so arming anything else takes it down. The
+  // same rule the mend rings follow, and for the same reason: a mark nothing can act on is a lie.
+  if (next !== "blob") clearBlobPreview();
   // The ring belongs to whichever brush is now in hand, and to no tool at all otherwise. Cleared
   // here because no pointer event fires on a click in the panel.
   setBrushPosition(null);
@@ -302,7 +306,7 @@ function floodAt(point: MapPoint): boolean {
   const layer = workingLayer("suppress");
   if (!layer) return false;
 
-  const found = floodMapFraction(point.u, point.v);
+  const found = floodMapFraction(point.u, point.v, currentSettings().trace.blobTolerance);
   if (!found) {
     say("nothing has been read from the map yet, so there is no tone to flood");
     return false;
@@ -351,6 +355,47 @@ export function acceptAllShownGaps(): void {
   if (result.bounds) refreshPaintRegion(result.bounds);
   gapsChanged();
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
+}
+
+/**
+ * The pointer position the preview has not been computed for yet, and whether a frame is booked.
+ *
+ * **At most one flood a frame.** A hover fires far more often than the screen refreshes, and a flood
+ * costs nothing on a pool and about 50ms on a fill the size of a map's whole ink network — so
+ * searching per event would queue work nobody will ever see. Span's preview is throttled the same
+ * way and for the same reason.
+ */
+let pendingPreview: MapPoint | null = null;
+let previewBooked = false;
+
+/**
+ * Show what a click here would fill, at most once a frame.
+ *
+ * **Measured before it was built** (2026-09-17, at the 3626×2598 raster that first hit the megapixel
+ * budget): a mark-sized fill is under a millisecond, a fill covering the whole connected ink network
+ * — 1.09 million pixels — is 44 to 50ms, and the hard ceiling, a field with no boundary anywhere and
+ * so every one of its 9.4 million pixels taken, is 242 to 339ms. No real map is boundary-free, but a
+ * click on the open ground of a large map is the case that approaches it, and the preview will
+ * visibly lag there. **The stated cost**, against Span's accepted worst of 170ms.
+ */
+function previewBlobAt(point: MapPoint | null): void {
+  pendingPreview = point;
+  if (previewBooked) return;
+  previewBooked = true;
+  requestAnimationFrame(() => {
+    previewBooked = false;
+    const at = pendingPreview;
+    // The tool may have been put down between booking the frame and running it, and a preview drawn
+    // for a tool nobody is holding is a mark with nothing able to act on it.
+    if (!at || tool !== "blob" || !workingLayer("suppress")) {
+      clearBlobPreview();
+      return;
+    }
+    const found = floodMapFraction(at.u, at.v, currentSettings().trace.blobTolerance, {
+      quiet: true,
+    });
+    setBlobPreview(found, found?.rasterWidth ?? 0, found?.rasterHeight ?? 0);
+  });
 }
 
 function move(point: MapPoint): void {
@@ -418,6 +463,8 @@ function hover(point: MapPoint | null): void {
     the gap tool the surface really does move on a drag, so the hand is right *except* over a ring,
     which is the one place a press does something.
   */
+  if (tool === "blob") previewBlobAt(point);
+
   if (!point) {
     setGrabTarget(false);
     return;
@@ -426,8 +473,8 @@ function hover(point: MapPoint | null): void {
     setGrabTarget(workingLayer(kind) !== null);
     return;
   }
-  // The blob spike acts anywhere there is a layer to write into, so the crosshair is on throughout
-  // the map rather than over a target — which is what the tool actually does.
+  // Fill a mark acts anywhere there is a layer to write into, so the crosshair is on throughout the
+  // map rather than over a target — which is what the tool actually does.
   if (tool === "blob") {
     setGrabTarget(workingLayer("suppress") !== null);
     return;
