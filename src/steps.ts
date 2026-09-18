@@ -108,7 +108,7 @@ export const ALWAYS_LAYERS = ["ink", "regions", "graph"] as const;
  * the resting picture, so the tool *is* the switch, and offering a second one would be two
  * handles on the same state.
  */
-export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
+export const TOOL_LAYERS: Readonly<Record<string, LayerId | readonly LayerId[]>> = {
   suppress: "paint",
   ink: "paint",
   gaps: "gaps",
@@ -117,11 +117,19 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId>> = {
   // `steps.test.ts` now checks every key is a tool.
   mend: "mends",
   /*
-    What a fill would take, under the pointer. Tool id on the left, layer id on the right — they are
-    the same word here, which is a coincidence rather than a rule: `mend` maps to `mends`, and keying
-    that entry by the layer's name instead drew nothing at all.
+    **Two**, and it is the first tool to want two (user, 2026-09-17).
+
+    `blob` is what a click would take and `paint` is what previous clicks already took, and a GM
+    filling several blobs in a row needs both: the preview says what is about to go, and the
+    suppression layer says what has gone. Without the second, every fill vanished from the picture the
+    moment the pointer moved off it, since the ink layer draws the composite and a suppressed blob is
+    simply absent from it.
+
+    Tool id on the left, layer ids on the right — `blob` appears on both sides here, which is a
+    coincidence and not a rule: `mend` maps to `mends`, and keying that entry by its layer's name
+    instead drew nothing at all.
   */
-  blob: "blob",
+  blob: ["blob", "paint"],
 };
 
 /**

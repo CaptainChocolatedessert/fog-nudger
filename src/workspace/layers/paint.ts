@@ -11,7 +11,8 @@
  * The ink is a colour the GM chooses because no single one works on every map. These two are fixed,
  * the same arrangement the gap fill has and resting on the same rule: what the map said and what
  * we did to it must never look alike (`DESIGN.md` §8). Amber for ink taken away, cyan for ink put
- * in — and both at full alpha whatever the ink opacity is set to, so a GM who has tinted the mask
+ * in — added ink solid and suppression semitransparent, so what is being suppressed stays visible
+ * under it, and neither takes the ink's opacity — so a GM who has tinted the mask
  * down to compare it against the linework underneath has not also turned their own edits down.
  *
  * ## A stroke repaints its own rectangle and nothing else
@@ -94,6 +95,28 @@ export function setBrushPosition(
 }
 
 /** What colour a pixel of the two layers is, with added ink winning where they overlap. */
+/**
+ * How solid a suppression mark is drawn, against added ink's 255.
+ *
+ * **Semitransparent so you can see what is being suppressed under it** (user, 2026-09-17). The two
+ * layers are not symmetric in what they cover: suppression sits on ink and its whole subject is
+ * *which* ink is going, so hiding that was hiding the thing being judged — a blob fill covers a pool
+ * and you could not see whether it had reached the pool's edge. Added ink sits on ground and there is
+ * nothing underneath it worth seeing, so it stays solid.
+ *
+ * This narrows a recorded decision rather than reversing one: both layers were at full alpha *so that
+ * a GM who tinted the mask could still tell their own edits from it*, and at this alpha they still
+ * plainly can. It is also not the per-layer opacity control that was removed in September — there is
+ * no handle, and a GM cannot tune this to the point where an edit stops being visible.
+ */
+const SUPPRESS_ALPHA = 165;
+
+/** A pixel of the GM's own work: which colour, and how solid. */
+interface Painted {
+  readonly rgb: Rgb;
+  readonly alpha: number;
+}
+
 function colourAt(
   i: number,
   suppress: PaintLayer | null,
@@ -102,9 +125,9 @@ function colourAt(
   sameInk: boolean,
   amber: Rgb,
   cyan: Rgb,
-): Rgb | null {
-  if (sameInk && ink!.data[i] !== 0) return cyan;
-  if (sameSuppress && suppress!.data[i] !== 0) return amber;
+): Painted | null {
+  if (sameInk && ink!.data[i] !== 0) return { rgb: cyan, alpha: 255 };
+  if (sameSuppress && suppress!.data[i] !== 0) return { rgb: amber, alpha: SUPPRESS_ALPHA };
   return null;
 }
 
@@ -144,10 +167,10 @@ function rebuild(suppress: PaintLayer | null, ink: PaintLayer | null): void {
   for (let i = 0, p = 0; i < width * height; i++, p += 4) {
     const colour = colourAt(i, suppress, ink, sameSuppress, sameInk, amber, cyan);
     if (colour) {
-      buffer[p] = colour.r;
-      buffer[p + 1] = colour.g;
-      buffer[p + 2] = colour.b;
-      buffer[p + 3] = 255;
+      buffer[p] = colour.rgb.r;
+      buffer[p + 1] = colour.rgb.g;
+      buffer[p + 2] = colour.rgb.b;
+      buffer[p + 3] = colour.alpha;
     } else {
       // Cleared explicitly rather than assumed zero, for the reason `paintMask` gives: a reused
       // buffer holds the last rasterisation, and stale alpha would draw edits the GM has undone.
@@ -207,10 +230,10 @@ export function refreshPaintRegion(bounds: StrokeBounds): void {
       const i = row + x;
       const p = i * 4;
       const colour = colourAt(i, suppress, ink, sameSuppress, sameInk, amber, cyan);
-      buffer[p] = colour ? colour.r : 0;
-      buffer[p + 1] = colour ? colour.g : 0;
-      buffer[p + 2] = colour ? colour.b : 0;
-      buffer[p + 3] = colour ? 255 : 0;
+      buffer[p] = colour ? colour.rgb.r : 0;
+      buffer[p + 1] = colour ? colour.rgb.g : 0;
+      buffer[p + 2] = colour ? colour.rgb.b : 0;
+      buffer[p + 3] = colour ? colour.alpha : 0;
     }
   }
 

@@ -39,7 +39,6 @@ import {
   TOOLS,
   toolGroups,
   type Drag,
-  type LayerId,
   type ToolChoice,
 } from "../steps";
 import {
@@ -180,9 +179,11 @@ function proposeVisibleLayers(): void {
     the defect this function's own note is about: `requireLayer` adds to a list this replaces on
     its next render, so the marks would survive until anything at all redrew the strip.
   */
-  const extra = [TOOL_LAYERS[tool], deltaShowing() ? "delta" : undefined].filter(
-    (layer): layer is LayerId => layer !== undefined,
-  );
+  const owned = TOOL_LAYERS[tool];
+  const extra = [
+    ...(owned === undefined ? [] : typeof owned === "string" ? [owned] : owned),
+    ...(deltaShowing() ? (["delta"] as const) : []),
+  ];
   proposeLayers([...ALWAYS_LAYERS, ...extra]);
 }
 

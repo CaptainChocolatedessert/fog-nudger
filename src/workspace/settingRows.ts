@@ -80,6 +80,10 @@ function format(
   limits: ScaleLimits,
   scale: Scale,
 ): string {
+  // A percentage of black-to-white, which is the only unit tone has that a GM can picture. One
+  // decimal, because the step is half a percent and a whole number would make half the stops print
+  // the same thing.
+  if (control.readout === "percent") return `${(value * 100).toFixed(1)}%`;
   if (control.readout !== "position") return formatValue(value, limits, scale);
   // Off is a state rather than a place on the track, and it is the one thing about these controls
   // that a number would obscure rather than convey.

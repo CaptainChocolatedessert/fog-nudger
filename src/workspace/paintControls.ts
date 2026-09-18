@@ -108,7 +108,15 @@ export function renderToolControls(head: HTMLElement): void {
     head.append(settingRow(control));
   }
 
-  head.append(kind ? brushActions(kind) : gapActions());
+  /*
+    A brush gets its pair of actions and the gap tool gets its accept-all. **Anything else gets
+    neither**, which this used to get wrong by asking only whether a brush was in hand: Suppress blob
+    arrived as a third non-brush tool and inherited the gap tool's button, which acts on rings it
+    never draws (user, 2026-09-17). Named tools rather than "not a brush", so the next one has to
+    say what it wants.
+  */
+  if (kind) head.append(brushActions(kind));
+  else if (active === "gaps") head.append(gapActions());
 }
 
 

@@ -120,15 +120,34 @@ describe("readouts that depend on a measurement", () => {
     }
   });
 
+  /*
+    The one control whose *stored* unit is already the feelable one.
+
+    Everywhere else the readout prints a bare number and the line under the slider converts it into
+    something a GM can picture — pixels into grid squares, graph units into pixels. Tone has no such
+    conversion: a share of black-to-white is the picture, so it goes in the readout and the line below
+    has nothing left to say. Which is why this is the only control here with neither a hint nor a
+    derived line.
+  */
+  it("asks for a percentage readout on the one control stored as a share of the tone range", () => {
+    const blob = CONTROLS.find((control) => control.name === "blobTolerance");
+    expect(blob?.readout).toBe("percent");
+    expect(blob?.derive).toBeUndefined();
+    expect(blob?.hint).toBe("");
+  });
+
   it("leaves every other control to the shared formatter", () => {
-    const byPosition = new Set([
+    // Named rather than counted, for the reason the hint test gives: a cap is a slot something slips
+    // into, where naming means the next one has to be argued for here.
+    const named = new Set([
       "spurPruneGraphUnits",
       "simplifyGraphUnits",
       "mendReachGraphUnits",
       "mendTravelGraphUnits",
+      "blobTolerance",
     ]);
     for (const control of CONTROLS) {
-      if (byPosition.has(control.name)) continue;
+      if (named.has(control.name)) continue;
       expect(control.readout, control.name).toBeUndefined();
     }
   });
