@@ -63,29 +63,46 @@ export interface IslandRemoval {
  * `minSpan` of zero or less is off, and off means the mask comes back untouched — that is the
  * default, so every map that never reaches for this control depends on it changing nothing.
  */
-export function removeSmallInkIslands(mask: BinaryMask, minSpan: number): IslandRemoval {
-  const { width, height } = mask;
-  if (minSpan <= 0 || width === 0 || height === 0) {
-    return { mask, removed: 0, removedArea: 0, largestKeptSpan: 0 };
-  }
+/** One 8-connected lump of ink: how far it reaches, and how much ink it holds. */
+export interface Island {
+  /** The longer side of its bounding box, in raster pixels — the measure that says *stubby*. */
+  readonly span: number;
+  /** Its ink pixels. */
+  readonly area: number;
+}
 
+/** Every island, and a label per pixel so a caller can write a decision back out. */
+export interface IslandWalk {
+  /** Label per pixel: 0 for ground, otherwise the island's index in `islands` plus one. */
+  readonly labels: Int32Array;
+  readonly islands: readonly Island[];
+}
+
+/**
+ * Find every 8-connected ink component, with its span and its area.
+ *
+ * **The one definition of an island**, shared by the filter below and by the profile that draws the
+ * distribution beside its slider. They were going to be two walks, which would have been two answers
+ * to "what is an island" with nothing to keep them in step — and the plot's whole job is to describe
+ * what the control does.
+ *
+ * Eight neighbours, so a diagonal touch joins. That is what stops a decoration resting against a
+ * wall from being treated as separable from it.
+ */
+export function walkIslands(mask: BinaryMask): IslandWalk {
+  const { width, height } = mask;
   const labels = new Int32Array(width * height);
+  const islands: Island[] = [];
+  if (width === 0 || height === 0) return { labels, islands };
+
   // A pixel index stack rather than recursion: a component can span the whole raster, and 8.4
   // million frames is not a call stack any browser will give us.
   const stack = new Int32Array(width * height);
 
-  let next = 0;
-  let removed = 0;
-  let removedArea = 0;
-  let largestKeptSpan = 0;
-  // Component index to whether it survived, so the second pass needs no bookkeeping per pixel.
-  const keep: boolean[] = [];
-
   for (let start = 0; start < labels.length; start++) {
     if (mask.data[start] !== 1 || labels[start] !== 0) continue;
 
-    next += 1;
-    const label = next;
+    const label = islands.length + 1;
     let top = 0;
     stack[top++] = start;
     labels[start] = label;
@@ -106,8 +123,6 @@ export function removeSmallInkIslands(mask: BinaryMask, minSpan: number): Island
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
 
-      // Eight neighbours, so a diagonal touch joins. See the note above: this is what stops a
-      // decoration resting against a wall from being treated as separable from it.
       for (let dy = -1; dy <= 1; dy++) {
         const ny = y + dy;
         if (ny < 0 || ny >= height) continue;
@@ -122,9 +137,37 @@ export function removeSmallInkIslands(mask: BinaryMask, minSpan: number): Island
       }
     }
 
-    const span = Math.max(maxX - minX + 1, maxY - minY + 1);
+    islands.push({ span: Math.max(maxX - minX + 1, maxY - minY + 1), area });
+  }
+
+  return { labels, islands };
+}
+
+/**
+ * Clear every 8-connected ink component whose bounding box is shorter than `minSpan` on **both**
+ * sides.
+ *
+ * `minSpan` of zero or less is off, and off means the mask comes back untouched — that is the
+ * default, so every map that never reaches for this control depends on it changing nothing.
+ */
+export function removeSmallInkIslands(mask: BinaryMask, minSpan: number): IslandRemoval {
+  const { width, height } = mask;
+  if (minSpan <= 0 || width === 0 || height === 0) {
+    return { mask, removed: 0, removedArea: 0, largestKeptSpan: 0 };
+  }
+
+  const { labels, islands } = walkIslands(mask);
+
+  let removed = 0;
+  let removedArea = 0;
+  let largestKeptSpan = 0;
+  // Island index to whether it survived, so the second pass needs no bookkeeping per pixel.
+  const keep: boolean[] = [];
+
+  for (let i = 0; i < islands.length; i++) {
+    const { span, area } = islands[i]!;
     const survives = span >= minSpan;
-    keep[label] = survives;
+    keep[i + 1] = survives;
     if (survives) {
       if (span > largestKeptSpan) largestKeptSpan = span;
     } else {
