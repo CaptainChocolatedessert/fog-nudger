@@ -74,6 +74,14 @@ const ICONS: Readonly<Record<string, string>> = {
     it, and would have been the first filled shapes in the strip.
   */
   gaps: '<path d="M2.5 12H8" stroke-width="4" /><path d="M16 12h5.5" stroke-width="4" /><circle cx="12" cy="12" r="7" stroke-dasharray="2.2 2" />',
+  /*
+    **Provisional, for the spike.** An irregular solid mark with the click on it — the shape the tool
+    is for, since a pool or a hole is drawn as a blot rather than as a stroke. It follows the Ink
+    band's rule only loosely: a heavy stroke is ink there, and this is a heavy *area*, which is the
+    distinction the tool turns on. If the tool is kept, this gets the proper glyph step — three or
+    four candidates at strip size beside their real neighbours.
+  */
+  blob: '<path d="M8.6 4.6c4-1.6 9.2.6 9.9 5.2.7 4.7-3 9.6-7.6 9.5-4-.1-7.4-3-7.5-6.7-.1-3.1 1.8-5.9 5.2-8z" /><circle cx="11.4" cy="12" r="1.6" fill="currentColor" stroke="none" />',
   // A vertex with somewhere to go. Arrows around a point, so it cannot read as a second hand.
   move: '<circle cx="12" cy="12" r="2.4" /><path d="M12 3.4v3.2M12 17.4v3.2M3.4 12h3.2M17.4 12h3.2" /><path d="M10.6 4.8 12 3.4l1.4 1.4M10.6 19.2 12 20.6l1.4-1.4M4.8 10.6 3.4 12l1.4 1.4M19.2 10.6 20.6 12l-1.4 1.4" />',
   // Two ends joined, which is what drawing a wall is.

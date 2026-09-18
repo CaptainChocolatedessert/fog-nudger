@@ -39,6 +39,7 @@ import {
 } from "../probe/viewTransform";
 import type { Drag, LayerId } from "../steps";
 import { graphExtent, type GraphExtent } from "../trace/graphUnits";
+import { planRaster } from "../map/rasterPlan";
 import { workspaceModalId } from "./workspaceControl";
 
 /**
@@ -107,6 +108,27 @@ let activeLayers: readonly LayerId[] = [];
 
 let view: View = { scale: 1, x: 0, y: 0 };
 let mapImage: HTMLImageElement | null = null;
+/**
+ * The map at the trace's own resolution, when the megapixel budget reduced it — otherwise `null`.
+ *
+ * **What this surface draws, and the reason is the one it was built on** (§7): the map and the mask
+ * go into one canvas under one transform so that they register by construction rather than by our
+ * arithmetic agreeing with anyone's. Drawing the full-resolution image under raster-sized layers is
+ * that arithmetic creeping back in — the effective ratio is `source / floor(source / factor)` rather
+ * than the factor itself, so a mask pixel straddles the image's pixel grid by a fraction that drifts
+ * across the map. Nothing about that is wrong: the raster genuinely samples the image on a slightly
+ * drifting grid, and both the drawing and the graph build invert it exactly. It is only that the map
+ * underneath offers a finer grid to compare against, and the comparison reads as a fault.
+ *
+ * So the finer grid goes. The GM sees the resolution the trace actually read, which is also the
+ * honest picture: detail the pipeline never saw is detail no amount of looking can act on.
+ *
+ * **`null` on every map this project has run.** The budget has never bitten until a 37.7-megapixel
+ * map arrived on 2026-09-17, so an uncapped map takes none of this and draws exactly as before.
+ */
+let mapBitmap: HTMLCanvasElement | null = null;
+/** The reduction the raster plan chose, so the smoothing threshold can count the pixels the trace saw. */
+let mapFactor = 1;
 let dirty = true;
 
 /**
@@ -227,11 +249,17 @@ function draw(): void {
     detail the trace never saw. Below 1:1 smoothing is what keeps thin linework from vanishing
     between samples.
   */
-  context.imageSmoothingEnabled = view.scale < 1;
+  // Counted in the pixels the *trace* saw, which is what the paragraph above has always meant: on a
+  // reduced map one raster pixel covers `mapFactor` image pixels, so 1:1 arrives that much sooner.
+  // `mapFactor` is 1 on an uncapped map, which is the rule exactly as it was.
+  context.imageSmoothingEnabled = view.scale * mapFactor < 1;
 
+  // The destination is the IMAGE's size, whichever bitmap goes into it. A reduced map occupies the
+  // same box at a coarser resolution — which is the whole of the change, and why every other use of
+  // `mapImage` here (the extent, the frame button, fit-to-rectangle, the click mapping) is untouched.
   const drawWidth = mapImage.naturalWidth * view.scale;
   const drawHeight = mapImage.naturalHeight * view.scale;
-  context.drawImage(mapImage, view.x, view.y, drawWidth, drawHeight);
+  context.drawImage(mapBitmap ?? mapImage, view.x, view.y, drawWidth, drawHeight);
 
   // Everything else, in the same call shape and therefore in the same place. This is the
   // registration argument in one line: there is no second transform to get wrong.
@@ -286,10 +314,45 @@ export function setMapName(text: string): void {
 // The map
 // ---------------------------------------------------------------------------------------------
 
-/** The map to draw, or `null` for none — which is a real state, not a failure: see the Map step. */
+/**
+ * The map to draw, or `null` for none — which is a real state, not a failure: see the Map step.
+ *
+ * **The one entry point**, which is what makes reducing here safe: there is no other route by which
+ * an image becomes the thing on screen, so the bitmap beside it can never describe a different map.
+ *
+ * The plan is computed rather than waited for. `rasterPlan` is pure and `MEGAPIXEL_BUDGET` is a
+ * constant, so the answer is a function of the image's own pixel size — available the moment it
+ * decodes, with nothing to invalidate later. The reduction is `drawImage` at the plan's size, the
+ * same call the trace makes from the same decoded image, so this is the same picture; it is a second
+ * resampling and need not be bit-identical, because what it produces is shown rather than read.
+ */
 export function setMapImage(image: HTMLImageElement | null): void {
   mapImage = image;
+  mapBitmap = null;
+  mapFactor = 1;
   dirty = true;
+  if (!image || !(image.naturalWidth > 0) || !(image.naturalHeight > 0)) return;
+
+  const plan = planRaster(image.naturalWidth, image.naturalHeight);
+  if (!plan.capped) return;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = plan.width;
+  canvas.height = plan.height;
+  const context = canvas.getContext("2d");
+  // Nothing to report if a context cannot be had: the full-resolution image is still there and still
+  // correct, and the only loss is the finer grid being back. Falling back beats drawing nothing.
+  if (!context) return;
+
+  context.drawImage(image, 0, 0, plan.width, plan.height);
+  mapBitmap = canvas;
+  mapFactor = plan.factor;
+  devLog(
+    "info",
+    `workspace: drawing the map at the trace's raster, ${plan.width}x${plan.height} reduced ` +
+      `${plan.factor}x from ${image.naturalWidth}x${image.naturalHeight} — so the map and every ` +
+      `layer over it are the same resolution`,
+  );
 }
 
 /**

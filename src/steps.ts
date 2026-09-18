@@ -218,6 +218,23 @@ export const TOOLS: readonly ToolChoice[] = [
   { id: "suppress", label: "Suppress", band: "ink", drag: "brush", hint: "" },
   { id: "ink", label: "Add ink", band: "ink", drag: "brush", hint: "" },
   { id: "gaps", label: "Gaps", band: "ink", drag: "brush", hint: "" },
+  /*
+    A spike (2026-09-17), to see whether flooding the map's own tone picks out the marks a GM wants
+    gone — a pool or a hole drawn as a big solid spot. No settings, so the hint is the only sentence
+    about it, as Dissolve region's is. It takes every press, as the brushes do.
+
+    **Temporary**: if a room says the fill is not what a GM wants, the tool, its glyph and
+    `trace/inkFlood.ts` all go together.
+  */
+  {
+    id: "blob",
+    label: "Fill a mark",
+    band: "ink",
+    drag: "brush",
+    hint:
+      "Click a solid mark on the map — a pool, a hole — to suppress it and everything of its tone " +
+      "joined to it. <b>Ctrl</b> pans. A trial: no settings yet, and the dev log says what it took.",
+  },
   {
     id: "move",
     label: "Move",

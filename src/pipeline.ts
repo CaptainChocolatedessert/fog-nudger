@@ -70,6 +70,7 @@ import {
   otsuSplit,
 } from "./trace/luminance";
 import { blur, luminanceField, type ScalarField } from "./trace/field";
+import { BLOB_TONE_TOLERANCE, floodByTone, type FloodResult } from "./trace/inkFlood";
 import type { BinaryMask } from "./trace/binarize";
 import type { LabelledSpace } from "./trace/label";
 import type { RasterPlacement, WorldBounds } from "./map/placement";
@@ -403,6 +404,47 @@ export function probeMapFraction(u: number, v: number): string {
   }
 
   return "Nothing read yet in this session — wait for the ink, then click again.";
+}
+
+/**
+ * Flood the map's tone from one point of it, given as a fraction of the map.
+ *
+ * **The blob tool's spike (2026-09-17)** — see `trace/inkFlood.ts` for what it is and what it is
+ * not. Here for the point probe's reason and through the point probe's seam: the luminance field is
+ * a thing the pipeline keeps and nothing else has, and a **fraction** rather than a pixel is what
+ * lets the surface ask without knowing the trace's raster, which the megapixel budget may have
+ * reduced under it.
+ *
+ * The **unblurred** field, which is the one retained — the blurred one is consumed by the binariser
+ * and dropped. That is also the right answer on its merits here: the question is what tone the map
+ * has at this mark, not what the binariser made of it.
+ *
+ * Answers from the last full run when there is one and from the last reading otherwise, exactly as
+ * the probe does, so it says something useful before a partition exists.
+ */
+export function floodMapFraction(u: number, v: number): FloodResult | null {
+  const source = lastRun ?? lastReading;
+  if (!source) return null;
+
+  const { rawField, name } = source;
+  const x = Math.min(rawField.width - 1, Math.max(0, Math.floor(u * rawField.width)));
+  const y = Math.min(rawField.height - 1, Math.max(0, Math.floor(v * rawField.height)));
+
+  const started = performance.now();
+  const result = floodByTone(rawField, x, y, BLOB_TONE_TOLERANCE);
+  const millis = performance.now() - started;
+  if (!result) return null;
+
+  const { left, top, right, bottom } = result.bounds;
+  devLog(
+    "info",
+    `blob: flood at (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — raster (${x}, ${y}), ` +
+      `seed tone ${result.seedTone.toFixed(3)}, tolerance ${BLOB_TONE_TOLERANCE}; ` +
+      `${result.pixels.length} px in a ${right - left + 1}x${bottom - top + 1} box ` +
+      `(${((result.pixels.length / (rawField.width * rawField.height)) * 100).toFixed(2)}% of the ` +
+      `raster) in ${Math.round(millis)}ms`,
+  );
+  return result;
 }
 
 /**

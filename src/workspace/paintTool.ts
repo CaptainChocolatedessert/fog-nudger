@@ -34,7 +34,8 @@
 
 import { devLog } from "../devlog";
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
-import { paintStroke, paintedCount } from "../trace/inkPaint";
+import { paintPixels, paintStroke, paintedCount } from "../trace/inkPaint";
+import { floodMapFraction } from "../pipeline";
 import { refreshPaintRegion, setBrushPosition } from "./layers/paint";
 import { describeAccepted, describeSearch, markAt } from "./gapGesture";
 import {
@@ -243,6 +244,7 @@ function start(point: MapPoint): boolean {
     else is a pan.
   */
   if (tool === "gaps") return acceptAt(point);
+  if (tool === "blob") return floodAt(point);
 
   const kind = brushKind(tool);
   // No brush in hand — either no tool is chosen, or the layer could not be made because the map has
@@ -281,6 +283,52 @@ function acceptAt(point: MapPoint): boolean {
   if (result.bounds) refreshPaintRegion(result.bounds);
   gapsChanged();
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
+  return true;
+}
+
+/**
+ * Flood the map's tone from this press and suppress what it takes — the blob spike (2026-09-17).
+ *
+ * Built on `acceptAt` above, because the two are the same act: a search hands over a set of raster
+ * pixels and they go into a paint layer as though a brush had covered them. The differences are
+ * which layer (suppression rather than added ink) and that there is nothing to re-run afterwards,
+ * since this proposes nothing and holds nothing between presses.
+ *
+ * **Takes every press that finds pixels**, so the crosshair is honest everywhere on the map and Ctrl
+ * is how you pan. There is no "nothing here" — every pixel of the map has a tone and floods to at
+ * least itself — so declining would only ever mean the map has not been read.
+ */
+function floodAt(point: MapPoint): boolean {
+  const layer = workingLayer("suppress");
+  if (!layer) return false;
+
+  const found = floodMapFraction(point.u, point.v);
+  if (!found) {
+    say("nothing has been read from the map yet, so there is no tone to flood");
+    return false;
+  }
+
+  // Snapshotted before the write, as an accept is: after it the layer is already changed.
+  const before = snapshotPaint("suppress");
+  const result = paintPixels(layer, found.pixels);
+  if (result.changed === 0) {
+    say("that mark is already suppressed");
+    return true;
+  }
+
+  if (before !== null) rememberPaint("suppress", before, "filling a mark");
+  if (result.bounds) refreshPaintRegion(result.bounds);
+  /*
+    Recomposed here, unlike a brush stroke, and the difference is which picture answers the question.
+
+    The ink layer draws the **base** while a brush is in hand, so a stroke shows as the GM's own
+    colour over it and needs no recompose to be seen. This is not a brush, so the ink layer is
+    drawing the composite — and without asking for a new one the mark would still be there until the
+    tool was put down. What the spike is for is seeing the ink *go*, and the rooms move with it.
+  */
+  requestRecompose();
+  gapsChanged();
+  say(`suppressed ${result.changed} px of tone ${found.seedTone.toFixed(2)} — the dev log has the rest`);
   return true;
 }
 
@@ -378,6 +426,13 @@ function hover(point: MapPoint | null): void {
     setGrabTarget(workingLayer(kind) !== null);
     return;
   }
+  // The blob spike acts anywhere there is a layer to write into, so the crosshair is on throughout
+  // the map rather than over a target — which is what the tool actually does.
+  if (tool === "blob") {
+    setGrabTarget(workingLayer("suppress") !== null);
+    return;
+  }
+
   const raster = gapRaster();
   const overRing =
     tool === "gaps" &&

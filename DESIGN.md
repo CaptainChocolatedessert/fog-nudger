@@ -644,6 +644,65 @@ the full-resolution pixels in memory, which is precisely what the budget exists 
 budget bounds the raster and says nothing about the decoded source image**, which is not capped and
 is the larger of the two on exactly the maps that trigger capping.
 
+#### The budget bit for the first time — 2026-09-17
+
+A 7252×5197 map (37.7 MP) against the 16-megapixel budget, reduced by a factor of 2 to 3626×2598.
+`rasterPlan.ts` had recorded that nothing had ever run this path, and named what would happen when
+something did.
+
+**The factor is integral; the ratio is not.** The output size is a `floor` and the reduction is
+`drawImage(source, 0, 0, plan.width, plan.height)` — the whole image into the floored size — so the
+**effective** ratio is `source / floor(source / factor)`. Here that is 7252/3626 = 2.000000 across
+and 5197/2598 = **2.000385** down, because 5197 is odd. One phase slip over the whole image, which is
+the mildest form of the beat pattern the integer factor exists to avoid.
+
+**Nothing is misplaced by it.** Raster row *r* genuinely samples the image around row *r* × 2.000385,
+and both the drawing and the graph build invert exactly that. What it produces is a raster sampled on
+a grid that drifts sub-pixel against the image's own — **a property of the ink, not of any
+conversion**. You cannot get an un-skewed map from skewed ink (user, 2026-09-17), and no drawing
+choice recovers it.
+
+**What it looked like in a room**, which is how it was found: at high zoom the mask cells straddle the
+map's pixel grid by a fraction that grows down the map — read as *low* in the top half, worst in the
+middle where the drift is half an image pixel, and *high* in the bottom half, because past halfway the
+eye measures against the next pixel down instead. It reaches exactly one image pixel at the bottom,
+which is back in phase and so looks aligned again.
+
+> **Two wrong answers were proposed before this one**, and both are worth not repeating: that the
+> drift was a rendering fault in how the layers are drawn, and that the cure was to treat the raster
+> as covering `rasterHeight × factor` image rows at a true factor of 2. The second would have
+> *introduced* an error, since it does not describe what the resampler did. The file being read —
+> `mapImage.ts`'s one `drawImage` call — settled it in a line.
+
+**The answer is that the workspace draws the map at the raster's own resolution whenever the budget
+bit.** This is §7's registration argument applied to the one place still outside it: drawing the
+full-resolution image under raster-sized layers is our arithmetic agreeing with the browser's rather
+than registration by construction, and taking the finer grid away removes the comparison rather than
+fixing a fault. It is also the honest picture — detail the pipeline never saw is detail no amount of
+looking can act on, which is the ink layer's own rule about drawing the composite.
+
+- **One bitmap swapped into the same `drawImage` call, on the same rectangle.** The destination stays
+  the *image's* size times the scale, so the map occupies the box it always did, at a coarser
+  resolution. `mapImage` is read in eight places in `shell.ts` and is a draw *source* in one; the
+  other seven want its pixel dimensions — the extent, the frame button, fit-to-rectangle, the click
+  mapping — and are untouched.
+- **The plan is computed, not awaited.** `planRaster` is pure and `MEGAPIXEL_BUDGET` is a constant,
+  so the answer is a function of the image's own size, available the moment it decodes.
+- **Smoothing counts the pixels the trace saw**: the threshold is `scale × factor < 1`, which is the
+  existing rule — off past one screen pixel per source pixel — with the source being the raster.
+- **Inert on an uncapped map.** `capped` false means no bitmap, factor 1, and not one line behaves
+  differently. That is the property most worth having in a change to the shell.
+
+*Rejected: marking the map name "(reduced 2×)"* (user, 2026-09-17). *"Downsampling isn't a strange
+thing to do, and a user will understand if they spot it."*
+
+**Held, and worth doing: free the full-resolution image.** The reduced canvas is about 38MB on that
+map and is held *in addition to* the decoded image, which the shell still references — for its pixel
+dimensions alone, which is two numbers. That makes the note above concrete rather than theoretical:
+the budget bounds the raster and the decoded source is the larger of the two on exactly the maps that
+trigger capping, and on this one the surface holds both plus a third of a copy.
+
+
 ### Units — there is no unit that is always right
 
 The original rule was *"denominate in measured ink width or grid squares, never raster pixels"*. Both
@@ -2774,6 +2833,40 @@ next section.
 **Nothing is broken and nothing is half-built.** The session of 2026-09-16 ended with every change
 committed, `tsc`, 940 tests and a build passing, and the parking lot empty. **The next piece of work is
 the user's to choose** — the list at the end of this section is what is open, not a queue.
+
+**A spike is live on `main` and is waiting for a verdict — 2026-09-17.** *Fill a mark*, a fourth tool
+in the Ink band: click a solid mark on the map — a pool, a hole drawn as a big black spot — and the
+flood of the map's own tone from that pixel goes into the suppression layer. **It is deliberately
+unfinished**: no setting (the tolerance is a constant in `trace/inkFlood.ts`), no tests, no oracle, no
+preview, and a placeholder name and glyph. It exists to answer one question a room can answer and a
+desk cannot — *does flooding the map image by luminance pick out the marks a GM wants gone?* If yes it
+gets the wiring and the tests; if no, the tool, the glyph and the module go together.
+
+What is settled about it, so a cold session does not re-litigate the design:
+
+- **The flood reads the map image, not the derived ink** (user). A big solid spot derives as an
+  *outline*, because Sauvola's window is uniformly dark in its middle and finds no contrast there, so
+  suppression painted over the derived ink leaves a ring. The sentence the tool is for is *"this mark
+  on the map is not ink."*
+- **A mark joined to the wall network takes the whole network, and that is correct** (user) — a bad
+  use of the tool rather than something to guard against. A version using Sauvola as a *barrier* was
+  designed and cut as not worth the complexity: on an ordinary map the mark and the linework are the
+  same black, so the tone flood walks from one to the other before any second criterion is consulted.
+- **8-connected, measured against the seed's tone.** Against the seed, so the fill can never hold a
+  tone further from the click than the tolerance whatever route it took. 8-connected because §4 pairs
+  8 for ink with 4 for space and a mark is ink-like — it shipped 4-connected for an hour, on an
+  argument from *consequence* rather than from what is being connected, and a room found the cost in
+  one click: a map's edges are anti-aliased, so the dark fringe along a diagonal is a staircase whose
+  corners touch the mark only at their corners, and a filled pool came back ringed with the black
+  pixels the flood had stepped around.
+- **It writes suppression, so it is paint**: an input, one undo step, locks none of the rebuild
+  controls, and survives a re-derive. It asks for a recompose where a brush stroke does not, because
+  the ink layer draws the composite unless a *brush* is in hand.
+
+**Open on it:** the gesture — tolerance in the drawer with a hover preview, or click-to-seed then tune
+— which waits on whether a preview can keep up; whether the tolerance becomes a slider; and the name
+and glyph, which get their own step if it survives.
+
 
 **What that session built**, all on `main`:
 
