@@ -393,6 +393,16 @@
         left: 0;
         right: 0;
         bottom: calc(50% + 3px);
+        /*
+          **`width` explicitly, and `left: 0; right: 0` is not enough.** An inline `<svg>` is a
+          *replaced* element, so `width: auto` takes the viewBox's ratio against the height given here
+          rather than stretching between the two offsets — 100:20 against 17px is 85px, about a third
+          of this drawer, which is exactly how it shipped. The horizontal axis **is** the track, so a
+          shape that is not the track's width puts every band somewhere other than the stop it
+          describes, and nothing about the picture means anything.
+        */
+        display: block;
+        width: 100%;
         height: 17px;
         pointer-events: none;
         z-index: 0;
