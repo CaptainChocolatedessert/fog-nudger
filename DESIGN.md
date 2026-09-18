@@ -2834,39 +2834,7 @@ next section.
 committed, `tsc`, 940 tests and a build passing, and the parking lot empty. **The next piece of work is
 the user's to choose** — the list at the end of this section is what is open, not a queue.
 
-**A spike is live on `main` and is waiting for a verdict — 2026-09-17.** *Fill a mark*, a fourth tool
-in the Ink band: click a solid mark on the map — a pool, a hole drawn as a big black spot — and the
-flood of the map's own tone from that pixel goes into the suppression layer. **It is deliberately
-unfinished**: no setting (the tolerance is a constant in `trace/inkFlood.ts`), no tests, no oracle, no
-preview, and a placeholder name and glyph. It exists to answer one question a room can answer and a
-desk cannot — *does flooding the map image by luminance pick out the marks a GM wants gone?* If yes it
-gets the wiring and the tests; if no, the tool, the glyph and the module go together.
-
-What is settled about it, so a cold session does not re-litigate the design:
-
-- **The flood reads the map image, not the derived ink** (user). A big solid spot derives as an
-  *outline*, because Sauvola's window is uniformly dark in its middle and finds no contrast there, so
-  suppression painted over the derived ink leaves a ring. The sentence the tool is for is *"this mark
-  on the map is not ink."*
-- **A mark joined to the wall network takes the whole network, and that is correct** (user) — a bad
-  use of the tool rather than something to guard against. A version using Sauvola as a *barrier* was
-  designed and cut as not worth the complexity: on an ordinary map the mark and the linework are the
-  same black, so the tone flood walks from one to the other before any second criterion is consulted.
-- **8-connected, measured against the seed's tone.** Against the seed, so the fill can never hold a
-  tone further from the click than the tolerance whatever route it took. 8-connected because §4 pairs
-  8 for ink with 4 for space and a mark is ink-like — it shipped 4-connected for an hour, on an
-  argument from *consequence* rather than from what is being connected, and a room found the cost in
-  one click: a map's edges are anti-aliased, so the dark fringe along a diagonal is a staircase whose
-  corners touch the mark only at their corners, and a filled pool came back ringed with the black
-  pixels the flood had stepped around.
-- **It writes suppression, so it is paint**: an input, one undo step, locks none of the rebuild
-  controls, and survives a re-derive. It asks for a recompose where a brush stroke does not, because
-  the ink layer draws the composite unless a *brush* is in hand.
-
-**Open on it:** the gesture — tolerance in the drawer with a hover preview, or click-to-seed then tune
-— which waits on whether a preview can keep up; whether the tolerance becomes a slider; and the name
-and glyph, which get their own step if it survives.
-
+**Suppress blob is built and its flood is confirmed in a room** (user, 2026-09-17: *"The flood looks right"*) — §10 has it in full. What that room saw was the spike: the tolerance was a constant, there was no preview, and the name and glyph were placeholders. **The finished tool has not been in a room**, so its slider, its preview and its glyph are all unlooked-at, and the preview is the one worth a moment — it is the thing standing between a click and the whole map's linework.
 
 **What that session built**, all on `main`:
 
@@ -3179,7 +3147,7 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Four tools built from conversations
+### Five tools built from conversations
 
 **1. Dissolve region — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
 pick this up* has which part). Click inside a region and the walls around it go.
@@ -3472,6 +3440,89 @@ wall within it runs beyond it, skipped a stretch holding a wall 1% shorter.
 - **A span's end can split two walls at once** where two walls lie closer together than the crossing
   test's tolerance — measured twice in 3,072 random clicks, both on near-degenerate walls. The span
   itself stays one uncrossed wall.
+
+**5. Suppress blob — built 2026-09-17, after a spike a room approved.** Click a solid blob on the
+map — a pool, a hole drawn as a big black spot — and everything of that tone joined to it stops being
+ink.
+
+**What it is for**: map detail that is not linework. *"With the current tools, I would paint
+suppression over it, but a blob fill provides a shortcut"* (user, 2026-09-17).
+
+**Decided (user, 2026-09-17), and two of these overturned a design in progress:**
+
+- **It floods the map IMAGE, not the derived ink.** This is the decision the tool turns on. A big
+  solid spot derives as an **outline**, because Sauvola's window is uniformly dark in its middle and
+  finds no contrast there — so suppression aimed at the derived ink leaves a ring, and the parameters
+  move the outline's thickness underneath it. The sentence the tool is for is *"this mark on the map
+  is not ink."*
+- **A blob joined to the wall network takes the whole network, and that is correct** — *"that's just a
+  bad use for the tool, not something for us to guard against."* Everything built to guard it was cut
+  on that ruling.
+- **No barrier, and no second criterion.** A version using Sauvola as a *stop* — flood only what the
+  reading calls ground, then extend a bounded distance into ink — was designed and cut as not worth
+  the complexity, and it was answering a question that barely arises: on an ordinary map the blob and
+  the linework are the same black, so the tone flood walks from one to the other before any second
+  test is consulted.
+- **A tolerance slider rather than a fixed number.** Span's two constants are geometry and are the
+  same on every map; tone is a property of the *map's contrast*, so one number cannot be right
+  everywhere and a faded scan is the case that breaks it.
+
+**Named** *Suppress blob*, after the verb of the brush that does the same job by hand. *Suppress
+mark* was ruled out by a collision inside the same strip — **mark** is already the word for the point
+*Suppress region* places. Three Suppresses is not a collision but a family: a stroke you paint, a blob
+you click, a region you mark. **Drawn as Suppress's own swipe across a solid blot instead of a
+stroke**, with the swipe empty rather than drawn over the fill (user), and built as two lumps either
+side of it rather than one path with a hole — even-odd is a symmetric difference, so the parts of the
+capsule outside the blot would have filled solid instead of cutting.
+
+**As built** — `trace/inkFlood.ts` is the decision, pure and tested; the tool is a fourth Ink tool
+beside Suppress, Add ink and Gaps, on the brush pointer path the Gaps tool already uses.
+
+- **Against the seed's tone, not the neighbour's.** Measuring against the neighbour lets the flood walk
+  a gradient and come out on tones the click never had, which on a map with a wash is the page.
+- **8-connected.** §4's pairing — 8 for ink, 4 for space — and a blob is ink-like. It shipped
+  4-connected for an hour, on an argument from *consequence* (this removes ink, so leaking is the
+  expensive mistake) rather than from what is being connected, and a room found the cost in one click:
+  a map's edges are anti-aliased, so the dark fringe along a diagonal is a staircase whose corners
+  touch only at their corners, and a filled pool came back ringed with the pixels the flood had
+  stepped around.
+- **The fill goes into the suppression layer**, through the same `paintPixels` accepting a gap uses.
+  So it is paint: an input, one undo step, locks none of the rebuild controls, and survives a
+  re-derive. It asks for a recompose where a brush stroke does not, because the ink layer draws the
+  base only while a *brush* is in hand and the composite otherwise.
+- **The luminance is already there.** `rawField` — the unblurred field the point probe reports from —
+  is retained at the pipeline's raster, which is the raster the suppression layer lives at. The tool
+  needed no new cache, no new storage and no second read of the map.
+- **The tolerance is `read` in stage and `tool` in kind**, so it recomputes nothing and needs no
+  post-reading entry — tool parameters never enter the reading fingerprint. Linear in tone with a
+  percentage readout, and **the one tool distance with no per-map seeding**: pixels and graph units
+  mean different lengths on different maps, luminance is 0 to 1 on all of them.
+- **A preview under the pointer, at most once a frame**, drawing only the box the fill lies in. §8
+  requires a visual channel before a control that can be wrong ships, and this one can take the whole
+  map's linework in a click. Every other raster layer rasterises the whole raster once; a hover
+  rewriting nine million RGBA pixels per frame is not available.
+
+**Nineteen mutations, nineteen caught**, against a **fixpoint** oracle — sweep the grid repeatedly
+adding any pixel adjacent to one already taken, until a sweep changes nothing — which shares no code
+path with the implementation's queue. One survivor was answered with a fixture: dropping the `left`
+bounds comparison passed, because that test's seed sat at the fill's own top-left corner and three of
+the four comparisons never had to move anything.
+
+**Measured before the preview was built**, at the 3626×2598 raster of the map that first hit the
+megapixel budget: a blob-sized fill is under a millisecond, a fill taking the whole connected ink
+network — 1.09 million pixels — is 44 to 50ms, and the hard ceiling, a field with no boundary anywhere
+and every one of its 9.4 million pixels taken, is 242 to 339ms.
+
+**Costs, stated:**
+
+- **A click on open ground approaches the ceiling**, and the preview will visibly lag there. Against
+  Span's accepted worst of 170ms.
+- **It works on a solid mark only.** A pool drawn as stipple or wavy line texture has no single
+  interior tone, so the click takes one cell between two strokes. The suppression brush stays the tool
+  for a textured mark.
+- **A plain drag does not pan with this tool in hand**, since every press is a fill; Ctrl pans.
+- **An anti-aliased or dusty edge can leave a scatter of survivors** that no tolerance cleanly
+  reaches. The two proposed ink tools above are the answer if a room finds it.
 
 ### Two ink tools proposed and not built — 2026-09-17
 

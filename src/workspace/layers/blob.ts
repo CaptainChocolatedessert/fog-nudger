@@ -1,8 +1,8 @@
 /**
- * What *Fill a mark* would take, drawn under the pointer before the click.
+ * What *Suppress blob* would take, drawn under the pointer before the click.
  *
  * The tool's visual channel, and §8 requires it: a control that can be wrong needs one before it
- * ships. This one can be wrong in a way nothing else on the surface warns about — a mark that touches
+ * ships. This one can be wrong in a way nothing else on the surface warns about — a blob that touches
  * a wall is one contiguous region with it, so the fill takes the whole network — and that is a
  * decision the GM is entitled to make rather than something to guard against, *provided they can see
  * it first*. A whole map lighting up is a clear answer to "do not click here".

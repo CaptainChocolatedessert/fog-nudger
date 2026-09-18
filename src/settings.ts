@@ -159,7 +159,7 @@ export interface TraceSettings {
    * How far from the clicked pixel's tone a pixel may be and still join its mark, on luminance's
    * own 0..1.
    *
-   * *Fill a mark* floods the **map image** rather than the derived ink, and this is the whole of
+   * *Suppress blob* floods the **map image** rather than the derived ink, and this is the whole of
    * what it means by "the same mark". A big solid spot derives as an *outline* — Sauvola's window is
    * uniformly dark in its middle and finds no contrast there — so the derived ink cannot answer the
    * question this tool asks.

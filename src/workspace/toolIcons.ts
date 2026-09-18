@@ -75,13 +75,31 @@ const ICONS: Readonly<Record<string, string>> = {
   */
   gaps: '<path d="M2.5 12H8" stroke-width="4" /><path d="M16 12h5.5" stroke-width="4" /><circle cx="12" cy="12" r="7" stroke-dasharray="2.2 2" />',
   /*
-    **Provisional, for the spike.** An irregular solid mark with the click on it — the shape the tool
-    is for, since a pool or a hole is drawn as a blot rather than as a stroke. It follows the Ink
-    band's rule only loosely: a heavy stroke is ink there, and this is a heavy *area*, which is the
-    distinction the tool turns on. If the tool is kept, this gets the proper glyph step — three or
-    four candidates at strip size beside their real neighbours.
+    Suppress's own swipe, across a solid blot instead of a stroke — chosen from four at strip size
+    (user, 2026-09-17).
+
+    **The pair with Suppress is the point.** That glyph is a broad swipe crossing a heavy stroke of
+    ink with the ink gone where the swipe passed; this is the identical swipe across a filled *area*.
+    The band's rule is that a heavy stroke is ink, and the one thing this tool turns on is that a
+    solid mark is not a stroke — so an area is the only part that may differ.
+
+    **The swipe is empty, not drawn over the fill** (user, same day). Lying on top, the blot showed
+    through it and the glyph said "a blot with a band drawn on it"; empty, it says what Suppress's
+    says — what the swipe passed over is gone.
+
+    **Two lumps either side of it, and not one path with a hole in it.** `fill-rule="evenodd"` was the
+    obvious way and is wrong here: even-odd is a *symmetric difference*, so the parts of the capsule
+    lying outside the blot — which are most of it, since the swipe must run past both ends — would
+    have filled solid instead of cutting. Two shapes stopping short of the band is also exactly
+    Suppress's own construction, where two heavy ink stubs stop either side of the same rect.
+
+    **The rect is Suppress's, unchanged**, so the pair holds at any size: same width, same radius,
+    same rotation about the same centre.
   */
-  blob: '<path d="M8.6 4.6c4-1.6 9.2.6 9.9 5.2.7 4.7-3 9.6-7.6 9.5-4-.1-7.4-3-7.5-6.7-.1-3.1 1.8-5.9 5.2-8z" /><circle cx="11.4" cy="12" r="1.6" fill="currentColor" stroke="none" />',
+  blob:
+    '<path d="M13 5L4.5 13.5c-.9-.8-1.2-1.9-1-3 .5-2.8 3.1-5.2 6.1-5.8 1.3-.3 2.5-.1 3.4 .3z" fill="currentColor" stroke="none" />' +
+    '<path d="M18.5 11.5L13 17c.9 1.4 2.2 2.3 3.4 2.3 2-.1 3.3-2.3 2.9-4.7-.2-1.1-.4-2.2-.8-3.1z" fill="currentColor" stroke="none" />' +
+    '<rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-45 12 12)" />',
   // A vertex with somewhere to go. Arrows around a point, so it cannot read as a second hand.
   move: '<circle cx="12" cy="12" r="2.4" /><path d="M12 3.4v3.2M12 17.4v3.2M3.4 12h3.2M17.4 12h3.2" /><path d="M10.6 4.8 12 3.4l1.4 1.4M10.6 19.2 12 20.6l1.4-1.4M4.8 10.6 3.4 12l1.4 1.4M19.2 10.6 20.6 12l-1.4 1.4" />',
   // Two ends joined, which is what drawing a wall is.

@@ -316,11 +316,11 @@ function floodAt(point: MapPoint): boolean {
   const before = snapshotPaint("suppress");
   const result = paintPixels(layer, found.pixels);
   if (result.changed === 0) {
-    say("that mark is already suppressed");
+    say("that blob is already suppressed");
     return true;
   }
 
-  if (before !== null) rememberPaint("suppress", before, "filling a mark");
+  if (before !== null) rememberPaint("suppress", before, "suppressing a blob");
   if (result.bounds) refreshPaintRegion(result.bounds);
   /*
     Recomposed here, unlike a brush stroke, and the difference is which picture answers the question.
@@ -332,7 +332,10 @@ function floodAt(point: MapPoint): boolean {
   */
   requestRecompose();
   gapsChanged();
-  say(`suppressed ${result.changed} px of tone ${found.seedTone.toFixed(2)} — the dev log has the rest`);
+  say(
+    `suppressed a blob of ${result.changed} px at tone ${found.seedTone.toFixed(2)} · ` +
+      "not saved until you leave Ink",
+  );
   return true;
 }
 
@@ -473,7 +476,7 @@ function hover(point: MapPoint | null): void {
     setGrabTarget(workingLayer(kind) !== null);
     return;
   }
-  // Fill a mark acts anywhere there is a layer to write into, so the crosshair is on throughout the
+  // Suppress blob acts anywhere there is a layer to write into, so the crosshair is on throughout the
   // map rather than over a target — which is what the tool actually does.
   if (tool === "blob") {
     setGrabTarget(workingLayer("suppress") !== null);

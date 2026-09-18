@@ -232,7 +232,7 @@ export const TOOLS: readonly ToolChoice[] = [
     **Temporary**: if a room says the fill is not what a GM wants, the tool, its glyph and
     `trace/inkFlood.ts` all go together.
   */
-  { id: "blob", label: "Fill a mark", band: "ink", drag: "brush", hint: "" },
+  { id: "blob", label: "Suppress blob", band: "ink", drag: "brush", hint: "" },
   {
     id: "move",
     label: "Move",
@@ -505,11 +505,18 @@ export const STEPS: readonly Step[] = [
       },
       {
         tool: "blob",
-        title: "Fill a mark",
+        title: "Suppress blob",
+        /*
+          "Blob" rather than "mark", throughout and deliberately.
+
+          A **mark** is already this surface's word for the point *Suppress region* places, two bands
+          down the same strip — so naming this one's subject a mark would put one word on two things a
+          GM meets side by side. The name and every sentence under it say blob instead.
+        */
         blurb:
-          "Click a solid mark on the map — a pool, a hole — and it stops being ink. The fill is " +
+          "Click a solid blob on the map — a pool, a hole — and it stops being ink. The fill is " +
           "drawn under the pointer before you click. It takes everything of that tone joined to what " +
-          "you click, so a mark touching a wall takes the wall too. <b>Ctrl</b> pans.",
+          "you click, so a blob touching a wall takes the wall too. <b>Ctrl</b> pans.",
         parameters: ["blobTolerance"],
       },
     ],
