@@ -31,6 +31,7 @@ import {
   type ScaleLimits,
 } from "../sliderScale";
 import { graphScaleTop, onGraphScale } from "./graphScale";
+import { onInkProfiles, profileFor } from "./inkProfiles";
 import { ghostPosition } from "./ghostMark";
 import { recomputeFor } from "./recompute";
 import {
@@ -91,6 +92,62 @@ function format(
   return String(positionReadout(position));
 }
 
+/**
+ * An empty shape, and the two paths that draw it.
+ *
+ * `preserveAspectRatio="none"` so the box stretches to whatever width the drawer is: the horizontal
+ * axis **is** the track, and a shape that kept its aspect would put its bands somewhere other than
+ * the stops they describe.
+ */
+function profileSvg(): { element: SVGSVGElement; fill: SVGPathElement; line: SVGPathElement } {
+  const ns = "http://www.w3.org/2000/svg";
+  const element = document.createElementNS(ns, "svg");
+  element.setAttribute("class", "profile");
+  element.setAttribute("viewBox", `0 0 ${PROFILE_WIDTH} ${PROFILE_HEIGHT}`);
+  element.setAttribute("preserveAspectRatio", "none");
+  element.setAttribute("aria-hidden", "true");
+  const fill = document.createElementNS(ns, "path");
+  fill.setAttribute("class", "profile-fill");
+  const line = document.createElementNS(ns, "path");
+  line.setAttribute("class", "profile-line");
+  element.append(fill, line);
+  return { element, fill, line };
+}
+
+/** The shape's own coordinate space. Stretched to the track, so these are proportions. */
+const PROFILE_WIDTH = 100;
+const PROFILE_HEIGHT = 20;
+
+/**
+ * Draw one control's distribution, or take it down.
+ *
+ * **It starts and ends on the rail**, which is honest either way round: at the far left nothing has
+ * been removed, and past the last band there is nothing left to remove.
+ */
+function paintProfile(
+  svg: { element: SVGSVGElement; fill: SVGPathElement; line: SVGPathElement },
+  name: SettingName,
+): void {
+  const points = profileFor(name);
+  // One point is a spike with no shape to it and no comparison to make, so it is not drawn.
+  if (points.length < 2) {
+    svg.element.classList.add("empty");
+    return;
+  }
+  svg.element.classList.remove("empty");
+
+  const steps = points.map(
+    (point) =>
+      `L${(point.at * PROFILE_WIDTH).toFixed(2)} ${((1 - point.ink) * PROFILE_HEIGHT).toFixed(2)}`,
+  );
+  const open = `M0 ${PROFILE_HEIGHT} ${steps.join(" ")} L${PROFILE_WIDTH} ${PROFILE_HEIGHT}`;
+  svg.line.setAttribute("d", open);
+  svg.fill.setAttribute("d", `${open} Z`);
+}
+
+/** Repainters for the rows on screen, cleared with them. */
+const profilePainters: (() => void)[] = [];
+
 function measured(): Measured {
   return {
     pxPerSquare: lastPixelsPerSquare(),
@@ -126,7 +183,19 @@ export function refreshHints(): void {
  */
 export function resetHints(): void {
   hintPainters = [];
+  profilePainters.length = 0;
 }
+
+/*
+  Repaint every shape on screen when a new pair lands.
+
+  Subscribed once at module load rather than per row, for `resetHints`' own reason: a subscription
+  taken per row would outlive the row and grow the list on every rebuild. The painters list is what
+  is cleared, and this only walks whatever is in it.
+*/
+onInkProfiles(() => {
+  for (const painter of profilePainters) painter();
+});
 
 
 /**
@@ -380,6 +449,22 @@ export function settingRow(control: Control): HTMLElement {
   const ghost = document.createElement("div");
   ghost.className = "ghost";
   ghost.hidden = true;
+
+  /*
+    The distribution, for the two controls that have one, drawn **first** so it sits under the rail.
+
+    Its baseline is the rail's own centre line, which is what makes it read as a shape rising off the
+    track rather than as a chart placed above one. The stylesheet pins it there; the drawing here only
+    has to fill its box.
+  */
+  const profile = control.profile ? profileSvg() : null;
+  if (profile) {
+    track.append(profile.element);
+    paintProfile(profile, control.name);
+    // Repainted rather than rebuilt: a new reading replaces the shape, and the row it belongs to is
+    // still the row on screen.
+    profilePainters.push(() => paintProfile(profile, control.name));
+  }
   track.append(input, ghost);
 
   /**

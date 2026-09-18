@@ -362,6 +362,52 @@
       .row .track input[type="range"] {
         display: block;
         margin: 0;
+        /* Over the shape, so the rail and the thumb are never behind it. */
+        position: relative;
+        z-index: 1;
+      }
+      /*
+        The distribution the two ink filters act on, rising off the rail.
+
+        **Its floor is the rail's own centre line**, which is what makes it read as a shape sitting on
+        the track rather than as a chart placed above one — so `bottom` is half the track's height,
+        and the box grows upward from there. It fits inside the row the slider already occupies, so
+        nothing below it moves.
+
+        `pointer-events: none` throughout: it is a hint about the control, never a second control.
+      */
+      .row .track .profile {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 50%;
+        height: 20px;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .row .track .profile.empty {
+        visibility: hidden;
+      }
+      .row .track .profile-line {
+        fill: none;
+        stroke: #9aa0c8;
+        /*
+          Not scaled with the box. The shape is stretched to the track's width and squashed to its
+          height, so a stroke that scaled with it would be thick on a wide drawer and hairline on a
+          narrow one, and would vary along its own length.
+        */
+        vector-effect: non-scaling-stroke;
+        stroke-width: 1.5px;
+        stroke-linejoin: round;
+      }
+      .row .track .profile-fill {
+        fill: #9aa0c8;
+        opacity: 0.16;
+        stroke: none;
+      }
+      /* A locked row's slider is inert, and its hint should not be louder than the control. */
+      .row.locked .track .profile {
+        opacity: 0.5;
       }
       .row .ghost {
         position: absolute;

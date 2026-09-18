@@ -93,6 +93,20 @@ export interface Control {
    */
   readonly readout?: "position" | "percent";
   /**
+   * Draw the distribution this control acts on, rising off its own rail.
+   *
+   * Only the two ink filters have one, and that is a decision rather than a starting point: each is
+   * a threshold over a population the pipeline can *measure* — stroke widths and island spans — so
+   * the picture says where the populations are and the handle says which of them you are keeping.
+   * A control with no distribution behind it has nothing to draw, and one drawn for every slider
+   * would grow a 22rem column by 20 pixels a row for decoration.
+   *
+   * §8 asks a control that can be wrong for a visual channel. Both of these already have one — the
+   * damage appears under the GM's cursor as they drag — and this is a second, cheaper channel that
+   * works *before* the drag rather than during it.
+   */
+  readonly profile?: boolean;
+  /**
    * Renders the value in a unit the GM can feel.
    *
    * Returns an empty string when it cannot say anything honest yet, which is how a control reports
@@ -184,6 +198,7 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "minStrokeInkWidths",
+    profile: true,
     label: "Thinnest stroke to keep",
     hint: "",
     // No derived line. Every figure it could give is the setting times the measured ink width, which
@@ -192,6 +207,7 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "minIslandPx",
+    profile: true,
     label: "Smallest mark to keep",
     hint: "",
     derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),

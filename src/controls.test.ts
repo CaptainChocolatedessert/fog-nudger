@@ -136,6 +136,19 @@ describe("readouts that depend on a measurement", () => {
     expect(blob?.hint).toBe("");
   });
 
+  /*
+    Which controls draw a distribution, named rather than counted.
+
+    Both are thresholds over a population the pipeline can measure — stroke widths and island spans —
+    which is what there is to draw. The rest have nothing behind them, and one drawn per slider would
+    grow a 22rem column by twenty pixels a row for decoration. Naming them means a third has to be
+    argued for here.
+  */
+  it("draws a distribution on the two ink filters and on nothing else", () => {
+    const plotted = CONTROLS.filter((control) => control.profile).map((control) => control.name);
+    expect(plotted).toEqual(["minStrokeInkWidths", "minIslandPx"]);
+  });
+
   it("leaves every other control to the shared formatter", () => {
     // Named rather than counted, for the reason the hint test gives: a cap is a slot something slips
     // into, where naming means the next one has to be argued for here.

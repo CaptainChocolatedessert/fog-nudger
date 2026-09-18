@@ -78,6 +78,13 @@ import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
 import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
+import {
+  islandPoints,
+  islandProfile,
+  strokePoints,
+  strokeProfile,
+  type ProfilePoint,
+} from "./trace/inkProfile";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import type { FittedEdge } from "./trace/faces";
@@ -416,6 +423,58 @@ export function probeMapFraction(u: number, v: number): string {
 export interface MapFlood extends FloodResult {
   readonly rasterWidth: number;
   readonly rasterHeight: number;
+}
+
+/**
+ * The masks the two ink filters were handed, kept for the profiles drawn on their sliders.
+ *
+ * Module state beside `lastRun`, and stale in the same way: it describes the last run, and a run
+ * that has not happened yet has none. Nothing here reports a *total*, so a stale profile cannot make
+ * a wrong claim about the map — the worst it does is draw the previous reading's shape until the
+ * next one lands, which is the same contract the mask on screen already has.
+ */
+let lastFilterInputs: {
+  readonly beforeStroke: BinaryMask;
+  readonly beforeIsland: BinaryMask;
+  readonly inkWidthPx: number;
+} | null = null;
+
+/** The two distributions, placed on their own tracks. Empty arrays where there is nothing to draw. */
+export interface InkProfiles {
+  readonly stroke: readonly ProfilePoint[];
+  readonly island: readonly ProfilePoint[];
+  /** How long both took, for the log — this is the expensive half of drawing them. */
+  readonly millis: number;
+}
+
+/**
+ * Measure what each ink filter would take, band by band.
+ *
+ * **Deliberately not part of a run.** The stroke profile opens the mask once per radius the slider
+ * can reach, which is the same order of work as the rest of the reading — so it is computed when a
+ * caller asks, after the map is already on screen, rather than inside the path that puts it there.
+ *
+ * Returns `null` before any reading, which is a caller's cue to draw nothing rather than to draw an
+ * empty shape.
+ */
+export function inkProfiles(maxInkWidths: number, maxSpanPx: number, spanBins: number): InkProfiles | null {
+  if (!lastFilterInputs) return null;
+  const { beforeStroke, beforeIsland, inkWidthPx } = lastFilterInputs;
+
+  const started = performance.now();
+  // The track's own top, converted to the radius it reaches: past this the slider cannot go, so a
+  // band beyond it describes nothing the GM can choose.
+  const maxRadius = radiusForWidth(maxInkWidths * inkWidthPx);
+  const stroke = strokePoints(strokeProfile(beforeStroke, maxRadius), inkWidthPx, maxInkWidths);
+  const island = islandPoints(islandProfile(beforeIsland, maxSpanPx, spanBins));
+  const millis = performance.now() - started;
+
+  devLog(
+    "info",
+    `profiles: ${stroke.length} stroke bands to radius ${maxRadius} and ${island.length} island ` +
+      `bands over ${maxSpanPx}px, in ${Math.round(millis)}ms`,
+  );
+  return { stroke, island, millis };
 }
 
 /**
@@ -901,6 +960,20 @@ function composeInk(
   const strokeFloor = settings.trace.minStrokeInkWidths * (reading.inkWidth ?? 0);
   const openRadius = radiusForWidth(strokeFloor);
   const effectiveMask = openMask(reading.mask, openRadius);
+  /*
+    Kept so the two sliders can be drawn with the distribution they act on, computed later and only
+    if something asks.
+
+    **Each filter's input, not its output.** The stroke filter acts on the raw reading and the island
+    filter on what the stroke filter left — so neither profile depends on its own control, and moving
+    a handle redraws the same curve with the marker somewhere new. Held as references to masks this
+    run already built, so the cost of keeping them is nothing beyond not collecting them.
+  */
+  lastFilterInputs = {
+    beforeStroke: reading.mask,
+    beforeIsland: effectiveMask,
+    inkWidthPx: reading.inkWidth ?? 0,
+  };
 
   if (openRadius > 0) {
     const removed = removedInk(reading.mask, effectiveMask);

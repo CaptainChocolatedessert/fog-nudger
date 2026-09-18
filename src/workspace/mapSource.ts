@@ -33,6 +33,7 @@ import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
 import { loadMarks } from "./regionMarks";
 import { loadStage } from "./stage";
+import { clearInkProfiles } from "./inkProfiles";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
 /**
@@ -90,6 +91,12 @@ export async function loadNominatedMap(opening = false): Promise<void> {
     say(describeMaskFailure(outcome), "bad");
     setMapName(outcome.reason === "no-map" ? "No map chosen." : `${outcome.mapName} — unreadable.`);
     setMapImage(null);
+    /*
+      And drop the shapes on the two ink sliders, for the gap marks' reason one line up: they
+      describe a reading that is gone, and a distribution left beside a control after its map has
+      is a diagnostic answering about something else. Nothing redraws them until a reading lands.
+    */
+    clearInkProfiles();
     return;
   }
   const result = outcome.reading;

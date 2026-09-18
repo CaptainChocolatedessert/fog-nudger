@@ -35,7 +35,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows, seededRandom } from "./fixtures";
-import { islandProfile, strokeProfile } from "./inkProfile";
+import { islandPoints, islandProfile, strokePoints, strokeProfile } from "./inkProfile";
 import type { BinaryMask } from "./binarize";
 
 /**
@@ -397,5 +397,34 @@ describe("islandProfile", () => {
     const marks = maskFromRows(["#.#"]);
     expect(islandProfile(marks, 0, 4).bands).toEqual([]);
     expect(islandProfile(marks, 10, 0).bands).toEqual([]);
+  });
+});
+
+describe("placing bands on a track", () => {
+  it("puts a stroke band at the width where its radius first applies", () => {
+    // Ink 4px, track 0..3 ink widths, so 0..12px. Radius 1 first applies at 1px, radius 2 at 3px.
+    const points = strokePoints({ bands: [10, 20], total: 30 }, 4, 3);
+    expect(points).toEqual([
+      { at: 1 / 12, ink: 0.5 },
+      { at: 3 / 12, ink: 1 },
+    ]);
+  });
+
+  it("drops a stroke band the track cannot reach, rather than piling it on the last stop", () => {
+    // Ink 1px: radius 3 first applies at 5px, which is past a track ending at 3 ink widths.
+    const points = strokePoints({ bands: [4, 4, 4], total: 12 }, 1, 3);
+    expect(points.map((point) => point.at)).toEqual([1 / 3, 1]);
+  });
+
+  it("puts an island band at the top of its own slice", () => {
+    const points = islandPoints({ bands: [1, 3, 0, 2], total: 6 });
+    expect(points.map((point) => point.at)).toEqual([0.25, 0.5, 0.75, 1]);
+    expect(points.map((point) => point.ink)).toEqual([1 / 3, 1, 0, 2 / 3]);
+  });
+
+  it("gives nothing back when every band is empty, rather than dividing by zero", () => {
+    expect(islandPoints({ bands: [0, 0], total: 0 })).toEqual([]);
+    expect(strokePoints({ bands: [], total: 0 }, 4, 3)).toEqual([]);
+    expect(strokePoints({ bands: [5], total: 5 }, 0, 3)).toEqual([]);
   });
 });

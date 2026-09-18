@@ -138,3 +138,67 @@ function countInk(mask: BinaryMask): number {
   for (let i = 0; i < mask.data.length; i++) if (mask.data[i] === 1) ink += 1;
   return ink;
 }
+
+/** One band, placed on its control's own track. */
+export interface ProfilePoint {
+  /** Where on the track this ink goes, 0 at the left end and 1 at the right. */
+  readonly at: number;
+  /** How much ink, as a share of the tallest band — so the shape fills its box whatever the map. */
+  readonly ink: number;
+}
+
+/**
+ * Place a profile's bands on the track, at the point where each band's ink leaves the map.
+ *
+ * **The position is where the ink goes, not where the band begins**, for both filters and for the
+ * same reason: the picture is answering *what does moving the handle here cost me*, so a band's
+ * height belongs at the stop that spends it.
+ *
+ * **Normalised to the tallest band.** The shape fills its box on every map, which is right for
+ * reading a distribution and would be wrong if anyone compared two maps. Nobody does — there is one
+ * map open at a time and the plot is beside its own control.
+ */
+function placed(bands: readonly number[], at: (index: number) => number): ProfilePoint[] {
+  let tallest = 0;
+  for (const band of bands) if (band > tallest) tallest = band;
+  if (tallest <= 0) return [];
+
+  const points: ProfilePoint[] = [];
+  for (let i = 0; i < bands.length; i++) {
+    const position = at(i);
+    // Bands past the end of the track are dropped rather than piled on its last stop, which would
+    // invent a spike the control cannot reach.
+    if (position < 0 || position > 1) continue;
+    points.push({ at: position, ink: bands[i]! / tallest });
+  }
+  return points;
+}
+
+/**
+ * Stroke bands on the *Thinnest stroke to keep* track, which is denominated in ink widths.
+ *
+ * The filter halves its pixel threshold and rounds, so radius `r` first applies at a width of
+ * `2r - 1` pixels — `radiusForWidth` rounds `2r - 1` up to `r`. Divided by the measured ink width to
+ * reach the track's own unit, and by the track's maximum to reach a fraction of it.
+ */
+export function strokePoints(
+  profile: Profile,
+  inkWidthPx: number,
+  maxInkWidths: number,
+): ProfilePoint[] {
+  if (!(inkWidthPx > 0) || !(maxInkWidths > 0)) return [];
+  return placed(profile.bands, (i) => (2 * (i + 1) - 1) / inkWidthPx / maxInkWidths);
+}
+
+/**
+ * Island bands on the *Smallest mark to keep* track, which is denominated in raster pixels.
+ *
+ * Band `i` holds the islands whose span falls in the `i`-th slice of `0 .. maxSpan`, and they leave
+ * as the handle passes the top of that slice — so the point sits at the slice's upper edge, which is
+ * a fraction of the track with no measurement in it at all.
+ */
+export function islandPoints(profile: Profile): ProfilePoint[] {
+  const count = profile.bands.length;
+  if (count < 1) return [];
+  return placed(profile.bands, (i) => (i + 1) / count);
+}

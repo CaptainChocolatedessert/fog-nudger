@@ -947,6 +947,79 @@ inner loop addresses pixels through a base and a stride rather than a closure ch
 multiplications; measured in Node at 3300×2550, radius 6 went from 503ms to 235ms, and the new
 version is flat in the radius where the old one was not.
 
+#### Each filter draws the distribution it acts on — 2026-09-17
+
+A shape rises off each of the two ink filters' own rails: **ink per stroke width** on *Thinnest stroke
+to keep*, **ink per island span** on *Smallest mark to keep*. Where the humps are says what kinds of
+mark the map has; where the handle sits says which of them are being kept.
+
+**The measurement is the filter, sampled — not a model of it.** Both have an obvious cheaper way to
+answer "how much is there at each size" that is *not* the control: a distance transform for stroke
+width, a plain size histogram for islands. Either would be a second opinion about a quantity the
+control already decides, and a curve drawn beside a slider to say where to put it is the worst
+possible place for one. So the stroke profile is a **granulometry** — open the mask at each radius the
+slider can reach and count what survives, using the same `openMask` the filter applies — and the
+island profile shares `removeSmallInkIslands`' own walk, extracted so there is one definition of an
+island rather than two that can drift.
+
+**Neither profile depends on the slider it belongs to.** Each is measured from the ink *before* its
+own filter, so dragging that handle redraws the same curve with the marker somewhere new. The stroke
+profile depends on the reading alone; the island profile also moves with the stroke slider, which is
+real rather than an oversight — the islands the second filter sees are whatever the first left.
+
+**Computed off the critical path.** The stroke profile is one opening per radius, the same order of
+work as the reading itself, so folding it in would roughly double what a slider release costs to draw
+a hint. A frame is yielded first — §7a's trap, where a synchronous computation holds the thread and
+nothing set before it ever paints — and the map goes up before the shape follows it.
+
+**The resolution is the control's, not ours.** The filter halves its pixel threshold and rounds to a
+radius, so the curve has one point per *distinct outcome*: six on a map whose ink measures 3.4px,
+against sixty slider stops. Drawing it at any finer grain would describe something the control cannot
+do.
+
+- **A band sits where its ink leaves the map**, for both filters, because the question the picture
+  answers is what moving the handle here costs. For islands that settles a boundary too: a span
+  landing exactly on a band edge belongs to the band *below*, since `removeSmallInkIslands` keeps an
+  island when `span >= minSpan`, so one of span 4 survives the setting 4.
+- **Islands longer than the track can reach are left out**, not folded into the last band. A map's
+  wall network is one island spanning most of the raster and holding most of the ink, and including
+  it would put every decoration on the floor.
+- **Normalised to the tallest band**, so the shape fills its box on any map. Wrong if anyone compared
+  two maps; nobody does.
+- **It fits inside the row the slider already occupies**, with the rail as its floor, so nothing below
+  it moves. Only these two controls get one, and `controls.test.ts` names them — a third has to be
+  argued for there.
+
+**Three findings from the oracles, none of which a mutation would have produced:**
+
+- The first stroke oracle modelled an *unclamped* opening and disagreed with the implementation on
+  every random mask. The implementation was right: `morphology.ts` counts off-image as ink so a wall
+  along the border is not eroded off it, and the fixture that caught it had a block resting on the
+  bottom row.
+- The island oracle walked islands independently but binned them with a **copy of the expression
+  under test**, so a mutated formula survived the whole sweep. Rewriting it to scan the band
+  boundaries — saying what a band *means* rather than restating how one is computed — then failed,
+  and this time the implementation was wrong: it offset every island by one span. That offset had
+  also made a genuine overflow guard look like dead code, which a previous survivor had been
+  "answered" by deleting.
+- The random generator made white noise, in which a 7×7 all-ink window essentially never occurs, so
+  the sweep agreed about nothing surviving 120 times. The reach assertions refused it.
+
+**And one thing asserted here first and backwards:** chaining each opening off the previous result
+gives the *same* answer, because openings by squares compose as a granulometry. That mutation is
+equivalent rather than uncaught, and the fixture written to catch it cannot. The code still opens from
+the original, because that is the definition and because it does not depend on the structuring element
+continuing to compose that way.
+
+**Thirteen mutations, thirteen caught**, plus four more over the track placement.
+
+*Open, and noticed only because this plot makes it visible: the stroke slider has about ten stops per
+distinct outcome.* This project has already treated that as a defect once — the gap width is stepped
+in twos *"because the value is halved and rounded to a closing radius, so consecutive odd and even
+settings produce the identical repair"* — and the stroke filter has a worse version that nobody has
+seen, because the map redraws identically either way. With the curve drawn, the handle slides a third
+of the way across a flat stretch while nothing moves.
+
 ### Connectivity — the pairing is not optional
 
 Connected-component labelling must use **8-connectivity for ink and 4-connectivity for space**.

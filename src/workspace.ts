@@ -49,6 +49,7 @@ import { applyPalette } from "./workspace/palette";
 import { registerLayerRow } from "./workspace/layerRow";
 import { onToolChange, registerToolPalette } from "./workspace/toolPalette";
 import { registerUndoAction } from "./workspace/undoAction";
+import { refreshInkProfiles } from "./workspace/inkProfiles";
 import { registerBlobLayer } from "./workspace/layers/blob";
 import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerInkLayer } from "./workspace/layers/ink";
@@ -112,6 +113,15 @@ onReading((result) => {
     already paid for once — a diagnostic that looked clean and was answering about something else.
   */
   noteReadingForGaps(result.mask);
+  /*
+    And ask for the two ink filters' distributions, which arrive a frame later.
+
+    **Booked rather than computed here.** The stroke profile opens the mask once per radius the
+    slider can reach, which is the same order of work as the reading that has just finished — doing
+    it inside this listener would roughly double what a slider release costs, to draw a hint. The map
+    goes up first and the shape follows it.
+  */
+  refreshInkProfiles();
 });
 
 /*
