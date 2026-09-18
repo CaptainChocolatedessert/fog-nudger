@@ -986,6 +986,17 @@ do.
   it would put every decoration on the floor.
 - **Normalised to the tallest band**, so the shape fills its box on any map. Wrong if anyone compared
   two maps; nobody does.
+- **A band with any ink at all is drawn at a visible height** (user, 2026-09-18), because the question
+  at the thin end of the picture is *is there anything here* rather than *how much*. On a map whose
+  detail outweighs its walls, normalising alone puts the wall population on the floor and hides the
+  one thing worth seeing — where the setting starts costing linework rather than pebbles. **The cost:
+  heights stop being comparable below that floor.** Zero is still zero and stays on the rail, which is
+  the distinction that matters there.
+- **A blank top end has two causes and the log tells them apart.** A plot shows only ink that *leaves*
+  somewhere on the track; ink in strokes too wide for the last stop, or in islands longer than the
+  track can reach, is in no band at all. So the `profiles:` line reports the share each profile does
+  not account for. No floor under a band can raise what is not in the profile, and on a map whose
+  linework survives everything the control can do, that share is the whole story.
 - **It fits inside the row the slider already occupies**, with the rail as its floor, so nothing below
   it moves. Only these two controls get one, and `controls.test.ts` names them — a third has to be
   argued for there.

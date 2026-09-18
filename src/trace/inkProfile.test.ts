@@ -428,3 +428,15 @@ describe("placing bands on a track", () => {
     expect(strokePoints({ bands: [5], total: 5 }, 0, 3)).toEqual([]);
   });
 });
+
+describe("the floor under a band that has any ink", () => {
+  it("draws a band far below the tallest at a visible height, and an empty one at nothing", () => {
+    const points = islandPoints({ bands: [1000, 1, 0], total: 1001 });
+    expect(points.map((point) => point.ink)).toEqual([1, 0.14, 0]);
+  });
+
+  it("leaves a band above the floor at its true share", () => {
+    const points = islandPoints({ bands: [100, 50, 20], total: 170 });
+    expect(points.map((point) => point.ink)).toEqual([1, 0.5, 0.2]);
+  });
+});

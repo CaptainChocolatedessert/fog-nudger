@@ -465,14 +465,36 @@ export function inkProfiles(maxInkWidths: number, maxSpanPx: number, spanBins: n
   // The track's own top, converted to the radius it reaches: past this the slider cannot go, so a
   // band beyond it describes nothing the GM can choose.
   const maxRadius = radiusForWidth(maxInkWidths * inkWidthPx);
-  const stroke = strokePoints(strokeProfile(beforeStroke, maxRadius), inkWidthPx, maxInkWidths);
-  const island = islandPoints(islandProfile(beforeIsland, maxSpanPx, spanBins));
+  const strokeBands = strokeProfile(beforeStroke, maxRadius);
+  const islandBands = islandProfile(beforeIsland, maxSpanPx, spanBins);
+  const stroke = strokePoints(strokeBands, inkWidthPx, maxInkWidths);
+  const island = islandPoints(islandBands);
   const millis = performance.now() - started;
+
+  /*
+    **The share each profile does not account for is the line to read**, and it is why it is logged
+    rather than left implicit.
+
+    A plot only shows ink that *leaves* somewhere on the track. Ink in strokes too wide for the
+    slider's last stop, or in islands longer than it can reach, belongs to no band at all — so a blank
+    top end has two very different causes. Either there is nothing there, or what is there is the
+    linework, surviving everything the control can do and therefore invisible to a picture of what it
+    takes. The second is the interesting one on a map whose detail outweighs its walls, and no floor
+    under a band can raise what is not in the profile.
+  */
+  const untouched = (profile: { bands: readonly number[]; total: number }): string => {
+    if (profile.total <= 0) return "0%";
+    const spent = profile.bands.reduce((sum, band) => sum + band, 0);
+    return `${(((profile.total - spent) / profile.total) * 100).toFixed(1)}%`;
+  };
 
   devLog(
     "info",
-    `profiles: ${stroke.length} stroke bands to radius ${maxRadius} and ${island.length} island ` +
-      `bands over ${maxSpanPx}px, in ${Math.round(millis)}ms`,
+    `profiles: ${stroke.length} stroke bands to radius ${maxRadius}, ` +
+      `${untouched(strokeBands)} of the ink in strokes the track never reaches; ` +
+      `${island.length} island bands over ${maxSpanPx}px, ` +
+      `${untouched(islandBands)} of the ink in islands longer than that; ` +
+      `in ${Math.round(millis)}ms`,
   );
   return { stroke, island, millis };
 }

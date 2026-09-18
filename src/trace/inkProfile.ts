@@ -148,6 +148,21 @@ export interface ProfilePoint {
 }
 
 /**
+ * The shortest a band with any ink at all is drawn, as a share of the box.
+ *
+ * **Because the question at the thin end of the picture is "is there anything here", not "how
+ * much"** (user, 2026-09-18). Normalising to the tallest band puts a small population on the floor,
+ * and on a map whose detail outweighs its walls that hides the one thing worth seeing: where the
+ * setting starts costing linework rather than pebbles. A band that draws at nothing says there is
+ * nothing there, and it is the wrong answer.
+ *
+ * **The cost, stated: heights stop being comparable below this.** A band holding a tenth of a percent
+ * draws the same as one holding a tenth. What survives is the distinction that matters at that end —
+ * zero is still zero, and stays on the rail.
+ */
+const MIN_VISIBLE_BAND = 0.14;
+
+/**
  * Place a profile's bands on the track, at the point where each band's ink leaves the map.
  *
  * **The position is where the ink goes, not where the band begins**, for both filters and for the
@@ -169,7 +184,11 @@ function placed(bands: readonly number[], at: (index: number) => number): Profil
     // Bands past the end of the track are dropped rather than piled on its last stop, which would
     // invent a spike the control cannot reach.
     if (position < 0 || position > 1) continue;
-    points.push({ at: position, ink: bands[i]! / tallest });
+    const band = bands[i]!;
+    points.push({
+      at: position,
+      ink: band <= 0 ? 0 : Math.max(MIN_VISIBLE_BAND, band / tallest),
+    });
   }
   return points;
 }

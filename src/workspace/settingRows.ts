@@ -459,6 +459,7 @@ export function settingRow(control: Control): HTMLElement {
   */
   const profile = control.profile ? profileSvg() : null;
   if (profile) {
+    track.classList.add("with-profile");
     track.append(profile.element);
     paintProfile(profile, control.name);
     // Repainted rather than rebuilt: a new reading replaces the shape, and the row it belongs to is

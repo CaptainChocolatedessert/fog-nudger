@@ -376,6 +376,16 @@
 
         `pointer-events: none` throughout: it is a hint about the control, never a second control.
       */
+      /*
+        A row carrying a shape takes a little more room above it (user, 2026-09-18).
+
+        Four pixels, which is the gap between the top of the plot and the line of text over it. A
+        class rather than `:has(.profile)` — the selector would do, and a stylesheet that can only be
+        wrong about a control it cannot see is the one this project has been bitten by.
+      */
+      .row .track.with-profile {
+        margin-top: 0.3rem;
+      }
       .row .track .profile {
         position: absolute;
         left: 0;
