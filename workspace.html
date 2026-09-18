@@ -367,31 +367,33 @@
         z-index: 1;
       }
       /*
-        The distribution the two ink filters act on, rising off the rail.
-
-        **Its floor is the rail's own centre line**, which is what makes it read as a shape sitting on
-        the track rather than as a chart placed above one — so `bottom` is half the track's height,
-        and the box grows upward from there. It fits inside the row the slider already occupies, so
-        nothing below it moves.
-
-        `pointer-events: none` throughout: it is a hint about the control, never a second control.
-      */
-      /*
         A row carrying a shape takes a little more room above it (user, 2026-09-18).
 
-        Four pixels, which is the gap between the top of the plot and the line of text over it. A
-        class rather than `:has(.profile)` — the selector would do, and a stylesheet that can only be
-        wrong about a control it cannot see is the one this project has been bitten by.
+        A class rather than `:has(.profile)` — the selector would do, and a stylesheet that can only
+        be wrong about a control it cannot see is the one this project has been bitten by.
       */
       .row .track.with-profile {
         margin-top: 0.3rem;
       }
+      /*
+        The distribution the two ink filters act on, floating just above the rail.
+
+        **Its floor was the rail's own centre line and is now clear of it** (user, 2026-09-18). The
+        centre reads correctly for a tall band and hides a short one completely: a band at the minimum
+        height is under three pixels, and the native track is thicker than that, so the smallest bands
+        — exactly the ones that minimum exists to make visible — were being drawn inside the rail.
+
+        **The height comes down by the same amount the floor goes up**, so the top edge does not move
+        and the headroom above stays what it is. One number in both places.
+
+        `pointer-events: none` throughout: it is a hint about the control, never a second control.
+      */
       .row .track .profile {
         position: absolute;
         left: 0;
         right: 0;
-        bottom: 50%;
-        height: 20px;
+        bottom: calc(50% + 3px);
+        height: 17px;
         pointer-events: none;
         z-index: 0;
       }
