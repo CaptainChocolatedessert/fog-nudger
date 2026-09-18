@@ -2562,7 +2562,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**940 tests across 66 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**967 tests across 68 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2589,6 +2589,25 @@ invisible. It costs almost nothing to keep.
   region on both sides and a separate rule by the sign of a loop, and disabling the check survived
   every test — because once a loop of zero area goes, a wall walked out and back is such a loop, and
   the check never decided anything (2026-09-16). It was deleted rather than tested, leaving one rule.
+- **An oracle that restates the implementation is not an oracle.** The island profile's sweep walked
+  components with a queue and a `Set` where the code uses an index stack — genuinely independent — and
+  then binned the results with a **copy of the expression under test**. A mutation swapping in a
+  different binning formula survived the whole sweep. Rewriting the oracle to scan the band boundaries
+  — saying what a band *means*, the spans it covers, rather than restating how one is computed — then
+  failed, and the implementation was the wrong one (2026-09-18). **Check every step of an oracle for
+  shared reasoning, not just its headline algorithm.**
+- **A surviving mutation sometimes means the mutant is equivalent.** Replacing "open the original mask
+  at each radius" with "open the previous result" survived every fixture and 120 random masks, because
+  openings by square structuring elements compose as a granulometry: opening at 1 then at 2 *is*
+  opening at 2. The fixture written to catch it could not, and the comment justifying it was wrong.
+  The measurement is the mutation run itself; what it asks for is a corrected comment, not a better
+  test.
+- **A mock drawn to settle a design cannot verify the code that follows it.** The ink profiles were
+  designed by rendering candidates over a mock slider, which worked — and the mock was hand-written
+  HTML whose SVG was sized by its container, so it could never exhibit the fault the real one shipped
+  with (§9, the replaced-element trap). Two rounds of a room's judgement were spent on a picture whose
+  axis was a third of the width it claimed. **The picture settles the design; only the running thing
+  settles the build.**
 - **An optimisation is a new implementation, and its oracle has to run again — once, heavier.** Span's
   search was made fast with a grid of the walls, and the rewrite broke exactness twice in ways every
   written fixture passed: rays aimed only at vertices within the bound, and rays stopped at the bound
@@ -2808,6 +2827,12 @@ them expensively; where the cost is instructive it is named.
   load.
 - **Scene metadata has no limit below 512KB per key** — measured.
 - **The grid covers only `MAP`-layer images.**
+- **An inline `<svg>` is a replaced element, so `left: 0; right: 0` does not stretch it.** With
+  `width: auto` it takes its width from the viewBox's ratio against whatever height is given — a
+  100:20 viewBox at 17px tall is 85px, about a third of the drawer, which is how the ink profiles
+  shipped. **Set `width` explicitly on any SVG that must match something else's width**, and treat a
+  drawing whose horizontal axis *is* another control as a correctness question rather than a
+  cosmetic one: every band was placed somewhere other than the stop it described.
 - **Rasters cannot enter a scene.** `data:` URLs draw a broken-image placeholder at 0.3KB, are refused
   at 21.6KB, and wedge the message bus at 1.37MB. Asset upload is the only mechanism that delivers
   pixels, and `Image` has no opacity or tint. **This is why the workspace's view can never be scene
@@ -2934,22 +2959,34 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is broken and nothing is half-built.** The session of 2026-09-16 ended with every change
-committed, `tsc`, 940 tests and a build passing, and the parking lot empty. **The next piece of work is
+**Nothing is broken and nothing is half-built.** The session of 2026-09-18 ended with every change
+committed, `tsc`, 967 tests and a build passing, and the parking lot empty. **The next piece of work is
 the user's to choose** — the list at the end of this section is what is open, not a queue.
 
-**Suppress blob is built and its flood is confirmed in a room** (user, 2026-09-17: *"The flood looks right"*) — §10 has it in full. What that room saw was the spike: the tolerance was a constant, there was no preview, and the name and glyph were placeholders. **The finished tool has not been in a room**, so its slider, its preview and its glyph are all unlooked-at, and the preview is the one worth a moment — it is the thing standing between a click and the whole map's linework.
+**The biggest open question in the project closed on its own.** *"The most informative thing that can
+happen to this project is now a second map, one whose style differs from the first"* — and one
+arrived: *The Incandescent Grottoes*, 7252×5197, a cave system drawn with thin-line hatching, pebbles
+scattered everywhere and brickwork texture, its walls in a heavier line. **It works** (user,
+2026-09-18): *"The sparse version is correct... So I'd say everything is working well."* The reading,
+the two ink filters and the partition all behaved on a style nothing in this project had been tried
+on, and the one thing that looked alarming from a desk — seven regions where an unfiltered derive
+gives 2,493 — was the right answer for a cave whose chambers connect.
 
-**What that session built**, all on `main`:
+It also ran the **megapixel budget** for the first time in the project's life, which §4 now covers in
+full.
 
-- **Three wall tools** (§10): *Dissolve region*, *Suppress region* and *Span*. The Walls band is now
-  Move, Draw, Erase, Mend, Dissolve region, Suppress region, Span.
-- **Five glyphs redrawn** to tell apart at strip size (Mend, Gaps, Suppress, Add ink, Dissolve region),
-  with a shared rule for the Ink band: a heavy stroke is ink. `toolIcons.ts` records each choice.
-- **The README** brought up to the current surface.
+**What this session built**, all on `main`:
 
-**24 commits are not pushed**, the oldest from before that session. **A push deploys** the published
-site, so it waits for the user to want the public build to have them — never offer it per change.
+- **Suppress blob** (§10), a fourth Ink tool: click a solid mark on the map and everything of that
+  tone joined to it stops being ink.
+- **A distribution drawn on each ink filter's own rail** (§4): ink per stroke width, and ink per
+  island span.
+- **The map drawn at the trace's raster** when the budget reduced it, and the full-resolution decode
+  released once it is (§4).
+
+**37 commits are not pushed**, the oldest from before the previous session. **A push deploys** the
+published site, so it waits for the user to want the public build to have them — never offer it per
+change.
 
 **What rooms have confirmed**, so a cold session does not re-ask:
 
@@ -2961,6 +2998,12 @@ site, so it waits for the user to want the public build to have them — never o
 - **Graph units, Mend and the delta's review — used, not checked item by item** (*"I haven't tested
   them carefully, but I've used them."*).
 - **The redrawn glyphs** — looked at in a room and judged good.
+- **Suppress blob — all of it** (2026-09-17 and -18): the flood picks out the marks a GM wants gone,
+  the preview keeps up, the tolerance slider, the glyph, and undo taking one fill back per click.
+- **The map drawn at the trace's raster, and the released decode** — *"Everything seems fine in a
+  room."*
+- **Both ink profiles** — *"That looks good now."* Judged only after the width fault below was fixed;
+  every reading of them before that was of a shape a third of the track wide.
 
 **Unconfirmed, to look at whenever a room is open for another reason** — none is suspected:
 
@@ -2997,9 +3040,10 @@ they are refused, not converted, and *Remove ours* in the panel clears one.
   in the strip is to be looked at later (decision 7).
 - **The small-region tool is answered** by Dissolve region and is no longer open.
 
-**And the thing that is not a decision at all: a second map**, in a style unlike the first — hatched
-stonework, a printed floor grid, a scan. The reading is least proven there, and it is where the next
-real finding is.
+**A second map has now been through it** — a hatched cave system — and the reading held. What is still
+untried is a **printed floor grid** and a **scan**, which are different failures again: a grid is
+regular and as dark as the linework, and a scan brings tone drift and severed strokes that no graph
+tool can see.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
