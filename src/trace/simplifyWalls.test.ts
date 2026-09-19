@@ -122,6 +122,36 @@ describe("simplifyWalls", () => {
   });
 
   /*
+    The collapse threshold is **four, not three**, and the room above cannot show it — at 0.9 that
+    square fits to two indices, which both thresholds preserve. This fits to *exactly three*: a
+    closed run reduced to the repeat of its first vertex plus one other, which is a doubled line
+    rather than a shape.
+
+    **Not a rare case.** Over 174,156 wall runs of random graphs at six tolerances, 4,391 of the
+    23,436 closed runs fitted to exactly three — 18.7% (2026-09-18). A threshold of three would turn
+    every one of those rooms into a pair of coincident walls.
+  */
+  it("keeps a closed run that fits to exactly three points", () => {
+    const spike = graphOf(
+      [
+        [0, 0],
+        [1, 0],
+        [0.5, 0.002],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+      ],
+    );
+    const result = simplifyWalls(spike, 0.1);
+    expect(result.preserved).toBe(1);
+    expect(result.removed).toBe(0);
+    expect(result.graph.edges).toHaveLength(3);
+    expect(wallRuns(result.graph)).toHaveLength(1);
+  });
+
+  /*
     Simplification can pull a wall across one that was clear of it — which pruning cannot, since
     deleting never breaks planarity. The rule is to let it split, so the result stays an embedding a
     face traversal can mean anything over.

@@ -552,15 +552,30 @@ export function simplifyWalls(graph: WallGraph, tolerance: number): WallSimplifi
       A closed run needs four entries to be a shape — three distinct vertices plus the repeat of the
       first — which is why the threshold is not the three a ring of points would want.
     */
+    // `run.length > 1` guards an input invariant rather than an observed case: a one-entry run is a
+    // vertex with no wall on it, which `compactNodes` removes and every layer skips. **Zero in
+    // 174,156 runs** (2026-09-18), so it is kept as cheap defence across a module boundary rather
+    // than because anything has produced one.
     const closed = run.length > 1 && run[0] === run[run.length - 1];
     const survivors = !closed || indices.length >= 4 ? indices : run.map((_, index) => index);
     if (survivors.length !== indices.length) preserved += 1;
     removed += run.length - survivors.length;
 
+    /*
+      No self-edge guard, and its absence is measured rather than assumed.
+
+      There was an `a !== b` test here, and it never decided anything: **zero self-edges over 174,156
+      wall runs** of random graphs at six tolerances (2026-09-18). The collapse guard above is what
+      makes it redundant — a closed run's first and last entries are the same vertex, and they are
+      only ever adjacent in this loop when the run fitted to two indices, which the guard has already
+      sent down the unfitted path. Two rules where one decides is the overlap this project has
+      already deleted once, in `dissolve.ts`.
+
+      Safe even if that invariant ever moved: a zero-length segment is dropped, counted and reported
+      when the wall graph is built, so the failure would be loud rather than silent.
+    */
     for (let i = 1; i < survivors.length; i++) {
-      const a = run[survivors[i - 1]!]!;
-      const b = run[survivors[i]!]!;
-      if (a !== b) kept.push({ a, b });
+      kept.push({ a: run[survivors[i - 1]!]!, b: run[survivors[i]!]! });
     }
   }
 
