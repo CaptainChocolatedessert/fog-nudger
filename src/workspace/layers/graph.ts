@@ -43,9 +43,8 @@ import {
 } from "../../trace/wallGraph";
 import { colourFor } from "../palette";
 import { addPainter, type Painter } from "../shell";
-import { showingSaved, previewGraph } from "../regions";
+import { graphOnScreen, showingSaved } from "../regions";
 import { currentTool } from "../toolPalette";
-import { wallGraph } from "../stage";
 
 /** The tools a handle is for. Anything else in hand and a dot at every vertex is decoration. */
 const WALL_TOOLS = new Set(["move", "draw", "erase"]);
@@ -139,13 +138,15 @@ function degrees(graph: WallGraph): number[] {
 }
 
 /**
- * The graph on screen: the stored document or the current derivation, by `regions.ts`'s one predicate.
+ * The graph on screen, which `regions.ts` decides.
  *
  * Asked once per frame rather than held, so nothing has to be told when a derive lands or a gesture
- * writes. Both sources are already module state that changes wholesale.
+ * writes. It used to repeat the saved-versus-derived predicate here; it delegates now, because a
+ * *substitution* — Straighten previewing its result — has to reach the walls and the room fills
+ * together, and two copies of the answer is how those come apart.
  */
 function graphOnCanvas(): WallGraph | null {
-  return showingSaved() ? wallGraph() : previewGraph();
+  return graphOnScreen();
 }
 
 /**

@@ -163,6 +163,50 @@ export function previewGraph(): WallGraph | null {
 }
 
 /**
+ * A graph being previewed in place of the real one, or `null` when nothing is.
+ *
+ * *Straighten* sets this while its slider is aimed at something. **It substitutes rather than
+ * overlaying** (user, 2026-09-18) because the question a GM is answering there is *do I want these
+ * walls*, which only the result can answer — and because straightening replaces every wall, so an
+ * overlay would draw a dense map twice.
+ *
+ * **The partition goes through it too, which is the point.** The walls layer and the room fills must
+ * come from one graph: the ink mode once previewed one face derivation and emitted another, and
+ * nothing in the code said they were meant to match. One variable, read by `graphOnScreen`, with the
+ * traversal recomputed when it is set.
+ *
+ * It is deliberately **not** what `editableGraph` returns. A tool must edit the document rather than a
+ * proposal — and no tool is armed while this is set, because opening a group's drawer puts the verb
+ * back to Pan.
+ */
+let substituted: WallGraph | null = null;
+
+/**
+ * The graph being **drawn**: a substitution if one is up, otherwise the document or the derivation.
+ *
+ * Distinct from `editableGraph` on purpose — that answers *what would a tool act on*, and this answers
+ * *what is on the canvas*. They differ only while something is previewing a replacement.
+ */
+export function graphOnScreen(): WallGraph | null {
+  return substituted ?? (showingSaved() ? wallGraph() : preview);
+}
+
+/**
+ * Put a graph on the canvas in place of the real one, or take the substitution down with `null`.
+ *
+ * Re-walks the traversal, because the fills, the emitted wall lines and the marks' active state are
+ * all functions of the graph being shown. Cheap against what it replaces: a traversal is the few
+ * milliseconds `publish` already spends, and this runs on a slider release rather than per frame.
+ */
+export function substituteGraph(graph: WallGraph | null): void {
+  if (substituted === graph) return;
+  substituted = graph;
+  const shown = graphOnScreen();
+  if (shown) showFaces(shown, buildWallFaces(shown));
+  invalidate();
+}
+
+/**
  * The graph the GM is looking at, which is the one the wall tools act on.
  *
  * **Here rather than in `wallEdit.ts`, because two callers need it and they must agree.** The
