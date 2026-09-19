@@ -675,7 +675,6 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
     it regenerates the walls like any reading change, and the mark and the prompt price that.
   */
   spurPruneGraphUnits: "walls",
-  simplifyGraphUnits: "walls",
   // The mend tool's own two, drawn in its drawer rather than in the group's.
   mendReachGraphUnits: "walls",
   mendTravelGraphUnits: "walls",

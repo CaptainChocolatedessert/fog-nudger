@@ -32,7 +32,6 @@
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { SETTING_LIMITS } from "../settings";
 import { simplifyWalls } from "../trace/planarOps";
 import type { WallGraph } from "../trace/wallGraph";
 import { onStepChange } from "./drawer";
@@ -45,7 +44,7 @@ import {
   revalidate,
   type GraphLatch,
 } from "./graphLatch";
-import { graphScaleTop, onGraphScale } from "./graphScale";
+import { bendTop, onGraphScale } from "./graphScale";
 import { editableGraph, substituteGraph } from "./regions";
 import { say } from "./shell";
 import { saveEditedWalls, wallsEdited } from "./stage";
@@ -60,21 +59,25 @@ let latch: GraphLatch = NO_LATCH;
 let frameAsked = false;
 
 /**
- * The track's top, measured off the graph.
+ * The amount's own track: a pinned floor, a measured top, and the step the scale snaps to.
  *
- * The largest **bend** — how far one vertex sits off the line joining its neighbours — which is
- * per-vertex rather than per-wall on purpose: a whole wall's deviation from the chord between its ends
- * is dominated by the exterior, which departs from its own chord by something like half the map, and
- * every useful setting would sit in the first percent of the track.
+ * **The floor is pinned rather than the smallest bend in the graph**, and the reason is sharp: this
+ * deletes from the bottom, so the smallest bend is the most mobile quantity there is. Straighten at
+ * one amount and the smallest surviving bend is that amount — a tracking floor would chase the handle
+ * upward every opening, and the same position would mean a larger bite each time. That is the
+ * non-monotonicity the two-slider gap design collapsed under.
  *
- * Still read through the settings' own scale entry while the tolerance is still declared there. When
- * that declaration goes, this becomes a direct call for the same measurement.
+ * **Nothing is stored, so there are no `SETTING_LIMITS` to borrow.** These belonged to the tolerance
+ * that fed the derive, and that number is computed from the ink width now. What is left here is a
+ * transient amount, which needs a range to draw a track against and nothing to normalise.
  */
+const AMOUNT_FLOOR = 2e-4;
+const AMOUNT_STEP = 0.0001;
+
 function limits(): ScaleLimits | null {
-  const top = graphScaleTop("simplifyGraphUnits");
+  const top = bendTop();
   if (!top || !(top > 0)) return null;
-  const declared = SETTING_LIMITS.simplifyGraphUnits;
-  return { min: 0, max: top, step: declared.step, floor: declared.floor };
+  return { min: 0, max: top, step: AMOUNT_STEP, floor: AMOUNT_FLOOR };
 }
 
 export function renderStraightenAction(body: HTMLElement): void {

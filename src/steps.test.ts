@@ -450,19 +450,20 @@ describe("per-step defaults", () => {
 });
 
 describe("the four axes are declared independently", () => {
-  it("does not let the stage be recovered from the step", () => {
-    // The Walls step holds spur pruning, which is a reading control, beside edge smoothing, which is
-    // a deriving one. Reading a stage off a step would put a later-stage control into the reading
-    // stage's cache invalidation - the failure the two-axis split exists to prevent, one axis on.
-    const byStep = new Map<StepId, Set<string>>();
-    for (const name of ALL_NAMES) {
-      // Through `stepsOf`, because a control may name more than one step — spur pruning is in both
-      // modes' last step. Every step it names has to carry the same conclusion.
-      for (const step of stepsOf(name))
-      byStep.set(step, (byStep.get(step) ?? new Set()).add(PARAMETER_STAGE[name]));
-    }
-    expect([...byStep.values()].some((stages) => stages.size > 1)).toBe(true);
-  });
+  /*
+    **The stage-versus-step assertion is gone (2026-09-18), and it pinned a coincidence.**
+
+    It asserted that some step mixes two stages, so that nobody could read a stage off a step — and its
+    own example was *"the Walls step holds spur pruning, which is a reading control, beside edge
+    smoothing, which is a deriving one."* Edge smoothing stopped being a setting, the `derive` stage
+    went with it, and no step mixes stages any more.
+
+    Deleted rather than inverted, because this record already said which direction happens to be a
+    function *"is a fact about today's parameters and moves whenever the sections do"*. Keeping it would
+    force every future layout to preserve a coincidence. What actually guards the conflation is the
+    totality assertion below: every parameter declares its own stage, so nothing has to be guessed from
+    a neighbour.
+  */
 
   it("does not let the kind be recovered from the step", () => {
     // The Ink step holds the ink opacity, which recomputes nothing, beside the threshold, which

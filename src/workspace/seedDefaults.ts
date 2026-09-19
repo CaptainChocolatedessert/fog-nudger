@@ -47,24 +47,20 @@
  */
 
 import { devLog } from "../devlog";
-import { lastInkWidth, lastRasterPerGraphUnit } from "../pipeline";
+import { lastRasterPerGraphUnit } from "../pipeline";
 import {
   DEFAULT_SETTINGS,
   readParameter,
-  SETTING_LIMITS,
   seededGraphUnitsFromPixels,
-  seededSimplifyGraphUnits,
   writeParameter,
   type SettingName,
 } from "../settings";
 import { renderPanel } from "./drawer";
 import { onReading } from "./reading";
-import { invalidateRegions } from "./regions";
 import { currentSettings, persistSettings, setSettings } from "./settingsState";
 
 export function registerDefaultSeeds(): void {
   onReading(() => {
-    seed();
     seedMends();
     // Never the reason a reading is marked failed. A listener returning false means a step could not
     // take the mask and the surface would be half-updated; this only ever writes a setting.
@@ -72,47 +68,17 @@ export function registerDefaultSeeds(): void {
   });
 }
 
-function seed(): void {
+/*
+  `seed` was here, and it went on 2026-09-18 with the setting it seeded.
 
-  const settings = currentSettings();
-  if (settings.trace.simplifyGraphUnits !== DEFAULT_SETTINGS.trace.simplifyGraphUnits) return;
+  It gave the stored simplification tolerance a per-map starting value on the first reading, because a
+  fixed default comes out sub-pixel on a small map and produced a graph too large to write. The
+  tolerance is computed inside the derive now — a quarter of the measured ink width, the same figure —
+  so there is no stored default left to seed and nothing to tell the GM they can override.
 
-  const inkWidth = lastInkWidth();
-  const rasterPerUnit = lastRasterPerGraphUnit();
-  if (inkWidth === null || rasterPerUnit === null) return;
-
-  const value = seededSimplifyGraphUnits(inkWidth, rasterPerUnit);
-  if (value === settings.trace.simplifyGraphUnits) return;
-
-  setSettings(writeParameter(settings, "simplifyGraphUnits", value));
-  void persistSettings();
-  /*
-    Invalidated explicitly rather than relying on the reading's own listeners to do it afterwards.
-
-    The regions subscribe to readings too, and the order listeners are told in is registration order,
-    which is not something this should depend on — a seed that landed after the invalidation would
-    derive the partition at the old tolerance and mark it current. One extra invalidation costs
-    nothing, because deriving is lazy and only runs when a step that draws it is open.
-  */
-  invalidateRegions();
-  // Rebuilt so the slider moves to where the value now is. It also re-measures the track's top,
-  // which is correct: this is the first reading, so it is the first graph worth measuring.
-  renderPanel();
-  devLog(
-    "info",
-    `workspace: simplification was at its default and has been seeded from the map — ` +
-      `${value.toExponential(2)} graph units, a quarter of the measured ${inkWidth.toFixed(1)}px ` +
-      `ink width at ${Math.round(rasterPerUnit)} raster pixels to the unit. Move the slider to ` +
-      `choose your own.`,
-  );
-  if (value >= SETTING_LIMITS.simplifyGraphUnits.max) {
-    devLog(
-      "warn",
-      "workspace: the seeded tolerance hit the storage ceiling, which means the measured ink width " +
-        "is an implausible share of the map. Check the Ink step before trusting the graph.",
-    );
-  }
-}
+  The mend tool's two distances are still seeded below, which is why this module survives. *Untouched
+  means equal to the static default* is one rule and it lives in one place.
+*/
 
 /**
  * The mend tool's two distances, each seeded only while it is still at its static default.

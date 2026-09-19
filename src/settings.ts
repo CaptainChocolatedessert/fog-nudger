@@ -199,18 +199,23 @@ export interface TraceSettings {
    * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
    */
   readonly spurPruneGraphUnits: number;
-  /**
-   * Simplification tolerance, **in graph units** — the map's longer side is 1.
-   *
-   * **Renamed from `simplifyFraction` on 2026-09-16**, for the reason the prune limit was.
-   *
-   * The old `simplifyInkWidths` cap — below half an ink width, so Douglas–Peucker provably could not
-   * carry a room's edge past the centre of the wall beside it — is **retired** (user, 2026-09-06:
-   * *"it's ok to allow simplification over a half-ink-width. The user will be looking at the
-   * consequences."*). Its original reason went when the graph pivot made both faces of a shared wall
-   * move together, and what is left is a corner cut across a doorway, which is visible.
-   */
-  readonly simplifyGraphUnits: number;
+  /*
+    `simplifyGraphUnits` was here and went on 2026-09-18. It was the **fitting** tolerance, converted
+    to raster pixels and handed to the derive.
+
+    **Removed rather than hidden.** A stored value with no handle would have governed every fit for
+    ever, silently, on any scene tuned before the change — which is the failure the unit-rename rule
+    exists to prevent, arriving by a different route. The derive computes the figure from the measured
+    ink width now: a quarter of one, which is what this defaulted to for the months it was denominated
+    in ink widths and the only form that means the same on every map.
+
+    The round trip went with it. The seed divided a pixel figure by raster pixels per graph unit and
+    the derive multiplied it straight back; that hop existed only so a *stored* number could outlive
+    the raster.
+
+    **Straighten** is what a GM presses instead, and it is not this number. It applies an amount to
+    the walls in front of them, so it works on a hand-edited graph and needs no lock.
+  */
   /**
    * The mend tool's largest gap to look for, **in graph units**. Zero proposes nothing.
    *
@@ -378,15 +383,6 @@ export const DEFAULT_SETTINGS: Settings = {
     // graph as fitting produced it, hairs and all.
     spurPruneGraphUnits: 0,
     /*
-      About a quarter of an ink width on the test map, which is what this defaulted to when it was
-      denominated in them: 0.25 x 5.7px on a 3300px raster is 4.3e-4 of the map's longer side.
-
-      **Only a fallback.** A fixed figure comes out sub-pixel on a small map, so the real starting
-      value is seeded per map from its reading — `seedDefaults.ts` — and this is what stands until
-      one has landed.
-    */
-    simplifyGraphUnits: 4e-4,
-    /*
       20 and 40 raster pixels on the 3300px test map, and **only fallbacks**: both are seeded per map
       from its raster once a reading lands, for the reason straightening is — a fixed figure means a
       different stretch of wall on every map.
@@ -463,9 +459,6 @@ export const SETTING_LIMITS = {
   minStrokeInkWidths: { min: 0, max: 3, step: 0.05 },
   // Same reasoning: the top end should be able to erase a map's decoration and then its walls.
   minIslandPx: { min: 0, max: 300, step: 1 },
-  // The half-ink-width cap is retired (user, 2026-09-06); the top of the track is meant to reach
-  // obviously useless values, the same as the two ink filters. See the block above for the unit.
-  simplifyGraphUnits: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
   /*
     The mend tool's two, on log tracks in graph units like the other two graph controls — but with a
     **declared** top rather than one measured off the graph, because what they measure is a gap and
@@ -554,10 +547,26 @@ export type SettingName = keyof typeof SETTING_LIMITS;
  * reading operation. The control was removed on 2026-08-30; the argument it settled is why the line
  * is drawn here.
  */
-export type Stage = "read" | "derive" | "adjust";
+export type Stage = "read" | "adjust";
+
+/*
+  **`derive` was the middle rung and it is gone (2026-09-18), because it ran out of members.**
+
+  It meant *abstracting the ink into shapes*: regenerates every polygon, so it discards hand edits but
+  not the reading. The evidence quoted for it being a real rung was a minimum-area filter that is not a
+  pure delete — and that control was deleted on 2026-08-30, which left the simplification tolerance as
+  the only parameter at this stage. That tolerance stopped being a setting on 2026-09-18: it is computed
+  from the measured ink width inside the derive, and what a GM presses instead is Straighten, which
+  applies an amount to the walls rather than changing a parameter.
+
+  So every setting that remains either changes what the ink is (`read`) or destroys nothing (`adjust`).
+  **A stage with no members claims an ordering it does not have**, which is what `stages.test.ts` is
+  there to refuse, and the honest answer was to take the rung out rather than relax the test.
+*/
 
 /**
- * In order, and the order **is** the cascade: read destroys derive and adjust, derive destroys adjust.
+ * In order, and the order **is** the cascade: read destroys adjust. (It was three until 2026-09-18 —
+ * the block above says where the middle one went.)
  *
  * No production code reads this array — the UI reads `PARAMETER_STAGE` and `PARAMETER_STEP`, and the
  * cache invalidation reads the fingerprints. What it is for is stating the cascade in one place so a
@@ -565,7 +574,7 @@ export type Stage = "read" | "derive" | "adjust";
  * part of the UI depends on it being this way round", which was true of the panel's stage tabs and
  * stopped being true when they were deleted at A.6.
  */
-export const STAGES = ["read", "derive", "adjust"] as const;
+export const STAGES = ["read", "adjust"] as const;
 
 /**
  * The single declaration of which stage owns which parameter.
@@ -586,7 +595,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   spurPruneGraphUnits: "read",
   suppressBrushPx: "read",
   inkBrushPx: "read",
-  simplifyGraphUnits: "derive",
   // Filed `read` as every tool control is, which `stages.test.ts` pins: a tool control's stage is
   // never spent — its kind is what decides — and one convention for all of them is what keeps the
   // re-read prompt from being argued control by control. A mend setting destroys nothing.
@@ -665,36 +673,19 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   spurPruneGraphUnits: "pipeline",
   suppressBrushPx: "tool",
   inkBrushPx: "tool",
-  simplifyGraphUnits: "pipeline",
   mendReachGraphUnits: "tool",
   mendTravelGraphUnits: "tool",
   fillOpacity: "display",
   strokeSquares: "display",
 };
 
-/**
- * A quarter of the measured ink width, in graph units.
- *
- * What the simplification tolerance is seeded to on a map that has never had one chosen. A quarter
- * of an ink width is what this control defaulted to for the months it was denominated in ink widths,
- * and it is the figure that means the same thing on every map — which a fixed figure cannot,
- * because 4e-4 is 1.3px on a 3300px raster and 0.30px on a 751px one.
- *
- * `rasterPerUnit` is raster pixels per graph unit, which is what turns a pixel figure into one.
- *
- * Pure, and clamped into the control's own range so a wild measurement cannot store an unusable
- * value. `seedDefaults.ts` carries why seeding a default is not the same thing as a threshold that
- * moves with a measurement.
- */
-export function seededSimplifyGraphUnits(inkWidth: number, rasterPerUnit: number): number {
-  const limits = SETTING_LIMITS.simplifyGraphUnits;
-  if (!(inkWidth > 0) || !(rasterPerUnit > 0)) return DEFAULT_SETTINGS.trace.simplifyGraphUnits;
-  const wanted = (0.25 * inkWidth) / rasterPerUnit;
-  // The floor rather than `min`, because `min` is zero — the off position — and a seed must never
-  // land there: off is a state a GM chooses, not one they are given.
-  const floor = limits.floor ?? limits.min;
-  return Math.min(limits.max, Math.max(floor, Number(wanted.toPrecision(3))));
-}
+/*
+  `seededSimplifyGraphUnits` was here and went on 2026-09-18 with the setting it seeded.
+
+  Its whole job was to give a *stored* tolerance a per-map starting value, because a fixed one comes
+  out sub-pixel on a small map. With the tolerance computed inside the derive there is no default to
+  seed: the figure is a quarter of the measured ink width every time, which is what this returned.
+*/
 
 /**
  * A length in raster pixels as a starting value for a graph-unit setting, clamped into its track.
@@ -943,7 +934,6 @@ export function normaliseSettings(raw: unknown): Settings {
         "spurPruneGraphUnits",
         t.spurPruneGraphUnits,
       ),
-      simplifyGraphUnits: clamp(trace.simplifyGraphUnits, "simplifyGraphUnits", t.simplifyGraphUnits),
       mendReachGraphUnits: clamp(trace.mendReachGraphUnits, "mendReachGraphUnits", t.mendReachGraphUnits),
       mendTravelGraphUnits: clamp(
         trace.mendTravelGraphUnits,
@@ -1005,8 +995,7 @@ export function describeSettings(settings: Settings): string {
     `min island ${trace.minIslandPx}px, ` +
     // Spur pruning belongs in the summary more than most: it is the one control here that can erode
     // the entire graph at its top end, and it went missing when the smallest-room term was removed.
-    `prune ${trace.spurPruneGraphUnits.toExponential(2)} graph units, ` +
-    `simplify ${trace.simplifyGraphUnits.toExponential(2)} graph units; ` +
+    `prune ${trace.spurPruneGraphUnits.toExponential(2)} graph units; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}; ` +
     `blob tolerance ${trace.blobTolerance.toFixed(3)}; ` +

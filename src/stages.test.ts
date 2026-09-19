@@ -66,10 +66,15 @@ describe("the stage declaration", () => {
   });
 
   it("keeps the stages in cascade order", () => {
-    // The order is the cascade: reading destroys deriving and adjusting, deriving destroys
-    // adjusting. The cache invalidation and the workspace's recompute-on-release both read this
-    // array, so reversing it would change what a slider destroys without changing what it says.
-    expect(STAGES).toEqual(["read", "derive", "adjust"]);
+    // The order is the cascade: reading destroys adjusting. The cache invalidation and the
+    // workspace's recompute-on-release both read this array, so reversing it would change what a
+    // slider destroys without changing what it says.
+    //
+    // "derive" sat between the two until 2026-09-18. It meant abstracting the ink into shapes, and it
+    // went when its last member did: the simplification tolerance is computed from the measured ink
+    // width inside the derive now, not set. Every setting left either changes what the ink is or
+    // destroys nothing.
+    expect(STAGES).toEqual(["read", "adjust"]);
   });
 });
 
@@ -188,12 +193,13 @@ describe("maskFingerprint", () => {
     expect(maskFingerprint(recoloured)).toBe(maskFingerprint(DEFAULT_SETTINGS));
   });
 
-  it("does NOT change when a deriving or adjusting parameter changes", () => {
+  it("does NOT change when an adjusting parameter changes", () => {
     // This is the property the whole cache rests on. If it failed in this direction the cache would
     // merely be useless; the test exists because a later edit could just as easily break it in the
     // *other* direction, and that one is silent.
     const base = maskFingerprint(DEFAULT_SETTINGS);
-    for (const stage of ["derive", "adjust"] as const) {
+    // "derive" stood beside this until 2026-09-18, when that stage went for having no members left.
+    for (const stage of ["adjust"] as const) {
       for (const name of stageParameters(stage)) {
         const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
         expect(maskFingerprint(changed)).toBe(base);

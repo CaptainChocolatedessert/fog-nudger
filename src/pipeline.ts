@@ -150,6 +150,38 @@ const BLOB_INK_WIDTHS = 3;
 const MAX_SIMPLIFY_GRAPH_UNITS = 0.01;
 
 /**
+ * The fitting tolerance, in raster pixels — computed, never chosen.
+ *
+ * ## Why there is no control for this
+ *
+ * It was a GM-facing slider until 2026-09-18, on the argument that a fitting parameter needs a sane
+ * non-zero start or a fresh map produces a graph too large to write. That is still true, and it is
+ * exactly why the handle went: **the figure that works is a measurement, not a preference.** A quarter
+ * of the measured ink width is what this defaulted to for the months it was denominated in ink widths,
+ * it is the only form that means the same thing on every map, and a GM watching the rooms has no way
+ * to judge it — the report when it was still on screen was that nobody looked at it while tuning.
+ *
+ * What replaced the slider as a *deliberate* control is **Straighten**, which fits the walls the GM
+ * already has rather than the ones the trace is about to make. That one applies to a hand-edited graph
+ * and needs no lock; this one cannot, because fitting happens once per edge before the wall graph
+ * exists, which is what keeps two faces of a shared wall from drifting apart.
+ *
+ * ## The round trip that went with it
+ *
+ * The stored value was in graph units and this multiplied it back by raster pixels per graph unit, so
+ * the seed divided by exactly what the derive multiplied. That hop existed only so a **stored** number
+ * could outlive the raster; with nothing stored, the tolerance is measured and used in the same unit.
+ *
+ * **One raster pixel when the ink width is unknown**, which happens only if the reading failed to
+ * measure one. It is deliberately in the range the old static default covered — 4e-4 of the longer
+ * side was 1.3px on a 3300px raster and 0.30px on a 751px one — rather than zero, because zero also
+ * disables the escalation ladder: it doubles, and doubling zero is zero.
+ */
+function fittingTolerance(inkWidth: number | null): number {
+  return inkWidth !== null && inkWidth > 0 ? 0.25 * inkWidth : 1;
+}
+
+/**
  * Everything the reading stage produces, which is everything the deriving stage needs.
  *
  * This is the cache boundary between stage one and stage two. Binarisation is the expensive half of
@@ -1450,7 +1482,7 @@ export async function runTrace(
   // The map's size in graph units, from the image rather than the raster — `graphUnits.ts` says why.
   const extent = graphExtent(plan.sourceWidth, plan.sourceHeight);
   const rasterPerUnit = rasterPixelsPerGraphUnit(plan.width, extent);
-  const tolerance = settings.trace.simplifyGraphUnits * rasterPerUnit;
+  const tolerance = fittingTolerance(reading.inkWidth);
 
   const derived = deriveWalls(inkMask, {
     tolerance,
@@ -1551,9 +1583,9 @@ export async function runTrace(
   devLog(
     "info",
     `trace: simplified to ${totalVertices} points in ${totalCommands} commands at ` +
-      `${derived.tolerance.toFixed(2)}px (${settings.trace.simplifyGraphUnits.toExponential(2)} graph ` +
-      `units, ${(derived.tolerance / inkWidth).toFixed(2)} of a ${inkWidth.toFixed(1)}px ink ` +
-      `width, escalated ${derived.escalations} times for the whole map); ` +
+      `${derived.tolerance.toFixed(2)}px (${(derived.tolerance / inkWidth).toFixed(2)} of a ` +
+      `${inkWidth.toFixed(1)}px ink width, computed rather than set, escalated ` +
+      `${derived.escalations} times for the whole map); ` +
       `${derived.walls.collinear} points dropped as exactly collinear, which costs nothing; ` +
       `${derived.walls.duplicates} segments dropped as coincident and ` +
       `${derived.walls.zeroLength} as having no length`,

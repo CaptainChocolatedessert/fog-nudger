@@ -291,17 +291,20 @@ export const CONTROLS: readonly Control[] = [
     label: "Preview outline",
     hint: "",
   },
-  {
-    name: "simplifyGraphUnits",
-    label: "Straightening",
-    scale: "log",
-    // The editor had a second copy of this, applied once by a button. One control now: it is part of
-    // the derive, so turning it back down puts the detail straight back — and the price of a derive
-    // when the walls carry hand edits is priced by the mark and the dialog, not by a note here.
-    hint: "",
-    readout: "position",
-    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
-  },
+  /*
+    `simplifyGraphUnits` was here, labelled *Straightening*, and it went on 2026-09-18 with the
+    setting behind it.
+
+    It was a **fitting** tolerance the derive read, which is why it could only ever apply to a fresh
+    derivation — and therefore why turning it discarded every hand edit and the group carrying it had
+    to be locked. The number is computed from the measured ink width inside the derive now, because the
+    figure that works is a measurement rather than a preference: a quarter of an ink width means the
+    same thing on every map, and the report while it was still on screen was that nobody looked at it
+    while tuning.
+
+    What a GM presses instead is **Straighten**, at the foot of this group — an amount applied to the
+    walls in front of them, which discards nothing and needs no lock.
+  */
   /*
     The mend tool's two, labelled as the ink tool's are (user, 2026-09-16): they are the same two
     questions asked of the walls instead of the ink. Positions on a log track like the other graph

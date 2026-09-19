@@ -108,10 +108,27 @@ export function onGraphScale(tell: () => void): void {
 export function graphScaleTop(name: SettingName): number | null {
   if (tops === null && latest !== null) tops = measure(latest);
   if (tops === null) return null;
-  // One simplification key since 2026-09-14; the second copy went with the button that applied it.
-  const top =
-    name === "spurPruneGraphUnits" ? tops.spur : name === "simplifyGraphUnits" ? tops.bend : 0;
+  const top = name === "spurPruneGraphUnits" ? tops.spur : 0;
   return top > 0 ? top : null;
+}
+
+/**
+ * The largest **bend** in the graph, which is *Straighten*'s track top.
+ *
+ * Named rather than keyed by a setting, because straightening stopped being one on 2026-09-18 — it is
+ * an amount applied to the walls in front of the GM. The measurement is unchanged and so is the reason
+ * it is per **vertex**: how far one point sits off the line joining its neighbours. A whole wall's
+ * deviation from the chord between its ends is dominated by the exterior, which departs from its own
+ * chord by something like half the map, and every useful amount would sit in the first percent.
+ *
+ * `null` when nothing has been derived, or when the graph is already straight enough to offer nothing
+ * to measure — a graph with no bend has no largest bend, and the caller says so rather than offering a
+ * track with no range.
+ */
+export function bendTop(): number | null {
+  if (tops === null && latest !== null) tops = measure(latest);
+  if (tops === null) return null;
+  return tops.bend > 0 ? tops.bend : null;
 }
 
 function measure(graph: WallGraph): Tops {

@@ -7,7 +7,6 @@ import {
   normaliseSettings,
   SETTING_LIMITS,
   seededGraphUnitsFromPixels,
-  seededSimplifyGraphUnits,
 } from "./settings";
 
 describe("normaliseSettings", () => {
@@ -44,11 +43,12 @@ describe("normaliseSettings", () => {
     together. What replaces the cap is the same argument the two ink filters rest on — the top of the
     track should reach obviously useless values, and it is visible when it does.
 
-    What still has to hold is the **off state**, which is what the two graph-derived controls gained
-    when they moved onto a log scale. Both have a real zero, and a log scale cannot start at one.
+    What still has to hold is the **off state**, which the prune limit gained when it moved onto a
+    log scale: it has a real zero, and a log scale cannot start at one. Straightening was the second
+    control here until 2026-09-18, when it stopped being a stored setting at all.
   */
-  it("keeps a stored zero at zero on the two log controls with an off position", () => {
-    for (const name of ["simplifyGraphUnits", "spurPruneGraphUnits"] as const) {
+  it("keeps a stored zero at zero on the log control with an off position", () => {
+    for (const name of ["spurPruneGraphUnits"] as const) {
       const limits = SETTING_LIMITS[name];
       /*
         The floor is declared beside `min` rather than as it, and that is forced.
@@ -132,44 +132,6 @@ describe("seededGraphUnitsFromPixels", () => {
   });
 });
 
-describe("seededSimplifyGraphUnits", () => {
-  /*
-    The figure that makes a default mean the same thing on every map.
-
-    A fixed figure cannot: 4e-4 is 1.3px on the 3300px test map and 0.30px on a 751px one, which is
-    sub-pixel and very nearly no simplification at all. A room found that the second case produced a
-    graph too large for a scene write to carry.
-  */
-  it("is a quarter of the ink width, whatever the raster", () => {
-    // 0.25 x 5.7px on 3300px, and 0.25 x 3.3px on 751px: 1.4px and 0.8px, both sane.
-    expect(seededSimplifyGraphUnits(5.7, 3300)).toBeCloseTo(4.32e-4, 6);
-    expect(seededSimplifyGraphUnits(3.3, 751)).toBeCloseTo(1.1e-3, 6);
-  });
-
-  it("says the same thing about the same linework at two rasters", () => {
-    // The same map read at half size must seed the same *value*, or the megapixel cap would
-    // silently change the tuning — which is the trap the whole unit change exists to close.
-    expect(seededSimplifyGraphUnits(6, 3000)).toBeCloseTo(seededSimplifyGraphUnits(3, 1500), 9);
-  });
-
-  it("never lands on the off position", () => {
-    // Off is a state a GM chooses, not one they are handed. The floor is the lowest a seed may be.
-    const floor = SETTING_LIMITS.simplifyGraphUnits.floor!;
-    expect(seededSimplifyGraphUnits(0.0001, 100000)).toBe(floor);
-    expect(seededSimplifyGraphUnits(0.0001, 100000)).toBeGreaterThan(0);
-  });
-
-  it("stays inside the storable range at the other end", () => {
-    // A quarter of 3000px against a 1000px raster is 0.75 of the map, well past the ceiling.
-    expect(seededSimplifyGraphUnits(3000, 1000)).toBe(SETTING_LIMITS.simplifyGraphUnits.max);
-  });
-
-  it("falls back to the declared default when there is no usable measurement", () => {
-    for (const [ink, raster] of [[0, 3300], [5.7, 0], [-1, 3300], [5.7, -1]] as const) {
-      expect(seededSimplifyGraphUnits(ink, raster)).toBe(DEFAULT_SETTINGS.trace.simplifyGraphUnits);
-    }
-  });
-});
 
 describe("isDefault and describeSettings", () => {
   it("recognises the untouched case", () => {
@@ -197,7 +159,7 @@ describe("isDefault and describeSettings", () => {
       summary is a setting the log cannot report.
     */
     const line = describeSettings(DEFAULT_SETTINGS);
-    for (const part of ["blur", "k ", "window", "min stroke", "min island", "prune", "simplify"]) {
+    for (const part of ["blur", "k ", "window", "min stroke", "min island", "prune"]) {
       expect(line, `no "${part}" in: ${line}`).toContain(part);
     }
     /*

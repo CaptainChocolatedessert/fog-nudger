@@ -68,7 +68,7 @@ import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
 import { currentMarks, onMarksChange } from "./regionMarks";
-import { currentSettings, markApplied, markParametersApplied } from "./settingsState";
+import { currentSettings, markParametersApplied } from "./settingsState";
 import { invalidate, isClosing, say, whileWorking } from "./shell";
 import { wallGraph, wallsEdited } from "./stage";
 
@@ -606,11 +606,13 @@ async function derive(): Promise<void> {
       rasterPerUnit,
       pxPerSquare,
     };
-    // The picture now shows these deriving-stage settings, so any row that was marked ahead of it
-    // stops being.
-    markApplied("derive");
-    // And the prune limit, which a derive re-applies on its way through but which is filed under a
-    // different stage, so `markApplied("derive")` alone never copied it across.
+    /*
+      The prune limit, which a derive re-applies on its way through.
+
+      `markApplied("derive")` stood above this and went with the `derive` stage on 2026-09-18: the
+      simplification tolerance was the only parameter filed there, and it is computed inside the derive
+      now rather than set. Nothing else was ever marked here.
+    */
     markGraphOnlyApplied();
     publish(derivation, generation);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
