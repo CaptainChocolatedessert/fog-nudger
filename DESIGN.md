@@ -3330,7 +3330,7 @@ to survive that case rather than assert something false.
    control that no longer exists. Its advice also gets more expensive, since what reduces item count is
    now two operations applied to the graph rather than a free reversible slider.
 2. **The clear family**, then **the cover**, then **dimming** — as above.
-3. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
+2. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
    while we get the real changes implemented, then we can redesign it."* The complaint is that a
    *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
    since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —

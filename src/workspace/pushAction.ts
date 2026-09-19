@@ -253,6 +253,19 @@ async function pushCurrent(): Promise<boolean> {
  *
  * **It warns and does not refuse.** The GM may have a genuinely enormous map, and this is a
  * prediction about a scene rather than a measurement of one.
+ *
+ * ## It is the only guard on item count, and that is worth knowing
+ *
+ * Nothing automatic bounds it. The derive's escalation ladder raises the fitting tolerance until every
+ * **face** fits Owlbear's 8192-command cap, which is a different failure — it says nothing about how
+ * many items there are. The manual guard used to be the Straightening slider; that became an amount a
+ * GM presses on 2026-09-18, so this warning is what stands here alone.
+ *
+ * **Measured 2026-09-18, from the 38 derives in `dev.log`:** the two maps the project has been through
+ * emitted **318 items** (6 regions and 312 wall lines) and **514** (10 and 504), at seeded tolerances
+ * with zero escalations. So ordinary work sits an order of magnitude below this. Two maps is not a
+ * range, both were line-drawn, and the 5,881-segment failure that calibrated the top of this predates
+ * per-map seeding — what is known is that seeding fixed *that*, not that it suffices in general.
  */
 const LARGE_PUSH_ITEMS = 1_500;
 
@@ -277,9 +290,10 @@ async function mayBeTooLarge(): Promise<boolean> {
       `This graph is ${items.toLocaleString()} separate scene items — ${currentRegions().length} ` +
         `rooms and ${currentWalls().length} wall segments. A scene write that large may not ` +
         "finish, and there is a point past which Owlbear refuses it outright.",
-      "Raising Straightening under Walls is what reduces it: every point it removes is a wall " +
-        "segment fewer. Pruning the dead ends helps too. If you go ahead, the write can be stopped " +
-        "part way, and pushing again afterwards replaces whatever landed.",
+      "Straighten and Prune the dead ends under Walls are what reduce it: every point either " +
+        "removes is a wall segment fewer. Both apply to the walls you have, so they cost what they " +
+        "take and one step of undo puts it back. If you go ahead, the write can be stopped part " +
+        "way, and pushing again afterwards replaces whatever landed.",
     ],
     confirmLabel: "Put it on the map",
   });
