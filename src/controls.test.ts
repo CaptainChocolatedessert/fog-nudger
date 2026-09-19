@@ -77,7 +77,6 @@ describe("every control's readout", () => {
 
 describe("readouts that depend on a measurement", () => {
   const gapFill = CONTROLS.find((control) => control.name === "gapFillPx")!;
-  const spurs = CONTROLS.find((control) => control.name === "spurPruneGraphUnits")!;
   const stroke = CONTROLS.find((control) => control.name === "minStrokeInkWidths")!;
 
   it("drops the grid-square clause when there is no pixel density", () => {
@@ -94,7 +93,9 @@ describe("readouts that depend on a measurement", () => {
     checked, because two controls sharing a formatter is exactly where one of them gets left behind.
   */
   it("says nothing in pixels when no raster has been read", () => {
-    for (const control of [spurs]) {
+    // The spur limit was one of these until 2026-09-18, when pruning became an amount in the Walls
+    // drawer; the mend tool's two are what is left stored in graph units.
+    for (const control of CONTROLS.filter((control) => control.name.startsWith("mend"))) {
       expect(control.derive!(4e-4, MEASURED_NONE)).toBe("");
       expect(control.derive!(4e-4, MEASURED_MAP)).toContain("px");
       // Empty rather than "off": their own `format` says so beside the label, and a hint that
@@ -114,7 +115,7 @@ describe("readouts that depend on a measurement", () => {
   it("asks for a position readout on every control stored in graph units", () => {
     const mendControls = CONTROLS.filter((control) => control.name.startsWith("mend"));
     expect(mendControls).toHaveLength(2);
-    for (const control of [spurs, ...mendControls]) {
+    for (const control of mendControls) {
       expect(control.readout, control.name).toBe("position");
     }
   });
@@ -188,7 +189,7 @@ describe("readouts that depend on a measurement", () => {
       coming from the measurement.
     */
     // The two stored in graph units report against the raster.
-    for (const control of [spurs]) {
+    for (const control of CONTROLS.filter((control) => control.name.startsWith("mend"))) {
       const small = control.derive!(4e-4, { pxPerSquare: 51, rasterPerUnit: 1600 });
       const large = control.derive!(4e-4, { pxPerSquare: 51, rasterPerUnit: 3300 });
       expect(small, control.name).not.toBe(large);

@@ -674,7 +674,6 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
     needed while the stored graph had nothing to re-derive it from. One live slider now: changing
     it regenerates the walls like any reading change, and the mark and the prompt price that.
   */
-  spurPruneGraphUnits: "walls",
   // The mend tool's own two, drawn in its drawer rather than in the group's.
   mendReachGraphUnits: "walls",
   mendTravelGraphUnits: "walls",

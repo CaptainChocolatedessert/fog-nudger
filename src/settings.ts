@@ -184,21 +184,21 @@ export interface TraceSettings {
    * through, which is the most eager the detector gets.
    */
   readonly gapTravelPx: number;
-  /**
-   * The longest dead-end wall spur pruning will remove, **in graph units** — the map's longer side
-   * is 1.
-   *
-   * **Renamed from `spurPruneFraction` on 2026-09-16** when the unit changed from a fraction of each
-   * side, so a stored value falls back to the default rather than being read in the new unit.
-   *
-   * A spur is the artefact a ragged ink edge leaves on a centreline; a **stub** is a wall that
-   * genuinely stops in mid-air. They are the same shape locally and only length separates them,
-   * which is why this is a number rather than a rule. Zero is off.
-   *
-   * Destructive out of proportion to its size at the top end: a limit longer than a wall's own arms
-   * erodes the whole graph, since every arm of a junction is a dead end once the arms around it go.
-   */
-  readonly spurPruneGraphUnits: number;
+  /*
+    `spurPruneGraphUnits` was here and went on 2026-09-18, with `simplifyGraphUnits` before it.
+
+    It was the longest dead-end wall run pruning would remove, read by the derive — so a stored limit
+    was re-applied behind the GM on every derive, and turning it discarded every hand edit. **Pruning
+    is an amount a GM presses in the Walls drawer now**, applied to the walls in front of them, which
+    is what takes it out of the lock.
+
+    **Removed rather than hidden**, for the reason the tolerance was: a stored value with no handle
+    would keep pruning every derive for ever, silently, on any scene tuned before the change.
+
+    A spur is still the artefact a ragged ink edge leaves on a centreline, and a **stub** is still a
+    wall that genuinely stops in mid-air — the same shape locally, separated only by length, which is
+    why the control is a number rather than a rule. That is `spurs.ts`'s to carry now.
+  */
   /*
     `simplifyGraphUnits` was here and went on 2026-09-18. It was the **fitting** tolerance, converted
     to raster pixels and handed to the derive.
@@ -377,11 +377,6 @@ export const DEFAULT_SETTINGS: Settings = {
     blobTolerance: 0.12,
     gapFillPx: 12,
     gapTravelPx: 40,
-    // Off by default, like every other control that removes something a GM has not looked at yet.
-    // Pruning is also destructive out of proportion to its number — see `spurs.ts`: a limit longer
-    // than a wall's own arms erodes the whole graph — so the first thing a GM should see is the
-    // graph as fitting produced it, hairs and all.
-    spurPruneGraphUnits: 0,
     /*
       20 and 40 raster pixels on the 3300px test map, and **only fallbacks**: both are seeded per map
       from its raster once a reading lands, for the reason straightening is — a fixed figure means a
@@ -513,7 +508,12 @@ export const SETTING_LIMITS = {
     two-slider gap design. And `min` stays 0 because the normaliser clamps into `[min, max]`, so a
     positive `min` would silently raise a stored zero to the floor on every read.
   */
-  spurPruneGraphUnits: { min: 0, max: 0.5, step: 0.0001, floor: 2e-4 },
+  /*
+    The two graph controls' limits were here and went with them on 2026-09-18. **The pinned-floor
+    reasoning above is not dead** — it moved to `wallAmounts.ts`, which draws both tracks now and needs
+    the same floor for the same reason. What is gone is only the storage: nothing normalises an amount
+    that is never stored.
+  */
   // From a single pixel — the finest correction a raster can hold — to wide enough to cover a room
   // in a few strokes. The bottom end is genuinely usable rather than a token: repairing one severed
   // wall is a one-pixel job.
@@ -592,7 +592,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   blobTolerance: "read",
   gapFillPx: "read",
   gapTravelPx: "read",
-  spurPruneGraphUnits: "read",
   suppressBrushPx: "read",
   inkBrushPx: "read",
   // Filed `read` as every tool control is, which `stages.test.ts` pins: a tool control's stage is
@@ -670,7 +669,6 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   blobTolerance: "tool",
   gapFillPx: "tool",
   gapTravelPx: "tool",
-  spurPruneGraphUnits: "pipeline",
   suppressBrushPx: "tool",
   inkBrushPx: "tool",
   mendReachGraphUnits: "tool",
@@ -754,11 +752,10 @@ export function writeParameter(
  * pipeline combines this with the map's own identity before trusting a cached mask.
  */
 export function maskFingerprint(settings: Settings): string {
+  // Every reading parameter, with nothing excluded. The graph-only ones were filtered out here —
+  // they changed the faces rather than the mask, so a prune did not have to cost a re-read — and that
+  // list emptied on 2026-09-18 when pruning stopped being a setting.
   return readingParameters()
-    // The graph-only ones are excluded, which is what stops a prune costing a re-read.
-    // They change the faces, not the mask, and `GRAPH_ONLY` says why that distinction survived
-    // step D when the record expected it to disappear.
-    .filter((name) => !isSkeletonOnly(name))
     .map((name) => `${name}=${readParameter(settings, name)}`)
     .join(",");
 }
@@ -788,36 +785,29 @@ const POST_READING: readonly SettingName[] = [
   // *pipeline* parameters of the read stage, and they are `tool` parameters now — so naming them
   // here would be naming non-members, and the test that every excluded one still moves the mask
   // fingerprint would fail, correctly.
-  "spurPruneGraphUnits",
+  //
+  // The spur limit was the last entry and left on 2026-09-18 with the setting: pruning is an amount a
+  // GM presses rather than a parameter, so there is nothing here for the reading boundary to exclude.
 ];
 
-/**
- * Parameters that change the wall **graph** but not the ink mask.
- *
- * The third recompute target. This was `SKELETON_ONLY` when the skeleton was a view that emitted
- * nothing, and the record said it would have to empty at step D, when faces started coming from the
- * graph. **That was half right, and deleting the list would have been the wrong correction.**
- *
- * What is true is narrower than it looked. The mask fingerprint answers one question — would these
- * settings produce a different *mask* — and pruning a spur does not touch the mask at all. It changes the graph, and therefore the faces. So the list stays out of the
- * fingerprint, correctly, and what changes at step D is the **dispatch**: a change here used to
- * invalidate only the skeleton view, and must now invalidate the derived regions as well, because
- * they are the graph's faces. `recomputeFor` is where that lives.
- *
- * The cost this saves is real: a prune sweep costs a branch walk and a face traversal rather than
- * re-binarising the map or recomposing the ink.
- */
-const GRAPH_ONLY: readonly SettingName[] = ["spurPruneGraphUnits"];
+/*
+  **`GRAPH_ONLY` and `isSkeletonOnly` are gone (2026-09-18), because the list emptied.**
 
-/**
- * Whether a parameter changes the graph without changing the mask.
- *
- * Exported for the recompute dispatch and the tests. Keeps its old name so nothing has to be renamed
- * twice; what it means has narrowed rather than moved.
- */
-export function isSkeletonOnly(name: SettingName): boolean {
-  return GRAPH_ONLY.includes(name);
-}
+  They named the parameters that change the wall *graph* without changing the ink mask — the third
+  recompute target, worth having because a re-prune is a run walk and a face traversal rather than a
+  690ms re-read. It was `SKELETON_ONLY` when the skeleton was a view that emitted nothing, and the
+  record predicted it would empty when faces started coming from the graph, then corrected itself:
+  what was true was narrower, and the list stayed with one member, the spur limit.
+
+  **That member has stopped being a setting.** Pruning is an amount a GM presses in the Walls drawer,
+  applied to the walls in front of them, so no parameter changes the graph without changing the mask.
+  Every `pipeline` parameter that remains re-reads or recomposes the ink.
+
+  **This closes a carried open question** — *"should the graph-only recompute become a fourth cascade
+  stage?"* — in the direction nobody expected. The answer is that the **third** stage was the one to
+  delete, and this list with it. If a graph-only parameter ever returns, both come back together, and
+  the cost argument above is why.
+*/
 
 /**
  * Whether changing this parameter re-reads the map.
@@ -856,7 +846,9 @@ export function regeneratesWalls(name: SettingName): boolean {
 }
 
 export function rereadsTheMap(name: SettingName): boolean {
-  return PARAMETER_KIND[name] === "pipeline" && PARAMETER_STAGE[name] === "read" && !isSkeletonOnly(name);
+  // The `!isSkeletonOnly(name)` term was here and went on 2026-09-18 with the graph-only list: no
+  // pipeline parameter of the reading stage skips the re-read any more.
+  return PARAMETER_KIND[name] === "pipeline" && PARAMETER_STAGE[name] === "read";
 }
 
 /** Every reading-stage pipeline parameter, in `SETTING_LIMITS`' declaration order. */
@@ -929,11 +921,6 @@ export function normaliseSettings(raw: unknown): Settings {
       blobTolerance: clamp(trace.blobTolerance, "blobTolerance", t.blobTolerance),
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
-      spurPruneGraphUnits: clamp(
-        trace.spurPruneGraphUnits,
-        "spurPruneGraphUnits",
-        t.spurPruneGraphUnits,
-      ),
       mendReachGraphUnits: clamp(trace.mendReachGraphUnits, "mendReachGraphUnits", t.mendReachGraphUnits),
       mendTravelGraphUnits: clamp(
         trace.mendTravelGraphUnits,
@@ -993,9 +980,6 @@ export function describeSettings(settings: Settings): string {
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusPx}px, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
     `min island ${trace.minIslandPx}px, ` +
-    // Spur pruning belongs in the summary more than most: it is the one control here that can erode
-    // the entire graph at its top end, and it went missing when the smallest-room term was removed.
-    `prune ${trace.spurPruneGraphUnits.toExponential(2)} graph units; ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}; ` +
     `blob tolerance ${trace.blobTolerance.toFixed(3)}; ` +

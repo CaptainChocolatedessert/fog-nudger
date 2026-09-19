@@ -254,19 +254,15 @@ export const CONTROLS: readonly Control[] = [
     derive: (value) =>
       value <= 0 ? "propose every gap" : `${Math.round(value)}px along the ink`,
   },
-  {
-    name: "spurPruneGraphUnits",
-    // A spur is a wall run with a free end, and "spur" is vocabulary from `DESIGN.md` rather than
-    // anything a GM brought with them. The label says the whole of what the number means.
-    label: "Longest dead end to remove",
-    scale: "log",
-    hint: "",
-    readout: "position",
-    // Nothing when off, because the readout has already said so beside the label. These are the only
-    // controls whose own readout names the off state, so they are the only ones whose hint must not
-    // repeat it.
-    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
-  },
+  /*
+    `spurPruneGraphUnits` was here, labelled *Longest dead end to remove*, and it went on 2026-09-18
+    with `simplifyGraphUnits`.
+
+    It was read by the derive, so a stored limit was re-applied on every derive and turning it discarded
+    every hand edit. Pruning is an amount at the foot of this group now — **Prune the dead ends** — which
+    applies to the walls in front of the GM and needs no lock. The label was the good part and it
+    survives: *spur* is this record's vocabulary rather than anything a GM brought with them.
+  */
   {
     name: "suppressBrushPx",
     label: "Brush width",

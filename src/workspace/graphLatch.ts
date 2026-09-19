@@ -1,37 +1,48 @@
 /**
- * The latch behind an action with an amount — *Straighten* and *Prune the dead ends*.
+ * The latch behind the Walls drawer's two actions — *Prune the dead ends* and *Straighten*.
  *
  * ## What an action with an amount is, and why it is not a setting
  *
- * Straightening and pruning were settings read by the derive: stored, fed into the trace, and
- * reversible because a derivation is not spent by being redone — turn the handle back and the detail
- * comes back from the ink. They are **applied to the walls in front of you** now, which is what lets
- * them work on a graph the GM has hand-edited, and what retires the lock they used to need.
+ * Both were parameters the derive read: stored, fed into the trace, and reversible because a derivation
+ * is not spent by being redone — turn the handle back and the detail comes back from the ink. They are
+ * **applied to the walls in front of the GM** now, which is what lets them work on a graph that has been
+ * hand-edited, and what retires the lock they used to need. After this, the only things that regenerate
+ * the walls are the map and the ink.
  *
- * That change costs the handle its meaning. Applied to the current graph, the operation is
- * cumulative: straighten at one amount, then a smaller one, and the detail does not return, because
- * the document no longer holds it. So the handle cannot describe a state, and a slider whose position
- * describes nothing is the non-monotonic trap the two-slider gap design already collapsed under.
+ * That change costs each handle its meaning. Applied to the current graph the operation is cumulative:
+ * prune at one amount, then a smaller one, and the runs do not come back, because the document no longer
+ * holds them. So a handle cannot describe a state, and a slider whose position describes nothing is the
+ * non-monotonic trap the two-slider gap design already collapsed under.
  *
- * ## The latch is what buys the slider back
+ * ## The latch is what buys the sliders back
  *
- * Opening the drawer **latches** the graph as it stands. The handle then previews against that fixed
- * base rather than against the last result, so dragging back and forth inside one opening is free and
- * exact — the same property the derive-time version had, with the base being the graph rather than
- * the ink. Closing the drawer applies the result once.
+ * Opening the drawer **pins** the graph. Both handles then preview against that fixed base rather than
+ * against the last result, so dragging back and forth inside one opening is free and exact — the same
+ * property the derive-time versions had, with the base being the graph rather than the ink. Closing the
+ * drawer applies the result once.
  *
- * **The amount starts at zero on every opening**, and that is the load-bearing half. Left where the
- * GM put it last, the handle would sit describing work already done, and one nudge would straighten
- * again from the already-straightened base — the ratchet back through the side door. At zero it reads
- * honestly as *how much more*, and three things fall out for free: a drawer closed untouched applies
- * nothing, a drawer stolen by another press commits nothing, and one opening is one undo entry.
+ * **Both amounts start at zero on every opening**, and that is the load-bearing half. Left where the GM
+ * put them, a handle would sit describing work already done, and one nudge would re-apply it to the
+ * already-pruned base — the ratchet back through the side door. At zero each reads honestly as *how much
+ * more*, and three things fall out for free: a drawer closed untouched applies nothing, a drawer stolen
+ * by another press commits nothing, and one opening is one undo entry.
+ *
+ * ## One pin and two amounts, not two latches
+ *
+ * Both sliders live in the same drawer, so two independent latches would pin the same graph and both
+ * try to commit on the way out — and the first to save **replaces the document**, which voids the second
+ * by the staleness rule below. The second amount would vanish with nothing said. One pin carrying both
+ * amounts is what makes the drawer's commit a single operation, and a single undo entry.
+ *
+ * **The order the two are applied is the caller's**, not this module's: it holds numbers. `wallAmounts.ts`
+ * applies pruning first and says why.
  *
  * ## The staleness rule, which is the only subtle thing here
  *
- * A latched base describes the document as it was. Two things replace the document while a drawer is
- * open — **an undo**, and **a derive landing** — and applying an operation computed against the old
- * base would silently throw away whatever replaced it. So the latch is **void** the moment the
- * current graph is not the object that was latched, and a void latch commits nothing.
+ * A pinned base describes the document as it was. Two things replace the document while a drawer is
+ * open — **an undo**, and **a derive landing** — and applying an operation computed against the old base
+ * would silently throw away whatever replaced it. So the latch is **void** the moment the current graph
+ * is not the object that was pinned, and a void latch commits nothing.
  *
  * Identity, not equality: every edit and every derive replaces the graph wholesale, which is the same
  * property the face traversal's cache is keyed on. Two graphs that are equal but distinct are still a
@@ -43,7 +54,10 @@
 
 import type { WallGraph } from "../trace/wallGraph";
 
-/** A latched base, the amount aimed at it, and where the base came from. */
+/** Which of the drawer's two amounts a caller is aiming. */
+export type WallAmount = "prune" | "straighten";
+
+/** A pinned base and the amounts aimed at it. */
 export type GraphLatch = {
   /**
    * The graph as it stood when the drawer opened, or `null` for no latch.
@@ -59,34 +73,41 @@ export type GraphLatch = {
    * at commit time instead would read a predicate that may have changed since the latch.
    */
   readonly fromDerivation: boolean;
-  /** How much to apply, in graph units. Zero means the action is off. */
-  readonly amount: number;
+  /** How much dead end to remove, in graph units. Zero means pruning is off. */
+  readonly prune: number;
+  /** How much to straighten by, in graph units. Zero means straightening is off. */
+  readonly straighten: number;
 };
 
 /** No latch: nothing is open, nothing is pending. */
-export const NO_LATCH: GraphLatch = { base: null, fromDerivation: false, amount: 0 };
+export const NO_LATCH: GraphLatch = {
+  base: null,
+  fromDerivation: false,
+  prune: 0,
+  straighten: 0,
+};
 
 /**
- * Latch a graph as a drawer opens.
+ * Pin a graph as the drawer opens.
  *
- * **The amount is always zero**, never carried over from the last opening, for the reason in the
- * module note. A `null` graph latches nothing, which is the state on a map with no walls yet.
+ * **Both amounts are zero**, never carried over from the last opening, for the reason in the module
+ * note. A `null` graph pins nothing, which is the state on a map with no walls yet.
  */
 export function openLatch(graph: WallGraph | null, fromDerivation: boolean): GraphLatch {
   if (!graph) return NO_LATCH;
-  return { base: graph, fromDerivation, amount: 0 };
+  return { base: graph, fromDerivation, prune: 0, straighten: 0 };
 }
 
 /**
- * Aim the handle at an amount.
+ * Aim one of the two handles.
  *
  * Negative and non-finite values land on zero rather than being refused: this is a slider's live
  * position, so the safe reading of nonsense is *off*.
  */
-export function aimLatch(latch: GraphLatch, amount: number): GraphLatch {
+export function aimLatch(latch: GraphLatch, which: WallAmount, amount: number): GraphLatch {
   const wanted = Number.isFinite(amount) && amount > 0 ? amount : 0;
-  if (!latch.base || wanted === latch.amount) return latch;
-  return { ...latch, amount: wanted };
+  if (!latch.base || wanted === latch[which]) return latch;
+  return { ...latch, [which]: wanted };
 }
 
 /**
@@ -100,10 +121,13 @@ export function revalidate(latch: GraphLatch, current: WallGraph | null): GraphL
   return latch.base === current ? latch : NO_LATCH;
 }
 
-/** What the latch would preview: the base and a positive amount, or nothing. */
-export function previewOf(latch: GraphLatch): { base: WallGraph; amount: number } | null {
-  if (!latch.base || latch.amount <= 0) return null;
-  return { base: latch.base, amount: latch.amount };
+/** What the latch would apply: the base and the two amounts, or nothing when both are off. */
+export function previewOf(
+  latch: GraphLatch,
+): { base: WallGraph; prune: number; straighten: number } | null {
+  if (!latch.base) return null;
+  if (latch.prune <= 0 && latch.straighten <= 0) return null;
+  return { base: latch.base, prune: latch.prune, straighten: latch.straighten };
 }
 
 /**
@@ -115,7 +139,23 @@ export function previewOf(latch: GraphLatch): { base: WallGraph; amount: number 
  */
 export function commitOf(
   latch: GraphLatch,
-): { base: WallGraph; amount: number; fromDerivation: boolean } | null {
+): { base: WallGraph; prune: number; straighten: number; fromDerivation: boolean } | null {
   const preview = previewOf(latch);
   return preview ? { ...preview, fromDerivation: latch.fromDerivation } : null;
+}
+
+/**
+ * What the undo entry should be called, from which amounts are set.
+ *
+ * Named here rather than in the caller because it is a function of the latch and nothing else, and
+ * because a label that disagrees with what was applied is exactly what undo's own rule forbids: the
+ * button prints it, and the whole reason it does is that a GM has just done something whose effect they
+ * misjudged.
+ */
+export function labelFor(latch: GraphLatch): string {
+  const pruning = latch.prune > 0;
+  const straightening = latch.straighten > 0;
+  if (pruning && straightening) return "tidying the walls";
+  if (pruning) return "pruning the dead ends";
+  return "straightening the walls";
 }

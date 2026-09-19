@@ -535,7 +535,6 @@ describe("stepRegeneratesWalls", () => {
   */
   it("marks the groups whose controls rebuild the walls", () => {
     expect(stepRegeneratesWalls("ink")).toBe(true);
-    expect(stepRegeneratesWalls("walls")).toBe(true);
   });
 
   it("leaves alone the groups that change nothing about the walls", () => {
@@ -543,6 +542,24 @@ describe("stepRegeneratesWalls", () => {
     // all, and nominating an image is destructive by a different route that has its own handling.
     expect(stepRegeneratesWalls("view")).toBe(false);
     expect(stepRegeneratesWalls("map")).toBe(false);
+  });
+
+  /*
+    **Walls stopped regenerating on 2026-09-18, and that is the rework arriving rather than a
+    regression.**
+
+    It carried the two settings the derive read — straightening and the spur limit — so opening it to
+    move either meant rebuilding the walls and losing every hand edit. Both are *amounts* pressed in
+    this group now, applied to the walls in front of the GM, and its only other control adds four
+    walls at the map's edge. So nothing under Walls rebuilds anything.
+
+    What that buys is the point of the whole rework: **the set of things that regenerate the walls is
+    now exactly the map and the ink**, which is a cause a GM already holds rather than a list they have
+    to be told. If this ever goes back to `true`, something has put a derive-time parameter back into
+    the group that edits the document, and the lock's subject has stopped being one sentence.
+  */
+  it("no longer marks Walls, because nothing in it rebuilds them", () => {
+    expect(stepRegeneratesWalls("walls")).toBe(false);
   });
 
   it("marks fewer controls than the group it sits in, which is the point of moving the gate", () => {

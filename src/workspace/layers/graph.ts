@@ -43,12 +43,12 @@ import {
 } from "../../trace/wallGraph";
 import { colourFor } from "../palette";
 import { addPainter, type Painter } from "../shell";
-import { graphOnScreen, showingSaved } from "../regions";
+import { graphOnScreen } from "../regions";
+import { pendingPrune } from "../wallAmounts";
 import { currentTool } from "../toolPalette";
 
 /** The tools a handle is for. Anything else in hand and a dot at every vertex is decoration. */
 const WALL_TOOLS = new Set(["move", "draw", "erase"]);
-import { currentSettings } from "../settingsState";
 import type { DrawPoint } from "../dragGesture";
 import {
   dissolvingWalls,
@@ -161,15 +161,21 @@ let doomedFor: { graph: WallGraph; limit: number; doomed: DoomedSpurs } | null =
 
 function doomed(graph: WallGraph): DoomedSpurs {
   /*
-    Only against the **saved** graph, because only there is the limit pending.
+    Only while the graph on screen **is** the graph the pruning would act on.
 
-    A fresh derivation already has it applied — the trace prunes as it builds — so marking anything
-    red would be claiming the button would remove walls that are not in the picture. The saved graph
-    is the one the button acts on, and the one that can have drifted from the limit by being edited.
+    The Walls drawer's two amounts share one pinned base. Straightening substitutes its result onto the
+    canvas, and the runs a prune would take are already absent from that result — so marking them would
+    claim the press removes walls that are not in the picture. Pruning alone substitutes nothing, which
+    is exactly the case this is for, and the identity test is what tells the two apart.
+
+    (It used to ask `showingSaved()`, on the ground that a fresh derivation already had the limit
+    applied because the trace pruned as it built. Nothing applies it on the way through since
+    2026-09-18 — pruning is an amount a GM presses — so that condition would now hide the marks on
+    every unedited map.)
   */
-  if (!showingSaved()) return NOTHING_DOOMED;
-  const limit = currentSettings().trace.spurPruneGraphUnits;
-  if (!(limit > 0)) return NOTHING_DOOMED;
+  const pending = pendingPrune();
+  if (!pending || pending.base !== graph) return NOTHING_DOOMED;
+  const limit = pending.limit;
 
   if (doomedFor && doomedFor.graph === graph && doomedFor.limit === limit) return doomedFor.doomed;
   const found = spurEdgesToPrune(graph, limit);

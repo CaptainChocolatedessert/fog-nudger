@@ -47,21 +47,19 @@ describe("normaliseSettings", () => {
     log scale: it has a real zero, and a log scale cannot start at one. Straightening was the second
     control here until 2026-09-18, when it stopped being a stored setting at all.
   */
-  it("keeps a stored zero at zero on the log control with an off position", () => {
-    for (const name of ["spurPruneGraphUnits"] as const) {
-      const limits = SETTING_LIMITS[name];
-      /*
-        The floor is declared beside `min` rather than as it, and that is forced.
+  /*
+    **The off-state test went on 2026-09-18, with the last setting it applied to.**
 
-        This normaliser clamps into `[min, max]`, so a positive `min` would raise a stored zero to
-        the floor on every read — destroying the off state at the one moment nothing is watching.
-      */
-      expect(limits.min).toBe(0);
-      expect(limits.floor).toBeGreaterThan(0);
-      expect(normaliseSettings({ trace: { [name]: 0 } }).trace[name]).toBe(0);
-      expect(normaliseSettings({ trace: { [name]: 99 } }).trace[name]).toBe(limits.max);
-    }
-  });
+    It pinned that a stored zero survives a read on a log control with a real off position — the floor
+    being declared beside `min` rather than as it, because this normaliser clamps into `[min, max]` and
+    a positive `min` would raise a stored zero to the floor on every read, destroying the off state at
+    the one moment nothing is watching.
+
+    Straightening and pruning are amounts pressed in the Walls drawer now and nothing stores them, so
+    no setting is left with an off position to guard. **The rule is not dead** — it belongs to any
+    future log-scaled setting with a real zero, and `SETTING_LIMITS` still carries `floor` for exactly
+    that shape.
+  */
 
   it("falls back per field, not wholesale", () => {
     // One unusable value must not discard the rest. The failure this prevents is a GM's tuning
@@ -159,7 +157,7 @@ describe("isDefault and describeSettings", () => {
       summary is a setting the log cannot report.
     */
     const line = describeSettings(DEFAULT_SETTINGS);
-    for (const part of ["blur", "k ", "window", "min stroke", "min island", "prune"]) {
+    for (const part of ["blur", "k ", "window", "min stroke", "min island"]) {
       expect(line, `no "${part}" in: ${line}`).toContain(part);
     }
     /*

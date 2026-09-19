@@ -44,7 +44,6 @@
  * No DOM, no SDK.
  */
 
-import type { SettingName } from "../settings";
 import { largestBend, longestRun, type WallGraph } from "../trace/wallGraph";
 
 interface Tops {
@@ -98,19 +97,13 @@ export function onGraphScale(tell: () => void): void {
   listeners.push(tell);
 }
 
-/**
- * The top of this control's track, or `null` when it has none.
- *
- * `null` for every control but the two, and for those when nothing has been derived yet or when the
- * graph offers nothing to measure — a map with no spur at all has no longest spur. The caller falls
- * back to the declared maximum, which is a real ceiling rather than a guess.
- */
-export function graphScaleTop(name: SettingName): number | null {
-  if (tops === null && latest !== null) tops = measure(latest);
-  if (tops === null) return null;
-  const top = name === "spurPruneGraphUnits" ? tops.spur : 0;
-  return top > 0 ? top : null;
-}
+/*
+  **`graphScaleTop` was here and went on 2026-09-18.**
+
+  It answered "what is the top of this *control's* track" for the two settings with graph-derived
+  ranges. Neither is a setting any more — straightening and pruning are amounts a GM presses — so the
+  two measurements are named directly below instead, and nothing keyed by `SettingName` is left.
+*/
 
 /**
  * The largest **bend** in the graph, which is *Straighten*'s track top.
@@ -129,6 +122,25 @@ export function bendTop(): number | null {
   if (tops === null && latest !== null) tops = measure(latest);
   if (tops === null) return null;
   return tops.bend > 0 ? tops.bend : null;
+}
+
+/**
+ * The longest wall **run** in the graph, which is *Prune the dead ends*' track top.
+ *
+ * The longest run rather than the longest spur, and that distinction was learned the hard way.
+ * Measuring only runs that have a free end *today* never counts a run sitting between two junctions —
+ * and the cascade frees exactly such runs on later rounds, so at the far right, where a GM reasonably
+ * expects every dead end to go, those are the walls left standing. No run can be longer than the
+ * longest run, so a limit there reaches anything the cascade ever frees while staying a real
+ * measurement. It must be the run and not the longest segment, because pruning removes a whole run at
+ * a time.
+ *
+ * `null` when nothing has been derived, or when there is no run to measure.
+ */
+export function spurTop(): number | null {
+  if (tops === null && latest !== null) tops = measure(latest);
+  if (tops === null) return null;
+  return tops.spur > 0 ? tops.spur : null;
 }
 
 function measure(graph: WallGraph): Tops {

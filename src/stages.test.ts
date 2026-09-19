@@ -19,7 +19,6 @@ import {
   normaliseColour,
   normaliseSettings,
   isPostReading,
-  isSkeletonOnly,
   PARAMETER_KIND,
   PARAMETER_STAGE,
   readingFingerprint,
@@ -98,13 +97,14 @@ describe("what re-reads the map", () => {
     );
   });
 
-  it("excludes pruning, which re-applies to a graph already in hand", () => {
-    // A pipeline parameter of the reading stage, and still not a re-read: the reason `isSkeletonOnly`
-    // exists. Its own prompt claimed it "decides what counts as ink", which it does not.
-    expect(PARAMETER_KIND.spurPruneGraphUnits).toBe("pipeline");
-    expect(PARAMETER_STAGE.spurPruneGraphUnits).toBe("read");
-    expect(rereadsTheMap("spurPruneGraphUnits")).toBe(false);
-  });
+  /*
+    **The pruning-exclusion test went on 2026-09-18 with the setting.**
+
+    It pinned that the spur limit was a `pipeline` parameter of the `read` stage that still did *not*
+    re-read — the whole reason the graph-only list existed — after its own prompt had wrongly claimed
+    it "decides what counts as ink". Pruning is an amount pressed in the Walls drawer now, so nothing
+    is filed that way and the list is gone. `settings.ts` carries the full note.
+  */
 
   it("excludes every tool control, whatever stage it is filed under", () => {
     // The five the prompt wrongly fired for are all filed `read`, which is the whole trap.
@@ -116,49 +116,31 @@ describe("what re-reads the map", () => {
 });
 
 describe("maskFingerprint", () => {
-  it("changes when any reading PIPELINE parameter changes, bar the skeleton-only ones", () => {
+  it("changes when any reading PIPELINE parameter changes", () => {
+    // "bar the skeleton-only ones" was the rest of this name until 2026-09-18; nothing is excluded now.
     const base = maskFingerprint(DEFAULT_SETTINGS);
     for (const name of stageParameters("read")) {
-      if (PARAMETER_KIND[name] !== "pipeline" || isSkeletonOnly(name)) continue;
+      if (PARAMETER_KIND[name] !== "pipeline") continue;
       const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
       expect(maskFingerprint(changed)).not.toBe(base);
     }
   });
 
-  it("does NOT change for a graph-only parameter, which is what makes a prune cheap", () => {
-    /*
-      The exclusion this rests on, stated as a property.
+  /*
+    **Two graph-only tests went on 2026-09-18, and what they pinned is worth keeping in words.**
 
-      Spur pruning is a reading-stage pipeline parameter, and since step D it does feed the emit
-      path — the faces are the graph's. What they still do not touch is the **mask**.
-      Leaving them in the mask fingerprint would throw away a cached mask and spend 690ms arriving at
-      a byte-identical one.
+    One asserted that a graph-only parameter leaves `maskFingerprint` untouched — the exclusion that
+    stopped a prune throwing away a cached mask and spending 690ms arriving at a byte-identical one.
+    The other asserted every such parameter was filed `read`, `pipeline` and post-reading, since filed
+    anywhere else it would be reached by a different recompute path and the exclusion would be
+    silently wrong.
 
-      This test was written expecting to be deleted at step D. It was not, and the reason is worth
-      keeping: the record had conflated "decides what is emitted" with "changes the mask". What had
-      to change was the *dispatch* — a graph change now invalidates the derived regions as well —
-      not this exclusion.
-    */
-    const base = maskFingerprint(DEFAULT_SETTINGS);
-    for (const name of ALL_NAMES) {
-      if (!isSkeletonOnly(name)) continue;
-      const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
-      expect(maskFingerprint(changed)).toBe(base);
-    }
-  });
-
-  it("keeps every graph-only parameter in the reading stage and out of the reading itself", () => {
-    // Filed anywhere else it would be reached by a different recompute path and the exclusion above
-    // would be silently wrong. Post-reading as well, since a parameter that fed binarisation could
-    // not possibly leave the mask unchanged.
-    const skeleton = ALL_NAMES.filter(isSkeletonOnly);
-    expect(skeleton.length).toBeGreaterThan(0);
-    for (const name of skeleton) {
-      expect(PARAMETER_STAGE[name]).toBe("read");
-      expect(PARAMETER_KIND[name]).toBe("pipeline");
-      expect(isPostReading(name)).toBe(true);
-    }
-  });
+    The first of those was written expecting to be deleted when faces started coming from the graph,
+    and it was not — the record had conflated *decides what is emitted* with *changes the mask*, and
+    what had to change was the dispatch rather than the exclusion. **It is deleted now for a different
+    reason**: its only subject stopped being a setting, so the list is empty and both assertions are
+    about nothing.
+  */
 
   it("does NOT change for a reading-stage DISPLAY parameter", () => {
     // The reason the two axes exist. The ink opacity sits in the Ink step because that is where the
@@ -246,9 +228,10 @@ describe("readingFingerprint", () => {
   it("covers strictly less than the mask fingerprint, and every post-reading parameter is in one of them", () => {
     /*
       A post-reading parameter that *nothing* noticed would be a setting the GM could change with no
-      effect at all, silently. Two ways to be noticed now: the mask fingerprint, for everything the
-      ink is composed from, or the graph-only declaration, for the ones that change the graph the
-      faces come from. Being in neither is the failure.
+      effect at all, silently. There were two ways to be noticed: the mask fingerprint, for everything
+      the ink is composed from, or the graph-only declaration, for the ones that changed the graph the
+      faces come from. **The second went on 2026-09-18 with the list**, so the fingerprint is now the
+      whole of it — every post-reading parameter has to move the mask.
     */
     for (const name of ALL_NAMES) {
       if (!isPostReading(name)) continue;
@@ -256,7 +239,7 @@ describe("readingFingerprint", () => {
       expect(PARAMETER_STAGE[name]).toBe("read");
       const changed = writeParameter(DEFAULT_SETTINGS, name, otherValue(name));
       const movesTheMask = maskFingerprint(changed) !== maskFingerprint(DEFAULT_SETTINGS);
-      expect(movesTheMask || isSkeletonOnly(name)).toBe(true);
+      expect(movesTheMask, name).toBe(true);
     }
   });
 

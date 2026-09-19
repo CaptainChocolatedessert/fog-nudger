@@ -30,7 +30,6 @@ import {
   type Scale,
   type ScaleLimits,
 } from "../sliderScale";
-import { graphScaleTop, onGraphScale } from "./graphScale";
 import { onInkProfiles, profileFor } from "./inkProfiles";
 import { ghostPosition } from "./ghostMark";
 import { recomputeFor } from "./recompute";
@@ -45,25 +44,18 @@ import { invalidate, say, setPendingEdit } from "./shell";
 import { controlIsMarked, reviewRegenerate, wallsMark } from "./regenerateGuard";
 
 /**
- * The track a control's slider runs over.
+ * The track a control's slider runs over: its declared limits, and nothing else.
  *
- * The declared limits for all but two, whose top end is measured off the graph. Falling back to the
- * declared maximum when there is no measurement yet is deliberate: it is a real ceiling rather than
- * a guess, and the handle moves to where the measurement puts it the moment one arrives.
+ * **Two controls used to measure their top end off the graph**, and both stopped being settings on
+ * 2026-09-18 — straightening and pruning are amounts pressed in the Walls drawer, which draws its own
+ * tracks. What went with them is worth recording, because it was a real defect for a day: a measured
+ * top had to be capped at the **declared ceiling**, since `fromSlider` clamps to the track's own
+ * maximum and a higher one hands back a value the normaliser silently rewrites on the next read.
+ * Seen in a room on 2026-09-07, where a largest bend of 0.707 was stored against a ceiling of 0.5.
+ * Any future measured track has the same trap waiting.
  */
 function trackFor(name: SettingName): ScaleLimits {
-  const declared: ScaleLimits = SETTING_LIMITS[name];
-  const top = graphScaleTop(name);
-  /*
-    **Never above the declared ceiling**, and this was a real defect for a day.
-
-    `fromSlider` clamps to the track's own maximum, so a measured top above `declared.max` hands back
-    a value the settings normaliser will silently clamp the next time the scene is read — a stored
-    setting rewritten with nothing announced, which is the worst thing a control can do and the whole
-    reason the round-trip tests exist. Seen in a room on 2026-09-07: a graph whose largest bend
-    measured 0.707 of the map against a ceiling of 0.5, and 0.707 was written.
-  */
-  return top === null ? declared : { ...declared, max: Math.min(top, declared.max) };
+  return SETTING_LIMITS[name];
 }
 
 /**
@@ -312,23 +304,14 @@ export function settingRow(control: Control): HTMLElement {
   hintPainters.push(() => paintHint(fromSlider(Number(input.value), limits, scale)));
 
   /*
-    Reposition when the measurement lands, which is after the first derive of an opening.
+    The reposition-on-measurement subscription was here and went with the two graph-derived tracks on
+    2026-09-18. It moved the *handle* when a measurement landed, never the value — the stored setting
+    was an absolute tolerance, so a re-measured top could only change where on the track it sat.
 
-    **The value does not move; the handle does.** That is the whole shape of the decision — the
-    stored setting is an absolute tolerance, so a re-measured top can only change where on the track
-    it sits. Registered through `graphScale` rather than through a subscription of this row's own, so
-    the list is cleared with the rows it belongs to.
+    Kept as a shape rather than a fact: any control whose track is measured rather than declared needs
+    this, and needs it registered through `graphScale` rather than through a subscription of its own,
+    so the list is cleared with the rows it belongs to.
   */
-  if (graphScaleTop(control.name) === null) {
-    onGraphScale(() => {
-      limits = trackFor(control.name);
-      const current = readParameter(currentSettings(), control.name);
-      placed = toSlider(current, limits, scale);
-      input.value = String(placed);
-      readout.textContent = format(control, current, placed, limits, scale);
-      paintHint(current);
-    });
-  }
 
   /*
     Re-reads on **release**, not while dragging — reverted 2026-08-23 after a room reported the
@@ -507,7 +490,14 @@ export function settingRow(control: Control): HTMLElement {
     `onApplied` in the composition root re-runs them whenever the picture catches up with anything.
   */
   hintPainters.push(showGhost);
-  onGraphScale(showGhost);
+  /*
+    `onGraphScale(showGhost)` stood here and went on 2026-09-18 with the graph-derived tracks.
+
+    It repositioned the ghost when a measurement landed, because a moving track top moves every mark on
+    it. No setting's track is measured any more — both that were are amounts in the Walls drawer, which
+    draws its own — so a measurement changes nothing about a row, and a subscription that fires to
+    recompute an unchanged position is the kind of thing a later reader has to disprove.
+  */
   showGhost();
 
   row.append(top, track, hint);

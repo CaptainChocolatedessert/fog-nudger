@@ -18,7 +18,6 @@
  */
 
 import {
-  isSkeletonOnly,
   PARAMETER_KIND,
   rereadsTheMap,
   type SettingName,
@@ -26,7 +25,7 @@ import {
 import { refreshGapSearch } from "./paintTool";
 import { refreshMends } from "./wallEdit";
 import { requestReread } from "./reading";
-import { invalidateRegions, repruneRegions } from "./regions";
+import { invalidateRegions } from "./regions";
 import { invalidate } from "./shell";
 
 /**
@@ -52,28 +51,20 @@ export function recomputeFor(names: readonly SettingName[]): void {
     refreshMends();
   }
 
-  const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
   /*
-    Graph-only first, and it is now a third thing rather than a cheaper second.
+    **Two targets, not three, since 2026-09-18.**
 
-    `GRAPH_ONLY` has exactly one member, the spur limit. It used to mean "skip the 690ms re-read but
-    re-derive everything", because pruning happened between thinning and chaining. **Pruning moved
-    past the derivation on 2026-09-06**, so it changes nothing the trace did — the graph is already
-    fitted and stored, and re-pruning it is a run walk and a face traversal, single-digit
-    milliseconds against the better part of a second.
-
-    The weld radius was the other member and was deleted rather than defaulted to zero, after 459 of
-    600 generated cases failed at its default.
+    There was a graph-only branch here — parameters that change the wall graph without changing the ink
+    mask, dispatched to a re-prune that cost a run walk and a face traversal rather than a 690ms
+    re-read. Its only member was the spur limit, and pruning is an amount a GM presses now rather than
+    a parameter, so nothing is left to dispatch. `settings.ts` carries the full note and why both come
+    back together if such a parameter ever returns.
   */
-  const rest = pipeline.filter((name) => !isSkeletonOnly(name));
-  const graphChanged = pipeline.some(isSkeletonOnly);
+  const pipeline = names.filter((name) => PARAMETER_KIND[name] === "pipeline");
 
   // The same predicate the discard prompt asks, so the two can never disagree about what re-reads.
   if (names.some(rereadsTheMap)) requestReread();
-  // Ordered so the broadest wins: a Defaults reset changes both kinds at once, and a full derive
-  // re-prunes on its way through where a re-prune would leave the trace stale.
-  else if (rest.length > 0) invalidateRegions();
-  else if (graphChanged) repruneRegions();
+  else if (pipeline.length > 0) invalidateRegions();
   invalidate();
   for (const listener of commitListeners) listener();
 }

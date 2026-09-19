@@ -48,7 +48,6 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import type { Ring } from "../geometry/ring";
 import { lastPixelsPerSquare, runTrace } from "../pipeline";
-import { isSkeletonOnly, SETTING_LIMITS, type SettingName } from "../settings";
 import { rasterPixelsPerGraphUnit } from "../trace/graphUnits";
 import { regionAt } from "../trace/dissolve";
 import { suppressedRegions, withoutSuppressed } from "../trace/suppression";
@@ -58,17 +57,13 @@ import {
   wallSegments,
   type WallFaces,
 } from "../trace/wallFaces";
-import {
-  pruneWallGraph,
-  wallRuns,
-  type WallGraph,
-} from "../trace/wallGraph";
+import { wallRuns, type WallGraph } from "../trace/wallGraph";
 import { noteGraph } from "./graphScale";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
 import { currentMarks, onMarksChange } from "./regionMarks";
-import { currentSettings, markParametersApplied } from "./settingsState";
+import { currentSettings } from "./settingsState";
 import { invalidate, isClosing, say, whileWorking } from "./shell";
 import { wallGraph, wallsEdited } from "./stage";
 
@@ -401,7 +396,7 @@ export function invalidateRegions(): void {
  * of date and there is nothing here worth re-pruning.
  */
 let derivation: {
-  /** The derivation's own output, unpruned. Pruning always starts from this rather than from itself. */
+  /** The derivation's own output. Nothing here prunes it any more — the Walls drawer's amount does. */
   readonly graph: WallGraph;
   /** Segments the derivation dropped for lying on one already stored, plus any of no length. */
   readonly dropped: number;
@@ -420,12 +415,15 @@ let derivation: {
  * is a few milliseconds against the second the trace took.
  */
 function publish(from: NonNullable<typeof derivation>, generation: number): void {
-  // Both the limit and the graph are in graph units, so there is nothing to convert — which is the
-  // point of the unit.
-  const limit = currentSettings().trace.spurPruneGraphUnits;
-  const pruned = pruneWallGraph(from.graph, limit);
+  /*
+    **The derivation is published as it came, unpruned — since 2026-09-18.**
 
-  preview = pruned.graph;
+    Pruning used to happen here, from the stored limit, on every traversal. It is an amount a GM presses
+    in the Walls drawer now, applied to the walls in front of them, so nothing on this path applies it.
+    The default was off, so a fresh map's picture is unchanged; what changes is that a *set* limit is no
+    longer re-applied behind the GM on every derive.
+  */
+  preview = from.graph;
   previewDropped = from.dropped;
   /*
     Measured from the graph **before** pruning, which is the graph the slider's own limit acts on.
@@ -436,8 +434,8 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   */
   noteGraph(from.graph);
 
-  const faces = buildWallFaces(pruned.graph);
-  const emitted = showFaces(pruned.graph, faces);
+  const faces = buildWallFaces(from.graph);
+  const emitted = showFaces(from.graph, faces);
   unitsPerSquare = from.pxPerSquare > 0 ? from.pxPerSquare / from.rasterPerUnit : 0;
 
   /*
@@ -455,9 +453,8 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   */
   const rooms = describeRooms(emitted, faces, "region");
   lastSummary =
-    `${rooms} · ${wallRuns(pruned.graph).length} walls in ` +
-    `${pruned.graph.edges.length} segments · ${pruned.graph.nodes.length} points` +
-    (pruned.removed === 0 ? "" : ` · ${pruned.removed} spurs pruned`) +
+    `${rooms} · ${wallRuns(from.graph).length} walls in ` +
+    `${from.graph.edges.length} segments · ${from.graph.nodes.length} points` +
     (previewDropped === 0
       ? ""
       : ` · ${previewDropped} wall${previewDropped === 1 ? "" : "s"} dropped — ` +
@@ -467,49 +464,25 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   say(lastSummary, lastSummaryOk ? "" : "bad");
   devLog(
     "info",
-    `workspace: partition ${generation} — pruned ${pruned.removed} spurs ` +
-      `(${pruned.segments} segments) in ${pruned.rounds} rounds at a limit of ` +
-      `${limit.toExponential(2)} of the map; ${from.collinear} points dropped as exactly ` +
+    `workspace: partition ${generation} — ${from.collinear} points dropped as exactly ` +
       `collinear, which costs nothing; ${describeWallFaces(faces)}`,
   );
   invalidate();
   for (const listener of derivedListeners) listener();
 }
 
-/**
- * Re-apply the spur limit without re-deriving anything.
- *
- * The dispatch calls this for a graph-only change. Falls back to a full derive when there is no
- * derivation in hand — which is the state after any reading or deriving change, and after opening
- * the workspace — so the caller never has to know which of the two it is asking for.
- */
-export function repruneRegions(): void {
-  // Nothing to re-prune against: what is on screen is the GM's own graph, which a limit does not
-  // reach — changing one regenerates the walls, and that is priced by the mark and the prompt.
-  //
-  // Recorded as applied all the same, because nothing on screen is waiting for it — the picture is
-  // the stored document and will never show this value. Left unrecorded, the slider's ghost marked a
-  // delay that would never end (room, 2026-09-09).
-  if (showingSaved()) {
-    markGraphOnlyApplied();
-    return;
-  }
-  if (!derivation || inFlight) {
-    invalidateRegions();
-    return;
-  }
-  requests.request();
-  publish(derivation, requests.latest());
-  requests.fulfil(requests.latest());
-  markGraphOnlyApplied();
-}
+/*
+  **`repruneRegions`, `GRAPH_ONLY_NAMES` and `markGraphOnlyApplied` were here and went on 2026-09-18.**
 
-/** The parameters a re-prune applies, which is exactly what `GRAPH_ONLY` names. */
-const GRAPH_ONLY_NAMES = (Object.keys(SETTING_LIMITS) as SettingName[]).filter(isSkeletonOnly);
+  They were the graph-only dispatch: re-apply the stored spur limit against the derivation already in
+  hand, which cost a run walk and a face traversal rather than a full re-derive. Pruning is an amount a
+  GM presses in the Walls drawer now, so no setting dispatches here and nothing calls it.
 
-function markGraphOnlyApplied(): void {
-  markParametersApplied(GRAPH_ONLY_NAMES);
-}
+  The one piece of reasoning worth keeping is why it recorded the limit as *applied* even when it did
+  nothing: with the stored document on screen the picture would never show a re-prune, so leaving it
+  unrecorded left the slider's ghost marking a delay that would never end (room, 2026-09-09). Any future
+  control that cannot affect what is drawn has the same trap waiting for it.
+*/
 
 async function derive(): Promise<void> {
   if (inFlight || isClosing()) return;
@@ -607,13 +580,13 @@ async function derive(): Promise<void> {
       pxPerSquare,
     };
     /*
-      The prune limit, which a derive re-applies on its way through.
+      Nothing is marked applied here any more, and both halves went on 2026-09-18.
 
-      `markApplied("derive")` stood above this and went with the `derive` stage on 2026-09-18: the
-      simplification tolerance was the only parameter filed there, and it is computed inside the derive
-      now rather than set. Nothing else was ever marked here.
+      `markApplied("derive")` went with the `derive` stage — the simplification tolerance was its only
+      member, and it is computed inside the derive now rather than set. `markGraphOnlyApplied()` went
+      with the graph-only list, whose only member was the spur limit, now an amount a GM presses. Every
+      parameter a derive can satisfy is marked applied by the reading that fed it.
     */
-    markGraphOnlyApplied();
     publish(derivation, generation);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
   } catch (error) {

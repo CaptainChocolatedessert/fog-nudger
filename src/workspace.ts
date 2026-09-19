@@ -61,10 +61,7 @@ import { registerRegenerateReview } from "./workspace/regenerateGuard";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerDefaultSeeds } from "./workspace/seedDefaults";
 import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
-import {
-  refreshStraightenAction,
-  renderStraightenAction,
-} from "./workspace/straightenAction";
+import { refreshWallAmounts, renderWallAmounts } from "./workspace/wallAmounts";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/colourRows";
 import { loadNominatedMap } from "./workspace/mapSource";
@@ -292,7 +289,7 @@ onToolChange(() => renderPanel());
 */
 onSettingCommitted(() => {
   refreshFrameAction();
-  refreshStraightenAction();
+  refreshWallAmounts();
 });
 /*
   All five markup colours, in the group that is never entered — the ink's included since 2026-09-09,
@@ -341,7 +338,7 @@ registerStepContent("view", renderSwatches, "bottom");
   the graph rather than in a group of its own: all three are things you do to the walls, and this
   is the one that *adds*, which is why it is a deliberate press where they are live.
 */
-registerStepContent("walls", renderStraightenAction, "bottom");
+registerStepContent("walls", renderWallAmounts, "bottom");
 registerStepContent("walls", renderFrameAction, "bottom");
 
 renderPushAction();
