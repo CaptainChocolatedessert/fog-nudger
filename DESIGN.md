@@ -3048,6 +3048,54 @@ tool can see.
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
 
+### A suspected regression in the ink finding — reported 2026-09-18, NOT diagnosed
+
+**Reported (user, 2026-09-18), and nothing here is confirmed:** *"I get little gaps in the ink now
+that I never got before. I think they come from the setting for the thinnest line to keep. If it's
+too high I lose little bits at the ends of walls, creating small gaps all over the map. I'm pretty
+sure it didn't do that before."*
+
+Deliberately not investigated at the time — it was raised as a sidebar during the workflow
+conversation and parked so the surface rework could proceed. **This is the note that has to survive a
+cold session**, so it carries the leads rather than only the symptom.
+
+**The mechanism the user proposes is sound.** *Thinnest stroke to keep* is a morphological opening —
+erode by k, then dilate by k — and an opening retracts a stroke's **end**, because the shape is
+locally narrow there in the direction along the stroke. So a radius one notch too high genuinely
+does leave small gaps at wall ends, which is the worst artefact this project has, since a gap merges
+two rooms.
+
+**What actually changed in that window, by commit rather than by memory:**
+
+- **`morphology.ts` was NOT touched** — so the opening's own code is not the change. The four commits
+  in the window (`5a29ea5`, `aacf124`, `c21a674`, `ad65e3b`, `7eb8d72`) leave it alone.
+- **`inkIslands.ts` WAS substantially rewritten** in `c21a674` — 61 insertions against 18 deletions,
+  when `walkIslands` was extracted so the island profile could share the filter's own walk. That is
+  the only ink-path file whose behaviour changed. **But it probably cannot produce this symptom:** the
+  island filter removes 8-connected components short on both sides, and a bit at the end of a wall is
+  connected to the wall network, so it belongs to the one giant island and is never removed. A lead to
+  rule out rather than the prime suspect.
+
+**The two candidates that do not require any code to have regressed**, and the first is the one to
+check first:
+
+1. **The setting may simply be higher than it was.** The stroke profile shipped in this exact window
+   and its whole purpose is to invite moving that handle — and the record already notes the slider has
+   about **ten stops per distinct outcome**, so a nudge can cross into the next real radius with the
+   map redrawing identically on the way. **`dev.log` records the settings on every derive**, so this is
+   answerable by a grep over the log rather than by reasoning. Do that before reading any code.
+2. **The radius is derived from the measured ink width**, which is a property of the map rather than of
+   the setting. *The Incandescent Grottoes* is the first map in the project's life to trigger the
+   **megapixel budget** — reduced by a factor of 2 — so its ink is about half as wide in raster pixels
+   as an uncapped map's. The same slider position therefore means a different radius than it did on
+   any earlier map. **So "it didn't do that before" may be true and still involve no regression: the
+   input changed.**
+
+**What would settle it**, in order of cost: the log grep above; then the stroke profile itself, which
+draws ink per stroke width against the slider's own track and will show the linework sitting in a band
+the handle has passed; then, only if both come back clean, a mutation run over `c21a674`'s changes to
+`inkIslands.ts`.
+
 ### The decisions, in the order to take them
 
 1. ~~**The fractured save-then-buttons workflow.**~~ **Answered and built on 2026-09-14.** It was the
