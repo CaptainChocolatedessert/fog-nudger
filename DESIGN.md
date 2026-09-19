@@ -3324,13 +3324,19 @@ to survive that case rather than assert something false.
    recording a parameter as applied when the picture cannot show it (or a ghost marks a delay that never
    ends), and the pinned floor, which is live in `wallAmounts.ts`.
 
+7. **The large-push warning names the two amounts**, where it used to tell a GM to raise a slider that
+   no longer exists. Its advice is more expensive than it was — both act on the graph rather than being
+   free and reversible — so it says so, and that one step of undo puts it back. The module also now
+   carries the measurement above, and the fact that **this warning is the only guard on item count**
+   there has ever been: the escalation ladder bounds a *face* at 8,192 commands, which is a different
+   failure entirely, and the manual guard was the slider that just left.
+
 **Next, in order:**
 
-1. **The large-push warning's text**, which still tells a GM to raise *Straightening under Walls*: a
-   control that no longer exists. Its advice also gets more expensive, since what reduces item count is
-   now two operations applied to the graph rather than a free reversible slider.
-2. **The clear family**, then **the cover**, then **dimming** — as above.
-2. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
+1. **The clear family** — *Clear ink edits*, *Clear wall edits*, *Clear all marks*, and deleting
+   *Discard changes* with the knock-on fix to *Clear layer*'s confirmation, which names it.
+2. **The cover**, then **dimming** — as above.
+3. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
    while we get the real changes implemented, then we can redesign it."* The complaint is that a
    *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
    since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —
