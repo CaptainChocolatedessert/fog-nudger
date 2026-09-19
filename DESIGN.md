@@ -762,7 +762,7 @@ the grid *silently*.
 | Same-wall distance | px | a distance travelled across the image |
 | Brush widths | px | what the GM is aiming with, on screen |
 | Straighten (the amount) | graph units | acts on the graph, and is measured against it |
-| Longest dead end to remove | graph units | same |
+| Prune the dead ends (the amount) | graph units | acts on the graph, and is measured against it |
 | Mend: largest gap to look for | graph units | a gap between walls, measured on the graph |
 | Mend: same-wall distance | graph units | a distance travelled along the walls |
 
@@ -1550,8 +1550,13 @@ deleting a whole edge takes one pixel further into every pruned junction. The ta
 
 ### The graph-derived tracks
 
+> **These are the two *amounts* now, not settings, since 2026-09-18** — `wallAmounts.ts` draws both
+> tracks and nothing stores either value. The measurement below is unchanged and still live; what went
+> is the storage, and with it the cap at a declared ceiling that a stored value needed. Read *Straighten
+> and Prune became actions* in §10 first.
+
 Both simplification and pruning act on the graph, which outlives any reading and so has neither a
-raster nor an ink width of its own. **The answer is to denominate the stored value in graph units, and
+raster nor an ink width of its own. **The answer is to denominate the value in graph units, and
 to measure the top of the slider's track off the graph itself.**
 
 - **A log scale**, from a **pinned floor** — a small length in graph units — to a **graph-derived top**:
@@ -1940,8 +1945,10 @@ A reading marks the partition stale; rebuilding is visible in one step, so **ent
 pays**. A slider release consults `PARAMETER_STAGE` to decide which cycle it triggers — the cascade, not
 a third list.
 
-**The prune limit has a fast path.** The built graph is kept, so a limit change is a run walk and
-a traversal — single-digit milliseconds — rather than a full re-derive.
+~~**The prune limit has a fast path.**~~ **Gone 2026-09-18.** The built graph was kept, so a limit
+change cost a run walk and a traversal rather than a full re-derive. Pruning is an amount a GM presses
+now, not a parameter, so nothing dispatches here — and the whole graph-only recompute target went with
+it. The cheapness was real and would be worth rebuilding if a graph-only *parameter* ever returns.
 
 **The partition's source is the MODE, not the presence of a stored graph.** Reading a stored graph in
 the ink mode would show the GM the rooms as *edited* while they moved sliders that do not produce them.
@@ -2585,7 +2592,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**976 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**975 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3285,23 +3292,45 @@ to survive that case rather than assert something false.
    `run.length > 1` **kept and surviving deliberately**, guarding a cross-module invariant rather than an
    observed case.
 2. **`workspace/graphLatch.ts`** — the latch, pure and tested, nine mutations nine caught.
-3. **`workspace/straightenAction.ts`** — the slider at the foot of Walls, with the substituting preview.
+3. **`workspace/wallAmounts.ts`** — both sliders at the foot of Walls, the substituting preview, and
+   the commit when the drawer closes.
 4. **The fitting tolerance out of settings**, computed in the derive; the `derive` cascade stage deleted
    for having no members; the contingent "a stage cannot be read off a step" assertion deleted.
 
+5. **Prune joined it**, sharing one pinned base and one commit. **The Walls group now regenerates
+   nothing at all**, which is the rework arriving: the set of things that rebuild the walls is exactly
+   the map and the ink. `steps.test.ts` pins that Walls is unmarked, and says what it would mean if it
+   ever went back.
+
+   **Decided while building, and worth checking in a room:** the substitution is used **only when
+   straightening is aimed**. Straightening replaces every wall, so the only way to judge it is the
+   result; pruning *removes* runs, and the established channel for that is the **red marks**, which say
+   *what goes* where a result can only say what is left — a single missing hair being far harder to
+   spot than a red one. So pruning alone shows the walls as they are with the doomed runs in red,
+   exactly as the slider did, and with both aimed the result is substituted and the red goes with it.
+   The commit prunes first either way, so what is drawn is what closing applies.
+
+   The doomed preview also stopped asking `showingSaved()`. Its stated reason was that a fresh
+   derivation already had the limit applied because the trace pruned as it built — untrue now that
+   nothing applies it on the way through, and it would have hidden the marks on every unedited map.
+6. **The graph-only machinery is deleted**, emptied by the same change: `GRAPH_ONLY` and
+   `isSkeletonOnly`, the re-prune dispatch with `repruneRegions` and `markGraphOnlyApplied`,
+   `graphScaleTop` and `settingRows`' whole measured-track branch, and the mask fingerprint's exclusion
+   filter. **This closes the carried question about a fourth cascade stage**, in the direction nobody
+   expected: the *third* was the one to delete, and this list went with it.
+
+   Three pieces of reasoning were kept in words where a future control would meet the same trap —
+   capping a measured track top at the declared ceiling (a room stored 0.707 against a ceiling of 0.5),
+   recording a parameter as applied when the picture cannot show it (or a ghost marks a delay that never
+   ends), and the pinned floor, which is live in `wallAmounts.ts`.
+
 **Next, in order:**
 
-1. **Prune becomes an action on the same latch.** It already runs on a kept graph rather than a
-   re-trace, so this is a change of *which* graph it starts from. Its code names the property that goes:
-   *"Pruning always starts from this rather than from itself"*, which is exactly what makes today's
-   slider reversible. Taking `spurPruneGraphUnits` out of settings **empties the graph-only recompute
-   list**, which closes the carried question about a fourth cascade stage — the answer being that the
-   third was the one to delete.
-2. **The large-push warning's text**, which still tells a GM to raise *Straightening under Walls*: a
+1. **The large-push warning's text**, which still tells a GM to raise *Straightening under Walls*: a
    control that no longer exists. Its advice also gets more expensive, since what reduces item count is
    now two operations applied to the graph rather than a free reversible slider.
-3. **The clear family**, then **the cover**, then **dimming** — as above.
-4. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
+2. **The clear family**, then **the cover**, then **dimming** — as above.
+3. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
    while we get the real changes implemented, then we can redesign it."* The complaint is that a
    *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
    since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —
@@ -4215,7 +4244,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   (**what a settings change invalidates** — the one place the three stages are spent, shared by a
   slider's release and a group's Defaults) · `settingsState.ts`
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
-  pickers) · `graphScale.ts` (the two graph-derived track tops — `bendTop` for Straighten, the longest run for pruning) ·
+  pickers) · `graphScale.ts` (the two graph-derived track tops — `bendTop` for Straighten, `spurTop` for pruning) ·
   `seedDefaults.ts` (**the per-map defaults** — straightening from the ink width, the mend tool's two
   distances from the raster) · `inkProfiles.ts` (**the two distributions drawn on the ink filters'
   rails**, asked for a frame after a reading lands rather than inside it)
@@ -4235,8 +4264,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   learns what it is restoring — pure and tested) · `regionMarks.ts` (the suppression marks for the map
   in hand: loaded with it, saved on every change, undone like any other act) · `editHistory.ts` (the bounded stack under it, pure and
   tested) · `frameAction.ts` (the button that walls the map's edge) ·
-  `straightenAction.ts` (**Straighten**: the amount at the foot of Walls, its substituting preview, and
-  the commit when the drawer closes) · `graphLatch.ts` (**the latch** — the graph pinned when a drawer
+  `wallAmounts.ts` (**Prune the dead ends** and **Straighten**: the two amounts at the foot of Walls,
+  the substituting preview, and the commit when the drawer closes) · `graphLatch.ts` (**the latch** — the graph pinned when a drawer
   opens, the amount aimed at it, and the staleness rule that voids it when the document is replaced:
   pure and tested) ·
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
