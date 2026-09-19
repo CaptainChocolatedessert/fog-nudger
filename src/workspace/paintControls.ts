@@ -35,13 +35,11 @@ import { confirmAction } from "../confirmDialog";
 import { renderPanel } from "./drawer";
 import { brushKind } from "./paintGesture";
 import {
-  hasUnsavedPaint,
   paintRaster,
   snapshotPaint,
   workingLayer,
 } from "./paintState";
 import {
-  abandonPaint,
   acceptAllShownGaps,
   currentPaintTool,
   currentVerb,
@@ -177,44 +175,38 @@ const PAINT_VERB = "Draw";
 const ERASE_VERB = "Erase";
 
 /**
- * Discard and Clear, for the brush in hand.
+ * Clear, for the brush in hand.
  *
  * **There is no Done here**, and its absence is the merge showing through: with both layers open,
  * saving is one act for both and belongs at the foot of the step rather than inside a tool. What is
- * left in the tool is the pair that acts on *this* layer alone — and per layer is the point, since
- * discarding the suppression because a stroke of added ink went wrong would be one button destroying
- * work it was never pointed at.
+ * left in the tool acts on *this* layer alone — and per layer is the point, since clearing the
+ * suppression because a stroke of added ink went wrong would be one button destroying work it was
+ * never pointed at.
+ *
+ * **That argument is about a button in a brush's drawer**, which is where this one is. It does not
+ * carry to *Clear ink edits* at the group level, which takes both layers deliberately (user,
+ * 2026-09-18): a GM does not perceive two layers, they perceive their edits.
  */
 function brushActions(kind: PaintKind): HTMLElement {
   const wrapper = document.createElement("div");
   const row = document.createElement("div");
   row.className = "step-actions";
 
-  const discard = document.createElement("button");
-  discard.type = "button";
-  discard.className = "chip quiet";
-  discard.textContent = "Discard changes";
-  discard.addEventListener("click", () => {
-    if (!hasUnsavedPaint(kind)) {
-      say(`the ${PAINT_NAMES[kind]} has not changed since it was last saved`);
-      return;
-    }
-    void confirmAction({
-      title: `Discard the changes to the ${PAINT_NAMES[kind]}?`,
-      // Names what survives as well as what goes, which is the rule the one-way door's confirmations
-      // follow: without it "discard" reads as losing the whole layer.
-      body: [
-        `The strokes made to the ${PAINT_NAMES[kind]} since it was last saved are lost.`,
-        "Everything saved before that stays, and so do the reading settings, the other layer and " +
-          "the map.",
-      ],
-      confirmLabel: "Discard",
-      destructive: true,
-    }).then((yes) => {
-      if (yes) abandonPaint(kind);
-    });
-  });
+  /*
+    **`Discard changes` was here and went on 2026-09-18.**
 
+    It threw away the strokes made to this layer *since it was last saved*, and the fault was not that
+    undo replaces it — undo does not, being twenty entries deep, which leaves a hole between *the last
+    twenty strokes* and *everything on the layer*. The fault is that its **extent was unknowable**: it
+    reverted to "the last save", and the save is an event this surface stopped marking when the save
+    button was deleted. Putting the brush down saves, switching group saves, closing saves, and none of
+    them is announced — so a GM pressing it could not predict whether it took three strokes or thirty.
+    Undo's extent is one named act per press, printed beside the button.
+
+    It also made "discard" mean two opposite things one word apart: *put me back to what is stored* here,
+    and *destroy what is stored* on the area-level buttons arriving beside it. **Clear** means the second
+    everywhere now, and nothing means the first.
+  */
   const clear = document.createElement("button");
   clear.type = "button";
   clear.className = "chip quiet";
@@ -223,7 +215,7 @@ function brushActions(kind: PaintKind): HTMLElement {
     void clearWholeLayer(kind);
   });
 
-  row.append(discard, clear);
+  row.append(clear);
   wrapper.append(row);
   return wrapper;
 }
@@ -277,8 +269,8 @@ async function clearWholeLayer(kind: PaintKind): Promise<void> {
     title: `Clear the whole ${PAINT_NAMES[kind]} layer?`,
     body: [
       `Every mark on the ${PAINT_NAMES[kind]} goes, including ones already saved.`,
-      "The reading settings, the other layer and the map are untouched. Nothing is written until " +
-        "you save or leave the step, so Discard changes still brings it back.",
+      "The reading settings, the other layer and the map are untouched. It goes on the undo stack " +
+        "like the strokes that filled it, so one step of undo brings the layer back.",
     ],
     confirmLabel: "Clear it",
     destructive: true,

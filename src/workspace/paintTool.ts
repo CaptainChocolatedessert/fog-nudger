@@ -64,7 +64,6 @@ import {
   anyUnsavedPaint,
   beginPaint,
   commitPaint,
-  discardPaint,
   endPaint,
   paintModeOpen,
   restorePaint,
@@ -636,19 +635,14 @@ function describePainted(): string {
     .join(", ");
 }
 
-/** Throw away one layer's unsaved edits. The only way work here is lost. */
-export function abandonPaint(kind: PaintKind): void {
-  // On the stack like any other edit, so undoing after a discard takes the discard back rather than
-  // stepping past it to some state before it — which would look like undo skipping an act.
-  const before = snapshotPaint(kind);
-  discardPaint(kind);
-  if (before !== null) {
-    rememberPaint(kind, before, `discarding the ${PAINT_NAMES[kind]} edits`);
-  }
-  last = null;
-  say(`${PAINT_NAMES[kind]} back to what was last saved`);
-  invalidate();
-}
+/*
+  `abandonPaint` was here and went on 2026-09-18 with the *Discard changes* button, its only caller.
+
+  It put the working copy back to the last saved layer and pushed the revert itself onto the undo stack,
+  so undoing after a discard took the discard back rather than reaching past it. `paintControls.ts`
+  carries why the button went: its extent was unknowable, because the save it reverted to is an event
+  this surface stopped marking.
+*/
 
 /** Wire the brush up. The step declares that a drag means this; the shell offers it every press. */
 export function registerPaintTool(): void {

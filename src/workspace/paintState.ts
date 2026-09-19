@@ -361,22 +361,13 @@ export function endPaint(): void {
   announce();
 }
 
-/**
- * Throw away one layer's unsaved edits, putting it back to what the scene holds.
- *
- * Per layer rather than per mode, which is the shape the merged step forces: the two brushes are
- * open together, and discarding the suppression because a stroke of added ink went wrong would be
- * one button destroying work it was never pointed at.
- *
- * It leaves the mode **open** with a fresh copy, rather than closing it. Discarding is a correction
- * mid-session, not a way out, and a GM who discards a bad stroke expects to carry on painting.
- */
-export function discardPaint(kind: PaintKind): void {
-  if (!working) return;
-  devLog("info", `paint: discarded the ${PAINT_NAMES[kind]} edits in hand`);
-  working = { ...working, [kind]: workingCopy(kind) };
-  announce();
-}
+/*
+  `discardPaint` was here and went on 2026-09-18, with `abandonPaint` above it and the *Discard changes*
+  button above that. It replaced a working copy with a fresh copy of what the scene holds.
+
+  `hasUnsavedPaint` stays and is load-bearing: the automatic save loop asks it to skip a layer nothing
+  has touched, and something else asks whether anything at all is unsaved.
+*/
 
 /**
  * Where a failed write gets reported, supplied by whoever owns a state line.

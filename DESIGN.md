@@ -3331,10 +3331,14 @@ to survive that case rather than assert something false.
    there has ever been: the escalation ladder bounds a *face* at 8,192 commands, which is a different
    failure entirely, and the manual guard was the slider that just left.
 
+8. ***Discard changes* is deleted**, with `abandonPaint` and `discardPaint` beneath it — each had
+   exactly one caller, which was the chain above. `hasUnsavedPaint` stays, because the automatic save
+   loop asks it to skip an untouched layer. *Clear layer*'s confirmation named the deleted button as
+   what brings a clear back; it names **undo** now, which is true and was already true.
+
 **Next, in order:**
 
-1. **The clear family** — *Clear ink edits*, *Clear wall edits*, *Clear all marks*, and deleting
-   *Discard changes* with the knock-on fix to *Clear layer*'s confirmation, which names it.
+1. **The three clear buttons** — *Clear ink edits*, *Clear wall edits*, *Clear all marks*.
 2. **The cover**, then **dimming** — as above.
 3. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
    while we get the real changes implemented, then we can redesign it."* The complaint is that a
