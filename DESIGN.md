@@ -33,6 +33,7 @@ standing obligation — see §11. Everything else it taught this project is writ
 8. [Testing and diagnostic practice](#8-testing-and-diagnostic-practice)
 9. [Constraints and pitfalls](#9-constraints-and-pitfalls)
 10. [Open questions and what is next](#10-open-questions-and-what-is-next)
+    - [The workflow rework](#the-workflow-rework--designed-in-full-2026-09-18-part-built) — in progress
 11. [Copied code, and what it obliges](#11-copied-code-and-what-it-obliges)
 12. [Licence](#12-licence--gpl-30-or-later)
 
@@ -74,6 +75,9 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **dissolve** | removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
 | **mark** | a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. |
 | **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. |
+| **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten* and *Prune the dead ends*. Not a setting: nothing is stored, and the handle reads as *how much more*. |
+| **the latch** | the graph pinned when a drawer opens, so an amount previews against a fixed base instead of against its own last result. Void the moment the document is replaced under it. |
+| **the fitting tolerance** | the number that turns pixel chains into fitted edges inside the derive, and escalates to meet the command cap. **Computed** — a quarter of the measured ink width — never chosen. |
 | **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
 
 ### The stages — and the surface words for them are **retired**
@@ -757,7 +761,7 @@ the grid *silently*.
 | Largest gap to look for | px | a threshold that moved with a measurement would change what is proposed invisibly |
 | Same-wall distance | px | a distance travelled across the image |
 | Brush widths | px | what the GM is aiming with, on screen |
-| Straightening | graph units | acts on the graph, and outlives the reading |
+| Straighten (the amount) | graph units | acts on the graph, and is measured against it |
 | Longest dead end to remove | graph units | same |
 | Mend: largest gap to look for | graph units | a gap between walls, measured on the graph |
 | Mend: same-wall distance | graph units | a distance travelled along the walls |
@@ -1481,11 +1485,23 @@ still on — the dragged one, or the one it was folded into.
 
 ### Straightening, pruning, and the one button left
 
-**Straightening and pruning are single live sliders, applied on every derive — 2026-09-14.** They
+> **Straightening is an amount applied to the walls in front of the GM, since 2026-09-18, and the
+> fitting tolerance is computed rather than chosen.** The passage below describes both as live sliders
+> the derive read, which was true from 2026-09-14 until then. Read *Straighten and Prune became
+> actions* in §10 for what replaced it; the history here is kept because it is what that change had to
+> answer.
+
+**Straightening and pruning were single live sliders, applied on every derive — 2026-09-14.** They
 were a slider each under Walls *and* a button each in the editor, and crossing the save turned one
-into the other without saying so. There is one control each now, and changing either regenerates the
-walls like any reading change: the mark says the graph holds work of yours, the dialog prices it, and
+into the other without saying so. There was one control each, and changing either regenerated the
+walls like any reading change: the mark said the graph holds work of yours, the dialog priced it, and
 `editSimplifyFraction` is gone.
+
+**What was wrong with that, and what it cost.** A slider the derive reads can only ever apply to a
+fresh derivation — so turning it **discarded every hand edit**, which is the whole reason the group
+carrying it had to be locked at all. The record already stated the cost as *"you can no longer tidy a
+graph you have already hand-edited. Draw three walls, then decide to prune hairs, and the three walls
+go with it."* That is the cost the change removes.
 
 **What made the editor's copies necessary went with the save button.** Before the save the graph was
 a derivation and turning a slider down put the detail straight back; after it the graph was the
@@ -1870,18 +1886,25 @@ zooming in to work brings them back and zooming out leaves the linework readable
 | `POST_READING` | which **half of the reading cache** does it touch | the reading fingerprint |
 | `PARAMETER_STEP` | **where** does the control appear | the accordion |
 
-**The three stages are the cascade, and destruction flows one way:**
+**The stages are the cascade, and destruction flows one way:**
 
-1. **read** — what is ink. Re-partitions wholesale and discards both later stages.
-2. **derive** — abstracting that ink into shapes. Regenerates every polygon, so it discards hand edits
-   but not the reading.
-3. **adjust** — destroys nothing.
+1. **read** — what is ink. Re-partitions wholesale and discards the later stage.
+2. **adjust** — destroys nothing.
 
-**The evidence that the middle rung is real**, and it is not obvious: a minimum-area filter is **not a
-pure delete**. A hole is kept only when it encloses a surviving region and filled in when it encloses
-nothing, so dropping a sliver *dilates whatever surrounds it* into the space it held. Measured, mask
-unchanged: **15 holes kept at one threshold against 51 at another.** That is abstracting ink into
-regions, not reading ink.
+> **There were three until 2026-09-18, and the middle one is deleted.** `derive` meant *abstracting the
+> ink into shapes*: regenerate every polygon, discarding hand edits but not the reading. Its documented
+> evidence was that a minimum-area filter is **not a pure delete** — a hole is kept only when it
+> encloses a surviving region, so dropping a sliver dilates whatever surrounds it, measured at 15 holes
+> kept against 51 at another threshold. **That control was deleted on 2026-08-30**, which left the
+> simplification tolerance as the rung's only member; when that stopped being a setting the rung had
+> none.
+>
+> **A stage with no members claims an ordering it does not have**, which `stages.test.ts` refuses, so
+> the rung came out rather than the test being relaxed. Every setting that remains either changes what
+> the ink is or destroys nothing.
+>
+> **The evidence above is still a good argument** — it is why a minimum-area filter could not be filed
+> under `read`. If such a control ever returns, the rung returns with it.
 
 **`PARAMETER_KIND` is `pipeline | display | tool`**, and the third is not a synonym for the second.
 `display` here does not mean "about appearance" — it means the answer to *what does a change
@@ -2562,7 +2585,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**967 tests across 68 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**976 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2959,9 +2982,18 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is broken and nothing is half-built.** The session of 2026-09-18 ended with every change
-committed, `tsc`, 967 tests and a build passing, and the parking lot empty. **The next piece of work is
-the user's to choose** — the list at the end of this section is what is open, not a queue.
+**A rework of the workflow is in progress, designed in full and part built.** *The workflow rework*
+below carries the whole design and a stage-by-stage account of what has landed. Every commit so far
+leaves `tsc`, the suite and a build green, and **nothing is half-built at any commit** — but the
+feature set is incomplete, and the next thing to do is named there rather than chosen freshly.
+
+**The one thing a cold session must know before touching the Walls drawer:** straightening is an
+*action* now and the fitting tolerance is computed, so §5 and §7's passages about two live sliders are
+marked as history. Do not restore either as a setting without reading why they went.
+
+**Also waiting, and unrelated:** a suspected regression in the ink finding, reported and deliberately
+not investigated — the section after the rework carries the symptom and the leads, and says to start
+with a grep of `dev.log` rather than with the code.
 
 **The biggest open question in the project closed on its own.** *"The most informative thing that can
 happen to this project is now a second map, one whose style differs from the first"* — and one
@@ -3047,6 +3079,239 @@ tool can see.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
+
+### The workflow rework — designed in full 2026-09-18, part built
+
+**What it is for.** The lock that stops a GM destroying their wall edits was organised around a
+*consequence* — *"what will regenerate the walls"* — and that cuts across every category a GM already
+has. The Ink group holds nine controls of which five regenerate, so the guard had to be **per control**;
+two graph sliders were members for an unrelated reason; and the map picker, the most destructive thing
+on the surface, was not a member at all. **A GM cannot predict membership of that set**, so they cannot
+hold it, and the surface has to tell them each time with a mark.
+
+The rework organises it around a **cause** instead: *what the walls are made from*, which is the map and
+the ink. That is the same division as stage one and stage two, and it fits in one sentence — the walls
+come from the ink, so changing the ink makes new walls.
+
+**It is not a return to two modes**, and the difference matters because §7a's argument against them
+still stands. What 2026-09-14 killed was *navigation cost*: two pages, two panel buttons, a save between
+them, controls that moved when you crossed. None of that returns — one page, one strip, every group a
+click away, no save. The live objection from that decision is narrower and was answered directly:
+*"the ceremony fires on crossing the boundary whether or not anything is at stake."*
+
+> **So the cover exists only when there is something to lose**, gated on the stored base differing from
+> the document. No hand edits, no cover. That makes it **a state the document is in rather than a place
+> the GM is** — which is §7a's own formulation of the irreversibility, drawn properly for the first time
+> instead of scattered into per-control marks.
+
+**Reasoned, not measured:** the loop the mode boundary used to cut across — spot a merged room, go fix
+the ink — mostly happens *before* any wall editing, because spotting a merge is reading the partition
+and hand-editing walls means the partition has been accepted. So the cover costs nothing in the common
+case, and when it does appear the cost it names is real.
+
+#### Straighten and Prune became actions
+
+**Both apply an amount to the walls in front of the GM** rather than feeding a parameter to the derive.
+That is what lets them work on a hand-edited graph, and it is what takes them out of the lock — after
+this, the only things that regenerate the walls are the map and the ink.
+
+**The word for this was "dose" for two turns and is retired** (user, 2026-09-18: *"let's not use the
+term, I'll have trouble remembering it"*). There is deliberately **no category noun**: the buttons say
+*Straighten* and *Prune the dead ends*, the slider beside each says how much, and where the contrast is
+needed it is spelled out — *applied to the walls you have* against *read by the derive*.
+
+**What it costs, stated.** Applied to the current graph the operation is cumulative, so the handle
+cannot describe a state: straighten at one amount then a smaller one and the detail does not come back,
+because the document no longer holds it. A GM can add more or undo; they cannot drag back to a previous
+result. **That is the ratchet accepted and made visible** rather than eliminated, and it is only
+tolerable because undo is behind it.
+
+**The latch is what buys the slider back.** Opening the Walls drawer pins the graph; the handle previews
+against that fixed base, so dragging back and forth *inside one opening* is free and exact; closing the
+drawer applies the result once, as one undo entry. **The handle starts at zero on every opening**, which
+is the load-bearing half — at any other position it would describe work already done, and one nudge
+would re-apply it to the already-straightened base, which is the ratchet returning through the side
+door. Three things fall out for free: a drawer closed untouched applies nothing, a drawer stolen by
+another press commits nothing, and one opening is one entry.
+
+**The staleness rule is the only subtle part.** An undo or a derive landing replaces the document while
+the drawer is open, and an operation computed against the vanished base would discard the replacement
+silently. So the latch is **void** the moment the current graph is not the object that was latched —
+identity rather than equality, because every edit replaces the graph wholesale and two equal-but-distinct
+graphs are still a replacement. It is enforced at the commit as well as while the handle moves, and a
+void latch applies nothing at all, which is the loud answer: the GM sees walls unchanged rather than
+quietly re-straightened.
+
+**The preview substitutes rather than overlays** (user, 2026-09-18). While the amount is non-zero the
+walls *and* the room fills on the canvas come from the straightened graph. The question a GM is
+answering is *do I want these walls*, which only the result can answer — and straightening replaces
+every wall, so an overlay would draw a dense map twice, where Prune's red preview gets away with it by
+marking a subset. `regions.ts` holds one variable for it and the walls layer delegates its source there,
+because the fills and the walls coming from different graphs is a defect this project has already paid
+for. `editableGraph` deliberately still answers the document, since a tool must edit that rather than a
+proposal.
+
+#### The fitting tolerance is computed, not chosen
+
+**Two numbers had been one.** The tolerance that turns pixel chains into fitted edges — and escalates
+map-wide to meet Owlbear's 8192-command cap — lives inside the derive by construction: fitting happens
+once per edge *before* the wall graph exists, which is what stops two faces of a shared wall drifting
+apart. It cannot move to the current graph. Straightening the *document* is the separate operation
+above.
+
+**So the handle went and the number stayed**, computed as a quarter of the measured ink width. The
+premise that the automatic step made a control unnecessary needed one correction first: **the escalation
+ladder doubles**, and its loop is guarded `tolerance > 0` with the reason beside it — *"doubling zero is
+zero, so a caller asking for no simplification at all would spin here forever on any face over the
+cap."* The ladder therefore needs a non-zero start and cannot supply one; and it only guarantees each
+**face** is emittable, never that the whole graph is storable, which is the limit the 751px map hit.
+What makes the handle unnecessary is that the seeded figure is a *measurement* and a better answer than
+a GM's guess — the report while it was on screen was *"I haven't looked at them while adjusting
+settings."*
+
+**Removed rather than hidden.** A stored value with no handle would govern every fit for ever, silently,
+on any scene tuned before the change — the unit-rename failure arriving by another route. And the round
+trip went with it: the seed divided a pixel figure by raster pixels per graph unit and the derive
+multiplied it straight back, a hop that existed only so a *stored* number could outlive the raster.
+
+**Measured, and it says the handle was not load-bearing for size.** Across the 38 derives in `dev.log`,
+every one ran at a **seeded** tolerance with **zero escalations**, and the two maps emitted **318 items
+(6 regions + 312 wall lines)** and **514 (10 + 504)** against the large-push warning's threshold of
+1,500. What that does *not* establish: two maps, both line-drawn; the 5,881-segment catastrophe of
+2026-09-07 predates seeding, so what is known is that seeding fixed *that*, not that the seed suffices in
+general; and zero escalations means **the ladder has never been watched working on a real map.**
+
+**The residual cost, stated:** there is no automatic guard on item *count*, before or after. The ladder
+fires per face above 8,192 commands, which is a different failure. The slider was the manual guard, so
+removing it leaves the large-push warning as the only thing standing there.
+
+#### The clear family — one verb, one meaning
+
+Three tiers, each aimed at exactly what its name says: tool-level at one layer, area-level at all of my
+edits here, scene-level at everything.
+
+| control | where | takes |
+|---|---|---|
+| **Clear layer** | a brush's own drawer, unchanged | that one paint layer |
+| **Clear ink edits** | the Ink group's controls | **both** paint layers |
+| **Clear wall edits** | the Walls group's controls | the wall document, **leaving the marks** |
+| **Clear all marks** | *Suppress region*'s drawer | the suppression marks |
+| **Clear everything** | the panel, unchanged | the scene as though the extension never ran |
+
+**"Clear" means destroy the stored thing and nothing else does.** *Discard changes* — which reverted one
+layer to its last save — **is deleted**, and the reason is not that undo replaces it. Undo does not: it
+is twenty entries deep, so a spell of more than twenty strokes cannot be fully reverted, and the ladder
+now has a hole between *the last twenty strokes* and *everything on the layer*. The reason is that the
+button's **extent was unknowable**: it reverted to "the last save", and the save is an event the surface
+stopped marking when the save button was deleted — putting the brush down saves, switching group saves,
+closing saves, none of them announced. Undo's extent is one named act per press.
+
+**Both layers, not one** (user, 2026-09-18). The per-brush control is deliberately narrower, on the
+stated ground that *"discarding the suppression because a stroke of added ink went wrong would be one
+button destroying work it was never pointed at"* — but that argues against widening a button sitting in
+*a brush's* drawer, not against an area-level one. A GM does not perceive two layers; they perceive
+their edits.
+
+**The two area-level buttons are not peers in cost, despite the parallel names.** The ink is upstream, so
+clearing both paint layers changes the composite, which re-derives the walls, which takes the wall edits
+with it. *Clear ink edits* is therefore also a wall-edit discard; *Clear wall edits* touches nothing
+above it. The name stays about what it does directly and **the confirmation carries the cascade** — a
+point that is only one of several reasons a GM presses a button is a guess at intent rather than a name,
+which is what the frame button cost three names to learn.
+
+**The marks survive a wall-edit clear** (user, 2026-09-18, against a first instinct to couple them). A
+mark is a point in graph units that suppresses whatever region holds it, and it already survives a
+**rebuild** — the whole graph refitted from changed ink, far more violent than this button. Taking the
+marks would make the gentle, explicit recovery **strictly more destructive than the accident it exists
+to undo**, which reads as a bug. Three things compound it: the name says *wall edits*, and placing a
+mark is not a hand edit; marks can never go stale, since they are points rather than region references;
+and it would re-create the cross-document reach that was a reported defect — *"changing parameters on
+the walls shouldn't delete ink edits"* — fixed by tagging undo entries per document. **One rule
+instead of a split:** marks survive anything that re-derives the walls, and only their own tool or
+*Clear everything* removes them.
+
+#### Dimming the side you are not working on
+
+**Keyed on the last side the GM touched**, not on the tool in hand and not on the open drawer. Arming an
+ink tool, moving an ink control and pressing *Clear ink edits* all mean *I am working on the ink*, and
+the same for the wall side. Keying it to the drawer would put the pre-2026-09-14 arrangement back, since
+a group stopped being a mode.
+
+- **Wall side → the ink dims. Ink side → the walls dim. Nothing dims until the first interaction**, so
+  the workspace still opens on the plain picture.
+- **The room fills never dim** (user, 2026-09-18: *"they're already pretty faint"*). They are also the
+  consequence a GM paints to fix, and the crowding the record complains about is at the *stroke*, where
+  the centrelines are and the fills are not.
+- **Ink at 0.3, walls at 0.45**, and they differ for a reason: the ink is a flat area fill, while the
+  centrelines are **cased** — a light stroke two pixels wider under a saturated core — and the casing is
+  what makes them read on dark linework at all, so one number would make the walls vanish before the ink
+  did. A starting guess, to be moved by eye.
+- **No toggle, for now** (user): *"let's see if requiring it feels ok."* **The cost:** once work begins
+  one side is always dim, and there is no both-full state. That is what a toggle would buy.
+
+**It reverses two recorded decisions and the reason they no longer bite is worth keeping.** Per-layer
+opacity was removed outright in September, and automating *which layer is the subject* was rejected
+because that is a judgement and guessing it wrongly is worse than leaving it. The subject is not being
+guessed here — the GM has explicitly picked up a brush or a wall tool.
+
+#### The cover
+
+**One cover over the map picker and everything on the ink side**, raised only while the stored base
+differs from the document. **The map picker is a member and was not before**: nominating a different map
+discards the graph outright, since a graph is stored in graph units of *a* map and the marks record their
+map too, so it was the most destructive thing sitting outside the lock.
+
+**Clicking the cover raises the existing review state, not a dialog** (user, 2026-09-18). The dialog was
+deliberately removed on 2026-09-15 because *"panning is required to answer the question, and a modal is
+the thing that prevents panning"* — the dialog asks *do you understand the cost* and the review asks *is
+the cost acceptable*, which can only be answered by looking around the map. Unlocking destroys nothing;
+only using a tool that re-derives does.
+
+**One edge the picker's membership creates.** The gate reads "no base, or a base for another map" as
+*assume it was edited*, which is deliberately the loud answer — so a scene whose nominated map has gone
+missing would raise a cover over the picker warning about wall edits that may not exist. The wording has
+to survive that case rather than assert something false.
+
+#### What is built, and what is next
+
+**Built and committed**, each commit green under `tsc`, the suite and a build:
+
+1. **The straighten decision hardened.** `simplifyWalls` had been written, tested and called by nothing
+   since the editor's button went on 2026-09-14, so its tests had never guarded live code. Seven
+   mutations, three survived, each answered by measurement over 174,156 wall runs: a fixture for the
+   collapse threshold of four (4,391 of 23,436 closed runs fit to exactly three, 18.7%, and a threshold
+   of three turns every one of those rooms into a pair of coincident walls); the `a !== b` self-edge
+   guard **deleted** as decided by nothing, zero self-edges on the path the code takes; and
+   `run.length > 1` **kept and surviving deliberately**, guarding a cross-module invariant rather than an
+   observed case.
+2. **`workspace/graphLatch.ts`** — the latch, pure and tested, nine mutations nine caught.
+3. **`workspace/straightenAction.ts`** — the slider at the foot of Walls, with the substituting preview.
+4. **The fitting tolerance out of settings**, computed in the derive; the `derive` cascade stage deleted
+   for having no members; the contingent "a stage cannot be read off a step" assertion deleted.
+
+**Next, in order:**
+
+1. **Prune becomes an action on the same latch.** It already runs on a kept graph rather than a
+   re-trace, so this is a change of *which* graph it starts from. Its code names the property that goes:
+   *"Pruning always starts from this rather than from itself"*, which is exactly what makes today's
+   slider reversible. Taking `spurPruneGraphUnits` out of settings **empties the graph-only recompute
+   list**, which closes the carried question about a fourth cascade stage — the answer being that the
+   third was the one to delete.
+2. **The large-push warning's text**, which still tells a GM to raise *Straightening under Walls*: a
+   control that no longer exists. Its advice also gets more expensive, since what reduces item count is
+   now two operations applied to the graph rather than a free reversible slider.
+3. **The clear family**, then **the cover**, then **dimming** — as above.
+4. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
+   while we get the real changes implemented, then we can redesign it."* The complaint is that a
+   *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
+   since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —
+   18.19px, the size of the glyph beside it — is the other half of the question.
+
+**Nothing in the rework has been in a room.** It is all surface, which has no coverage by construction,
+so `tsc` and the suite are evidence about the pure halves only. The straighten preview's cost is logged
+past 50ms, which is what would say whether the quadratic crossing sweep needs splitting out of the
+preview — the geometry-only preview with the sweep left to the commit is the change to make if a room
+reports the handle dragging heavily.
 
 ### A suspected regression in the ink finding — reported 2026-09-18, NOT diagnosed
 
@@ -3950,7 +4215,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   (**what a settings change invalidates** — the one place the three stages are spent, shared by a
   slider's release and a group's Defaults) · `settingsState.ts`
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
-  pickers) · `graphScale.ts` ·
+  pickers) · `graphScale.ts` (the two graph-derived track tops — `bendTop` for Straighten, the longest run for pruning) ·
   `seedDefaults.ts` (**the per-map defaults** — straightening from the ink width, the mend tool's two
   distances from the raster) · `inkProfiles.ts` (**the two distributions drawn on the ink filters'
   rails**, asked for a frame after a reading lands rather than inside it)
@@ -3969,7 +4234,11 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   stack, for the graph, the painted ink and the marks**: entries are labelled closures, so it never
   learns what it is restoring — pure and tested) · `regionMarks.ts` (the suppression marks for the map
   in hand: loaded with it, saved on every change, undone like any other act) · `editHistory.ts` (the bounded stack under it, pure and
-  tested) · `frameAction.ts` (the one wall action left; straighten and prune became live sliders) ·
+  tested) · `frameAction.ts` (the button that walls the map's edge) ·
+  `straightenAction.ts` (**Straighten**: the amount at the foot of Walls, its substituting preview, and
+  the commit when the drawer closes) · `graphLatch.ts` (**the latch** — the graph pinned when a drawer
+  opens, the amount aimed at it, and the staleness rule that voids it when the document is replaced:
+  pure and tested) ·
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
   own limit at zero — pure and tested)
 - **What is drawn** — `regenerateGuard.ts` (**the mark and the gate**: which control or tool would
