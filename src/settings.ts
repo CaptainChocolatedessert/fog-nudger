@@ -809,42 +809,36 @@ const POST_READING: readonly SettingName[] = [
   the cost argument above is why.
 */
 
+/*
+  `regeneratesWalls` was here and went on 2026-09-20, with the per-control gate it was written for.
+
+  It answered *does changing this replace the wall graph*, and it was one line —
+  `PARAMETER_KIND[name] === "pipeline"` — read by the mark on a slider and by the mark on a group.
+  **The cover replaced both.** The lock is keyed on the *document* now, not on the parameter: the
+  walls are made from the map and the ink, so the whole ink side goes under one lid and no control
+  has to be asked about itself. `steps.ts`' `stepIsInkSide` is that division, and the cover in
+  `regenerateGuard.ts` is the drawing.
+
+  What it knew is not lost, only said directly: a `pipeline` parameter is one whose change recomputes
+  the mask, so the graph — a pure function of the ink and those numbers — is a new one afterwards.
+  Anywhere that used to need the question can read `PARAMETER_KIND` itself, and `steps.test.ts` does.
+*/
+
 /**
  * Whether changing this parameter re-reads the map.
  *
- * **One statement of it, used twice**, and the second use is the reason it exists. The recompute
- * cascade asks it to decide whether a release requests a re-read; the discard prompt asks it to
- * decide whether to warn. They used to ask different questions — the prompt read the stage alone and
- * never the kind — so it fired for five controls that re-read nothing: both brush widths, both gap
- * sliders and the editor's straighten slider (found 2026-09-10). Each of them told a GM with wall
- * edits outstanding that it "decides what counts as ink" and would derive the walls again, which was
- * false on both counts, and confirming did nothing at all.
+ * **One caller, the recompute cascade**, which asks it to decide whether a release requests a
+ * re-read. There were two until the per-control gate went: the discard prompt asked the same
+ * question to decide whether to warn, and the two used to ask it *differently* — the prompt read the
+ * stage alone and never the kind, so it fired for five controls that re-read nothing: both brush
+ * widths, both gap sliders and the editor's straighten slider (found 2026-09-10). Each told a GM
+ * with wall edits outstanding that it "decides what counts as ink", which was false, and confirming
+ * did nothing at all. **That is why the question has one statement** even now that one thing asks
+ * it.
  *
  * A pipeline parameter of the reading stage, less the graph-only ones: pruning re-applies to a graph
  * already in hand and never goes near the map.
  */
-/**
- * Whether changing this replaces the wall graph, and so discards anything edited into it by hand.
- *
- * **Every pipeline parameter, which is a wider net than `rereadsTheMap`** — that one asks whether the
- * expensive first half runs again, which is a question about *cost*. This asks what a change
- * **destroys**, and the answer is the same for all of them: the graph is a pure function of the ink
- * and these numbers, so moving any of them produces a new one and the old one's hand edits are not in
- * it.
- *
- * It covers the two wall controls as well as the five ink ones, which is the point. Straightening and
- * pruning used to be exempt because the editor applied them through buttons of their own against the
- * stored document; with one control each, live, they regenerate like everything else and have to be
- * priced the same way.
- *
- * Also covers the ink **brushes**, whose strokes are pipeline inputs rather than parameters —
- * `settingRows` prices the sliders and `paintTool` prices a stroke, but the rule they share is this
- * one.
- */
-export function regeneratesWalls(name: SettingName): boolean {
-  return PARAMETER_KIND[name] === "pipeline";
-}
-
 export function rereadsTheMap(name: SettingName): boolean {
   // The `!isSkeletonOnly(name)` term was here and went on 2026-09-18 with the graph-only list: no
   // pipeline parameter of the reading stage skips the re-read any more.

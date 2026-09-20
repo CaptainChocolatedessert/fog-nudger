@@ -2598,7 +2598,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**981 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**978 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3015,12 +3015,11 @@ next section.
 below carries the whole design and a stage-by-stage account of what has landed — nine items built,
 each green under `tsc`, the suite and a build, and **nothing is half-built at any commit.**
 
-> **The cover is built (2026-09-20) and the per-control gate it replaces is still standing.** Every
-> branch of that gate on the ink side is now unreachable — a marked slider, a marked ink tool and
-> the clear button's own mark all sit under the lid at exactly the moments they would be marked — so
-> **taking them out is the next thing to do**, and it is a deletion rather than a design. Then
-> **dimming**, which is item 1 of *Next, in order*. The walls glyph is item 2 and is deliberately
-> last, because the cover may retire it rather than need it redrawn.
+> **The cover is built and the per-control gate is deleted (2026-09-20).** The lock is one lid over
+> the ink side now, and nothing marks a control, a tool or a group. **Dimming is next**, item 1 of
+> *Next, in order*, and it has a start-up state the original design did not — see the note there.
+> The walls glyph, item 2, may be gone rather than redrawn: the mark it belonged to no longer
+> exists.
 
 **Waiting for a room, and nothing else is.** The whole rework — ten items — has never been looked
 at. The cover is the newest and the list of what to watch is under *Unconfirmed* below; the one that
@@ -3128,8 +3127,7 @@ they are refused, not converted, and *Remove ours* in the panel clears one.
   than a word to change.
 - **A longest span offered** — the remedy if Span's preview ever lags in open space (§10, *Span*). It
   changes what the tool finds, so it waits for a room to show lag.
-- **Per-colour opacity** wants a conversation before code (decision 6), and **the walls mark's size**
-  in the strip is to be looked at later (decision 7).
+- **Per-colour opacity** wants a conversation before code (decision 6).
 - **The small-region tool is answered** by Dissolve region and is no longer open.
 
 **A second map has now been through it** — a hatched cave system — and the reading held. What is still
@@ -3333,10 +3331,10 @@ above it.
 > pressed the question has been asked and answered and the walls are already a derivation. Its own
 > confirmation speaks about the ink alone.
 >
-> **Until the cover is built the per-control gate stands in for it**, exactly as it does for a marked
-> slider and a marked ink tool: the button wears the walls mark, and pressing it raises the review
-> rather than clearing, handing the clear over to run if the answer is yes. That branch becomes
-> unreachable the day the cover lands, in the same way the per-control marks do.
+> **The stand-in went with the cover, on 2026-09-20.** Until then the button wore the walls mark and
+> a press raised the review rather than clearing. It is at the foot of the Ink band, so the lid is
+> over it in exactly the case that was true — and by the time it can be pressed the question has
+> been asked and answered and the walls are a derivation again.
 
 **The marks survive a wall-edit clear** (user, 2026-09-18, against a first instinct to couple them). A
 mark is a point in graph units that suppresses whatever region holds it, and it already survives a
@@ -3539,17 +3537,29 @@ room's question.
 
 10. **The cover**, as the section above describes it: a lid over the map picker and the ink side,
     raised while the stored base differs from the document, and clicking it raises the existing
-    review rather than a dialog. **The per-control gate it replaces is still in the code** and every
-    ink-side branch of it is now unreachable — that deletion is the first thing on the list below.
+    review rather than a dialog.
+
+11. **The per-control gate deleted**, which the cover made dead. Five exports went from
+    `regenerateGuard.ts` — `stepIsMarked`, `controlIsMarked`, `toolIsMarked`, the `wallsMark` glyph
+    they wore and the `wallsNotice` that explained it — with the per-row lock in `settingRows.ts`,
+    the three marked branches in the strip, `ClearAct.marked` and `pressClearAct`, and four orphaned
+    stylesheet rules. One layer down, `regeneratesWalls` and `stepRegeneratesWalls` went with their
+    only callers.
+
+    **The review collapsed with them.** It held *what* the press was and *what to do* if the answer
+    was yes, because a marked tool handed over its own arming; the cover hands over nothing, so
+    `reviewRegenerate` is `reviewFromCover`, the `Review` record is a boolean, and the drawer's
+    review variant lost its anchor. **Answering now closes the drawer** rather than reopening what
+    the anchor described — a lid is not an opener, so there is nothing behind it to go back to.
+
+    **The claim the deleted functions guarded is kept and asked directly**: nothing under Walls is a
+    `pipeline` parameter, and Ink is a mixture. `steps.test.ts` reads `PARAMETER_KIND` for both,
+    which is all `regeneratesWalls` ever was. **Four mutations, four caught.**
 
 **Next, in order:**
 
-1. **Take out the per-control gate**, which the cover has made dead: the marks on the ink sliders,
-   on the ink tools and on *Clear ink edits*, and the notice at the top of a group holding marked
-   controls. It is a deletion rather than a design, and it is first because unreachable code that
-   looks live is the defect this project has already paid for once.
-2. **Dimming** — as above.
-3. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
+1. **Dimming** — as above, plus the start-up state below.
+2. **The walls glyph** (user, 2026-09-18): *"leave the glyph alone for the moment
    while we get the real changes implemented, then we can redesign it."* The complaint is that a
    *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
    since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —
@@ -3793,11 +3803,12 @@ the handle has passed; then, only if both come back clean, a mutation run over `
    base size** that shared this item is ~~open~~ **settled 2026-09-16 as no change**: the eye was
    given and every size on the surface looks fine. §7a's typography note carries the figures.
 
-7. **Reconsider the walls mark in the strip — later, not now** (user, 2026-09-16). The mark riding on
-   a group's settings button draws at **18.19px**, the size of the glyph beside it, because the strip's
-   `button.tool svg` rule outranks the 13px the mark gives itself. Every size it was ever meant to be
-   there was smaller. Whether that reads as a second icon rather than as a mark on one is a question
-   for a look, and "Where to pick this up" carries the measurement.
+7. ~~**Reconsider the walls mark in the strip.**~~ **Closed 2026-09-20 by deletion.** The mark rode
+   on a group's settings button at **18.19px**, the size of the glyph beside it, because the strip's
+   `button.tool svg` rule outranked the 13px it gave itself — every size it was ever meant to be
+   there was smaller. The cover replaced the whole per-control gate, so there is no mark to resize.
+   The measurement is kept because it is the trap: a glyph sized by a rule scoped to its container
+   is not the size its own attributes claim.
 
 **And the thing that is not a decision at all: a second map.** The reading is least proven on styles
 unlike the one that has been tried — hatched stonework, a printed floor grid, a scan, walls drawn as
@@ -4492,10 +4503,10 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   own limit at zero — pure and tested) ·
   `clearActions.ts` (**the clear family**: both paint layers, the wall document, every mark — each
   confirming, each one step of undo, and the two the strip draws at the foot of their band)
-- **What is drawn** — `regenerateGuard.ts` (**the mark and the gate**: which control or tool would
-  rebuild the walls, the glyph that says so — per control rather than per group, since Ink holds nine
-  controls and five regenerate — and the **review state** the question is asked in, which is a delta
-  on the map and two answers in the drawer, level with the button pressed, rather than a dialog) · `layerToggles.ts` (pure and tested: groups
+- **What is drawn** — `regenerateGuard.ts` (**the cover and the question behind it**: whether the
+  walls hold anything the trace did not derive, which is what raises the lid over the map picker and
+  the ink side, and the **review state** a press on it opens — a delta on the map and two answers in
+  the drawer, level with the lid, rather than a dialog. The per-control marks it replaced are gone) · `layerToggles.ts` (pure and tested: groups
   propose, the GM disposes, a tool may only add) · `layerRow.ts` (the switches) · `palette.ts` (the live colours; `src/palette.ts` holds
   the values and is pure)
 - **Layers** — `layers/ink.ts` · `layers/paint.ts` (repainting only the rectangle a stroke changed) ·

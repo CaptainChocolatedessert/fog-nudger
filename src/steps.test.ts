@@ -43,7 +43,6 @@ import {
   stepControls,
   stepIsInkSide,
   stepParameters,
-  stepRegeneratesWalls,
   toolGroups,
   toolIsInkSide,
   ungroupedControls,
@@ -56,7 +55,6 @@ import {
   PARAMETER_KIND,
   PARAMETER_STAGE,
   readParameter,
-  regeneratesWalls,
   SETTING_LIMITS,
   writeParameter,
 } from "./settings";
@@ -554,72 +552,61 @@ describe("the four axes are declared independently", () => {
   });
 });
 
-describe("stepRegeneratesWalls", () => {
+describe("what rebuilds the walls, now that no function is left to answer it", () => {
   /*
-    What the rail's mark is hung on.
+    `stepRegeneratesWalls` and `regeneratesWalls` were both deleted on 2026-09-20, with the
+    per-control gate that was their only caller. **The claim they guarded is the rework's central
+    one and is still worth pinning**, so it is asked of `PARAMETER_KIND` directly — which is all
+    `regeneratesWalls` ever was. A `pipeline` parameter is one whose change recomputes the mask, so
+    the graph, being a pure function of the ink and those numbers, is a new one afterwards and the
+    old one's hand edits are not in it.
 
-    Five mutations tried, five caught: a step that never regenerates, one that always does, `every`
-    in place of `some`, `regeneratesWalls` admitting the display kinds, and it admitting nothing.
-
-    Asked of a step's parameters rather than hardcoded, so that a control moving between groups takes
-    its consequences with it. What these pin is the *shape* of the answer rather than today's list:
-    the groups that build the walls carry it, and the groups that only decide what is drawn do not.
+    **Four mutations, four caught**: Walls admitting a pipeline parameter, Ink holding none, Ink
+    holding nothing else, and the Walls list being empty so that `every` passes over nothing.
   */
-  it("marks the groups whose controls rebuild the walls", () => {
-    expect(stepRegeneratesWalls("ink")).toBe(true);
-  });
-
-  it("leaves alone the groups that change nothing about the walls", () => {
-    // View is preview fill and outline: appearance, recomputing nothing. Map has no parameters at
-    // all, and nominating an image is destructive by a different route that has its own handling.
-    expect(stepRegeneratesWalls("view")).toBe(false);
-    expect(stepRegeneratesWalls("map")).toBe(false);
-  });
-
-  /*
-    **Walls stopped regenerating on 2026-09-18, and that is the rework arriving rather than a
-    regression.**
-
-    It carried the two settings the derive read — straightening and the spur limit — so opening it to
-    move either meant rebuilding the walls and losing every hand edit. Both are *amounts* pressed in
-    this group now, applied to the walls in front of the GM, and its only other control adds four
-    walls at the map's edge. So nothing under Walls rebuilds anything.
-
-    What that buys is the point of the whole rework: **the set of things that regenerate the walls is
-    now exactly the map and the ink**, which is a cause a GM already holds rather than a list they have
-    to be told. If this ever goes back to `true`, something has put a derive-time parameter back into
-    the group that edits the document, and the lock's subject has stopped being one sentence.
-  */
-  it("no longer marks Walls, because nothing in it rebuilds them", () => {
-    expect(stepRegeneratesWalls("walls")).toBe(false);
-  });
-
-  it("marks fewer controls than the group it sits in, which is the point of moving the gate", () => {
+  it("leaves nothing under Walls that would rebuild them", () => {
     /*
-      **The over-marking the per-control gate fixes** (user, 2026-09-14). Ink holds nine controls and
-      only five rebuild the walls: the two brush widths and the two gap settings recompute nothing at
-      all. Marking the *group* therefore told a GM the brush width was dangerous, and a mark that is
-      wrong about half of what it covers stops being believed about the other half.
+      **Walls stopped regenerating on 2026-09-18, and that is the rework arriving rather than a
+      regression.**
 
-      Pinned as a strict inequality rather than as the numbers, so adding a control to Ink does not
-      fail this — what has to stay true is that the group is not a proxy for its parts.
+      It carried the two settings the derive read — straightening and the spur limit — so opening it
+      to move either meant rebuilding the walls and losing every hand edit. Both are *amounts*
+      pressed in this group now, applied to the walls in front of the GM, and its only other control
+      adds four walls at the map's edge.
 
-      Two mutations tried, two caught: `regeneratesWalls` admitting everything, and admitting nothing.
+      What that buys is the point of the whole rework: **the set of things that rebuild the walls is
+      exactly the map and the ink**, which is a cause a GM already holds rather than a list they have
+      to be told — and it is what lets one lid cover the ink side and nothing else. If this ever
+      fails, something has put a derive-time parameter back into the group that edits the document,
+      and the cover is covering the wrong half.
+
+      The list is asserted non-empty first, or the check is satisfied by Walls having no parameters
+      to look at.
+    */
+    const inWalls = stepParameters("walls");
+    expect(inWalls.length).toBeGreaterThan(0);
+    expect(inWalls.filter((name) => PARAMETER_KIND[name] === "pipeline")).toEqual([]);
+  });
+
+  it("keeps Ink a mixture, which is why a group was never the right subject", () => {
+    /*
+      **The over-marking that the per-control gate fixed and the cover made moot** (user,
+      2026-09-14). Ink holds nine controls and only five rebuild the walls: the two brush widths and
+      the two gap settings recompute nothing at all. Marking the *group* told a GM the brush width
+      was dangerous, and a mark that is wrong about half of what it covers stops being believed
+      about the other half.
+
+      The cover answers it a third way — the whole side goes under one lid, so no control is asked
+      about itself and the inaccuracy has nothing to attach to. This stays because the mixture is the
+      reason that move was necessary, and a later reader meeting a lid over nine controls should be
+      able to see that five of them are the ones it is really for.
+
+      A strict inequality rather than the numbers, so adding a control to Ink does not fail it.
     */
     const inInk = stepParameters("ink");
-    const rebuild = inInk.filter(regeneratesWalls);
+    const rebuild = inInk.filter((name) => PARAMETER_KIND[name] === "pipeline");
     expect(rebuild.length).toBeGreaterThan(0);
     expect(rebuild.length).toBeLessThan(inInk.length);
-  });
-
-  it("agrees with the per-parameter question for every step", () => {
-    // The two must not drift: the mark says a press here would destroy, and the dialog fires on the
-    // press. If a step could be unmarked while holding a control that confirms, the dialog would be
-    // the first a GM heard of it.
-    for (const step of workspaceSteps()) {
-      const any = stepParameters(step.id).some(regeneratesWalls);
-      expect(stepRegeneratesWalls(step.id), step.id).toBe(any);
-    }
   });
 });
 
@@ -654,10 +641,9 @@ describe("the ink side, which is what the cover covers", () => {
     If this ever starts agreeing, someone has filed a parameter under Map, and the cover's membership
     should be re-derived rather than left as a coincidence.
   */
-  it("holds the map picker, which declares no parameter and so is not marked", () => {
+  it("holds the map picker, which declares no parameter at all", () => {
     expect(stepIsInkSide("map")).toBe(true);
     expect(stepParameters("map")).toEqual([]);
-    expect(stepRegeneratesWalls("map")).toBe(false);
   });
 
   it("leaves the walls and the view outside it", () => {

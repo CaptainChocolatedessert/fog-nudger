@@ -40,7 +40,6 @@ import { CONTROLS, type Control } from "./controls";
 import {
   DEFAULT_SETTINGS,
   readParameter,
-  regeneratesWalls,
   writeParameter,
   type SettingName,
   type Settings,
@@ -793,18 +792,6 @@ export function stepParameters(step: StepId): readonly SettingName[] {
 }
 
 /**
- * Whether a step holds any control that would rebuild the wall graph.
- *
- * **What the strip's mark is hung on**, and it is asked of the parameters rather than hardcoded to
- * Ink and Walls — so a control moving between groups carries its consequences with it rather than
- * leaving the mark behind on the group it left. `regeneratesWalls` is the per-parameter half;
- * `workspace/regenerateGuard.ts` is the drawing.
- */
-export function stepRegeneratesWalls(step: StepId): boolean {
-  return stepParameters(step).some(regeneratesWalls);
-}
-
-/**
  * Whether a group is on the **ink side**: the half of the surface the walls are made from.
  *
  * **This is the cover's membership, and it is deliberately not `stepRegeneratesWalls`.** That one is
@@ -816,8 +803,11 @@ export function stepRegeneratesWalls(step: StepId): boolean {
  * So the rework's own division is stated here instead, as a cause rather than a consequence: what
  * the walls are made from is **the map and the ink**. That is the same line stage one and stage two
  * fall either side of, and it fits in one sentence a GM can hold — the walls come from the ink, so
- * changing the ink makes new walls. `stepRegeneratesWalls` stays because the group glyphs still read
- * it; the two answer different questions and only agree about Ink.
+ * changing the ink makes new walls.
+ *
+ * It replaced `stepRegeneratesWalls`, which asked the same thing of a step's parameters and is
+ * deleted — a step with no parameters answered `false` there, which is exactly how the picker slipped
+ * the lock.
  */
 export function stepIsInkSide(step: StepId): boolean {
   return step === "map" || step === "ink";

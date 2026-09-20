@@ -66,13 +66,12 @@ import { renderLayerRow } from "./layerRow";
 import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
 import {
-  controlIsMarked,
+  COVER_ANCHOR,
   coverIsUp,
   keepWallChanges,
   onRegenerateReview,
-  regenerateReview,
   reviewBody,
-  wallsNotice,
+  reviewIsUp,
 } from "./regenerateGuard";
 import { onStageChange } from "./stage";
 
@@ -112,10 +111,12 @@ type Drawer =
    * the press was, which the bar was not (user, 2026-09-15: *"it's easy to miss those buttons
    * down on the bar"*). This is the one slot that is already both.
    *
-   * It carries `anchor` because it is the only drawer not opened *by* a strip button: a marked
-   * tool names its own, and a locked slider's key names nothing and keeps the group it is in.
+   * **It carried an `anchor` until 2026-09-20**, because the question used to arrive from two
+   * places: a marked tool named its own button, and a locked slider's key named nothing and kept
+   * the group it was in. The cover is the only way here now, so the anchor is its stamp and the
+   * field would be one value written twice.
    */
-  | { readonly kind: "review"; readonly anchor: string };
+  | { readonly kind: "review" };
 
 let drawer: Drawer | null = { kind: "params", step: workspaceSteps()[0]?.id ?? "map" };
 
@@ -147,7 +148,7 @@ export function drawerAnchor(): string {
     case "tool":
       return `tool:${drawer.tool}`;
     case "review":
-      return drawer.anchor;
+      return COVER_ANCHOR;
   }
 }
 
@@ -159,21 +160,21 @@ export function drawerAnchor(): string {
   one way, which is what keeps that true.
 */
 onRegenerateReview(() => {
-  const review = regenerateReview();
-  if (review) {
-    // No anchor means the press came from inside the drawer — a locked slider's key — so the
-    // question stays level with the group the GM was already reading.
-    drawer = { kind: "review", anchor: review.anchor ?? drawerAnchor() };
+  if (reviewIsUp()) {
+    drawer = { kind: "review" };
     touched = true;
   } else if (showingReview()) {
     /*
-      Answered, so the drawer goes back to what the anchor's own button shows.
+      Answered, so the drawer closes.
 
-      Not closed: the GM pressed something to get here, and leaving them with a bare map would
-      make answering feel like a dismissal. `advanceTo` is not used because this is not a step
-      gate — the anchor already names the destination.
+      **It used to reopen what the anchor described**, on the argument that the GM pressed something
+      to get here and a bare map would make answering feel like a dismissal. That held while the
+      question came from a marked tool or a locked slider, both of which have a drawer behind them.
+      The cover has none — it is a lid, not an opener — so there is nothing to go back to, and
+      whichever way the question was answered the map is the thing to look at next: the walls have
+      either just been rebuilt or just been kept.
     */
-    drawer = reopenFrom(drawerAnchor());
+    drawer = null;
   }
   renderPanel();
 });
@@ -219,14 +220,6 @@ onStageChange(() => {
  */
 function leaveReview(): void {
   if (showingReview()) keepWallChanges();
-}
-
-/** The drawer a `data-opens` stamp describes, for putting one back after a review. */
-function reopenFrom(anchor: string): Drawer | null {
-  if (anchor === "layers") return { kind: "layers" };
-  if (anchor.startsWith("params:")) return { kind: "params", step: anchor.slice(7) as StepId };
-  if (anchor.startsWith("tool:")) return { kind: "tool", tool: anchor.slice(5) };
-  return null;
 }
 
 /** Show the layer switches, or close the drawer if they are already showing. */
@@ -433,10 +426,6 @@ function stepBody(step: Step): HTMLElement {
   blurb.className = "sub";
   blurb.innerHTML = step.blurb;
   body.append(blurb);
-
-  // Above everything the group holds, and only where something in it is actually locked — the
-  // notice explains the marks, so a group with none has nothing for it to explain.
-  if (stepParameters(step.id).some(controlIsMarked)) body.append(wallsNotice());
 
   content.get(step.id)?.top?.(body);
 

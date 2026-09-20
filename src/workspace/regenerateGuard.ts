@@ -10,17 +10,19 @@
  * own backdrop to compensate, which was the compromise showing; needing to **pan** is where it
  * stopped holding (*"maybe the dialog isn't the right idea if there is interaction needed"*).
  *
- * So there is no dialog on this path. Pressing the lock's key puts the delta on the map and the two
- * answers **in the drawer, level with the button that was pressed**, and the surface stays entirely
+ * So there is no dialog on this path. Pressing the cover puts the delta on the map and the two
+ * answers **in the drawer, level with the lid that was pressed**, and the surface stays entirely
  * live while the GM looks. **Nothing is pending while they do**: the walls are exactly as they were,
  * so wandering off and arming some other tool is a perfectly good answer and simply takes the marks
  * down.
  *
  * ## The answers were in the bar for a few hours — user, 2026-09-15
  *
- * *"It's easy to miss those buttons down on the bar."* The bar was chosen because the question
- * arrives from two places — a locked slider inside a drawer, a marked tool in the strip — and it is
+ * *"It's easy to miss those buttons down on the bar."* The bar was chosen because the question then
+ * arrived from two places — a locked slider inside a drawer, a marked tool in the strip — and it is
  * the one piece of furniture both can reach. Reachable from both turned out to mean near neither.
+ * (There is one place now, and it is the lid; the reasoning is kept because it is what the drawer
+ * had to answer, and because the failure it names is this surface's own gravity.)
  *
  * That is a failure this record had already written down about the **state line**: it sits at the
  * foot of a full-screen window while every control that writes to it is in the left rail, so a
@@ -35,9 +37,9 @@
  *
  * That is this project's own rule one step further on. `confirmDialog.ts` already argues that a
  * dialog is a bad way to make a boundary visible, because it arrives *after* the gesture, and that
- * the boundary should be shown first by disabling what would cross it and saying why. The lock and
- * its mark are that first half. This is the second: it shows what is behind the boundary rather than
- * describing it.
+ * the boundary should be shown first by disabling what would cross it and saying why. The lid is
+ * that first half. This is the second: it shows what is behind the boundary rather than describing
+ * it.
  *
  * **Two costs, and they are real.** The destructive action is no longer behind a modal, so a stray
  * click can reach it — which is why it is the **second** of the two in a drawer that has just
@@ -45,57 +47,70 @@
  * screen. And this is a **mode**, on a surface that has been shedding them; the mildest kind, since
  * it changes nothing and leaves on any other action, but one.
  *
- * ## What the mark is on, and why it is not on the group
+ * ## What is locked: a side, not a control — 2026-09-20
  *
- * It was on the group, which is a proxy and an inaccurate one (user, 2026-09-14). **Ink holds nine
- * controls and five of them regenerate**: the two brush widths and the two gap settings recompute
- * nothing at all. Marking the group told a GM the brush width was dangerous, which is false — and a
- * mark that is wrong about half of what it covers is worse than no mark, because the half it is
- * right about stops being believed.
+ * **It was per control, and before that per group, and both were the same mistake at two sizes.**
+ * The group was a proxy and an inaccurate one (user, 2026-09-14): Ink holds nine controls and five
+ * of them regenerate, so marking the group told a GM the brush width was dangerous — and a mark
+ * that is wrong about half of what it covers stops being believed about the other half. Going per
+ * control fixed the accuracy and kept the shape: a set of controls, membership of which a GM
+ * **cannot predict and therefore cannot hold**, so the surface had to tell them each time.
  *
- * So the gate is per control and per tool. The group's own glyph keeps a mark as a **summary**, so
- * something is at stake is visible without opening anything; it asks nothing, because opening a
- * group to read what a threshold is set to destroys nothing.
+ * The cover organises it around the **cause** instead. What the walls are made from is the map and
+ * the ink, which is one sentence and the same line stage one and stage two fall either side of, so
+ * the whole ink side goes under one lid and no control is asked about itself. The map picker joins
+ * it for the first time — nominating a different image discards the graph outright, and it declared
+ * no parameter, so the most destructive control on the surface was the one thing the per-control
+ * gate could never mark.
  *
- * ## The question is asked before the act, for both kinds
+ * ## It exists only when there is something to lose
  *
- * A marked slider is **locked** — it cannot be picked up until the GM agrees. A marked tool cannot
- * be armed until the same. That is one rule covering both, and it fixes an asymmetry that was
- * awkward in exactly one direction: the prompt used to fire on a slider's *release*, so declining
- * had to put the handle back, restoring the input **and** the row's own idea of where it sat, or the
- * next release would think nothing had changed and write the discarded value silently. Asking first
- * deletes that entirely.
- *
- * > A lock was proposed early and rejected, on the grounds that a lock prohibits where the truth is
- * > a price. That was right while nothing was actually locked. Something is now, so the reading is
- * > honest: **a marked control must be agreed to before it can be touched.**
+ * Gated on `wallsEdited`, so no hand edits means no cover and nothing interrupts. **That makes it a
+ * state the document is in rather than a place the GM is**, which is the formulation the mode
+ * boundary never managed — and it answers the live objection to the old arrangement, that *the
+ * ceremony fires on crossing the boundary whether or not anything is at stake.*
  *
  * ## It only ever asks once
  *
- * Agreeing discards the stored graph, so `wallsEdited` goes false and every mark on the surface
- * clears together. There is no path where a GM answers this twice in a row.
+ * Agreeing discards the stored graph, so `wallsEdited` goes false and the lid comes down with it.
+ * There is no path where a GM answers this twice in a row.
  *
- * ## Why the glyph is a wall graph
+ * ## The lid carries no glyph, and why that is the point
  *
- * It names **what is at stake** rather than what the control does — which is the complaint that
- * retired the count (user, 2026-09-14): a badge on a brush reads as a property of the brush. It is
- * drawn in the structure blue the wall layer uses, so it reads as *walls of yours*.
+ * The strip is a column of glyphs, so another glyph in it is another tool to read past. Four
+ * candidates were drawn at strip size and lost to a plain lid: it is furniture over the buttons
+ * rather than a button among them, and it **lightens** rather than darkening, so the tools stay
+ * legible underneath at half strength. *Readable but unreachable* is the honest picture of the
+ * state, where a dark scrim says gone.
  *
- * **Blue and not red**, which is where this started: red is reserved for destruction and earns its
- * alarm by being rare, while this can be worn for a whole session.
+ * **The cost:** with no glyph and no word, its blue carries the meaning alone — which reads as
+ * *your walls* to somebody who knows the palette and as *locked* to somebody who does not, who
+ * learns why on pressing it. Blue and not red regardless: red is reserved for destruction and earns
+ * its alarm by being rare, while this can be worn for a whole session.
  */
 
 import { describeError } from "../describeError";
-import { regeneratesWalls, type SettingName } from "../settings";
-import { stepRegeneratesWalls, TOOLS, type StepId } from "../steps";
 import { say } from "./shell";
 import { discardWalls, onStageChange, wallsEdited } from "./stage";
 import { showWallDelta } from "./layers/delta";
 
-/** Whether a group holds anything that would rebuild the walls — the summary on its own glyph. */
-export function stepIsMarked(step: StepId): boolean {
-  return stepRegeneratesWalls(step) && wallsEdited();
-}
+/*
+  The per-control gate was here and went on 2026-09-20, when the cover replaced it.
+
+  `stepIsMarked`, `controlIsMarked`, `toolIsMarked`, the `wallsMark` glyph they all wore and the
+  `wallsNotice` that explained it: five exports, each asking *would this particular press rebuild
+  the walls*, and every one of them true only while the cover is up — which is to say only while the
+  control it marked is under the lid and cannot be pressed at all.
+
+  **They are not being tidied away; they had stopped being reachable.** That is the distinction this
+  project has paid for before, in the other direction: `toolPalette` once exported an `onToolChange`
+  nothing subscribed to, and the unreachability *was* the defect rather than dead weight. Here it is
+  the intended consequence — the rework's whole point is that a GM cannot hold the set of controls
+  that regenerate, so the surface stopped asking them to and locked a whole side instead.
+
+  What went with them, one layer down: `regeneratesWalls` in `settings.ts` and
+  `stepRegeneratesWalls` in `steps.ts`, whose only callers these were.
+*/
 
 /**
  * The `data-opens` stamp the cover carries.
@@ -134,98 +149,66 @@ export function coverIsUp(): boolean {
  * the walls come from the ink, so changing the ink makes new walls.
  */
 export function reviewFromCover(): void {
-  reviewRegenerate("Changing the map or the ink", undefined, COVER_ANCHOR);
-}
-
-/** Whether this control would rebuild the walls, and so cannot be touched without agreeing. */
-export function controlIsMarked(name: SettingName): boolean {
-  return regeneratesWalls(name) && wallsEdited();
-}
-
-/**
- * Whether this tool would rebuild the walls.
- *
- * **Every tool in the ink band, and the band is the honest test rather than a shortcut.** What those
- * three do is write to the reading's inputs — suppression and added ink are composed into the mask,
- * and accepting a gap writes into the added-ink layer — so all three change what the walls are
- * derived from, exactly as a threshold does. Nothing in the other bands touches the reading at all.
- */
-export function toolIsMarked(tool: string): boolean {
-  return TOOLS.find((choice) => choice.id === tool)?.band === "ink" && wallsEdited();
+  up = true;
+  const marked = showWallDelta(true);
+  // The state line still narrates, because it is the surface's running commentary and this is an
+  // event. What it is not any more is where the *answer* lives.
+  say(
+    marked
+      ? `${COVER_SUBJECT} would build these walls again from the map — look at what changes, then choose`
+      : `${COVER_SUBJECT} would build these walls again from the map`,
+  );
+  announce();
 }
 
 /**
- * What the GM came to do, held while they decide whether it is worth the walls.
+ * What the question is about, in the one place the state line and the drawer both read it from.
  *
- * **The walls are not pending; the press is**, and the difference is the whole argument for this
- * shape. Nothing has happened to the document, so leaving costs nothing — but a GM who reached for
- * Add ink meant to reach for Add ink, and making them press it twice would turn a confirmation into
- * an errand. A locked slider has no `then`: unlocking is the entire act.
+ * **The cause rather than a control.** Every per-control mark named the thing it sat on, because it
+ * sat on one; the cover sits over a whole side, and what that side does is the rework's own
+ * sentence — the walls come from the ink, so changing the ink makes new walls.
  */
-interface Review {
-  readonly what: string;
-  readonly then: (() => void) | null;
-  /**
-   * Which strip button the drawer should open level with, or `null` for wherever it already is.
-   *
-   * A marked **tool** names its own button, because the press that raised the question is that
-   * button and the answer belongs beside it. A locked **slider** names nothing: its key is inside
-   * a drawer that is already anchored at its group, so the question stays exactly where the GM
-   * was looking rather than jumping to a button they did not press.
-   */
-  readonly anchor: string | null;
-}
+const COVER_SUBJECT = "Changing the map or the ink";
 
-let review: Review | null = null;
+/**
+ * Whether the question is up. A boolean, and it did not used to be.
+ *
+ * It held **what** the press was and **what to do** if the answer turned out to be yes, because a
+ * marked tool handed over its own arming: a GM who reached for Add ink meant to reach for Add ink,
+ * and making them press it twice would have turned a confirmation into an errand. With the cover
+ * there is no such press — reaching for the locked half of the surface is not reaching for anything
+ * in particular — so **unlocking is the entire act**, which is what a locked slider's key already
+ * was. The subject and the anchor are constants now, and nothing is pending but the answer.
+ */
+let up = false;
 
 const listeners: (() => void)[] = [];
 
-/** Told when the review opens or closes, so the bar can show or hide its two answers. */
+/** Told when the review opens or closes, so the drawer can raise or drop its two answers. */
 export function onRegenerateReview(listener: () => void): void {
   listeners.push(listener);
 }
 
-/** What is being reviewed, or `null`. Read by the bar to decide what its buttons say. */
-export function regenerateReview(): Review | null {
-  return review;
+/** Whether the question is on screen. Read by the drawer to decide what to show. */
+export function reviewIsUp(): boolean {
+  return up;
 }
 
 function announce(): void {
   for (const listener of listeners) listener();
 }
 
-/**
- * Put the question up: the delta on the map, the answers in the bar.
- *
- * Takes what the GM was trying to do rather than returning whether they may. **The old signature was
- * a promise of a yes or a no**, which is what a modal can offer and this cannot: there is no moment
- * at which this function knows the answer, because the surface goes on working while the answer is
- * being decided. A caller hands over what to do if the answer turns out to be yes.
- */
-export function reviewRegenerate(what: string, then?: () => void, anchor?: string): void {
-  review = { what, then: then ?? null, anchor: anchor ?? null };
-  const marked = showWallDelta(true);
-  // The state line still narrates, because it is the surface's running commentary and this is an
-  // event. What it is not any more is where the *answer* lives.
-  say(
-    marked
-      ? `${what} would build these walls again from the map — look at what changes, then choose`
-      : `${what} would build these walls again from the map`,
-  );
-  announce();
-}
-
 /** Take the question down, leaving the walls as they are. */
 export function keepWallChanges(): void {
-  if (!review) return;
-  review = null;
+  if (!up) return;
+  up = false;
   showWallDelta(false);
   say("kept your wall changes — nothing was touched");
   announce();
 }
 
 /**
- * Agree: throw the stored graph away, then do whatever the press was for.
+ * Agree: throw the stored graph away.
  *
  * **Consent is the document going rather than a flag recording that consent was given.** A flag is a
  * second statement of the same fact and can disagree with it; an absent graph cannot. With nothing
@@ -238,8 +221,7 @@ export function keepWallChanges(): void {
  * is what makes staying up the honest state rather than a stuck one.
  */
 export async function acceptRegenerate(): Promise<void> {
-  const pending = review;
-  if (!pending) return;
+  if (!up) return;
 
   try {
     await discardWalls();
@@ -250,10 +232,9 @@ export async function acceptRegenerate(): Promise<void> {
     return;
   }
 
-  review = null;
+  up = false;
   showWallDelta(false);
   announce();
-  pending.then?.();
 }
 
 /**
@@ -266,12 +247,12 @@ export async function acceptRegenerate(): Promise<void> {
 export function reviewBody(): HTMLElement {
   const body = document.createElement("div");
   body.className = "review-body";
-  if (!review) return body;
+  if (!up) return body;
 
   const said = document.createElement("p");
   said.className = "sub";
   said.innerHTML =
-    `<b>${review.what}</b> builds these walls again from the map. Anything you moved, drew or ` +
+    `<b>${COVER_SUBJECT}</b> builds these walls again from the map. Anything you moved, drew or ` +
     "erased by hand goes with them, and the ink you painted does not — it is an input to the " +
     "reading, so it survives.";
   body.append(said);
@@ -327,7 +308,7 @@ export function registerRegenerateReview(): void {
   document.addEventListener(
     "keydown",
     (event) => {
-      if (!review || event.key !== "Escape") return;
+      if (!up || event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
       keepWallChanges();
@@ -336,66 +317,6 @@ export function registerRegenerateReview(): void {
   );
 
   onStageChange(() => {
-    if (review && !wallsEdited()) keepWallChanges();
+    if (up && !wallsEdited()) keepWallChanges();
   });
-}
-
-/**
- * The mark itself: a small wall graph, cased the way every mark on the canvas is.
- *
- * The casing is not decoration — it is the one thing that makes a mark legible without knowing what
- * is behind it, and using it means this looks like the marks on the map rather than like chrome that
- * happens to be blue.
- */
-export function wallsMark(): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 16 16");
-  svg.setAttribute("width", "13");
-  svg.setAttribute("height", "13");
-  svg.setAttribute("aria-hidden", "true");
-  svg.classList.add("walls-mark");
-
-  const path = "M3 13 L3 4 L9 4 L9 9 L14 9";
-  // The casing is a literal and not a custom property, deliberately: it is the part doing the
-  // visibility work, and the palette exposes core hues only so a GM cannot tune away the mechanism
-  // the hues rely on.
-  for (const [stroke, width] of [
-    ["rgba(255, 255, 255, 0.5)", "3.4"],
-    ["var(--structure, #7aa7ff)", "1.7"],
-  ] as const) {
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    line.setAttribute("d", path);
-    line.setAttribute("fill", "none");
-    line.setAttribute("stroke", stroke);
-    line.setAttribute("stroke-width", width);
-    line.setAttribute("stroke-linecap", "round");
-    line.setAttribute("stroke-linejoin", "round");
-    svg.append(line);
-  }
-
-  const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  dot.setAttribute("cx", "9");
-  dot.setAttribute("cy", "4");
-  dot.setAttribute("r", "2.1");
-  dot.setAttribute("fill", "var(--structure, #7aa7ff)");
-  svg.append(dot);
-
-  return svg;
-}
-
-/**
- * The line at the top of a group holding marked controls, saying what the marks mean.
- *
- * **A glyph cannot say what it costs**, and a sentence on every group would be noise on the ones
- * that are not marked. So it appears exactly where at least one control is locked, and it explains
- * the marks rather than the group — which is the change from when the group itself was the thing
- * marked, and this said "anything here rebuilds them".
- */
-export function wallsNotice(): HTMLElement {
-  const notice = document.createElement("p");
-  notice.className = "walls-notice";
-  notice.innerHTML =
-    "<b>These walls hold changes of yours.</b> The marked settings build them again from the map, " +
-    "so they ask before they will move.";
-  return notice;
 }

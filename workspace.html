@@ -427,10 +427,6 @@
         opacity: 0.16;
         stroke: none;
       }
-      /* A locked row's slider is inert, and its hint should not be louder than the control. */
-      .row.locked .track .profile {
-        opacity: 0.5;
-      }
       .row .ghost {
         position: absolute;
         top: 50%;
@@ -759,63 +755,20 @@
          nothing sets `.step`.
          ---------------------------------------------------------------------------------------- */
       /*
-        The mark: a miniature wall graph on anything whose controls would rebuild walls the GM has
-        changed by hand — a row's name in the drawer, and a group or tool button in the strip.
-        `regenerateGuard.ts` draws it, and carries why it is this and not a count.
+        `.walls-mark`, `.row.locked`, `button.row-lock` and `.walls-notice` went on 2026-09-20, with
+        the per-control gate they dressed. The cover replaced it, so nothing sets any of them.
 
-        Baseline-aligned rather than floated, so it reads as part of the name it sits beside rather
-        than as a badge stuck to it — a badge is what made it look like a modifier on the tool.
-      */
-      .walls-mark {
-        flex: none;
-        /* Optically centred against uppercase letterforms, which sit above the baseline. */
-        margin-top: -0.06rem;
-      }
-      /*
-        The sentence the mark cannot carry. Cased down the edge in the structure colour so the two
-        read as one statement, and quiet enough that a group wearing it does not shout on every open.
-      */
-      /*
-        A control that would rebuild the walls, while they hold hand edits.
+        **Deleted rather than left**, on this surface's own finding: a sweep once cleared
+        `button.tool-band` because `.tool-band` was live — on a `<p>`, so every rule scoped to a
+        button was dead and nothing said so. An orphaned rule is not inert, it is a claim that
+        something still exists.
 
-        Dimmed rather than hidden, because reading it is the point — the whole reason the gate is on
-        the control and not on the group is that opening a group to see what a threshold is set to
-        should cost nothing. The mark beside the name is the way in.
+        `.row-name` stays: the drawer still wraps a row's label in it.
       */
-      .row.locked input[type="range"] {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
       .row-name {
         display: flex;
         align-items: center;
         gap: 0.3rem;
-      }
-      button.row-lock {
-        display: flex;
-        align-items: center;
-        padding: 0.1rem;
-        border: 0;
-        border-radius: 0.25rem;
-        background: transparent;
-        cursor: pointer;
-      }
-      button.row-lock:hover {
-        background: rgba(122, 167, 255, 0.18);
-      }
-      .walls-notice {
-        margin: 0 0 0.6rem;
-        padding: 0.45rem 0.6rem;
-        border-left: 2px solid var(--structure, #7aa7ff);
-        background: rgba(122, 167, 255, 0.09);
-        border-radius: 0 3px 3px 0;
-        font-size: 0.76rem;
-        line-height: 1.45;
-        color: #c3c7e4;
-      }
-      .walls-notice b {
-        color: #e8e9f5;
-        font-weight: 600;
       }
       .step-body {
         padding: 0 0 0.4rem 0.6rem;

@@ -54,16 +54,8 @@ import {
   showingLayers,
   showingReview,
 } from "./drawer";
-import { CLEAR_ACTS, pressClearAct } from "./clearActions";
-import {
-  COVER_ANCHOR,
-  coverIsUp,
-  reviewFromCover,
-  reviewRegenerate,
-  stepIsMarked,
-  toolIsMarked,
-  wallsMark,
-} from "./regenerateGuard";
+import { CLEAR_ACTS } from "./clearActions";
+import { COVER_ANCHOR, coverIsUp, reviewFromCover } from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { putDownMends, setTool as setWallTool, type WallTool } from "./wallEdit";
@@ -464,37 +456,15 @@ export function render(): void {
         // guessing from the pressed state — which two buttons carry at once.
         button.dataset.opens = `tool:${choice.id}`;
         /*
-          A tool that writes to the reading carries the same mark a slider does, and asks the same
-          question before it can be armed. Painted ink and an accepted gap are inputs to the trace,
-          so all three change what the walls are derived from.
+          **The per-tool mark went on 2026-09-20.** An ink tool used to wear the wall-graph mark and
+          put the question up instead of arming, handing the arming over to run if the answer came
+          back yes. The cover replaced it: every tool that could be marked is in the ink band, so by
+          the time one is at stake it is under the lid and this button cannot be pressed at all.
         */
-        if (toolIsMarked(choice.id)) {
-          button.append(wallsMark());
-          button.classList.add("marked");
-          button.title = `${choice.label} rebuilds the walls, discarding your changes to them`;
-        }
         button.disabled = !usable(choice);
         button.addEventListener("click", () => {
-          pressTool(choice.id as Tool);
+          armTool(choice.id as Tool);
         });
-        /*
-          A marked tool puts the question up **instead of** arming, and hands over the arming to
-          run if the answer turns out to be yes.
-
-          It used to await a dialog, which is what a dialog can offer and the review cannot:
-          there is no moment at which the press knows the answer, because the GM is panning the
-          map while they decide. What has not changed is that the question comes **before** the
-          tool is in hand — asking afterwards would be asking with paint already down, which is
-          the one place a prompt cannot honestly go.
-        */
-        const pressTool = (id: Tool): void => {
-          if (toolIsMarked(id)) {
-            // Anchored at this button, because this button is the press being asked about.
-            reviewRegenerate(choice.label, () => armTool(id), `tool:${id}`);
-            return;
-          }
-          armTool(id);
-        };
         const armTool = (id: Tool): void => {
           setTool(id);
           /*
@@ -587,15 +557,6 @@ export function render(): void {
       opener.setAttribute("aria-pressed", String(currentPanel() === step.id));
       opener.dataset.opens = `params:${step.id}`;
       opener.disabled = shut;
-      /*
-        The mark rides here, on the settings that would do the destroying, rather than on the group's
-        name — a caption cannot be pressed, and what the mark is warning about is a press.
-      */
-      if (stepIsMarked(step.id)) {
-        opener.append(wallsMark());
-        opener.classList.add("marked");
-        opener.title = "These walls hold changes of yours";
-      }
       opener.addEventListener("click", () => {
         /*
           Decided before anything moves, because `setTool` clears the drawer on its way past: asking
@@ -650,17 +611,13 @@ export function render(): void {
         button.setAttribute("aria-label", act.label);
         button.disabled = act.step === "ink" ? !mapChosen() : editableGraph() === null;
         /*
-          Marked exactly as an ink tool is, and for the same reason: *Clear ink edits* writes to the
-          reading's inputs, so it changes what the walls are derived from. This is the per-control
-          gate standing in for the cover that will replace it.
+          **No mark, since 2026-09-20.** *Clear ink edits* wore one and raised the question instead
+          of clearing, because it writes to the reading's inputs. It is at the foot of the Ink band,
+          so the lid is over it whenever that would be true — and the cover owns the cascade
+          warning now, which is what that mark was really saying.
         */
-        if (act.marked()) {
-          button.append(wallsMark());
-          button.classList.add("marked");
-          button.title = `${act.label} rebuilds the walls, discarding your changes to them`;
-        }
         button.addEventListener("click", () => {
-          pressClearAct(act);
+          void act.run();
         });
         target.append(button);
       }

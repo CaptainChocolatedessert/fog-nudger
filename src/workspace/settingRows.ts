@@ -41,7 +41,6 @@ import {
   setSettings,
 } from "./settingsState";
 import { invalidate, say, setPendingEdit } from "./shell";
-import { controlIsMarked, reviewRegenerate, wallsMark } from "./regenerateGuard";
 
 /**
  * The track a control's slider runs over: its declared limits, and nothing else.
@@ -240,29 +239,20 @@ export function settingRow(control: Control): HTMLElement {
   readout.className = "value";
   readout.textContent = format(control, value, toSlider(value, limits, scale), limits, scale);
   /*
-    A control that would rebuild the walls is **locked** while they hold hand edits.
+    **The per-row lock went on 2026-09-20**, with the rest of the per-control gate.
 
-    The slider is inert and the mark beside its name is the way in: pressing it asks, and agreeing
-    unlocks every marked control at once, because agreeing is the stored graph going. The mark is a
-    **button** rather than a glyph on the row so it is reachable by keyboard — a disabled input
-    cannot be tabbed to, and a lock with no key for one input method is a wall rather than a gate.
+    A control that would rebuild the walls used to be locked here while they held hand edits: the
+    slider inert, and a wall-graph mark beside its name acting as the key. The cover replaced it —
+    every control that could be marked is on the ink side, so by the time one is at stake the whole
+    drawer is behind a lid and this row cannot be reached to lock.
+
+    One thing it knew is worth keeping wherever a lock is built again: the key was a **button**
+    rather than a glyph on the row, because a disabled input cannot be tabbed to, and a lock with no
+    key for one input method is a wall rather than a gate. The lid is a button for the same reason.
   */
   const name = document.createElement("span");
   name.className = "row-name";
   name.append(label);
-  if (controlIsMarked(control.name)) {
-    row.classList.add("locked");
-    const key = document.createElement("button");
-    key.type = "button";
-    key.className = "row-lock";
-    key.append(wallsMark());
-    key.title = `${control.label} rebuilds the walls, discarding your changes to them`;
-    key.setAttribute("aria-label", `Unlock ${control.label}`);
-    // No follow-up handed over: unlocking is the entire act here, where a marked *tool* press
-    // still wants arming once the answer comes back.
-    key.addEventListener("click", () => reviewRegenerate(control.label));
-    name.append(key);
-  }
   top.append(name, readout);
 
   const input = document.createElement("input");
@@ -416,9 +406,7 @@ export function settingRow(control: Control): HTMLElement {
     the graph is a derivation until the GM saves, and the save is the one place the replacement is
     named and confirmed. A control that is live in the only mode that draws it needs no notice.
   */
-  // Locked as well as ungated: a marked control cannot be picked up until the GM agrees, which
-  // is the whole of the gate — see `regenerateGuard.ts`.
-  input.disabled = !controlsLive() || controlIsMarked(control.name);
+  input.disabled = !controlsLive();
 
   /*
     The track wraps the input so the ghost can be positioned against it.

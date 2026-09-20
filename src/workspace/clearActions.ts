@@ -68,7 +68,6 @@ import { currentMarks, saveMarks } from "./regionMarks";
 import { anyPaintToClear, replaceBothLayers, snapshotBothLayers } from "./paintState";
 import { requestRecompose } from "./reading";
 import { clearWallEdits as clearStoredWalls, wallsEdited } from "./stage";
-import { reviewRegenerate } from "./regenerateGuard";
 import { invalidate, say } from "./shell";
 import { pushUndo, type Restore } from "./undoHistory";
 
@@ -265,32 +264,23 @@ export interface ClearAct {
   /** The step whose band this sits at the foot of. */
   readonly step: string;
   readonly label: string;
-  /**
-   * Whether the press would rebuild the walls, and so has to ask first.
-   *
-   * True for the ink side only. This is the per-control gate standing in for the cover — see the
-   * header — and it is asked rather than declared so it answers the walls as they are now.
-   */
-  readonly marked: () => boolean;
   readonly run: () => Promise<void>;
 }
 
 export const CLEAR_ACTS: readonly ClearAct[] = [
-  { step: "ink", label: "Clear ink edits", marked: wallsEdited, run: clearInkEdits },
-  /*
-    Never marked. Clearing the walls *is* the thing the mark warns about, so asking "may this rebuild
-    your walls" in front of it would be asking the GM to agree to what they just pressed.
-  */
-  { step: "walls", label: "Clear wall edits", marked: () => false, run: clearWallEdits },
+  { step: "ink", label: "Clear ink edits", run: clearInkEdits },
+  { step: "walls", label: "Clear wall edits", run: clearWallEdits },
 ];
 
-/** Raise the question if there is one, otherwise run the act. The strip's own shape for a marked press. */
-export function pressClearAct(act: ClearAct): void {
-  if (act.marked()) {
-    // No anchor: the press is a button in the strip, but the question is about the band it sits in,
-    // and the drawer is already wherever the GM was looking.
-    reviewRegenerate(act.label, () => void act.run());
-    return;
-  }
-  void act.run();
-}
+/*
+  **`marked` and `pressClearAct` went on 2026-09-20.** *Clear ink edits* carried a flag saying its
+  press would rebuild the walls, and a press fired the review instead of clearing — the per-control
+  gate standing in for the cover. It sits at the foot of the Ink band, so the lid is over it in
+  exactly the case the flag was true, and the cover owns the cascade warning now: by the time this
+  button can be pressed the question has been asked and answered and the walls are a derivation
+  again. Its own confirmation speaks about the ink alone, which is what it always said.
+
+  *Clear wall edits* never carried one. Clearing the walls *is* the thing the warning was about, so
+  asking "may this rebuild your walls" in front of it would have been asking the GM to agree to what
+  they had just pressed.
+*/
