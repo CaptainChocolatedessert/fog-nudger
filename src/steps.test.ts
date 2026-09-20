@@ -41,9 +41,11 @@ import {
   STEPS,
   TOOLS,
   stepControls,
+  stepIsInkSide,
   stepParameters,
   stepRegeneratesWalls,
   toolGroups,
+  toolIsInkSide,
   ungroupedControls,
   workspaceSteps,
   type StepId,
@@ -618,5 +620,68 @@ describe("stepRegeneratesWalls", () => {
       const any = stepParameters(step.id).some(regeneratesWalls);
       expect(stepRegeneratesWalls(step.id), step.id).toBe(any);
     }
+  });
+});
+
+/*
+  The cover's membership, which is the one part of it a desk can check.
+
+  Almost nothing else about the lid is testable: it is markup in a module that imports the SDK, so
+  no node test can reach it, and whether it reads as a lid at 52px is a room's question. What *is* a
+  contract is which groups and which tools fall under it — and getting that wrong is the quiet kind
+  of failure, since a control left outside the cover simply goes on working with nothing to say it
+  should not have.
+
+  **Four mutations, four caught**: the map dropped from the ink side, every step admitted to it, the
+  tool test reading the walls band instead, and a tool that does not exist counting as ink side.
+*/
+describe("the ink side, which is what the cover covers", () => {
+  it("is the map and the ink, and nothing else", () => {
+    const inside = workspaceSteps()
+      .map((step) => step.id)
+      .filter(stepIsInkSide);
+    expect(inside).toEqual(["map", "ink"]);
+  });
+
+  /*
+    **The reason this is not `stepRegeneratesWalls`**, pinned so the two are never collapsed.
+
+    That question is asked of a step's *parameters*, and the map picker declares none — so the most
+    destructive control on the surface answered `false` and sat outside the lock for as long as the
+    lock was organised around which controls regenerate. Nominating a different map discards the
+    graph outright: a graph is stored in graph units of *a* map, and the marks record their map too.
+
+    If this ever starts agreeing, someone has filed a parameter under Map, and the cover's membership
+    should be re-derived rather than left as a coincidence.
+  */
+  it("holds the map picker, which declares no parameter and so is not marked", () => {
+    expect(stepIsInkSide("map")).toBe(true);
+    expect(stepParameters("map")).toEqual([]);
+    expect(stepRegeneratesWalls("map")).toBe(false);
+  });
+
+  it("leaves the walls and the view outside it", () => {
+    expect(stepIsInkSide("walls")).toBe(false);
+    expect(stepIsInkSide("view")).toBe(false);
+  });
+
+  /*
+    Asserted as a non-empty list before it is asserted to match, because a check satisfied by having
+    nothing to check is the failure `steps.test.ts` already exists to prevent one layer up: delete
+    the ink band and this would pass by agreeing that no tool is on the ink side.
+  */
+  it("holds exactly the tools of the ink band, and there are some", () => {
+    const inkBand = TOOLS.filter((choice) => choice.band === "ink").map((choice) => choice.id);
+    expect(inkBand.length).toBeGreaterThan(0);
+    expect(TOOLS.filter((choice) => toolIsInkSide(choice.id)).map((choice) => choice.id)).toEqual(
+      inkBand,
+    );
+  });
+
+  it("says no to a tool that does not exist, rather than guessing", () => {
+    // The strip asks this of whatever is in hand, and "pan" is a real tool that is not on the ink
+    // side. A lookup miss must answer the same way, or a renamed tool would arrive under the cover.
+    expect(toolIsInkSide("pan")).toBe(false);
+    expect(toolIsInkSide("no-such-tool")).toBe(false);
   });
 });

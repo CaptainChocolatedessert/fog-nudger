@@ -37,7 +37,9 @@ import {
   STEPS,
   TOOL_LAYERS,
   TOOLS,
+  stepIsInkSide,
   toolGroups,
+  toolIsInkSide,
   type Drag,
   type ToolChoice,
 } from "../steps";
@@ -53,7 +55,15 @@ import {
   showingReview,
 } from "./drawer";
 import { CLEAR_ACTS, pressClearAct } from "./clearActions";
-import { reviewRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
+import {
+  COVER_ANCHOR,
+  coverIsUp,
+  reviewFromCover,
+  reviewRegenerate,
+  stepIsMarked,
+  toolIsMarked,
+  wallsMark,
+} from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { putDownMends, setTool as setWallTool, type WallTool } from "./wallEdit";
@@ -264,6 +274,47 @@ function place(): void {
 window.addEventListener("resize", place);
 
 /**
+ * The cover: a lid over the map picker and the ink tools, while the walls hold hand edits.
+ *
+ * **A lid rather than a mark, and that is why there is no glyph on it** (user, 2026-09-20). The
+ * column is glyphs, so another glyph in it is another tool to read past; a lid is plainly not a
+ * button of the kind underneath it. Four glyph candidates were drawn at strip size and all of them
+ * lost to this — the winner says *locked* by being furniture rather than by carrying a picture.
+ *
+ * **It lightens rather than darkening**, which is the part doing the real work: the tools stay
+ * legible under it at half strength, and *readable but unreachable* is the honest picture of the
+ * state, where a dark scrim says gone.
+ *
+ * **The cost, stated:** with no glyph and no word, the blue carries the meaning alone. *This blue is
+ * your walls* reads to somebody who knows the palette and says only "locked" to somebody who does
+ * not — who learns why on pressing it, and not before. It is also a literal hue rather than
+ * `--structure`, so retuning the walls colour does not move it; the strip's other chrome is literal
+ * for the same reason, and what was chosen by looking was this blue rather than the palette's.
+ *
+ * It is a `<button>` so the drawer anchors level with it through the same `data-opens` stamp every
+ * other press uses, and so a keyboard can reach the one control that is not inert.
+ */
+function cover(): HTMLButtonElement {
+  const lid = document.createElement("button");
+  lid.type = "button";
+  lid.className = "cover";
+  lid.dataset.opens = COVER_ANCHOR;
+  /*
+    The wording has to survive the case the gate is deliberately loud about.
+
+    `wallsEdited` reads "nothing stored, a base for another map, or a base that will not decode" as
+    *assume it was edited* — so a scene whose nominated map has gone missing raises this over the
+    picker. Saying "your wall edits" there would assert something that may not be true; saying what
+    the comparison actually measures is true in every case it fires.
+  */
+  lid.title =
+    "These are not the walls the trace derived — press to see what changing the map or the ink would cost";
+  lid.setAttribute("aria-label", "Show what changing the map or the ink would cost");
+  lid.addEventListener("click", reviewFromCover);
+  return lid;
+}
+
+/**
  * The eye: the layer switches, in a drawer of their own.
  *
  * It does **not** put the verb down, unlike a group's settings button. Hiding a layer is something a
@@ -347,7 +398,43 @@ export function render(): void {
     */
     const inHand = TOOLS.find((choice) => choice.id === tool);
     if (inHand && !usable(inHand)) apply("pan");
+    /*
+      A brush cannot stay in hand under the cover.
+
+      Reachable, and by the one control that ignores everything else on the surface: undo and redo
+      sit in the bar and are pressed with any drawer open and any tool armed, so redoing a wall edit
+      with Add ink in hand locks the side that tool writes to while the tool is still held. This is
+      the rule that already puts the verb down when a group is opened, for the same reason — an
+      armed brush under something that has just closed over it is a press waiting to happen.
+
+      `apply` and not `setTool`, like the line above it: this is inside `render`, and `setTool`
+      renders.
+    */
+    if (inHand && coverIsUp() && toolIsInkSide(inHand.id)) apply("pan");
     const active = currentTool();
+
+    /*
+      The ink side in a wrapper of its own, so the cover is a **child** of what it covers rather
+      than a rectangle somebody has to measure.
+
+      Everything about where the lid sits is then the browser's answer: it fills its parent and
+      reaches past it to the rail's own padding. The alternative was reading the band's top and
+      bottom off `getBoundingClientRect`, and a measurement taken in the same tick as a render is
+      exactly what once anchored the drawer at 10px while its button sat at 82.
+
+      The wrapper is always here, cover or no cover, so the resting layout is one arrangement rather
+      than two. It carries no padding or border, so the act button's bottom margin still collapses
+      out of it into the rule below and nothing under it moves.
+    */
+    const inkSide = document.createElement("div");
+    inkSide.className = "ink-side";
+    const inkBody = document.createElement("div");
+    inkBody.className = "ink-side-body";
+    inkSide.append(inkBody);
+    strip.append(inkSide);
+
+    /** Where the group being drawn puts its rows: under the cover, or in the column itself. */
+    let target: HTMLElement = strip;
 
     const addTools = (band: ToolChoice["band"]): void => {
       for (const choice of TOOLS.filter((candidate) => candidate.band === band)) {
@@ -423,7 +510,7 @@ export function render(): void {
           if (toolHasControls(id)) openToolDrawer(id);
           else openPanel(null);
         };
-        strip.append(button);
+        target.append(button);
       }
     };
 
@@ -443,13 +530,13 @@ export function render(): void {
       const label = document.createElement("p");
       label.className = "tool-band";
       label.textContent = text;
-      strip.append(label);
+      target.append(label);
     };
 
     const rule = (): void => {
       const line = document.createElement("div");
       line.className = "tool-rule";
-      strip.append(line);
+      target.append(line);
     };
 
     /*
@@ -463,6 +550,12 @@ export function render(): void {
     */
     let first = true;
     for (const step of STEPS) {
+      /*
+        Which side of the cover this group falls on, decided before anything is appended — so the
+        rule *above* a group goes with the group, which is what puts the Map/Ink divider under the
+        lid and leaves the Ink/Walls divider outside it for the lid to rest on.
+      */
+      target = stepIsInkSide(step.id) ? inkBody : strip;
       // No rule above the first group: a divider needs something on both sides of it.
       if (!first) rule();
       first = false;
@@ -513,7 +606,7 @@ export function render(): void {
         setTool("pan");
         openPanel(wasOpen ? null : step.id);
       });
-      strip.append(opener);
+      target.append(opener);
 
       /*
         View's second button: the switches.
@@ -524,7 +617,7 @@ export function render(): void {
         one that says "what can I see", which is what it always meant; the sliders beside it say "how
         does it look".
       */
-      if (step.id === "view") strip.append(layersOpener());
+      if (step.id === "view") target.append(layersOpener());
 
       addTools(step.id as ToolChoice["band"]);
 
@@ -569,8 +662,22 @@ export function render(): void {
         button.addEventListener("click", () => {
           pressClearAct(act);
         });
-        strip.append(button);
+        target.append(button);
       }
+    }
+
+    /*
+      And the lid last, once the ink side is built, because it is drawn over what is now inside it.
+
+      **Half strength and `inert` under it, rather than every button disabled.** Dimming does not
+      stop a tab reaching a control and the lid stops only a pointer; `disabled` would stop both and
+      dim each glyph a second time on top of this, putting the strip's own measured 0.65 into a sum
+      nobody has computed.
+    */
+    if (coverIsUp()) {
+      inkBody.classList.add("under-cover");
+      inkBody.setAttribute("inert", "");
+      inkSide.append(cover());
     }
 
     /*

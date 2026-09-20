@@ -805,6 +805,37 @@ export function stepRegeneratesWalls(step: StepId): boolean {
 }
 
 /**
+ * Whether a group is on the **ink side**: the half of the surface the walls are made from.
+ *
+ * **This is the cover's membership, and it is deliberately not `stepRegeneratesWalls`.** That one is
+ * asked of the parameters, and the map picker declares none — so the most destructive control on the
+ * surface came out false. Nominating a different map discards the graph outright, since a graph is
+ * stored in graph units of *a* map and the marks record their map too, and it sat outside the lock
+ * for as long as the lock was organised around which *controls* regenerate.
+ *
+ * So the rework's own division is stated here instead, as a cause rather than a consequence: what
+ * the walls are made from is **the map and the ink**. That is the same line stage one and stage two
+ * fall either side of, and it fits in one sentence a GM can hold — the walls come from the ink, so
+ * changing the ink makes new walls. `stepRegeneratesWalls` stays because the group glyphs still read
+ * it; the two answer different questions and only agree about Ink.
+ */
+export function stepIsInkSide(step: StepId): boolean {
+  return step === "map" || step === "ink";
+}
+
+/**
+ * Whether a tool writes to what the walls are derived from, and so lives under the cover.
+ *
+ * **The band is the honest test rather than a shortcut.** Every tool in the ink band writes to the
+ * reading's inputs — suppression and added ink compose into the mask, an accepted gap and an
+ * accepted blob go into the paint layers — so all four change what the walls are derived from,
+ * exactly as a threshold does. Nothing in the other bands touches the reading at all.
+ */
+export function toolIsInkSide(tool: string): boolean {
+  return TOOLS.find((choice) => choice.id === tool)?.band === "ink";
+}
+
+/**
  * The line shown under a tool: its own hint, or the blurb of the group it belongs to.
  *
  * Pure, and here rather than in the tool strip, because the drawer needs the same answer — it draws

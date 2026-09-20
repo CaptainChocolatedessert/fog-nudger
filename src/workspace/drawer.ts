@@ -48,9 +48,11 @@ import {
   isStepDefault,
   resetStep,
   STEPS,
+  stepIsInkSide,
   stepParameters,
   TOOLS,
   toolHint,
+  toolIsInkSide,
   ungroupedControls,
   workspaceSteps,
   type Step,
@@ -65,12 +67,14 @@ import { mapChosen } from "./mapSource";
 import { invalidate, say } from "./shell";
 import {
   controlIsMarked,
+  coverIsUp,
   keepWallChanges,
   onRegenerateReview,
   regenerateReview,
   reviewBody,
   wallsNotice,
 } from "./regenerateGuard";
+import { onStageChange } from "./stage";
 
 /**
  * Which group is in the drawer, or `null` for none.
@@ -171,6 +175,34 @@ onRegenerateReview(() => {
     */
     drawer = reopenFrom(drawerAnchor());
   }
+  renderPanel();
+});
+
+/*
+  The cover closes an ink-side drawer as it raises (user, 2026-09-20).
+
+  **It is reachable**, by the one pair of controls that ignores everything else on the surface: undo
+  and redo sit in the bar and are pressed with any drawer open, so redoing a wall edit while the Ink
+  settings are on screen locks that side — leaving live sliders behind a lid that exists to be in
+  front of them. One rule and no second cover, which was the alternative: a lid over the drawer as
+  well, in a different box, placed by different arithmetic.
+
+  **Only what the lid covers goes, and a review never does.** A review is neither a `params` nor a
+  `tool` drawer, so it cannot match here — and closing the question the cover exists to ask would be
+  the worst possible reading of "as it raises".
+
+  Here rather than in the strip because this file owns what the drawer is showing, and the strip's
+  `render` may not reach across and shut it: `renderPanel` announces, which is what redraws the
+  strip, so closing from inside a render is a render inside a render.
+*/
+onStageChange(() => {
+  if (!coverIsUp()) return;
+  const covered =
+    (drawer?.kind === "params" && stepIsInkSide(drawer.step)) ||
+    (drawer?.kind === "tool" && toolIsInkSide(drawer.tool));
+  if (!covered) return;
+  drawer = null;
+  touched = true;
   renderPanel();
 });
 

@@ -560,6 +560,78 @@
       }
 
       /*
+        The cover: a lid over the map picker and the ink tools, while the walls hold hand edits.
+
+        **Flush to the rail on three sides** (user, 2026-09-20) — the rail's own padding at the top
+        and both sides, and resting on the rule between Ink and Walls at the foot. Those three
+        offsets are `#tools`' padding and `.tool-rule`'s margin, so the four numbers must move
+        together; nothing measures them at runtime, which is the point of the lid being a child of
+        what it covers rather than a rectangle placed by arithmetic.
+
+        **It lightens rather than darkening**, so the tools underneath stay legible at half strength:
+        readable but unreachable is the state, where a dark scrim would say gone.
+
+        **A literal blue, not `--structure`.** The walls' own hue is `#1d4ed8`, which over a
+        near-black column is a dim navy rather than the blue this was chosen as; the strip's other
+        chrome — the accent purple in the rules and the border — is literal for the same reason.
+        **The cost:** retuning the walls colour does not move the lid.
+
+        The bevel is what says *raised*, and it is the one exception on a surface that is otherwise
+        flat fills and hairlines. It is worth the exception here because the lid is the one thing
+        that must not read as chrome you can press past.
+      */
+      button.cover {
+        position: absolute;
+        top: -0.9rem;
+        right: -0.4rem;
+        bottom: -0.7rem;
+        left: -0.4rem;
+        box-sizing: border-box;
+        padding: 0;
+        border: 2px solid rgba(122, 167, 255, 0.5);
+        border-radius: 4px;
+        background: linear-gradient(180deg, rgba(122, 167, 255, 0.155), rgba(122, 167, 255, 0.085));
+        box-shadow:
+          inset 0 1px 0 rgba(168, 200, 255, 0.4),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+          inset 1px 0 0 rgba(168, 200, 255, 0.18),
+          inset -1px 0 0 rgba(0, 0, 0, 0.4),
+          0 2px 6px rgba(0, 0, 0, 0.45);
+        cursor: pointer;
+      }
+      button.cover:hover {
+        border-color: rgba(150, 190, 255, 0.72);
+      }
+      /*
+        While the question is up, the strip marks whatever raised it. **A lid has no pressed state to
+        draw** — it is neither a drawer opener nor a verb, so it belongs to neither selection group —
+        and it brightens instead, which is what says the marks on the map came from here.
+      */
+      button.cover[aria-pressed="true"] {
+        border-color: rgba(178, 208, 255, 0.9);
+        background: rgba(122, 167, 255, 0.2);
+      }
+      /*
+        The wrapper the lid is a child of. No padding and no border, deliberately: the act button's
+        bottom margin still collapses out of it into the rule below, so the resting column is
+        pixel-for-pixel what it was before the cover existed.
+      */
+      .ink-side {
+        position: relative;
+      }
+      /*
+        Half strength under the lid, **captions included** (user, 2026-09-20). Dimming the pictures
+        and leaving the words at full would read as two states rather than one.
+
+        Not `disabled` on each button, which would dim every glyph a second time on top of this and
+        put the strip's own measured 0.65 into a sum nobody has computed. `inert` on this element is
+        what stops a keyboard reaching them; the lid stops a pointer.
+      */
+      .ink-side-body.under-cover {
+        opacity: 0.5;
+      }
+
+      /*
         What the tool in hand does, at the top of the rail rather than beside the tool's controls.
 
         Under a rail that no longer forces one section shut, those controls may be collapsed while

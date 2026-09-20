@@ -97,6 +97,46 @@ export function stepIsMarked(step: StepId): boolean {
   return stepRegeneratesWalls(step) && wallsEdited();
 }
 
+/**
+ * The `data-opens` stamp the cover carries.
+ *
+ * A stamp and not an id, for the reason every other press here uses one: the drawer anchors level
+ * with whatever raised the question and the strip draws that same thing raised, and both go through
+ * this one string. **The cover has no pressed state of its own** — it is neither a drawer opener nor
+ * a verb — so the stylesheet answers `aria-pressed` by brightening the lid.
+ */
+export const COVER_ANCHOR = "cover";
+
+/**
+ * Whether the cover is over the ink side: these walls are not what the trace derived.
+ *
+ * **The same question every mark it replaces asked, put once to a whole half of the surface.**
+ * `wallsEdited` compares the stored document against the graph the trace last derived, so this is
+ * true exactly when there is something to lose — and false most of the time, when nothing
+ * interrupts. No hand edits, no cover.
+ *
+ * Named rather than called straight through, because *is there a cover* and *has this been
+ * hand-edited* are the same fact today and need not stay so; the gate is one line to move.
+ */
+export function coverIsUp(): boolean {
+  return wallsEdited();
+}
+
+/**
+ * The cover's press: raise the question, with nothing waiting on the answer.
+ *
+ * **No `then`, unlike a marked tool.** A tool hands over its own arming, so agreeing does both in
+ * one go; the cover is not a press at anything in particular — a GM reached for the half of the
+ * surface that is shut — so unlocking is the whole of the act, exactly as a locked slider's key was.
+ *
+ * **The subject is the cause, not a control.** Every per-control mark named the control it sat on,
+ * because it sat on one. This names what the whole side does, which is the rework's own sentence:
+ * the walls come from the ink, so changing the ink makes new walls.
+ */
+export function reviewFromCover(): void {
+  reviewRegenerate("Changing the map or the ink", undefined, COVER_ANCHOR);
+}
+
 /** Whether this control would rebuild the walls, and so cannot be touched without agreeing. */
 export function controlIsMarked(name: SettingName): boolean {
   return regeneratesWalls(name) && wallsEdited();

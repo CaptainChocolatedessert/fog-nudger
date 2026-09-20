@@ -2598,7 +2598,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**976 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**981 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2644,6 +2644,13 @@ invisible. It costs almost nothing to keep.
   with (§9, the replaced-element trap). Two rounds of a room's judgement were spent on a picture whose
   axis was a third of the width it claimed. **The picture settles the design; only the running thing
   settles the build.**
+
+  **And a mock can be drawn in a colour the surface does not use.** The cover's four candidates and
+  its three border strengths were all drawn in `#7aa7ff`, taken from `wallsMark`'s *fallback* — the
+  live `--structure` is `#1d4ed8`, a far deeper blue, so what was chosen by looking was a hue nothing
+  on the surface renders (2026-09-20). Caught before it shipped, by reading `palette.ts` while wiring
+  the lid rather than by looking again. **A fallback is not a value**: take a mock's colours from the
+  declaration, and where a mock and the palette disagree, say which one the build followed.
 - **An optimisation is a new implementation, and its oracle has to run again — once, heavier.** Span's
   search was made fast with a grid of the walls, and the rewrite broke exactness twice in ways every
   written fixture passed: rays aimed only at vertices within the bound, and rays stopped at the bound
@@ -3008,17 +3015,16 @@ next section.
 below carries the whole design and a stage-by-stage account of what has landed — nine items built,
 each green under `tsc`, the suite and a build, and **nothing is half-built at any commit.**
 
-> **Do this first: the cover.** It is item 1 of *Next, in order*, it is designed in full in that
-> section, and **three things already built are waiting on it.** The clear buttons' ink-side gate,
-> the per-control marks on the ink sliders and the marked ink tools are all the same stand-in for
-> it, and each of those branches becomes unreachable the day it lands. Dimming is item 2 and shares
-> its trigger. The walls glyph is item 3 and is deliberately last, because the cover may retire it
-> rather than redraw it.
+> **The cover is built (2026-09-20) and the per-control gate it replaces is still standing.** Every
+> branch of that gate on the ink side is now unreachable — a marked slider, a marked ink tool and
+> the clear button's own mark all sit under the lid at exactly the moments they would be marked — so
+> **taking them out is the next thing to do**, and it is a deletion rather than a design. Then
+> **dimming**, which is item 1 of *Next, in order*. The walls glyph is item 2 and is deliberately
+> last, because the cover may retire it rather than need it redrawn.
 
-**Waiting for a room, and nothing else is.** The whole rework — nine items — has never been looked
-at. The clear buttons are the newest and the list of what to watch is under *Unconfirmed* below; the
-one that will be noticed first is that arming *Suppress region* now opens a drawer where it used to
-clear one.
+**Waiting for a room, and nothing else is.** The whole rework — ten items — has never been looked
+at. The cover is the newest and the list of what to watch is under *Unconfirmed* below; the one that
+will be noticed first is the lid itself, since it appears the moment a first wall is drawn by hand.
 
 **The one thing a cold session must know before touching the Walls drawer:** straightening is an
 *action* now and the fitting tolerance is computed, so §5 and §7's passages about two live sliders are
@@ -3044,11 +3050,13 @@ gives 2,493 — was the right answer for a cave whose chambers connect.
 It also ran the **megapixel budget** for the first time in the project's life, which §4 now covers in
 full.
 
-**What the last session built**, all on `main`: **the three clear buttons** — *Clear ink edits* and
-*Clear wall edits* as acts at the foot of their band in the strip, *Clear all marks* in *Suppress
-region*'s first drawer. The clear family in §10 carries the whole of it.
+**What this session built**, on `main`: **the cover** — a lid over the map picker and the ink side,
+raised while the walls hold hand edits, with the ink tools legible at half strength underneath it
+and a press raising the existing review. *The cover* in §10 carries the whole of it.
 
-**The session before that** built **Suppress blob** (§10), **a distribution drawn on each ink
+**The session before that** built **the three clear buttons** — *Clear ink edits* and *Clear wall
+edits* as acts at the foot of their band in the strip, *Clear all marks* in *Suppress region*'s
+first drawer — and the one before that **Suppress blob** (§10), **a distribution drawn on each ink
 filter's own rail** (§4), and **the map drawn at the trace's raster** when the budget reduced it,
 with the full-resolution decode released once it is (§4).
 
@@ -3086,6 +3094,13 @@ the user to want the public build to have them — never offer it per change.
   distances, and whether split-the-difference lands where a GM would draw the wall.
 - **The delta's picture** on a real map — its state machine is checked, the drawing is not.
 - **View's Defaults** restoring all five colours — the button has not been pressed.
+- **The cover** — everything about it, since it has never been in a room. Specifically: whether the
+  lid reads as a lid at 52px or as a blue panel; whether the covered tools at 0.5 are *legible but
+  plainly out of reach* or merely murky — **the strip's measured 0.65 does not transfer**, since
+  these sit under something that lightens their ground, and no composite has been computed;
+  whether resting the lid on the Ink/Walls rule lands on the pixel it should; whether a drawer
+  vanishing as the lid raises is welcome or startling; and whether the blue says *walls* to anyone
+  who has not been told.
 - **The three clear buttons** — everything about them, since none has been in a room. Specifically:
   whether the bin reads as *clear this band* from where it sits; whether *Clear ink edits* pressed
   with a brush still in hand takes the unwritten strokes and leaves the brush working; whether one
@@ -3384,7 +3399,55 @@ only using a tool that re-derives does.
 **One edge the picker's membership creates.** The gate reads "no base, or a base for another map" as
 *assume it was edited*, which is deliberately the loud answer — so a scene whose nominated map has gone
 missing would raise a cover over the picker warning about wall edits that may not exist. The wording has
-to survive that case rather than assert something false.
+to survive that case rather than assert something false. **As built it says what the comparison
+measures** — *these are not the walls the trace derived* — which is true every time it fires.
+
+##### As built — 2026-09-20
+
+**It is a lid, and there is no glyph on it** (user). The strip is a column of glyphs, so another
+glyph in it is another tool to read past; a lid is plainly not a button of the kind underneath it.
+Four glyph candidates were drawn at strip size beside their real neighbours and all of them lost to
+this. The lid is **flush to the rail** on three sides — the rail's own padding at the top and both
+sides — and rests on the rule between Ink and Walls at the foot, with a 2px blue border, a little
+corner rounding and an embossed edge that is the one raised object on a surface of flat fills and
+hairlines.
+
+**It lightens rather than darkening**, which is the part doing the real work: the tools underneath
+stay legible at half strength, and *readable but unreachable* is the honest picture of the state,
+where a dark scrim says gone. **The covered half is `inert`, not disabled** — dimming does not stop
+a tab reaching a control and the lid stops only a pointer, while `disabled` would dim every glyph a
+second time on top of the 0.5 and put the strip's measured 0.65 into a sum nobody has computed.
+
+**The lid is a child of what it covers**, which is why nothing measures it. The strip builds the Map
+and Ink bands into a wrapper and the lid fills that wrapper, reaching past it to the rail's padding
+by three offsets that are `#tools`' own padding and `.tool-rule`'s own margin. The alternative was
+reading the band's extent off `getBoundingClientRect`, and a measurement taken in the same tick as a
+render is what once anchored the drawer at 10px while its button sat at 82.
+
+**Three things decided while building, and worth checking in a room:**
+
+- **The cover closes an ink-side drawer as it raises** (user). It is reachable by the one pair of
+  controls that ignores everything else on the surface: undo and redo sit in the bar and are pressed
+  with any drawer open, so redoing a wall edit while the Ink settings are on screen would otherwise
+  leave live sliders behind a lid meant to be in front of them. The same press also **puts an ink
+  brush down**, on the rule that already puts the verb back to Pan when a group is opened.
+- **The lid brightens where another button would draw pressed.** While the question is up the strip
+  marks whatever raised it, and the lid belongs to neither selection group, so it has no pressed
+  state to draw.
+- **A literal blue rather than `--structure`.** The walls' own hue is `#1d4ed8`, which over a
+  near-black column is a dim navy rather than the blue this was chosen as by looking; the strip's
+  other chrome is literal for the same reason. **The cost: retuning the walls colour does not move
+  the lid**, and with no glyph and no word on it the blue is carrying the meaning alone — *this blue
+  is your walls* reads to somebody who knows the palette and says only "locked" to somebody who does
+  not, who learns why on pressing it.
+
+**Membership is declared, and it is deliberately not `stepRegeneratesWalls`.** That question is
+asked of a step's *parameters* and the map picker declares none, which is exactly how the most
+destructive control on the surface came to sit outside the lock. `stepIsInkSide` and `toolIsInkSide`
+state the rework's own division instead — the map and the ink, and the ink band's four tools — and
+are the one part of the cover a desk can check. **Four mutations, four caught**; everything else
+about it is markup in a module that imports the SDK, and whether it reads as a lid at 52px is a
+room's question.
 
 #### What is built, and what is next
 
@@ -3468,10 +3531,19 @@ to survive that case rather than assert something false.
    unreachable. `steps.test.ts` pins it: two mutations, two caught, with a third recorded as
    equivalent.
 
+10. **The cover**, as the section above describes it: a lid over the map picker and the ink side,
+    raised while the stored base differs from the document, and clicking it raises the existing
+    review rather than a dialog. **The per-control gate it replaces is still in the code** and every
+    ink-side branch of it is now unreachable — that deletion is the first thing on the list below.
+
 **Next, in order:**
 
-1. **The cover**, then **dimming** — as above.
-2. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
+1. **Take out the per-control gate**, which the cover has made dead: the marks on the ink sliders,
+   on the ink tools and on *Clear ink edits*, and the notice at the top of a group holding marked
+   controls. It is a deletion rather than a design, and it is first because unreachable code that
+   looks live is the defect this project has already paid for once.
+2. **Dimming** — as above.
+3. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
    while we get the real changes implemented, then we can redesign it."* The complaint is that a
    *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
    since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —
