@@ -580,6 +580,28 @@ export const STEPS: readonly Step[] = [
           "Dragging pans.",
         parameters: ["mendReachGraphUnits", "mendTravelGraphUnits"],
       },
+      /*
+        **A group with no parameters, and that is the whole of its job** (2026-09-20).
+
+        `toolHasControls` asks these declarations whether a tool has a drawer, on the argument that a
+        tool acquiring its first setting should get one without anything else being told. *Suppress
+        region* has no setting and does have an action — *Clear all marks*, which takes the document
+        this tool alone writes — so it wants a drawer for the button rather than for a slider.
+
+        Declaring it here rather than keeping a second list in the module that draws the button is the
+        point: two lists of "which tools have a drawer" are one fact told twice, and `steps.test.ts`
+        pins this one so the button cannot become unreachable in silence. It is an empty hint slot
+        that looks like a tool with nothing to say — the failure that test was written for.
+
+        **No blurb**, because the tool has a hint of its own and the drawer paints that into the slot
+        above these controls. Two copies an inch apart is the duplication `toolHint` exists to avoid.
+      */
+      {
+        tool: "suppressRegion",
+        title: "Suppress region",
+        blurb: "",
+        parameters: [],
+      },
     ],
   },
   /*

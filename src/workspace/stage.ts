@@ -18,12 +18,19 @@
  * with the first; a graph either is in the scene or is not. `wallGraphStore.ts` says the same
  * thing from the other end.
  *
- * ## Nothing here discards it
+ * ## Two ways to discard it, and the difference is the undo history
  *
- * `startOver` was deleted with the door. Replacing the graph is what the ink mode's save does, with
- * a confirmation naming what goes; removing it altogether belongs to the panel, beside the button
- * that takes our fog out of the scene (user, 2026-09-05: *"the panel has a way to clear objects that
- * we own. the workspace doesn't need to provide that."*).
+ * This header used to say nothing here discards the graph at all — that removing it belongs to the
+ * panel, beside the button that takes our fog out of the scene (user, 2026-09-05). Both halves have
+ * since stopped being true, and the note outlived them.
+ *
+ * - **`discardWalls`** is consent to *regenerate*: the GM has agreed that a reading change may
+ *   rebuild the walls. The history goes with the graph, because its snapshots describe a document
+ *   derived from ink that has just moved.
+ * - **`clearWallEdits`** is *Clear wall edits*, a press aimed at the graph and nothing else. Nothing
+ *   upstream has moved, so the document is put on the stack and one undo brings it back.
+ *
+ * Neither is *Clear everything*, which is still the panel's and still reaches the whole scene.
  *
  * No DOM.
  */
@@ -249,6 +256,43 @@ export async function discardWalls(): Promise<void> {
   clearUndo("walls");
   announce();
   devLog("info", "stage: the stored walls were discarded so the reading can be derived again");
+}
+
+/**
+ * Throw the stored graph away because the GM asked for it — *Clear wall edits*.
+ *
+ * ## Why this is not `discardWalls`, which does the same thing
+ *
+ * The two differ in exactly one line, and it is the one that matters: **this pushes a way back and
+ * that one clears the history.** `discardWalls` is consent to *regenerate*, so the settings the
+ * edits were made under have just moved and its snapshots describe a document derived from ink the
+ * GM has since changed. Nothing upstream has moved here. The old document is a state that existed a
+ * moment ago and is a perfectly good one to return to, so one press of undo returns to it (user,
+ * 2026-09-20).
+ *
+ * That keeps the clear family on one rule: **a clear is one named act, and every named act is
+ * undoable** — *Clear layer* already was, *Clear all marks* is by going through `saveMarks`, and
+ * *Clear everything* is the single exception, which is why it is the one place "this cannot be
+ * undone" is true.
+ *
+ * **The entries below it stay**, and are still honest: they describe earlier states of this same
+ * document, which undoing this returns to.
+ *
+ * **It does not touch the marks**, and that is the decision rather than an omission (user,
+ * 2026-09-18). A mark survives a *rebuild* of the walls, which is far more violent than this, so
+ * taking them here would make the gentle explicit recovery more destructive than the accident it
+ * exists to undo.
+ */
+export async function clearWallEdits(): Promise<void> {
+  const before = stored();
+  if (!before) return;
+  await clearWallGraph();
+  // After the write, so a failed one leaves nothing to undo back to — `saveEditedWalls`' own rule.
+  pushUndo("clearing the wall edits", restoreTo(before), "walls");
+  saved = null;
+  base = null;
+  announce();
+  devLog("info", "stage: the stored walls were cleared, so they are a derivation again");
 }
 
 /**

@@ -2231,6 +2231,12 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
   disturbs the other. Borrowed from Procreate, which mixes the two in one strip and is not read as
   a category error precisely because tapping *Adjustments* does not put your brush down.
 
+  **A third kind joined them on 2026-09-20 and is not a selection group at all**: an **act**, which
+  is the two clear buttons at the foot of the Ink and Walls bands. It opens nothing and arms
+  nothing, so there is no state for it to be in and it never draws pressed — which is the
+  distinction doing the work, since nothing else tells it from a verb. §10's clear family carries
+  why they are here rather than in a drawer.
+
   **They do not need to be told apart, and that is why mixing them costs nothing** (user,
   2026-09-15): *"You click on what you want and it might open a drawer of settings or it might pick
   up a tool. The two being mixed isn't confusing to me."* The column is a list of things to press,
@@ -2592,7 +2598,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**975 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**976 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3023,9 +3029,13 @@ full.
 - **The map drawn at the trace's raster** when the budget reduced it, and the full-resolution decode
   released once it is (§4).
 
-**37 commits are not pushed**, the oldest from before the previous session. **A push deploys** the
-published site, so it waits for the user to want the public build to have them — never offer it per
-change.
+**12 commits are not pushed** (2026-09-20). **A push deploys** the published site, so it waits for
+the user to want the public build to have them — never offer it per change.
+
+> The figure here read **37** until 2026-09-20 and was wrong: `origin/main` had moved on since it was
+> written, and the count had been carried forward as a label rather than re-measured. It is one
+> command — `git rev-list --count origin/main..main` — so **measure it rather than editing the number
+> that is there.**
 
 **What rooms have confirmed**, so a cold session does not re-ask:
 
@@ -3053,6 +3063,11 @@ change.
   distances, and whether split-the-difference lands where a GM would draw the wall.
 - **The delta's picture** on a real map — its state machine is checked, the drawing is not.
 - **View's Defaults** restoring all five colours — the button has not been pressed.
+- **The three clear buttons** — everything about them, since none has been in a room. Specifically:
+  whether the bin reads as *clear this band* from where it sits; whether *Clear ink edits* pressed
+  with a brush still in hand takes the unwritten strokes and leaves the brush working; whether one
+  press of undo brings each of the three back; and whether *Suppress region*'s new drawer appearing
+  on arming is welcome or in the way.
 
 **A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
 they are refused, not converted, and *Remove ours* in the panel clears one.
@@ -3200,10 +3215,33 @@ edits here, scene-level at everything.
 | control | where | takes |
 |---|---|---|
 | **Clear layer** | a brush's own drawer, unchanged | that one paint layer |
-| **Clear ink edits** | the Ink group's controls | **both** paint layers |
-| **Clear wall edits** | the Walls group's controls | the wall document, **leaving the marks** |
+| **Clear ink edits** | the foot of the **Ink band** in the strip | **both** paint layers |
+| **Clear wall edits** | the foot of the **Walls band** in the strip | the wall document, **leaving the marks** |
 | **Clear all marks** | *Suppress region*'s drawer | the suppression marks |
 | **Clear everything** | the panel, unchanged | the scene as though the extension never ran |
+
+**The two area-level ones are in the STRIP, not in a drawer** (user, 2026-09-20). They were designed
+to sit at the foot of each group's drawer, beside the controls they clear up after; they belong in the
+band, **under the tools whose work they take**. That makes them a **third kind of button in the
+strip**, which has carried a *drawer opener* and a *verb* chosen independently of each other. An
+**act** opens nothing and arms nothing, so it never draws pressed and carries no `data-opens` — and
+the argument that lets the first two share a column covers it, since the column is a list of things to
+press and what each one does is its own business.
+
+> **The cost, stated:** a destructive press now sits one row under the tools, in the column a GM
+> reaches for constantly, where a drawer would have put two presses in front of it. What stands there
+> instead is the confirmation, which is what stands in front of *Clear layer* too.
+
+**Both wear the same glyph — a bin — and the band caption says which subject** (user, 2026-09-20,
+chosen from four candidates drawn at strip size). That is the strip's own ordering rule, *what a
+button acts on is said by where it is*, and the column already repeats a glyph on exactly that
+argument: the sliders are drawn for Ink, Walls and View. The three candidates that put the subject
+*into* the glyph each cost more than they bought — the band's heavy ink stroke or a wall between two
+vertex rings is about a fifth of a glyph at 18px, a struck-out wall is very nearly *Erase* three
+buttons above it, and a slashed pair was the busiest thing in the column. **The cost:** two identical
+destructive buttons in one column, told apart by reading the caption rather than the picture; and a
+bin is the first piece of *furniture* in a strip whose glyphs otherwise all draw the map — which is
+also what makes it read as an act rather than as a tool.
 
 **"Clear" means destroy the stored thing and nothing else does.** *Discard changes* — which reverted one
 layer to its last save — **is deleted**, and the reason is not that undo replaces it. Undo does not: it
@@ -3213,18 +3251,54 @@ button's **extent was unknowable**: it reverted to "the last save", and the save
 stopped marking when the save button was deleted — putting the brush down saves, switching group saves,
 closing saves, none of them announced. Undo's extent is one named act per press.
 
+**Every clear is undoable in one step but *Clear everything***, which is the rule the family now runs
+on (user, 2026-09-20). *Clear layer* already was; *Clear all marks* is, by going through `saveMarks`
+like every other placement and removal; and *Clear wall edits* is, which needed a second discard in
+`stage.ts` beside the one that already existed. The two differ in one line: `discardWalls` is consent
+to **regenerate**, so it clears the walls' history because its snapshots describe a document derived
+from ink the GM has just changed, while `clearWallEdits` is a press aimed at the graph with nothing
+upstream moved — the old document is a state that existed a moment ago and is a perfectly good one to
+return to. *Clear everything* stays the single exception, which is why it is the one place "this
+cannot be undone" is true.
+
 **Both layers, not one** (user, 2026-09-18). The per-brush control is deliberately narrower, on the
 stated ground that *"discarding the suppression because a stroke of added ink went wrong would be one
 button destroying work it was never pointed at"* — but that argues against widening a button sitting in
 *a brush's* drawer, not against an area-level one. A GM does not perceive two layers; they perceive
 their edits.
 
+**What *Clear ink edits* takes is what is DRAWN, not only what is stored.** In a drawer it could never
+have met a brush, since opening a group puts the verb back to Pan, which commits both layers and lets
+the working copies go. In the strip it is reachable with a brush still down and strokes still
+unwritten, so the snapshot it takes — and therefore what one undo hands back — is the layers on
+screen. An open brush has its working copies re-taken against the layers that now exist, rather than
+being abandoned, or it would go on drawing ink that has just been thrown away.
+
+**Emptiness is answered at the press, not by greying the button out.** The strip's rule that *a
+control offered where its presses do nothing is a control that lies* is about what is structurally
+unavailable — no map, no graph — and that is what these are gated on. Whether there is anything to
+clear *right now* means walking the raster, and an untouched working copy is the case with no early
+exit: nine million comparisons a layer on the largest map tried so far, in a strip that redraws on
+every tool change. So it is asked once, when pressed, the way the Defaults button answers the same
+question.
+
 **The two area-level buttons are not peers in cost, despite the parallel names.** The ink is upstream, so
 clearing both paint layers changes the composite, which re-derives the walls, which takes the wall edits
 with it. *Clear ink edits* is therefore also a wall-edit discard; *Clear wall edits* touches nothing
-above it. The name stays about what it does directly and **the confirmation carries the cascade** — a
-point that is only one of several reasons a GM presses a button is a guess at intent rather than a name,
-which is what the frame button cost three names to learn.
+above it.
+
+> **The cascade is the cover's to name, not the confirmation's** (user, 2026-09-20). This used to read
+> that the name stays about what the button does directly and *the confirmation carries the cascade*.
+> It does not: *"the cover over the map and ink tools delivers a warning that these tools will remove
+> wall edits, so by the time the user can touch the tools, they don't need another warning."* The
+> button is a member of that cover like everything else on the ink side, so by the time it can be
+> pressed the question has been asked and answered and the walls are already a derivation. Its own
+> confirmation speaks about the ink alone.
+>
+> **Until the cover is built the per-control gate stands in for it**, exactly as it does for a marked
+> slider and a marked ink tool: the button wears the walls mark, and pressing it raises the review
+> rather than clearing, handing the clear over to run if the answer is yes. That branch becomes
+> unreachable the day the cover lands, in the same way the per-control marks do.
 
 **The marks survive a wall-edit clear** (user, 2026-09-18, against a first instinct to couple them). A
 mark is a point in graph units that suppresses whatever region holds it, and it already survives a
@@ -3236,6 +3310,16 @@ and it would re-create the cross-document reach that was a reported defect — *
 the walls shouldn't delete ink edits"* — fixed by tagging undo entries per document. **One rule
 instead of a split:** marks survive anything that re-derives the walls, and only their own tool or
 *Clear everything* removes them.
+
+**Clearing them gave *Suppress region* its first drawer.** The tool has no settings, so nothing
+declared one — and `toolHasControls` asks the step declarations alone, on the argument that *a tool
+acquiring its first setting gets a drawer without anything else being told*. It now has a group in
+Walls with **no parameters**, which is the same hook used for an action rather than a slider; a
+second list of "tools with a drawer" beside the list of "tools with settings" would be one fact told
+twice. `steps.test.ts` pins it, because without the group the button is not misplaced but
+**unreachable**, with the press that should open the drawer clearing it instead — no error, no
+failing test, a control that is simply not there. **What changes for a GM:** arming *Suppress region*
+now opens a drawer, where it used to clear one, exactly as Mend and the brushes do.
 
 #### Dimming the side you are not working on
 
@@ -3336,11 +3420,35 @@ to survive that case rather than assert something false.
    loop asks it to skip an untouched layer. *Clear layer*'s confirmation named the deleted button as
    what brings a clear back; it names **undo** now, which is true and was already true.
 
+9. **The three clear buttons**, and a fourth thing fell out of them. *Clear ink edits* and *Clear
+   wall edits* are acts at the foot of the Ink and Walls bands in the strip; *Clear all marks* is in
+   *Suppress region*'s drawer, which this gave the tool for the first time. The section above carries
+   the whole of it — where they went and why, the shared bin glyph and the three candidates it beat,
+   the cover owning the cascade warning, and every clear but *Clear everything* being one step of
+   undo.
+
+   **New machinery, in three places.** `workspace/clearActions.ts` is the family in one module — the
+   three acts, their confirmations, and the two the strip draws, declared as a list so the band a
+   press belongs to is stated once. `paintState.ts` gained the one path by which a whole layer is
+   replaced, used by the clear and by its undo, which snapshots what is **drawn** rather than what is
+   stored and re-takes an open brush's working copies afterwards. `stage.ts` gained `clearWallEdits`
+   beside `discardWalls`, differing in the one line that decides whether the history survives.
+
+   **Decided while building, and worth checking:** the strip's act buttons are gated on the same
+   structural question their band's tools ask — the ink needs a map, the walls need walls — and
+   emptiness is answered at the press instead, because asking it per redraw means walking the raster.
+   The marks button wears `chip quiet`, which is what *Clear layer* wears one tier up. And the act
+   button takes a little air above it in the strip, since it is not a verb.
+
+   **Almost none of this is testable from a desk.** The one contract that is, and the one that would
+   have failed silently, is that *Suppress region* declares a group — without it the button is
+   unreachable. `steps.test.ts` pins it: two mutations, two caught, with a third recorded as
+   equivalent.
+
 **Next, in order:**
 
-1. **The three clear buttons** — *Clear ink edits*, *Clear wall edits*, *Clear all marks*.
-2. **The cover**, then **dimming** — as above.
-3. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
+1. **The cover**, then **dimming** — as above.
+2. **The walls glyph, deliberately last** (user, 2026-09-18): *"leave the glyph alone for the moment
    while we get the real changes implemented, then we can redesign it."* The complaint is that a
    *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
    since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —
@@ -4266,7 +4374,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
   untouched**) · `mendGesture.ts` (a mend's ring and which one a click lands in — pure and tested) ·
   `paintControls.ts` (the tool in hand, drawn into **its own drawer**) · `mendControls.ts` (the mend
-  tool's drawer) · `paintState.ts` · `gapSearch.ts` · `mendSearch.ts` (the mend search, following the
+  tool's drawer) · `markControls.ts` (*Suppress region*'s drawer, which is one button and no
+  settings) · `paintState.ts` · `gapSearch.ts` · `mendSearch.ts` (the mend search, following the
   walls on screen and the settings on release)
 - **Acting on the document** — `undoAction.ts` (the undo/redo pair in the rail head, and their
   keystrokes) · `undoHistory.ts` (**the one
@@ -4279,7 +4388,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   opens, the amount aimed at it, and the staleness rule that voids it when the document is replaced:
   pure and tested) ·
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
-  own limit at zero — pure and tested)
+  own limit at zero — pure and tested) ·
+  `clearActions.ts` (**the clear family**: both paint layers, the wall document, every mark — each
+  confirming, each one step of undo, and the two the strip draws at the foot of their band)
 - **What is drawn** — `regenerateGuard.ts` (**the mark and the gate**: which control or tool would
   rebuild the walls, the glyph that says so — per control rather than per group, since Ink holds nine
   controls and five regenerate — and the **review state** the question is asked in, which is a delta

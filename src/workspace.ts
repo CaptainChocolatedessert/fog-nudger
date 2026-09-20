@@ -69,6 +69,7 @@ import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderToolControls } from "./workspace/paintControls";
 import { renderMendControls } from "./workspace/mendControls";
+import { renderMarkControls } from "./workspace/markControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation } from "./workspace/regions";
@@ -263,6 +264,14 @@ registerStepContent("map", renderMapPicker);
 */
 registerToolContent(renderToolControls);
 registerToolContent(renderMendControls);
+/*
+  And *Suppress region*'s, which is a drawer holding one button and no settings.
+
+  The marks are that tool's own document — nothing else places or removes one — so taking them all
+  off belongs beside it rather than in the Walls band, where *Clear wall edits* deliberately leaves
+  them alone.
+*/
+registerToolContent(renderMarkControls);
 /*
   The rail redraws when the tool changes, which it did not until now.
 

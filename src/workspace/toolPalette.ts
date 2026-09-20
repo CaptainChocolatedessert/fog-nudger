@@ -52,6 +52,7 @@ import {
   showingLayers,
   showingReview,
 } from "./drawer";
+import { CLEAR_ACTS, pressClearAct } from "./clearActions";
 import { reviewRegenerate, stepIsMarked, toolIsMarked, wallsMark } from "./regenerateGuard";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
@@ -526,6 +527,50 @@ export function render(): void {
       if (step.id === "view") strip.append(layersOpener());
 
       addTools(step.id as ToolChoice["band"]);
+
+      /*
+        And last in the band, the act that clears what the band's tools have been making.
+
+        **A third kind of button in this column** (user, 2026-09-20). It has carried a *drawer
+        opener* and a *verb*, chosen independently; this one opens nothing and arms nothing, so it
+        never draws pressed and carries no `data-opens`. The same argument that lets the first two
+        share a column covers it — *"you click on what you want and it might open a drawer of
+        settings or it might pick up a tool"* — and the column stays a list of things to press.
+
+        **Both wear the same bin**, and the caption above says which subject: the strip's own rule
+        that what a button acts on is said by where it is. `toolIcons.ts` has the three candidates
+        that put the subject into the glyph and what each cost at 18px.
+
+        **Gated on the band being usable at all**, on the same structural question its tools ask —
+        the ink needs a map, the walls need walls. Whether there is anything to clear *right now* is
+        answered at the press, because knowing it means walking the raster and this redraws on every
+        tool change; `clearActions.ts` carries that trade.
+      */
+      const act = CLEAR_ACTS.find((candidate) => candidate.step === step.id);
+      if (act) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "tool act";
+        const bin = toolIcon("clear");
+        if (bin) button.append(bin);
+        button.title = act.label;
+        button.setAttribute("aria-label", act.label);
+        button.disabled = act.step === "ink" ? !mapChosen() : editableGraph() === null;
+        /*
+          Marked exactly as an ink tool is, and for the same reason: *Clear ink edits* writes to the
+          reading's inputs, so it changes what the walls are derived from. This is the per-control
+          gate standing in for the cover that will replace it.
+        */
+        if (act.marked()) {
+          button.append(wallsMark());
+          button.classList.add("marked");
+          button.title = `${act.label} rebuilds the walls, discarding your changes to them`;
+        }
+        button.addEventListener("click", () => {
+          pressClearAct(act);
+        });
+        strip.append(button);
+      }
     }
 
     /*

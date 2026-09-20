@@ -296,6 +296,36 @@ describe("a step's groups", () => {
     }
   });
 
+  it("gives every tool that draws its own actions a group, since that is what opens its drawer", () => {
+    /*
+      **The contract behind `toolHasControls`**, which asks these declarations and nothing else.
+
+      A tool whose drawer holds an *action* rather than a setting has nothing in `parameters` to
+      declare it, so the group is the only thing saying the drawer exists — and without it the
+      button is not merely misplaced, it is unreachable, with the press that should open it clearing
+      the drawer instead. That is the silent kind: no error, no failing test, a control that is
+      simply not there. It is the same failure `elementIds.test.ts` exists for, one layer up.
+
+      Listed by name rather than derived, because deriving it would mean asking the modules that draw
+      the buttons — which import the SDK and cannot be reached from here. A tool joining this list
+      is a deliberate act, and so is leaving it.
+
+      **Two mutations, two caught**: deleting the group from `steps.ts`, and emptying the list so the
+      loop below has nothing to walk. A third — relaxing the guard to `>= 0` — survives and is
+      equivalent, since it can only differ when the list is empty and the second mutation is that.
+    */
+    const drawsActions = ["suppressRegion"];
+    // Or the loop below is satisfied by having nothing to check, which is the shape of failure this
+    // suite has already been bitten by twice.
+    expect(drawsActions.length).toBeGreaterThan(0);
+    const declared = new Set(
+      STEPS.flatMap((step) => toolGroups(step)).map((group) => group.tool),
+    );
+    for (const tool of drawsActions) {
+      expect(declared, `${tool} has no group, so its drawer never opens`).toContain(tool);
+    }
+  });
+
   it("explains every tool, either by its own hint or by the blurb of the group it reveals", () => {
     /*
       The one place the 2026-09-09 prose cull could take away something nothing replaces.

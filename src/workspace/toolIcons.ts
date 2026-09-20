@@ -19,6 +19,10 @@
  * want the same 24×24 house style and the same guarantee about arriving, so they are drawn here
  * rather than in a second place with a second set of conventions to keep in step.
  *
+ * **`clear` is an act that IS in the strip**, which undo and redo never were: it sits at the foot of
+ * a band and destroys that band's document. So the strip carries a third kind of button beside the
+ * drawer opener and the verb — one that neither opens nor arms, and so never draws pressed.
+ *
  * ## The house style
  *
  * 24×24, `fill="none"`, `stroke="currentColor"`, round caps and joins — which is what
@@ -163,6 +167,28 @@ const ICONS: Readonly<Record<string, string>> = {
     point in the map rather than a vertex of the graph.
   */
   span: '<path d="M5 3v7M5 14v7M19 3v7M19 14v7" /><circle cx="5" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /><path d="M7 12h10" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />',
+  /*
+    A bin, and the one glyph here that **is drawn twice** — at the foot of Ink and at the foot of
+    Walls, for *Clear ink edits* and *Clear wall edits* (user, 2026-09-20, from four candidates at
+    strip size).
+
+    **The band above it says which subject**, which is the strip's own ordering rule — *what a tool
+    acts on is said by where it is* — and the column already repeats a glyph on exactly that
+    argument: `params` is drawn for Ink, Walls and View. The three candidates that put the subject
+    *into* the glyph were each shown beside their real neighbours and each cost more than they
+    bought: the band's heavy ink stroke or a wall between two vertex rings is about a fifth of a
+    glyph at 18px, a struck-out wall is very nearly Erase three buttons above it, and a slashed pair
+    was the busiest thing in the column.
+
+    **The cost, chosen:** two identical destructive buttons in one column, so telling them apart
+    means reading the caption rather than the picture. And a bin is the first piece of *furniture*
+    in a strip whose glyphs otherwise all draw the map — which is also what makes it read as an act
+    rather than as a tool, since it is neither a drawer to open nor a verb to arm.
+  */
+  clear:
+    '<path d="M4 7.6h16" /><path d="M9.8 7.6V5.4a1 1 0 0 1 1-1h2.4a1 1 0 0 1 1 1v2.2" />' +
+    '<path d="M6.4 7.6l.85 11.8a2 2 0 0 0 2 1.85h5.5a2 2 0 0 0 2-1.85L17.6 7.6" />' +
+    '<path d="M10 11.6v6M14 11.6v6" />',
 };
 
 /**

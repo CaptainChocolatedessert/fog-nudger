@@ -354,6 +354,90 @@ export async function commitPaint(): Promise<{
   return { saved, failed: null };
 }
 
+/**
+ * Whether *Clear ink edits* has anything to take.
+ *
+ * **Both halves, because the button is in the strip.** It was going to sit at the foot of the Ink
+ * drawer, where a brush can never be in hand — opening a group puts the verb back to Pan, which
+ * commits and lets the working copies go, so "is there paint" would have been a question about the
+ * scene alone. In the strip it is reachable with a brush still down and strokes still unwritten, so
+ * the honest question is whether there is anything **on screen** to take.
+ *
+ * **Asked at the press, never to decide whether to draw the button.** `isPaintEmpty` walks the
+ * raster, and an untouched working copy is the case with no early exit — on the largest map tried so
+ * far that is nine million comparisons a layer, which is nothing once but is not something to put in
+ * a strip that redraws on every tool change. The strip gates on *having a map*, which is structural
+ * and cannot go stale; emptiness is answered when pressed, as the Defaults button answers it.
+ */
+export function anyPaintToClear(): boolean {
+  return PAINT_KINDS.some((kind) => {
+    const layer = paintLayerFor(kind);
+    return layer !== null && !isPaintEmpty(layer);
+  });
+}
+
+/**
+ * Both layers as they stand, encoded — the way back from a clear.
+ *
+ * **What is drawn rather than what is stored**, for the reason above: undo has to put back what the
+ * GM was looking at when they pressed, which over an open brush is the working copy. Restoring
+ * commits it, so a clear-then-undo also saves strokes that had not been written yet. That is the
+ * right direction: the alternative is undo handing back less than it took.
+ *
+ * **Run-length encoded**, with the codec the scene store uses, exactly as a stroke's snapshot is.
+ * Holding the two rasters instead would put nineteen megabytes on the undo stack on the largest map
+ * tried so far, where the encoding of ordinary brushwork is a few kilobytes.
+ */
+export function snapshotBothLayers(): Readonly<Record<PaintKind, string | null>> {
+  const take = (kind: PaintKind): string | null => {
+    const layer = paintLayerFor(kind);
+    return layer ? encodePaint(layer) : null;
+  };
+  return { suppress: take("suppress"), ink: take("ink") };
+}
+
+/**
+ * Put both stored layers back to a pair of snapshots, writing each to the scene.
+ *
+ * **The one path by which a whole layer is replaced**, used by *Clear ink edits* and by its undo —
+ * `null` for a layer that should not exist. A failed write throws with whatever already landed
+ * applied, which is the same bargain `commitPaint` strikes: the caller reports it, and the next
+ * attempt writes the rest.
+ *
+ * **An open brush has its working copies re-taken** rather than being abandoned or left alone.
+ * Abandoning would decline every press until the tool was picked up again, and leaving them would
+ * go on drawing the ink that has just been thrown away — the working copy is what the canvas shows.
+ * Re-taking is what `beginPaint` does, against the layers that now exist.
+ */
+export async function replaceBothLayers(
+  next: Readonly<Record<PaintKind, string | null>>,
+): Promise<void> {
+  if (!mapId) throw new Error("no map is nominated, so there is nothing to clear paint against");
+
+  for (const kind of PAINT_KINDS) {
+    const snapshot = next[kind];
+    const layer = snapshot === null ? null : decodePaint(snapshot);
+    /*
+      A layer with nothing on it is **deleted**, never stored as an empty document — `commitPaint`'s
+      own rule, and the same reason: "there is no paint for this map" and "there is paint, and it is
+      blank" are one fact told two ways, and the second can disagree with the first.
+
+      A snapshot that will not decode lands here too, and deleting is the safe reading of it: the
+      alternative is writing a layer nobody can account for.
+    */
+    if (!layer || isPaintEmpty(layer)) {
+      await clearPaintLayer(kind);
+      committed = { ...committed, [kind]: null };
+    } else {
+      await writePaintLayer(kind, mapId, layer);
+      committed = { ...committed, [kind]: layer };
+    }
+  }
+
+  if (working) working = { suppress: workingCopy("suppress"), ink: workingCopy("ink") };
+  announce();
+}
+
 /** Let go of both working copies, once whatever was going to be saved has been. */
 export function endPaint(): void {
   if (!working) return;
