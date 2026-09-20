@@ -3364,8 +3364,23 @@ ink tool, moving an ink control and pressing *Clear ink edits* all mean *I am wo
 the same for the wall side. Keying it to the drawer would put the pre-2026-09-14 arrangement back, since
 a group stopped being a mode.
 
-- **Wall side → the ink dims. Ink side → the walls dim. Nothing dims until the first interaction**, so
-  the workspace still opens on the plain picture.
+- **Wall side → the ink dims. Ink side → the walls dim.**
+- ~~**Nothing dims until the first interaction**, so the workspace still opens on the plain
+  picture.~~ **Reversed 2026-09-20** (user): the workspace opens with a side already chosen, and the
+  document chooses it. **No wall edits → open with the ink undimmed**, which is where a GM with
+  nothing to lose is going anyway. **Wall edits → open with the walls undimmed**, which is the side
+  they can still work on, since the other one is under the cover.
+
+  **The auto-advance goes with it.** `mapSource` calls `advanceTo("ink")` the moment a map loads,
+  which opens the Ink *parameters* drawer — a guess at which controls the GM wants rather than at
+  which half of the map they are looking at, and the one route to a drawer that is not a press. A
+  start-up dim says the same thing without opening anything, so `advanceTo` and the cover guard
+  added to it on 2026-09-20 both come out.
+
+  **What that costs, stated:** the workspace no longer opens on the plain picture, so the very first
+  thing a GM sees is already a judgement about what they are here for. It is a judgement the
+  document can actually make — unlike *which layer is the subject*, which was rejected for being a
+  guess — but it is one more thing that is dim before anyone has done anything.
 - **The room fills never dim** (user, 2026-09-18: *"they're already pretty faint"*). They are also the
   consequence a GM paints to fix, and the crowding the record complains about is at the *stroke*, where
   the centrelines are and the fills are not.
@@ -4273,6 +4288,29 @@ against it: both deliberately run past useful, and set high enough to kill hatch
 eat a genuine closet. A click never has to be set high at all.
 
 **Explicitly not now** (user, same day). The blob tool's own full implementation comes first.
+
+### Orphaned data when the map goes — raised 2026-09-20, not designed
+
+**What happens when the nominated map has disappeared or changed, and the scene still holds ink and
+wall data for it?** Today three things answer separately and none of them says anything to the GM
+about the others: the resolver falls through to the largest image and the picker reports the stale
+nomination under its rows; the wall store treats a map mismatch as *no graph here*; and the cover
+reads "no base, or a base for another map" as *assume it was edited*, so a lid goes up over a picker
+warning about walls that may no longer mean anything.
+
+**The proposal** (user): a dialog on opening that explains what happened and erases the orphaned
+data, with an option to **cancel the open without deleting anything**, so a GM can go and restore the
+map in Owlbear first. The cancel is the half that makes it safe — the destructive answer is never
+the only way out.
+
+**The hazard it has to survive, and it is recorded rather than solved.** *"A stale nomination is
+reported, never cleared"* is a standing decision with two reasons behind it, and one of them is not
+about taste: **the map list is briefly empty while a scene loads**. So *the map has gone* and *the
+scene has not finished arriving* are the same observation at the wrong moment, and a dialog offering
+to erase an evening's work would fire on the second one. Anything built here needs a settled scene
+before it may ask, and *settled* is not something the SDK reports.
+
+**Not now** (user): *"Might not have to be done right now."*
 
 ### Carried open questions
 
