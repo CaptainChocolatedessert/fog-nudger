@@ -2675,6 +2675,15 @@ invisible. It costs almost nothing to keep.
   against the page that hosts it; a selector built from a template is still unguarded, and the answer
   there is structural — do not reach across a module boundary with one.
 
+  **A declaration that decides whether a control EXISTS is a contract too** (2026-09-20). *Suppress
+  region*'s drawer opens because a group in `steps.ts` names the tool, and the module drawing the
+  button inside it cannot say so — it imports the SDK, so nothing testable can reach it. Delete the
+  group and the button is not misplaced but **unreachable**, with the press that should open the
+  drawer clearing it instead: no error, no failing test, a control that is simply not there. That is
+  `elementIds.test.ts`'s failure one layer up, and the answer is the same — pin the contract from the
+  side that can be imported, and assert the list being walked is not empty, or the check is satisfied
+  by having nothing to check.
+
   **Keys are contracts too, and a test that reads only values cannot see them.** The mend tool's layer
   went into `TOOL_LAYERS` keyed by the layer's name where the strip looks it up by the tool's id, so
   picking up the tool drew nothing — and the test over that table walked its values (2026-09-16). It
@@ -2996,13 +3005,28 @@ next section.
 ### Where to pick this up
 
 **A rework of the workflow is in progress, designed in full and part built.** *The workflow rework*
-below carries the whole design and a stage-by-stage account of what has landed. Every commit so far
-leaves `tsc`, the suite and a build green, and **nothing is half-built at any commit** — but the
-feature set is incomplete, and the next thing to do is named there rather than chosen freshly.
+below carries the whole design and a stage-by-stage account of what has landed — nine items built,
+each green under `tsc`, the suite and a build, and **nothing is half-built at any commit.**
+
+> **Do this first: the cover.** It is item 1 of *Next, in order*, it is designed in full in that
+> section, and **three things already built are waiting on it.** The clear buttons' ink-side gate,
+> the per-control marks on the ink sliders and the marked ink tools are all the same stand-in for
+> it, and each of those branches becomes unreachable the day it lands. Dimming is item 2 and shares
+> its trigger. The walls glyph is item 3 and is deliberately last, because the cover may retire it
+> rather than redraw it.
+
+**Waiting for a room, and nothing else is.** The whole rework — nine items — has never been looked
+at. The clear buttons are the newest and the list of what to watch is under *Unconfirmed* below; the
+one that will be noticed first is that arming *Suppress region* now opens a drawer where it used to
+clear one.
 
 **The one thing a cold session must know before touching the Walls drawer:** straightening is an
 *action* now and the fitting tolerance is computed, so §5 and §7's passages about two live sliders are
 marked as history. Do not restore either as a setting without reading why they went.
+
+**And before touching the tool strip:** it carries three kinds of button now, not two — a drawer
+opener, a verb, and an **act**, which is the two clear buttons and which has no pressed state at all.
+§7a says why that costs nothing.
 
 **Also waiting, and unrelated:** a suspected regression in the ink finding, reported and deliberately
 not investigated — the section after the rework carries the symptom and the leads, and says to start
@@ -3020,14 +3044,13 @@ gives 2,493 — was the right answer for a cave whose chambers connect.
 It also ran the **megapixel budget** for the first time in the project's life, which §4 now covers in
 full.
 
-**What this session built**, all on `main`:
+**What the last session built**, all on `main`: **the three clear buttons** — *Clear ink edits* and
+*Clear wall edits* as acts at the foot of their band in the strip, *Clear all marks* in *Suppress
+region*'s first drawer. The clear family in §10 carries the whole of it.
 
-- **Suppress blob** (§10), a fourth Ink tool: click a solid mark on the map and everything of that
-  tone joined to it stops being ink.
-- **A distribution drawn on each ink filter's own rail** (§4): ink per stroke width, and ink per
-  island span.
-- **The map drawn at the trace's raster** when the budget reduced it, and the full-resolution decode
-  released once it is (§4).
+**The session before that** built **Suppress blob** (§10), **a distribution drawn on each ink
+filter's own rail** (§4), and **the map drawn at the trace's raster** when the budget reduced it,
+with the full-resolution decode released once it is (§4).
 
 **12 commits are not pushed** (2026-09-20). **A push deploys** the published site, so it waits for
 the user to want the public build to have them — never offer it per change.
