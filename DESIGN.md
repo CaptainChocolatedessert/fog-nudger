@@ -3059,7 +3059,7 @@ first drawer — and the one before that **Suppress blob** (§10), **a distribut
 filter's own rail** (§4), and **the map drawn at the trace's raster** when the budget reduced it,
 with the full-resolution decode released once it is (§4).
 
-**12 commits are not pushed** (2026-09-20). **A push deploys** the published site, so it waits for
+**17 commits are not pushed** (measured 2026-09-20, before the commit that writes this line). **A push deploys** the published site, so it waits for
 the user to want the public build to have them — never offer it per change.
 
 > The figure here read **37** until 2026-09-20 and was wrong: `origin/main` had moved on since it was
