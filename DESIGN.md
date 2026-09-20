@@ -3434,6 +3434,12 @@ render is what once anchored the drawer at 10px while its button sat at 82.
 - **The lid brightens where another button would draw pressed.** While the question is up the strip
   marks whatever raised it, and the lid belongs to neither selection group, so it has no pressed
   state to draw.
+- **`advanceTo` refuses a covered group**, which is the one route to a drawer that is not a press. A
+  map opening with hand edits already in its walls raises the cover before the GM has touched
+  anything, and `mapSource` advances to Ink the moment that map loads — and whether the graph or the
+  map arrives first is not ordered, so closing on the stage change alone answers one order and not
+  the other. Refusing there answers both, and the GM lands on the plain map with a lid on the ink
+  side.
 - **A literal blue rather than `--structure`.** The walls' own hue is `#1d4ed8`, which over a
   near-black column is a dim navy rather than the blue this was chosen as by looking; the strip's
   other chrome is literal for the same reason. **The cost: retuning the walls colour does not move

@@ -398,6 +398,20 @@ export function registerToolContent(render: Render): void {
  */
 export function advanceTo(id: StepId): void {
   if (touched || currentPanel() === id) return;
+  /*
+    **Never under the lid**, and this is the one route to a covered drawer that is not a press.
+
+    A map that opens with hand edits already in its walls raises the cover before the GM has
+    touched anything at all, and `mapSource` advances to Ink the moment that map loads. Whether the
+    graph or the map arrives first is not ordered, so one way round the cover closes the drawer on
+    the stage change and the other way round the drawer opens after it — live ink sliders behind the
+    thing that exists to be in front of them, with no press having opened it and so nothing obvious
+    to shut it.
+
+    Refusing here answers both orders with one line. The GM lands on the plain map with a lid on the
+    ink side, which is the honest picture of a scene they left half edited.
+  */
+  if (coverIsUp() && stepIsInkSide(id)) return;
   drawer = { kind: "params", step: id };
   renderPanel();
 }
