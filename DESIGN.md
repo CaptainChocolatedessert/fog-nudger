@@ -3018,12 +3018,11 @@ each green under `tsc`, the suite and a build, and **nothing is half-built at an
 > **The cover is built and the per-control gate is deleted (2026-09-20).** The lock is one lid over
 > the ink side now, and nothing marks a control, a tool or a group. **Dimming is next**, item 1 of
 > *Next, in order*, and it has a start-up state the original design did not — see the note there.
-> The walls glyph, item 2, may be gone rather than redrawn: the mark it belonged to no longer
-> exists.
+> **The walls glyph is closed**: the mark it belonged to no longer exists, so it dissolved rather
+> than needing a redraw. Dimming is the last item of the rework.
 
-**Waiting for a room, and nothing else is.** The whole rework — ten items — has never been looked
-at. The cover is the newest and the list of what to watch is under *Unconfirmed* below; the one that
-will be noticed first is the lid itself, since it appears the moment a first wall is drawn by hand.
+**The rework has had its first room.** The cover works (2026-09-20, below); the nine items before it
+have still never been looked at, and dimming is not built yet.
 
 **The one thing a cold session must know before touching the Walls drawer:** straightening is an
 *action* now and the fitting tolerance is computed, so §5 and §7's passages about two live sliders are
@@ -3081,6 +3080,12 @@ the user to want the public build to have them — never offer it per change.
   the preview keeps up, the tolerance slider, the glyph, and undo taking one fill back per click.
 - **The map drawn at the trace's raster, and the released decode** — *"Everything seems fine in a
   room."*
+- **The cover** (user, 2026-09-20): *"The cover seems to work correctly in the room."* The lid
+  appears, it is pressable, and the question behind it works. **Not itemised**, so it says nothing
+  on its own about the four details that were listed to watch — whether the lid lands on the pixel
+  it should against the Ink/Walls rule, whether the covered glyphs at 0.5 read as *out of reach*
+  rather than murky, whether a drawer vanishing as the lid raises is welcome, and whether the blue
+  says *walls* to anyone who has not been told. None is suspected; none was reported on.
 - **Both ink profiles** — *"That looks good now."* Judged only after the width fault below was fixed;
   every reading of them before that was of a shape a third of the track wide.
 
@@ -3093,13 +3098,6 @@ the user to want the public build to have them — never offer it per change.
   distances, and whether split-the-difference lands where a GM would draw the wall.
 - **The delta's picture** on a real map — its state machine is checked, the drawing is not.
 - **View's Defaults** restoring all five colours — the button has not been pressed.
-- **The cover** — everything about it, since it has never been in a room. Specifically: whether the
-  lid reads as a lid at 52px or as a blue panel; whether the covered tools at 0.5 are *legible but
-  plainly out of reach* or merely murky — **the strip's measured 0.65 does not transfer**, since
-  these sit under something that lightens their ground, and no composite has been computed;
-  whether resting the lid on the Ink/Walls rule lands on the pixel it should; whether a drawer
-  vanishing as the lid raises is welcome or startling; and whether the blue says *walls* to anyone
-  who has not been told.
 - **The three clear buttons** — everything about them, since none has been in a room. Specifically:
   whether the bin reads as *clear this band* from where it sits; whether *Clear ink edits* pressed
   with a brush still in hand takes the unwritten strokes and leaves the brush working; whether one
@@ -3574,11 +3572,10 @@ room's question.
 **Next, in order:**
 
 1. **Dimming** — as above, plus the start-up state below.
-2. **The walls glyph** (user, 2026-09-18): *"leave the glyph alone for the moment
-   while we get the real changes implemented, then we can redesign it."* The complaint is that a
-   *subject* glyph cannot carry a negative *consequence*, and it may dissolve rather than need redrawing,
-   since the cover replaces the per-control mark as the primary signal. §10 decision 7's measurement —
-   18.19px, the size of the glyph beside it — is the other half of the question.
+~~2. **The walls glyph.**~~ **Moot, 2026-09-20** (user), and it dissolved exactly as predicted rather
+   than needing a redraw: it was a mark on a per-control gate, and both went. The complaint it was
+   raised over is worth keeping because it generalises — *a subject glyph cannot carry a negative
+   consequence* — and it is why the cover is a lid rather than a picture of walls.
 
 **Nothing in the rework has been in a room.** It is all surface, which has no coverage by construction,
 so `tsc` and the suite are evidence about the pure halves only. The straighten preview's cost is logged
