@@ -32,6 +32,7 @@ import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
 import { controlsLive } from "./settingsState";
 import { mapExtent, say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
+import { workOn } from "./subject";
 
 const BUTTON_ID = "frame-action";
 const NOTE_ID = "frame-action-note";
@@ -77,6 +78,9 @@ export function renderFrameAction(body: HTMLElement): void {
   applyActionGate(button, note, READY_NOTE, controlsLive());
 
   button.addEventListener("click", () => {
+    // Adding four walls at the map's edge is wall work, and it is the one wall action that is a
+    // button rather than a tool, so nothing else here would say so.
+    workOn("walls");
     void run(button);
   });
 

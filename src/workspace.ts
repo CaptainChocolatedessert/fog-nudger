@@ -464,7 +464,7 @@ async function run(): Promise<void> {
   // Watched before the first load, so a scene whose items arrive after this iframe does not leave
   // the picker empty — the race the panel's version lost on its first outing.
   watchSceneMaps();
-  await loadNominatedMap(true);
+  await loadNominatedMap();
 }
 
 // `OBR.onReady` does not fire outside a room, so opening this page directly in a browser runs the

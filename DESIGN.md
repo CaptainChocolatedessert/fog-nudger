@@ -2598,7 +2598,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**978 tests across 69 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**991 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3017,9 +3017,10 @@ each green under `tsc`, the suite and a build, and **nothing is half-built at an
 
 > **The cover is built and the per-control gate is deleted (2026-09-20).** The lock is one lid over
 > the ink side now, and nothing marks a control, a tool or a group. **Dimming is next**, item 1 of
-> *Next, in order*, and it has a start-up state the original design did not — see the note there.
-> **The walls glyph is closed**: the mark it belonged to no longer exists, so it dissolved rather
-> than needing a redraw. Dimming is the last item of the rework.
+> **The workflow rework is built, all eleven items** (2026-09-20). The cover has been in a room and
+> works; **dimming is the newest and has not**, and what to watch is under *Unconfirmed* below —
+> starting with the two figures, 0.3 for the ink and 0.45 for the walls, which are guesses nothing
+> measured. There is no next item: the lot is empty, which is what it should be between builds.
 
 **The rework has had its first room.** The cover works (2026-09-20, below); the nine items before it
 have still never been looked at, and dimming is not built yet.
@@ -3080,6 +3081,12 @@ the user to want the public build to have them — never offer it per change.
   the preview keeps up, the tolerance slider, the glyph, and undo taking one fill back per click.
 - **The map drawn at the trace's raster, and the released decode** — *"Everything seems fine in a
   room."*
+- **Dimming** — everything about it, since it has never been drawn. The two figures first: **0.3
+  for the ink and 0.45 for the walls are guesses**, and how faint is too faint over a particular
+  map's artwork is the kind of question only a room answers. Then whether opening an edited map
+  already dim reads as helpful or as something being wrong; whether the ink at 0.3 is still enough
+  to judge a wall against; and whether *no drawer at all* on a map that is already chosen feels like
+  a clean start or like something failed to load.
 - **The cover** (user, 2026-09-20): *"The cover seems to work correctly in the room."* The lid
   appears, it is pressable, and the question behind it works. **Not itemised**, so it says nothing
   on its own about the four details that were listed to watch — whether the lid lands on the pixel
@@ -3386,6 +3393,11 @@ a group stopped being a mode.
   centrelines are **cased** — a light stroke two pixels wider under a saturated core — and the casing is
   what makes them read on dark linework at all, so one number would make the walls vanish before the ink
   did. A starting guess, to be moved by eye.
+- **Only two layers move, and the other six fall out rather than being exceptions.** The room fills
+  never dim by the decision above; `paint`, `gaps` and `blob` are drawn only while an ink tool is
+  armed, which *is* the ink side, and `mends` likewise on the wall side, so a tool layer can never
+  **be** the dimmed side; `delta` belongs to the review, which is a question about both halves at
+  once.
 - **No toggle, for now** (user): *"let's see if requiring it feels ok."* **The cost:** once work begins
   one side is always dim, and there is no both-full state. That is what a toggle would buy.
 
@@ -3393,6 +3405,44 @@ a group stopped being a mode.
 opacity was removed outright in September, and automating *which layer is the subject* was rejected
 because that is a judgement and guessing it wrongly is worse than leaving it. The subject is not being
 guessed here — the GM has explicitly picked up a brush or a wall tool.
+
+##### As built — 2026-09-20
+
+**One place applies it: the paint loop in `shell.ts`.** It already walks the painters in registration
+order asking whether each layer is active, and it now sets the canvas alpha on the way past and
+resets it after — so no layer module learns that dimming exists. That is `proposeLayers`' own
+argument one level down: two callers deciding a layer's appearance means the answer depends on which
+ran last. `regions.ts` sets its own alpha internally and restores 1, which would stamp on an outer
+value; harmless, and not a coincidence, since the room fills are the layer that never dims.
+
+**`workspace/subject.ts` is the decision, pure and tested** — which side is the subject, and the
+table saying which side each layer belongs to. **The table is total over `LAYERS` by type**, so a
+ninth layer has to be filed rather than defaulting to *never dims*, which is a layer that stops
+obeying the rule with nothing to say so. **Twelve mutations, twelve caught.**
+
+**Seven places say which side the GM is on**, and the first covers almost everything: arming a tool
+in `apply`, since a brush, a gap, a blob, a wall verb, a mend, a span and a mark are all tools. Then
+a slider release in `settingRows`, the two amounts in `wallAmounts` which draw their own tracks, the
+frame button, the two clear acts in the strip, agreeing to regenerate, and `startOn` at the load.
+
+**Decided while building, and worth checking in a room:**
+
+- **A slider release says its side before the no-op check**, so a handle dragged away and back still
+  counts as working on that half even though it writes nothing.
+- **Agreeing to regenerate moves the subject to the ink**, because unlocking the ink is why anybody
+  presses the lid — and the walls a moment later are a fresh derivation rather than anything of the
+  GM's, so there is nothing on that side left to be working on.
+- **`startOn` is not `workOn`.** It is the document speaking rather than the GM, and it has to move
+  the subject in **both** directions: loading a clean map after an edited one is reachable by
+  nominating a different image, and it has to come back to the ink.
+
+**Two deletions fell out of it.** `advanceTo` went, with the cover guard added to it that morning —
+it was the only route to an open drawer that was not a press, and a drawer is a guess at *which
+controls* where a dim is a statement about *which half of the map*. And `touched` went with it:
+five presses wrote it and `advanceTo` was the only thing that ever read it, so it had become
+**write-only state**, which is the reachability question this project asks of every export one scope
+down. `loadNominatedMap` lost its `opening` flag at the same time, since nothing behaves differently
+on the first call any more.
 
 #### The cover
 
@@ -3569,15 +3619,17 @@ room's question.
     `pipeline` parameter, and Ink is a mixture. `steps.test.ts` reads `PARAMETER_KIND` for both,
     which is all `regeneratesWalls` ever was. **Four mutations, four caught.**
 
-**Next, in order:**
+12. **Dimming**, the last item: the side the GM is not working on turned down, keyed on the side
+    they last touched, with the document choosing where a map opens. *Dimming the side you are not
+    working on* above carries the whole of it.
 
-1. **Dimming** — as above, plus the start-up state below.
-~~2. **The walls glyph.**~~ **Moot, 2026-09-20** (user), and it dissolved exactly as predicted rather
-   than needing a redraw: it was a mark on a per-control gate, and both went. The complaint it was
-   raised over is worth keeping because it generalises — *a subject glyph cannot carry a negative
-   consequence* — and it is why the cover is a lid rather than a picture of walls.
+**Nothing is next — the rework is built.** The walls glyph, which stood here as the last item, is
+**moot** (user, 2026-09-20) and dissolved exactly as predicted rather than needing a redraw: it was
+a mark on a per-control gate, and both went. The complaint it was raised over generalises and is
+worth keeping — *a subject glyph cannot carry a negative consequence* — and it is why the cover is a
+lid rather than a picture of walls.
 
-**Nothing in the rework has been in a room.** It is all surface, which has no coverage by construction,
+**Only the cover has been in a room.** The rest is all surface, which has no coverage by construction,
 so `tsc` and the suite are evidence about the pure halves only. The straighten preview's cost is logged
 past 50ms, which is what would say whether the quadratic crossing sweep needs splitting out of the
 preview — the geometry-only preview with the sweep left to the commit is the change to make if a room

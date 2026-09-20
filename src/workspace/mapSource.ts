@@ -28,21 +28,22 @@
 
 import { devLog } from "../devlog";
 import { resolveTraceMap } from "../map/mapImage";
-import { advanceTo, renderPanel } from "./drawer";
+import { renderPanel } from "./drawer";
 import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
 import { loadMarks } from "./regionMarks";
-import { loadStage } from "./stage";
+import { loadStage, wallsEdited } from "./stage";
+import { startOn } from "./subject";
 import { clearInkProfiles } from "./inkProfiles";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
 /**
  * Load whatever map the scene currently nominates, and take a reading of it.
  *
- * `opening` moves the GM to the ink step when a map is already chosen — the common case, where they
- * came here to look at ink and the map question is already answered. It does nothing once the GM has
- * touched the drawer themselves, and nothing at all when there is no map, which leaves them in
- * the one step that can do something about that.
+ * **It took an `opening` flag until 2026-09-20**, which moved the GM to the Ink step when a map was
+ * already chosen. The start-up advance went; `startOn` lights a side instead of opening a drawer,
+ * and the body below says why. With nothing left that behaves differently on the first call, the
+ * flag went with it — and both call sites now read the same.
  */
 /**
  * Whether a map has been resolved and read, which is what unlocks the rest of the ink mode.
@@ -57,7 +58,7 @@ export function mapChosen(): boolean {
   return chosen;
 }
 
-export async function loadNominatedMap(opening = false): Promise<void> {
+export async function loadNominatedMap(): Promise<void> {
   /*
     The GM's paint is loaded **before** the reading, and that ordering is load-bearing.
 
@@ -112,6 +113,15 @@ export async function loadNominatedMap(opening = false): Promise<void> {
     does replace the first map's; per-map keys are the fix if that ever matters.
   */
   const stage = await loadStage(result.mapId);
+  /*
+    Where the map opens, decided by the document rather than guessed.
+
+    Walls holding something the trace did not derive means the ink half is under the cover, so the
+    walls are the side there is anything to do on; otherwise the ink is where somebody with nothing
+    to lose is going. **After `loadStage`**, which is what makes `wallsEdited` answer about this map
+    rather than the last one.
+  */
+  startOn(wallsEdited());
   if (stage.corrupt) {
     say("the saved wall editing could not be read and has been ignored — see the console", "bad");
   }
@@ -146,19 +156,18 @@ export async function loadNominatedMap(opening = false): Promise<void> {
     the one holding the graph.
   */
   /*
-    Where a GM lands, which start-up decides once and never again.
+    **The start-up advance went on 2026-09-20.** It opened the Ink *parameters* drawer the moment a
+    map loaded, and with it the guard added that morning to stop it doing so under the cover.
 
-    Ink is where the ink mode starts once there is a map, which is the common case: they came here to
-    look at ink and the map question was already answered. With no map they stay on Map, which is the
-    only step open to them.
+    Two reasons, and the second is the better one. It was the only route to an open drawer that was
+    not a press, which is why it needed a guard at all. And a drawer is a guess at **which controls**
+    a GM wants, where the thing start-up actually knows is **which half of the map** they can work
+    on — which `startOn` above says by lighting that side, opening nothing.
 
-    **The stage no longer decides this**, because the mode does. The editor is a page of its own now,
-    so a saved scene does not have to be recognised and redirected to — the GM chose which surface
-    to open before this ran.
+    So a map that is already chosen opens with no drawer and the plain picture, one side lit. The
+    drawer a GM meets with no map is still the picker, which is the initial state and the one case
+    where they have to be shown the way in.
   */
-  // Only the ink mode has anywhere to move on to. The editor opens on its one step already, and
-  // sending it to a step it does not declare would leave the accordion with nothing open.
-  if (opening) advanceTo("ink");
   // The gate has just opened, so every step below Map becomes reachable.
   renderPanel();
 

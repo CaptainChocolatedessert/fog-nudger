@@ -69,6 +69,7 @@ import { bendTop, onGraphScale, spurTop } from "./graphScale";
 import { editableGraph, substituteGraph } from "./regions";
 import { invalidate, say } from "./shell";
 import { saveEditedWalls, wallsEdited } from "./stage";
+import { workOn } from "./subject";
 
 /**
  * The floor both tracks start from, in graph units.
@@ -160,6 +161,9 @@ export function renderWallAmounts(body: HTMLElement): void {
     slider.step = "1";
     slider.value = "0";
     slider.addEventListener("input", () => {
+      // Aiming an amount at the walls in front of you is wall work. These two draw their own tracks
+      // rather than going through `settingRows`, so they say it for themselves.
+      workOn("walls");
       aim(row, Number(slider.value));
     });
 

@@ -41,6 +41,13 @@ import type { Drag, LayerId } from "../steps";
 import { graphExtent, type GraphExtent } from "../trace/graphUnits";
 import { planRaster } from "../map/rasterPlan";
 import { workspaceModalId } from "./workspaceControl";
+import { alphaFor, currentSide, onSubjectChange } from "./subject";
+
+// The subject changing changes what is drawn, so the canvas has to hear about it. Subscribed
+// rather than pulled per frame for the reason `setActiveLayers` is pushed: it moves on a press.
+onSubjectChange(() => {
+  dirty = true;
+});
 
 /**
  * The navigation constants, settled by the probe in a room (`DESIGN.md` §4).
@@ -255,8 +262,24 @@ function draw(): void {
   // Everything else, in the same call shape and therefore in the same place. This is the
   // registration argument in one line: there is no second transform to get wrong.
   const frame: Frame = { context, view, width, height, drawWidth, drawHeight };
+  /*
+    The side that is not the subject is turned down **here**, on the way past each painter, so no
+    layer module ever learns that dimming exists.
+
+    One place, which is the same argument `proposeLayers` is built on: two callers deciding a
+    layer's appearance means the answer depends on which ran last. `subject.ts` holds the decision
+    and it is pure; this reads it and resets to 1 afterwards, because a painter that left the alpha
+    where it found it would dim everything drawn after it.
+
+    **`regions` sets its own alpha internally** and restores 1 when it is done, which would stamp on
+    an outer value — harmless, and not a coincidence: the room fills are the layer that never dims.
+  */
+  const side = currentSide();
   for (const painter of painters) {
-    if (activeLayers.includes(painter.layer)) painter.paint(frame);
+    if (!activeLayers.includes(painter.layer)) continue;
+    context.globalAlpha = alphaFor(painter.layer, side);
+    painter.paint(frame);
+    context.globalAlpha = 1;
   }
 }
 

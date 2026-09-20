@@ -33,6 +33,8 @@ import {
 import { onInkProfiles, profileFor } from "./inkProfiles";
 import { ghostPosition } from "./ghostMark";
 import { recomputeFor } from "./recompute";
+import { sideOfStep, workOn } from "./subject";
+import { stepsOf } from "../steps";
 import {
   appliedSettings,
   controlsLive,
@@ -358,6 +360,15 @@ export function settingRow(control: Control): HTMLElement {
   });
 
   input.addEventListener("change", () => {
+    /*
+      Moving a control is working on the side the group it lives in belongs to — and it is said here
+      rather than when the drawer opens, because reading a number is not working on anything. That
+      distinction is the whole reason the subject is not keyed on the open drawer.
+
+      Before the no-op check below, deliberately: a handle dragged away and back still says what the
+      GM came to do, even though it writes nothing.
+    */
+    for (const step of stepsOf(control.name)) workOn(sideOfStep(step));
     const position = Number(input.value);
     if (position === placed) {
       // Nothing moved. Say so and stop, rather than writing a value the track happens to mean here

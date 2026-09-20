@@ -93,6 +93,7 @@ import { describeError } from "../describeError";
 import { say } from "./shell";
 import { discardWalls, onStageChange, wallsEdited } from "./stage";
 import { showWallDelta } from "./layers/delta";
+import { workOn } from "./subject";
 
 /*
   The per-control gate was here and went on 2026-09-20, when the cover replaced it.
@@ -234,6 +235,14 @@ export async function acceptRegenerate(): Promise<void> {
 
   up = false;
   showWallDelta(false);
+  /*
+    Agreeing moves the subject to the ink, because unlocking the ink is why anybody presses the lid.
+
+    Leaving it on the walls would dim the half the GM has just paid for — and the walls on screen a
+    moment from now are a fresh derivation rather than anything of theirs, so there is nothing on
+    that side left to be working on.
+  */
+  workOn("ink");
   announce();
 }
 

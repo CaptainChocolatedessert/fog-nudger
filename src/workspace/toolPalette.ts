@@ -41,6 +41,7 @@ import {
   toolGroups,
   toolIsInkSide,
   type Drag,
+  type StepId,
   type ToolChoice,
 } from "../steps";
 import {
@@ -56,6 +57,7 @@ import {
 } from "./drawer";
 import { CLEAR_ACTS } from "./clearActions";
 import { COVER_ANCHOR, coverIsUp, reviewFromCover } from "./regenerateGuard";
+import { sideOfStep, workOn } from "./subject";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
 import { putDownMends, setTool as setWallTool, type WallTool } from "./wallEdit";
@@ -119,6 +121,12 @@ function dragFor(tool: Tool): Drag {
 function apply(next: Tool): void {
   tool = next;
   const band = TOOLS.find((choice) => choice.id === next)?.band;
+  /*
+    Arming a tool is the clearest statement there is of which half of the work the GM is on, and it
+    covers almost everything on its own: a brush, a gap, a blob, a wall verb, a mend, a span, a
+    mark. Pan says nothing and is ignored, which is what `workOn(null)` is for.
+  */
+  workOn(band === "ink" ? "ink" : band === "walls" ? "walls" : null);
   if (band === "walls") {
     setWallTool(next as WallTool);
     // The paint tool is put down whenever a wall tool is picked up, or a brush would still be armed
@@ -617,6 +625,9 @@ export function render(): void {
           warning now, which is what that mark was really saying.
         */
         button.addEventListener("click", () => {
+          // Clearing a band's work is working on that band, which is what makes the act a statement
+          // about the subject as much as the tools above it are.
+          workOn(sideOfStep(act.step as StepId));
           void act.run();
         });
         target.append(button);

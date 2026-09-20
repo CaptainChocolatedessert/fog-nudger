@@ -162,7 +162,6 @@ export function drawerAnchor(): string {
 onRegenerateReview(() => {
   if (reviewIsUp()) {
     drawer = { kind: "review" };
-    touched = true;
   } else if (showingReview()) {
     /*
       Answered, so the drawer closes.
@@ -203,7 +202,6 @@ onStageChange(() => {
     (drawer?.kind === "tool" && toolIsInkSide(drawer.tool));
   if (!covered) return;
   drawer = null;
-  touched = true;
   renderPanel();
 });
 
@@ -226,7 +224,6 @@ function leaveReview(): void {
 export function openLayersDrawer(): void {
   leaveReview();
   drawer = showingLayers() ? null : { kind: "layers" };
-  touched = true;
   renderPanel();
 }
 
@@ -246,7 +243,6 @@ export function currentToolDrawer(): string | null {
 export function openToolDrawer(tool: string): void {
   leaveReview();
   drawer = currentToolDrawer() === tool ? null : { kind: "tool", tool };
-  touched = true;
   renderPanel();
 }
 
@@ -286,7 +282,6 @@ export function currentPanel(): StepId | null {
 export function openPanel(id: StepId | null): void {
   leaveReview();
   drawer = id === null ? null : { kind: "params", step: id };
-  touched = true;
   renderPanel();
 }
 
@@ -312,16 +307,6 @@ export function openPanel(id: StepId | null): void {
 function locked(step: Step): boolean {
   return step.id !== "map" && !mapChosen();
 }
-
-/**
- * Whether the GM has opened a step themselves.
- *
- * Start-up may move them on once, from Map to Ink, when the scene turns out to already have a map
- * chosen — which is the common case, and where they were going anyway. After a deliberate click it
- * must never move again: a surface that relocates the GM because something finished loading is a
- * surface that takes the page away mid-sentence.
- */
-let touched = false;
 
 /**
  * Anything a step draws in its body beyond the rows built from its parameters.
@@ -378,36 +363,25 @@ export function registerToolContent(render: Render): void {
   toolContent.push(render);
 }
 
-/**
- * Open a group at start-up, unless the GM has already chosen for themselves.
- *
- * **`touched` covers closing as well as opening**, which is what stops start-up reopening a drawer
- * the GM has just shut. Any press in the strip sets it, and a press that closes is still a choice
- * about what to look at.
- *
- * It **replaces** what is showing rather than adding to it, which is the drawer's doing: there is
- * one slot, so moving the GM on from Map when a map turns out to be chosen is the whole of what this
- * can mean.
- */
-export function advanceTo(id: StepId): void {
-  if (touched || currentPanel() === id) return;
-  /*
-    **Never under the lid**, and this is the one route to a covered drawer that is not a press.
+/*
+  `advanceTo` was here and went on 2026-09-20, with the dimming that replaced it.
 
-    A map that opens with hand edits already in its walls raises the cover before the GM has
-    touched anything at all, and `mapSource` advances to Ink the moment that map loads. Whether the
-    graph or the map arrives first is not ordered, so one way round the cover closes the drawer on
-    the stage change and the other way round the drawer opens after it — live ink sliders behind the
-    thing that exists to be in front of them, with no press having opened it and so nothing obvious
-    to shut it.
+  It opened a group at start-up unless the GM had already chosen for themselves — in practice, the
+  Ink parameters the moment a map loaded. **It was the only route to an open drawer that was not a
+  press**, which is why it needed a guard against opening one under the cover, added that same
+  morning and deleted with it.
 
-    Refusing here answers both orders with one line. The GM lands on the plain map with a lid on the
-    ink side, which is the honest picture of a scene they left half edited.
-  */
-  if (coverIsUp() && stepIsInkSide(id)) return;
-  drawer = { kind: "params", step: id };
-  renderPanel();
-}
+  What replaces it is not another drawer: `subject.ts` lights the half of the map the document says
+  is available, and opening nothing is the honest answer to *which controls does this GM want*,
+  which start-up cannot know.
+
+  **`touched` went with it**, and that is worth noticing rather than tidying past: it recorded
+  whether the GM had opened a step themselves, and it existed so that start-up would not relocate
+  somebody who had already chosen. Five presses wrote it and `advanceTo` was the only thing that
+  ever read it, so once that went it was **write-only state** — five assignments keeping a variable
+  nothing consults in step. That is the reachability question this project asks of every export,
+  one scope down.
+*/
 
 /**
  * A step's rows, in declaration order, with its groups after them under their own headings.
