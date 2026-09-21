@@ -3087,6 +3087,8 @@ the user to want the public build to have them — never offer it per change.
   already dim reads as helpful or as something being wrong; whether the ink at 0.3 is still enough
   to judge a wall against; and whether *no drawer at all* on a map that is already chosen feels like
   a clean start or like something failed to load.
+- **The drawer opening on nothing, and the edited/unedited log line** (user, 2026-09-21): *"That
+  worked."* An already-nominated map opens with no drawer.
 - **The cover, including the start-up case** (user, 2026-09-20 and -21): *"The cover seems to work
   correctly in the room"*, and then *"once I did a true wall edit it, it started correctly with the
   cover up."* The lid appears, it is pressable, the question behind it works, and **opening a map
