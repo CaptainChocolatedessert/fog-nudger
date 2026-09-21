@@ -3862,7 +3862,46 @@ now prints **pieces** and **free ends** on every run, both of which were already
 > a network splitting — which is the louder failure and the rarer one. **Four mutations, four
 > caught.**
 
-#### The actual cause: the stroke filter lost its repair — found 2026-09-21
+#### The automatic healer was welding, and it went on 2026-08-30
+
+**Ruled out first** (user, 2026-09-21): the break repair below is *not* what they remember, because
+it required setting a slider. *"I feel like the ink sliders just worked and didn't create small gaps.
+Not that I could repair them easily when they appeared."* That is a sharper claim and it points at
+something with **no interaction at all**.
+
+There has been exactly one such thing, and its own documentation says what it was:
+
+> *"How far apart two ends of the skeleton may be and still count as one node, in raster pixels …
+> **it is the same operation as closing a gap**, so a radius that reaches across a doorway welds the
+> doorway shut, and a radius longer than a short wall welds that wall into nothing."*
+
+**`weldRadiusPx` defaulted to 3** and applied on every derive. It collapsed any two skeleton chain
+ends within three raster pixels onto one shared node — which is precisely what an opening leaves at
+a corner. Nothing had to be set, and nothing announced it. `5c5acf3`, *Stop the graph moving points,
+and find the slivers instead*, deleted it on **2026-08-30**.
+
+**It was deleted for a measured reason and must not come back.** Welding moves a chain's endpoint to
+a node it was not on, and the moved end is then walked there along an invented lattice path that can
+cross other linework — so the embedding stops being planar and a half-edge traversal stops meaning
+anything. Measured over generated linework: **21 failures in 600 at radius 0, 459 in 600 at the
+radius 3 that shipped.** §4 carries the table and the rule it produced — *deleting is allowed,
+inventing is not* — and the control was **deleted rather than defaulted to zero** for that reason.
+
+**So the capability was real, the memory is accurate, and the removal was right.** What is missing is
+a successor that closes a break *without moving a point*, and one exists: **Mend** does exactly this
+on the graph, planar-safely, with distances seeded per map at 20 and 40 raster pixels. The difference
+is that it is a tool a GM arms, and welding was a number that was simply on.
+
+> **The timing does not line up on its own, and that is worth stating rather than smoothing over.**
+> Welding went on 08-30 and the gaps were reported on 09-18. The reconciliation that fits is that
+> the stroke filter's destructiveness was unexercised in between: the **ink profiles shipped on
+> 09-17 and 09-18**, and their whole purpose is to invite moving that handle. So the filter may have
+> been severing since 08-30 with nobody pushing it far enough to see. **Unverified** — `dev.log` only
+> reaches back to 09-18, so there is no record of where that slider sat before.
+
+#### A second thing went too, and it is not what the user means
+
+##### The stroke filter also lost its repair — 09-05
 
 **The user was right and the two sections below are both too narrow.** They said the complaint was
 not *where* on the slider the cliff sits but that the result *used to be more robust to slider
