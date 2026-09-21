@@ -3862,9 +3862,52 @@ now prints **pieces** and **free ends** on every run, both of which were already
 > a network splitting — which is the louder failure and the rarer one. **Four mutations, four
 > caught.**
 
-**The next step is a room, and it is cheap**: derive the map that shows the gaps and read the free-end
-count, then move the stroke slider one notch and read it again. A break shows as two. Nothing else
-about this can be settled from a desk, and the previous round of desk work is above.
+#### Answered by a room — 2026-09-21: it is the rounding boundary
+
+**The user found the setting it happens at**: on the map where they first saw it, *"for thinnest
+line, a gap opens between 0.85 and 0.9"*, near a named point with similar features nearby. That
+settles it, and the arithmetic is exact.
+
+`radiusForWidth` is `round(width / 2)` where `width = setting × inkWidth`, and that map's ink
+measures **5.7px**:
+
+| setting | width | radius | marks removed under |
+|---|---|---|---|
+| 0.85 | 4.845px | **2** | ~4px |
+| 0.90 | 5.130px | **3** | ~6px |
+
+**One notch of 0.05 moves the threshold from 4px to 6px, across linework that is 5.7px wide.** At
+0.85 the filter cannot touch a wall; at 0.9 the threshold is above the ink width — and **a corner is
+locally narrower than the stroke along its own direction**, so corners go and the rest survives.
+That is the reported symptom exactly: robust, then a few tiny gaps, with no visible change in bulk.
+It is also why a total cannot see it.
+
+**Two consequences worth keeping.**
+
+- **`Math.round` gives more filtering than was asked for.** 0.9 requests 5.13px and gets a threshold
+  of about 6px, which is **1.05 ink widths**. `Math.floor` would guarantee the effective threshold
+  never exceeds the request — at the cost of a weaker control at every setting, and of changing
+  what every scene already tuned does. **A decision, not a fix**, and not taken.
+- **The cliff moves with the measured ink width**, which is how *"it didn't do that before"* can be
+  true with nothing changed. The radius flips 2→3 when `setting × inkWidth ≥ 5`, so the boundary is
+  at `5 / inkWidth`: **0.94 on a 5.3px reading and 0.85 on a 5.9px one**, and that map measures
+  anywhere in 5.3–5.9 across the log depending on blur, k and window. A small change in the reading
+  moves the cliff across a notch and a setting that was safe stops being safe.
+
+**So there is no regression, and the control is working as built.** What is wrong is that it is
+*unreadable*: about ten slider stops per distinct radius, so six nudges do nothing and the seventh
+takes the corners off the map. The stroke profile already draws the distinct outcomes — nine bands
+on that map — beside a track with sixty stops.
+
+> **The fix, when it is taken, is the one this project has already used once**: step the control so
+> consecutive positions are consecutive outcomes, as the gap width is stepped in twos *"because the
+> value is halved and rounded to a closing radius, so consecutive odd and even settings produce the
+> identical repair."* Here the stops would have to be **measured per map**, since the radius depends
+> on the ink width — which is the graph amounts' own pattern, a track whose top is measured when the
+> tool opens.
+
+**Free ends are still the instrument for confirming it**, and now cost nothing: derive at 0.85, read
+the count, derive at 0.9, read it again. The difference is two per broken corner.
 
 **What is still not established**, and it is the honest remainder: nothing here compares the *same
 map at the same setting* across the suspect commits. The decisive test is a room on an older build,
