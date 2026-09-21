@@ -185,6 +185,52 @@ const ICONS: Readonly<Record<string, string>> = {
     in a strip whose glyphs otherwise all draw the map — which is also what makes it read as an act
     rather than as a tool, since it is neither a drawer to open nor a verb to arm.
   */
+  /*
+    **Straighten**: the same wall twice, crooked on the left and straight on the right (user,
+    2026-09-21, chosen from four at strip size). Both wear vertex rings at their ends, because the
+    fitter keeps both ends of what it is handed and drops only what is between — which is the whole
+    of what the tool does.
+
+    **Nothing between the two**, and that is the cost chosen: the eye has to decide they are one wall
+    twice rather than two walls. A dot between them said *one thing* more clearly and was the
+    smallest mark in the band; dimming the crooked side said it best of all and was ruled out
+    because the strip already dims a disabled glyph to 0.65, so the two dimmings would stack.
+  */
+  straighten:
+    '<circle cx="6" cy="3.6" r="1.6" /><circle cx="6" cy="20.4" r="1.6" /><path d="M6 5.2 3.9 9.4 8.1 14.6 6 18.8" />' +
+    '<circle cx="18" cy="3.6" r="1.6" /><circle cx="18" cy="20.4" r="1.6" /><path d="M18 5.2v13.6" />',
+  /*
+    **Prune the dead ends**: a long wall with a stub off it, and a single slash through the stub
+    (user, 2026-09-21).
+
+    **The slash is Dissolve region's own mark**, and it carries the same rule — *where the mark sits
+    says what goes*. Here it sits on the stub alone, because the wall stays.
+
+    **The wall runs off both edges of the box and wears no end rings**, which is what says it is long:
+    a spur is short *relative* to the wall it hangs from, and a limit that takes it leaves the wall
+    standing. The junction ring joins two segments rather than sitting on one, which is how every
+    other glyph in this band is built.
+  */
+  prune:
+    '<path d="M6 1.5v8.8M6 13.7v8.8" /><circle cx="6" cy="12" r="1.7" />' +
+    '<circle cx="19.5" cy="12" r="1.7" /><path d="M7.7 12h10.1" /><path d="M11 16.5 16 7.5" />',
+  /*
+    **Add walls around the map edge**: the map picker's own picture with a vertex ring at each corner
+    (user, 2026-09-21).
+
+    Reusing `map`'s box, horizon and sun is the point — the subject is *this map's edge* — and the
+    four rings are what the button actually builds: four segments as one closed run, so the corners
+    are shared vertices by construction. The box is drawn as four segments stopping at the rings
+    rather than as a rectangle behind them, which is Dissolve region's construction exactly.
+
+    **The cost:** it is the most detailed glyph in the band, carrying a horizon and a sun inside a
+    ringed box at 18px.
+  */
+  frame:
+    '<circle cx="4.2" cy="5.2" r="1.8" /><circle cx="19.8" cy="5.2" r="1.8" />' +
+    '<circle cx="19.8" cy="18.8" r="1.8" /><circle cx="4.2" cy="18.8" r="1.8" />' +
+    '<path d="M6 5.2h12M19.8 7v10M18 18.8H6M4.2 17V7" />' +
+    '<path d="M6.4 15.4 9.8 12l2.6 2.3 2.1-1.8 3.1 2.6" /><circle cx="8.6" cy="9.2" r="1.2" />',
   clear:
     '<path d="M4 7.6h16" /><path d="M9.8 7.6V5.4a1 1 0 0 1 1-1h2.4a1 1 0 0 1 1 1v2.2" />' +
     '<path d="M6.4 7.6l.85 11.8a2 2 0 0 0 2 1.85h5.5a2 2 0 0 0 2-1.85L17.6 7.6" />' +

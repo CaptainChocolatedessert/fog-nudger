@@ -342,6 +342,30 @@ export function registerStepContent(
 }
 
 /**
+ * Whether a group has anything to open, which is what decides if it gets a button in the strip.
+ *
+ * **A group offered where its drawer would be empty is a control that lies**, which is this
+ * surface's own rule about a press that does nothing. Walls is the case: its two amounts became
+ * tools with drawers of their own and its one button became an act, so nothing is left to show and
+ * its opener goes.
+ *
+ * Asked of the same three things the body draws — the ungrouped rows, the heading groups, and
+ * whatever registered itself — rather than of `stepParameters`, which counts a tool group's
+ * controls and would keep the opener for a drawer that draws none of them.
+ */
+export function stepHasDrawer(id: StepId): boolean {
+  const step = STEPS.find((candidate) => candidate.id === id);
+  if (!step) return false;
+  const registered = content.get(id);
+  return (
+    ungroupedControls(step).length > 0 ||
+    headingGroups(step).length > 0 ||
+    registered?.top !== undefined ||
+    registered?.bottom !== undefined
+  );
+}
+
+/**
  * Anything drawn into the **pinned head**, which does not scroll and cannot be collapsed.
  *
  * ## Why a control lives here rather than in a step — user, 2026-09-09
@@ -450,7 +474,20 @@ function stepBody(step: Step): HTMLElement {
   */
   content.get(step.id)?.bottom?.(body);
 
-  if (stepParameters(step.id).length > 0) body.append(defaultsButton(step));
+  /*
+    **Defaults follows what this body actually drew**, not what the step declares.
+
+    It was `stepParameters(step.id).length > 0`, and Walls made that wrong: its two parameters are
+    the Mend tool's, so they are drawn in *Mend's* drawer and never here — leaving a Defaults button
+    in a drawer holding none of what it resets. A room called it orphaned (2026-09-21) and it was.
+
+    The rows this body draws are the ungrouped controls plus the heading groups; a tool group's
+    controls belong to the tool's own drawer, which draws its own. So the question is what is
+    on screen here, and the answer is the same list the loop above walked.
+  */
+  if (ungroupedControls(step).length > 0 || headingGroups(step).length > 0) {
+    body.append(defaultsButton(step));
+  }
 
   return body;
 }

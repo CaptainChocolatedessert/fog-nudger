@@ -28,67 +28,62 @@
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { addFrameWalls } from "../trace/frameWalls";
-import { actionBlocked, applyActionGate, setActionGate } from "./actionGate";
-import { controlsLive } from "./settingsState";
 import { mapExtent, say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
 import { workOn } from "./subject";
+import type { BandAct } from "./bandActs";
 
-const BUTTON_ID = "frame-action";
-const NOTE_ID = "frame-action-note";
 
-/*
-  Empty, and that is the whole of its ready state.
-
-  The name says the consequence, which is what the four-sentence note it replaced was for. What is
-  left for this element to carry is the blocked case, where there is something to say that no label
-  can: that there is no graph to add walls to yet.
-*/
-const READY_NOTE = "";
-
-export function renderFrameAction(body: HTMLElement): void {
-  const actions = document.createElement("div");
-  actions.className = "step-actions";
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "chip";
+/**
+ * **An act in the strip, since 2026-09-21**, at the foot of the Walls band above the clear bin.
+ *
+ * It was a chip in the Walls group's drawer — and that drawer is gone, because the two amounts that
+ * shared it became tools and this was the only other thing in it. An **act** is the strip's third
+ * kind of button: it opens nothing and arms nothing, so it never draws pressed.
+ *
+ * **The second act in the column, and the first that adds rather than destroys.** The bin was the
+ * only one, so "an act is a destructive press" was a coincidence of there being one example. This
+ * one asks nothing before it runs, which it never needed to: it adds walls, so there is nothing to
+ * lose, and undo takes it back like any other hand edit.
+ *
+ * **The gate is a graph and nothing else** — it is the one wall action with no limit of its own,
+ * since there is no ceiling on what adding takes and nothing to set before pressing it.
+ */
+export const FRAME_ACT: BandAct = {
+  step: "walls",
   /*
-    The name says the consequence, so the four-sentence note that used to say it is gone.
+    The name says the consequence, which is what the four-sentence note it replaced was for.
 
-    It was called "Wall the map's edge", which describes the mechanism — four walls at the extent —
-    and left the point to a paragraph: those walls turn the outside into a region, so the party can
-    be out there and the GM can reveal it. Without them the outside is enclosed by nothing and stays
-    fogged for ever. Naming the outcome carries that in three words.
+    It was *Wall the map's edge*, which describes the mechanism — four walls at the extent — and left
+    the point to a paragraph. It was then *Make the outside a room*, which named one reason a GM
+    might press it and was doubted in two rooms, because the exterior is not something they
+    necessarily think of as a room. The lesson is narrower than "name the point": a point that is
+    only one of several is a guess at intent.
   */
-  button.id = BUTTON_ID;
-  button.textContent = "Add walls around the map edge";
+  label: "Add walls around the map edge",
+  glyph: "frame",
+  gate: () => wallGraph() !== null,
+  run: frameTheMapEdge,
+};
 
-  const note = document.createElement("p");
-  note.id = NOTE_ID;
-  note.className = "sub";
+/**
+ * One press at a time.
+ *
+ * The chip disabled itself while the write was in flight and re-enabled through the gate. A strip
+ * button cannot: the column is rebuilt on every tool change, so the element that disabled itself is
+ * gone by the time the write returns. A module flag is what the clear acts already use for this.
+ */
+let busy = false;
 
-  /*
-    No limit of its own, which is why `actionBlocked` takes none here.
-
-    It is the only one of the three that **adds** rather than removes, so there is no ceiling on what
-    it would take and nothing to set before pressing it. A graph is the whole of what it needs.
-  */
-  setActionGate(button, () => actionBlocked(wallGraph() !== null));
-  applyActionGate(button, note, READY_NOTE, controlsLive());
-
-  button.addEventListener("click", () => {
-    // Adding four walls at the map's edge is wall work, and it is the one wall action that is a
-    // button rather than a tool, so nothing else here would say so.
-    workOn("walls");
-    void run(button);
-  });
-
-  actions.append(button);
-  body.append(actions, note);
+async function frameTheMapEdge(): Promise<void> {
+  if (busy) return;
+  // Adding four walls at the map's edge is wall work, and it is the one wall action that is not a
+  // tool, so nothing else here would say which side the GM is on.
+  workOn("walls");
+  await run();
 }
 
-async function run(button: HTMLButtonElement): Promise<void> {
+async function run(): Promise<void> {
   const graph = wallGraph();
   if (!graph) {
     say("no walls saved for this map yet", "bad");
@@ -111,7 +106,7 @@ async function run(button: HTMLButtonElement): Promise<void> {
     return;
   }
 
-  button.disabled = true;
+  busy = true;
   say("walling the edge…", "working");
   try {
     await saveEditedWalls(framed.graph, "walling the map's edge");
@@ -131,17 +126,12 @@ async function run(button: HTMLButtonElement): Promise<void> {
     devLog("error", "workspace: framing failed to save", detail);
     console.error("Fog Nudger — framing failed to save", error);
   } finally {
-    // Through the gate, not straight to `disabled`. Framing a graph that was already framed
-    // leaves it unchanged, and re-enabling blind would also re-enable it with no graph at all.
-    refreshFrameAction();
+    busy = false;
   }
 }
 
-/** Re-ask the gate, for when a graph arrives. */
-export function refreshFrameAction(): void {
-  const button = document.getElementById(BUTTON_ID);
-  const note = document.getElementById(NOTE_ID);
-  if (button instanceof HTMLButtonElement && note) {
-    applyActionGate(button, note, READY_NOTE, controlsLive());
-  }
-}
+/*
+  `refreshFrameAction` was here and went with the chip. It re-asked the action gate when a graph
+  arrived, by looking the button up by id. The strip redraws on `onStageChange` and asks `gate()` on
+  the way past, so the answer is recomputed at the moment it is drawn rather than pushed at it.
+*/

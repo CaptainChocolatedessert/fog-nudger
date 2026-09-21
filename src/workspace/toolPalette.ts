@@ -54,8 +54,9 @@ import {
   setDrawerTop,
   showingLayers,
   showingReview,
+  stepHasDrawer,
 } from "./drawer";
-import { CLEAR_ACTS } from "./clearActions";
+import { BAND_ACTS } from "./bandActs";
 import { COVER_ANCHOR, coverIsUp, reviewFromCover } from "./regenerateGuard";
 import { sideOfStep, workOn } from "./subject";
 import { requestPaintMode, setPaintTool } from "./paintTool";
@@ -547,6 +548,14 @@ export function render(): void {
         not exist is a control that lies. Map is the one that is never gated, because choosing a map
         is how the gate opens.
       */
+      /*
+        **No opener where there is nothing to open** (2026-09-21). Walls reached that state when its
+        two amounts became tools with drawers of their own and its one button became an act: the
+        group still declares two parameters, but both are the Mend tool's and are drawn in Mend's
+        drawer, so pressing Walls would have opened an empty slot. A button offered where its press
+        does nothing is a control that lies.
+      */
+      if (stepHasDrawer(step.id)) {
       const shut = step.id !== "map" && !mapChosen();
       const opener = document.createElement("button");
       opener.type = "button";
@@ -576,6 +585,7 @@ export function render(): void {
         openPanel(wasOpen ? null : step.id);
       });
       target.append(opener);
+      }
 
       /*
         View's second button: the switches.
@@ -608,16 +618,15 @@ export function render(): void {
         answered at the press, because knowing it means walking the raster and this redraws on every
         tool change; `clearActions.ts` carries that trade.
       */
-      const act = CLEAR_ACTS.find((candidate) => candidate.step === step.id);
-      if (act) {
+      for (const act of BAND_ACTS.filter((candidate) => candidate.step === step.id)) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "tool act";
-        const bin = toolIcon("clear");
-        if (bin) button.append(bin);
+        const glyph = toolIcon(act.glyph);
+        if (glyph) button.append(glyph);
         button.title = act.label;
         button.setAttribute("aria-label", act.label);
-        button.disabled = act.step === "ink" ? !mapChosen() : editableGraph() === null;
+        button.disabled = !act.gate();
         /*
           **No mark, since 2026-09-20.** *Clear ink edits* wore one and raised the question instead
           of clearing, because it writes to the reading's inputs. It is at the foot of the Ink band,
@@ -625,7 +634,7 @@ export function render(): void {
           warning now, which is what that mark was really saying.
         */
         button.addEventListener("click", () => {
-          // Clearing a band's work is working on that band, which is what makes the act a statement
+          // Pressing an act is working on the band it sits in, which is what makes it a statement
           // about the subject as much as the tools above it are.
           workOn(sideOfStep(act.step as StepId));
           void act.run();

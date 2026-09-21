@@ -69,6 +69,9 @@ import { anyPaintToClear, replaceBothLayers, snapshotBothLayers } from "./paintS
 import { requestRecompose } from "./reading";
 import { clearWallEdits as clearStoredWalls, wallsEdited } from "./stage";
 import { invalidate, say } from "./shell";
+import { mapChosen } from "./mapSource";
+import { editableGraph } from "./regions";
+import type { BandAct } from "./bandActs";
 import { pushUndo, type Restore } from "./undoHistory";
 
 /**
@@ -260,16 +263,21 @@ export async function clearAllMarks(): Promise<void> {
  * is stated once and read by the thing that draws it. `step` is the group it sits under, which is
  * also the caption that says which subject the shared bin glyph means.
  */
-export interface ClearAct {
-  /** The step whose band this sits at the foot of. */
-  readonly step: string;
-  readonly label: string;
-  readonly run: () => Promise<void>;
-}
-
-export const CLEAR_ACTS: readonly ClearAct[] = [
-  { step: "ink", label: "Clear ink edits", run: clearInkEdits },
-  { step: "walls", label: "Clear wall edits", run: clearWallEdits },
+export const CLEAR_ACTS: readonly BandAct[] = [
+  {
+    step: "ink",
+    label: "Clear ink edits",
+    glyph: "clear",
+    gate: mapChosen,
+    run: clearInkEdits,
+  },
+  {
+    step: "walls",
+    label: "Clear wall edits",
+    glyph: "clear",
+    gate: () => editableGraph() !== null,
+    run: clearWallEdits,
+  },
 ];
 
 /*

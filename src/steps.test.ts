@@ -362,12 +362,56 @@ describe("a step's groups", () => {
     }
   });
 
-  it("only lets `pan` mean a plain pan", () => {
-    // Any other tool taking `pan` would be a button that changes nothing about a press — the same
-    // defect the old per-step assertion guarded, one level down.
-    for (const tool of TOOLS) {
-      if (tool.id === "pan") continue;
-      expect(tool.drag, tool.id).not.toBe("pan");
+  it("lets only Pan and the two amounts bind a plain pan, and names them", () => {
+    /*
+      A verb taking `pan` is a button that changes nothing about a press, which is the defect this
+      guards. **The two amounts are exactly that and are correct** (2026-09-21): neither takes a
+      gesture, because an amount applies to the walls in front of the GM rather than to a point they
+      aim at. What arming one is *for* is the drawer it opens, where the handle lives — so a plain
+      drag must go on panning while one is in hand.
+
+      **Named rather than counted**, which is this suite's rule wherever an exception is allowed: a
+      cap would let a third through, and naming them means adding one fails here and has to be
+      argued for. The argument to beat is that the tool does something on a press; if it does, it
+      wants a drag of its own and not this list.
+    */
+    const panning = TOOLS.filter((tool) => tool.drag === "pan").map((tool) => tool.id);
+    expect([...panning].sort()).toEqual(["pan", "prune", "straighten"]);
+  });
+
+  /*
+    **Six mutations, six caught** across these two: either amount losing its group, an amount gaining
+    a stored parameter, an amount binding a gesture, an ordinary verb quietly starting to pan, and an
+    amount losing its hint.
+  */
+  it("gives the two amounts a drawer, or arming one clears the drawer instead of filling it", () => {
+    /*
+      **The contract that decides whether a control EXISTS**, and the one part of this a desk can
+      check. `toolHasControls` asks the step declarations alone, so a tool with no group gets no
+      drawer — and for these two that is not a misplaced slider but an unreachable one: the press
+      that should open the handle would clear the drawer instead. No error, no failing test, a
+      control that is simply not there.
+
+      That is `elementIds.test.ts`'s failure one layer up, and *Suppress region* is the precedent —
+      it declares a group holding no parameters purely so its one button has somewhere to be drawn.
+
+      The list is asserted non-empty first, or a `toolGroups` returning nothing satisfies this by
+      having nothing to check.
+    */
+    const walls = STEPS.find((step) => step.id === "walls");
+    expect(walls, "no Walls step").toBeDefined();
+    const groups = toolGroups(walls!);
+    expect(groups.length).toBeGreaterThan(0);
+    const withDrawers = groups.map((group) => group.tool);
+    for (const amount of ["straighten", "prune"]) {
+      expect(withDrawers, `${amount} has no group, so it has no drawer`).toContain(amount);
+    }
+    // And no parameters, because the handle is not a setting: nothing is stored and it starts at
+    // zero on every opening. A parameter here would be a stored value governing the graph for ever.
+    for (const group of groups) {
+      if (group.tool === "straighten" || group.tool === "prune") {
+        expect(group.parameters, group.tool).toEqual([]);
+      }
     }
   });
 

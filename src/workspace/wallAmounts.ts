@@ -53,7 +53,7 @@ import { describeError } from "../describeError";
 import { fromSlider, SLIDER_STEPS, type ScaleLimits } from "../sliderScale";
 import { simplifyWalls } from "../trace/planarOps";
 import { pruneWallGraph, type WallGraph } from "../trace/wallGraph";
-import { onStepChange } from "./drawer";
+import { currentToolDrawer, onStepChange } from "./drawer";
 import {
   NO_LATCH,
   aimLatch,
@@ -140,8 +140,17 @@ export function pendingPrune(): { base: WallGraph; limit: number } | null {
   return { base: latch.base, limit: latch.prune };
 }
 
-export function renderWallAmounts(body: HTMLElement): void {
-  for (const row of ROWS) {
+export function renderAmountControls(body: HTMLElement): void {
+  /*
+    **One row, belonging to the tool in hand** (user, 2026-09-21). Both used to be drawn together at
+    the foot of the Walls group's drawer; they are two tools now, each opening its own.
+
+    Asked of the drawer rather than of the armed tool, which is the same question by the shorter
+    route: the drawer shows a tool's controls exactly while that tool is in hand, and this is
+    registered as tool content so it is only called at all when one of the two is showing.
+  */
+  const armed = ROWS.filter((row) => row.which === currentToolDrawer());
+  for (const row of armed) {
     const wrapper = document.createElement("div");
     wrapper.className = "setting";
 
@@ -249,23 +258,41 @@ function drawPreview(): void {
 }
 
 /**
- * Pin on the way into Walls, commit on the way out.
+ * Which of the two the latch is pinned for, or `null` for neither.
  *
- * Every departure commits, including one caused by another press stealing the drawer — which is safe
- * because untouched handles are zero and commit nothing. That is the paint tools' own rule: leaving any
- * other way saves rather than warns.
+ * **Held rather than derived from the drawer**, because the commit has to know that a latch *was*
+ * open after the drawer has already moved on. Reading the drawer at that moment answers where the
+ * GM is going, not where they have been.
  */
-onStepChange((step) => {
-  if (step === "walls") {
-    latch = openLatch(editableGraph(), !wallsEdited());
-    for (const row of ROWS) {
-      const slider = document.getElementById(row.sliderId);
-      if (slider instanceof HTMLInputElement) slider.value = "0";
-    }
-    refresh();
-    return;
-  }
-  void commit();
+let pinnedFor: WallAmount | null = null;
+
+/**
+ * Pin when one of the two is armed, commit when it is put down.
+ *
+ * **The drawer is the event, exactly as it was** — what changed on 2026-09-21 is which drawer. It
+ * was the Walls group's, opened by its settings button; it is each tool's own now, opened by arming
+ * the tool. The latch's rule is untouched: the handle previews against a fixed base, so dragging
+ * back and forth inside one opening is free, and closing applies the result once as one undo entry.
+ *
+ * Every departure commits, including one caused by another press stealing the drawer — safe because
+ * an untouched handle is zero and commits nothing. That is the paint tools' own rule: leaving any
+ * other way saves rather than warns.
+ *
+ * **Arming the other one commits the first**, which is the cost of them being two tools rather than
+ * two sliders in one drawer. They shared a pinned base and a single undo entry, and with both aimed
+ * the straightened result was substituted and Prune's red marks went with it; that is gone.
+ */
+onStepChange(() => {
+  const showing = currentToolDrawer();
+  const mine = showing === "prune" || showing === "straighten" ? showing : null;
+  if (mine === pinnedFor) return;
+  // Synchronous through the part that matters: `commit` reads the latch and clears it before its
+  // first await, so re-pinning straight afterwards cannot race the save it started.
+  if (pinnedFor) void commit();
+  pinnedFor = mine;
+  if (!mine) return;
+  latch = openLatch(editableGraph(), !wallsEdited());
+  refresh();
 });
 
 /** A derive or an undo replaces the document, which voids a latch pinned to the old one. */
@@ -339,9 +366,14 @@ function refresh(): void {
   }
   const pending = previewOf(latch);
   // Says what closing does, because the commit is caused by leaving rather than by a button.
+  /*
+    The resting sentence is the armed row's alone. It joined both with a space while the two shared a
+    drawer, which read as one instruction about one control the moment they were split apart.
+  */
+  const armed = ROWS.find((row) => row.which === currentToolDrawer());
   note.textContent = pending
     ? "Applied when this drawer closes. One step of undo takes it back."
-    : ROWS.map((row) => row.resting).join(" ");
+    : (armed?.resting ?? "");
 }
 
 /** Re-ask the readouts when a graph arrives. */

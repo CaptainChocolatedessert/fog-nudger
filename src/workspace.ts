@@ -60,8 +60,7 @@ import { registerDeltaLayer } from "./workspace/layers/delta";
 import { registerRegenerateReview } from "./workspace/regenerateGuard";
 import { registerRegionsLayer } from "./workspace/layers/regions";
 import { registerDefaultSeeds } from "./workspace/seedDefaults";
-import { refreshFrameAction, renderFrameAction } from "./workspace/frameAction";
-import { refreshWallAmounts, renderWallAmounts } from "./workspace/wallAmounts";
+import { refreshWallAmounts, renderAmountControls } from "./workspace/wallAmounts";
 import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/colourRows";
 import { loadNominatedMap } from "./workspace/mapSource";
@@ -273,6 +272,14 @@ registerToolContent(renderMendControls);
 */
 registerToolContent(renderMarkControls);
 /*
+  And the two amounts, one slider each, in the drawer that arming the tool opens.
+
+  **Registered as tool content since 2026-09-21**, which is what makes the latch work unchanged:
+  it pins when the drawer opens and applies when it closes, and those are the same two events they
+  always were — arming the tool rather than pressing the group's settings button.
+*/
+registerToolContent(renderAmountControls);
+/*
   The rail redraws when the tool changes, which it did not until now.
 
   `onToolChange` was exported when the picker moved to the strip and **nothing ever subscribed to
@@ -297,7 +304,6 @@ onToolChange(() => renderPanel());
   `onStageChange` rebuilds the whole rail.
 */
 onSettingCommitted(() => {
-  refreshFrameAction();
   refreshWallAmounts();
 });
 /*
@@ -347,8 +353,17 @@ registerStepContent("view", renderSwatches, "bottom");
   the graph rather than in a group of its own: all three are things you do to the walls, and this
   is the one that *adds*, which is why it is a deliberate press where they are live.
 */
-registerStepContent("walls", renderWallAmounts, "bottom");
-registerStepContent("walls", renderFrameAction, "bottom");
+/*
+  The Walls group registers nothing, and so has no drawer and no button in the strip (2026-09-21).
+
+  **Two registrations collided here, and the second silently won.** `renderWallAmounts` and
+  `renderFrameAction` were both filed under the same step and the same slot, and the registry keeps
+  one render per slot — so the amounts were never drawn from the day they were built, which is why
+  they had never been in a room. Keys are contracts, and a map that overwrites one says nothing.
+
+  Both moved out rather than being made to share: the amounts are tools with drawers of their own,
+  and the frame button is an act in the strip.
+*/
 
 renderPushAction();
 

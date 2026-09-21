@@ -240,6 +240,39 @@ export const TOOLS: readonly ToolChoice[] = [
     `trace/inkFlood.ts` all go together.
   */
   { id: "blob", label: "Suppress blob", band: "ink", drag: "brush", hint: "" },
+  /*
+    **The two amounts are tools, since 2026-09-21** (user): *"They should be distinct tools in the
+    rail."* They were two sliders at the foot of the Walls group's drawer, and that drawer is gone.
+
+    `pan`, and that is the whole of what makes them unlike every other verb here: **neither takes a
+    gesture.** An amount applies to the walls in front of the GM rather than to a point they aim at,
+    so a plain drag still pans while one is in hand. What arming them is *for* is the drawer they
+    open, which is where the handle lives — and the drawer opening and closing is exactly the pin
+    and the commit the latch already keyed on, so moving them here changed the event's name and not
+    its shape.
+
+    **They sit at the head of the band, above the verbs**, because they are what a GM does to a
+    freshly derived graph before they start correcting it by hand.
+
+    **The cost, stated:** each holds its own latch now, so arming one commits the other. Both used to
+    share one pinned base and one undo entry, and with both aimed the straightened result was
+    substituted and Prune's red marks went with it. That interaction is gone; two presses, two
+    entries, and never both aimed at once.
+  */
+  {
+    id: "straighten",
+    label: "Straighten",
+    band: "walls",
+    drag: "pan",
+    hint: "Drag the amount to fit the walls you have. Closing this applies it, as one step of undo.",
+  },
+  {
+    id: "prune",
+    label: "Prune the dead ends",
+    band: "walls",
+    drag: "pan",
+    hint: "Drag the amount to remove dead ends up to a length. What would go is drawn in red.",
+  },
   {
     id: "move",
     label: "Move",
@@ -598,6 +631,31 @@ export const STEPS: readonly Step[] = [
       {
         tool: "suppressRegion",
         title: "Suppress region",
+        blurb: "",
+        parameters: [],
+      },
+      /*
+        The two amounts, which declare no parameter and still want a drawer.
+
+        **Their handle is not a setting**, which is why `parameters` is empty: nothing is stored, the
+        slider starts at zero on every opening, and what it aims at is the graph in front of the GM.
+        `wallAmounts.ts` draws the row into the slot these open, exactly as *Suppress region*'s one
+        button is drawn into its own.
+
+        Declared here rather than listed in the module that draws them, for the reason that entry
+        already carries: two lists of "which tools have a drawer" are one fact told twice, and
+        without a group the press that should open the drawer **clears** it instead — no error, no
+        failing test, a control that is simply not there. `steps.test.ts` pins both.
+      */
+      {
+        tool: "straighten",
+        title: "Straighten",
+        blurb: "",
+        parameters: [],
+      },
+      {
+        tool: "prune",
+        title: "Prune the dead ends",
         blurb: "",
         parameters: [],
       },

@@ -2598,7 +2598,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**991 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**992 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2681,6 +2681,15 @@ invisible. It costs almost nothing to keep.
   is a control that silently is not there. `elementIds.test.ts` checks every literal `getElementById`
   against the page that hosts it; a selector built from a template is still unguarded, and the answer
   there is structural — do not reach across a module boundary with one.
+
+  **A registry that keeps one entry per slot loses the other without a word** (2026-09-21).
+  `renderWallAmounts` and `renderFrameAction` were both filed under the Walls step's `bottom` slot,
+  and `content.set(id, { ...content.get(id), [place]: render })` keeps the last — so **Straighten and
+  Prune were never drawn at all**, from the day pruning joined straightening until a room noticed the
+  drawer looked thin. The two registrations are three days and two commits apart, so nothing about
+  either line looks wrong on its own. Same lesson as the keyed table below, one scope out: **a write
+  that silently replaces is a contract with no reader**, and the fix is to make the collision
+  impossible rather than to report it.
 
   **A declaration that decides whether a control EXISTS is a contract too** (2026-09-20). *Suppress
   region*'s drawer opens because a group in `steps.ts` names the tool, and the module drawing the
@@ -3081,6 +3090,10 @@ the user to want the public build to have them — never offer it per change.
   the preview keeps up, the tolerance slider, the glyph, and undo taking one fill back per click.
 - **The map drawn at the trace's raster, and the released decode** — *"Everything seems fine in a
   room."*
+- **Straighten and Prune** — everything, since neither has ever been drawn: whether the amounts do
+  what their names say, whether the latch's pin-and-apply reads as intended when the event is
+  arming and disarming a tool, whether losing the combined commit is felt, and whether ten buttons
+  in one band is too many. The frame act and the three new glyphs go with them.
 - **Dimming** — everything about it, since it has never been drawn. The two figures first: **0.3
   for the ink and 0.45 for the walls are guesses**, and how faint is too faint over a particular
   map's artwork is the kind of question only a room answers. Then whether opening an edited map
@@ -3396,6 +3409,58 @@ twice. `steps.test.ts` pins it, because without the group the button is not misp
 **unreachable**, with the press that should open the drawer clearing it instead — no error, no
 failing test, a control that is simply not there. **What changes for a GM:** arming *Suppress region*
 now opens a drawer, where it used to clear one, exactly as Mend and the brushes do.
+
+#### Straighten and Prune became tools, and the Walls drawer went — 2026-09-21
+
+**They had never been drawn at all**, and that is the finding rather than the change. `wallAmounts`
+and the frame button were both registered into the Walls group's **bottom** slot, and the registry
+keeps one render per slot — so the second silently displaced the first from the day pruning joined
+straightening. Nothing said so: no error, no failing test, a drawer that simply looked thin. It is
+the failure §8 already names one level down, *keys are contracts, and a test that reads values
+cannot see them*, and it is why neither amount had ever been in a room.
+
+**They are two tools now** (user, 2026-09-21): *"They should be distinct tools in the rail."* Each
+sits in the Walls band with a drawer of its own holding its one slider.
+
+- **The latch is untouched, only the event is renamed.** It pinned when the Walls group's drawer
+  opened and applied when it closed; it pins when the tool's drawer opens and applies when that
+  closes. Arming the tool *is* opening the drawer.
+- **`drag: "pan"`, which no other verb may take.** Neither takes a gesture — an amount applies to
+  the walls in front of the GM rather than to a point they aim at — so a plain drag goes on panning
+  while one is in hand. `steps.test.ts` names the two as the exception rather than counting them,
+  because a cap would let a third through.
+- **No parameters, and a group each so the drawer exists.** The handle is not a setting: nothing is
+  stored and it starts at zero on every opening. The group is *Suppress region*'s precedent —
+  without one the press that should open the handle clears the drawer instead.
+
+> **The cost, stated:** each holds its own latch, so arming one commits the other. They shared a
+> pinned base and a single undo entry, and with both aimed the straightened result was substituted
+> while Prune's red marks went with it. **That interaction is gone** — two presses, two entries, and
+> never both aimed at once.
+
+**The frame button became the second act in the strip**, at the foot of Walls above the clear bin,
+and it is **the first act that adds rather than destroys** — so "an act is a destructive press" turns
+out to have been a coincidence of there being one example. It asks nothing before it runs, which it
+never needed to. `bandActs.ts` states the order once, adds before destroys, so the bin is the last
+thing in every band and the foot of the column means the same wherever the eye lands.
+
+**And the Walls group lost its opener**, because nothing is left to open: a button offered where its
+press does nothing is a control that lies. `stepHasDrawer` asks the three things the body actually
+draws rather than `stepParameters`, which counts a *tool* group's controls — the same confusion that
+made Walls' **Defaults button orphaned**, resetting the two Mend settings from a drawer holding
+neither. Defaults now follows what the body drew.
+
+**The glyphs, chosen at strip size from ten candidates** (user, 2026-09-21). *Straighten* is the same
+wall twice, crooked then straight, with vertex rings at both ends because the fitter keeps both ends
+and drops what is between; **nothing sits between the two**, and a dot that said *one thing, twice*
+was the smallest mark in the band while dimming the crooked side was ruled out because the strip
+already dims a disabled glyph to 0.65 and the two would stack. *Prune* is a long wall — running off
+both edges, wearing no end rings, which is what says it is long — with a stub and a single slash
+through the stub, borrowing Dissolve region's rule that **where the mark sits says what goes**.
+*Add walls around the map edge* is the map picker's own picture with a vertex ring at each corner,
+which is what the button builds: four segments as one closed run, corners shared by construction.
+
+**The band is ten buttons now** and has no settings opener, which is the first group without one.
 
 #### Dimming the side you are not working on
 
