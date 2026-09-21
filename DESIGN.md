@@ -2783,6 +2783,40 @@ invisible. It costs almost nothing to keep.
 - **8-connectivity means single-pixel junctions barely exist.** Every pixel beside a junction is
   itself degree 3+, so a tee traces to eight chains, not three.
 
+### Search the whole history of a thing, not the window you suspect
+
+**Twice in one session the answer was outside the window chosen** (2026-09-21). A room reported that
+the ink filter had stopped being robust; the report was dated 09-18, so the search ran 09-16 to
+09-18, found nothing behavioural, and concluded *no regression*. That was **wrong in scope and
+stated too confidently**. The user pushed back — *"that bit of code must be pretty old, can you check
+if there have been changes to it or things immediately downstream"* — and the full history found two
+removals that mattered, on **08-30** and **09-05**, both outside every window searched.
+
+**So when a report says something changed, run `git log --follow` on the thing and on everything
+immediately downstream of it, with no date bound at all**, then narrow. `git log -S` on the exact
+expression is the sharpest form, and it is cheap. The counter-instinct — that the report's date
+bounds the change — is wrong whenever a capability is *removed*: nobody notices the day it goes, they
+notice the day they next need it.
+
+### A probe settles a mechanism faster than reasoning, and it will correct the variable you named
+
+Three throwaway probes answered in minutes what an afternoon of morphology-in-the-head had not
+(2026-09-21), and one of them **overturned the premise**: a missed gap was reported as *staggered by
+a pixel*, that was taken as the variable, and a probe sweeping stagger against gap width showed
+stagger changed nothing at all — the gap simply exceeded `2 * radius`. The real variable was the
+**angle** of the wall, which no amount of thinking about the report would have produced.
+
+**Write the probe before the explanation.** It is a throwaway test that reports by throwing, it costs
+one file, and it is deleted the moment it has answered.
+
+### An oracle follows the implementation, and changing one means revisiting the other
+
+When the severance bridge stopped being a symmetric closing, the oracle that checked it was still a
+symmetric closing — and it agreed with the old behaviour, not the new. **An oracle is only
+independent in its *method*, never in its *specification*.** Changing what a function is supposed to
+do means rewriting the oracle to the new specification, and the mutation run is what proves the
+rewrite still bites.
+
 ### Never look at map images
 
 This is the big one for an image-processing project. **Pipeline fixtures are generated in code** —
@@ -3087,182 +3121,55 @@ next section.
 
 ### Where to pick this up
 
-**A rework of the workflow is in progress, designed in full and part built.** *The workflow rework*
-below carries the whole design and a stage-by-stage account of what has landed — nine items built,
-each green under `tsc`, the suite and a build, and **nothing is half-built at any commit.**
+**Do this first: put the automatic prune back in the derive.** It is a regression with a safe fix
+and it is what a room is looking at right now (user, 2026-09-21: *"a lot of tiny spurs and very small
+enclosed loops"*).
 
-> **The cover is built and the per-control gate is deleted (2026-09-20).** The lock is one lid over
-> the ink side now, and nothing marks a control, a tool or a group. **Dimming is next**, item 1 of
-> **The workflow rework is built, all eleven items** (2026-09-20). The cover has been in a room and
-> works; **dimming is the newest and has not**, and what to watch is under *Unconfirmed* below —
-> starting with the two figures, 0.3 for the ink and 0.45 for the walls, which are guesses nothing
-> measured. There is no next item: the lot is empty, which is what it should be between builds.
+`spurPruneGraphUnits` was a **derive-time setting** until 2026-09-18 — the trace pruned as it built.
+When Prune became an amount, nothing applies it on the way through, so every derive now hands over
+the raw fitted graph with its hairs on. **Restoring it automatically is safe where the gap repair was
+not**, by this project's own rule: *deleting is allowed, inventing is not*. An automatic prune
+removes and cannot put anything on the map the ink did not have.
 
-**The rework has had its first room.** The cover works (2026-09-20, below); the nine items before it
-have still never been looked at, and dimming is not built yet.
+- **Computed, not chosen**, beside the fitting tolerance — a limit off the measured ink width rather
+  than a handle. `seedDefaults.ts` is the precedent and `simplify.ts`' tolerance is the shape.
+- **The Prune tool stays** and does what it is for: more, on demand, against the graph in hand.
+- **The tiny loops are a separate problem and probably shrink with this.** Some are spur-junction
+  debris that goes with the hairs. What remains is genuinely unanswered: sliver removal takes only
+  **sub-pixel** cycles, and a small-but-real loop survives everything. **Straightening will not do
+  it** — its collapse guard exists precisely to stop a closed run fitting to a point.
+- **`minRoomSquares` is not the answer and should not come back.** The smallest-room control was
+  dropped on 2026-08-30 for two reasons that still hold: it depended on the grid **squared**, so a
+  grid off by four put it off by sixteen; and a minimum-area filter **is not a pure delete**, since a
+  hole is kept only when it encloses a surviving region. Its replacement was *Dissolve region*.
 
-**The one thing a cold session must know before touching the Walls drawer:** straightening is an
-*action* now and the fitting tolerance is computed, so §5 and §7's passages about two live sliders are
-marked as history. Do not restore either as a setting without reading why they went.
+**Then the five parked items**, none started:
 
-**And before touching the tool strip:** it carries three kinds of button now, not two — a drawer
-opener, a verb, and an **act**, which is the two clear buttons and which has no pressed state at all.
-§7a says why that costs nothing.
+1. **Mend moves below Prune** in the Walls band, so the corrections sit together. A declaration-order
+   change in `steps.ts`.
+2. **Prune acts like Mend** — rings on the candidates, click one to take it, a button for all. **This
+   may reverse the base-vertex decision** (user), since a ring makes a tiny stub visible without
+   marking a junction that does not go.
+3. **Toggle Map Frame** — rename *Add walls around the map edge*, and make the press toggle. The
+   detection half exists: `addFrameWalls` already has a strict already-framed test that asks whether
+   a segment lies *along* an edge. **The open question is what a toggle does to walls the frame
+   split** when it went on, which cannot be unsplit without knowing which splits it caused.
+4. **The frame should be undoable**, and may already be: it goes through `saveEditedWalls`, which
+   pushes an entry unconditionally. Check before building.
+5. **Delete a whole connected chain or network of walls**, complementing Dissolve region.
 
-**Also waiting, and unrelated:** a suspected regression in the ink finding, reported and deliberately
-not investigated — the section after the rework carries the symptom and the leads, and says to start
-with a grep of `dev.log` rather than with the code.
+**Parked from the ink investigation**, both recorded with measurements and neither built: the stroke
+slider's **stepping** (about ten stops per distinct radius, so six nudges do nothing and the seventh
+severs), and **`round` versus `floor`** in `radiusForWidth`, where floor would guarantee the
+effective threshold never exceeds what was asked for.
 
-**The biggest open question in the project closed on its own.** *"The most informative thing that can
-happen to this project is now a second map, one whose style differs from the first"* — and one
-arrived: *The Incandescent Grottoes*, 7252×5197, a cave system drawn with thin-line hatching, pebbles
-scattered everywhere and brickwork texture, its walls in a heavier line. **It works** (user,
-2026-09-18): *"The sparse version is correct... So I'd say everything is working well."* The reading,
-the two ink filters and the partition all behaved on a style nothing in this project had been tried
-on, and the one thing that looked alarming from a desk — seven regions where an unfiltered derive
-gives 2,493 — was the right answer for a cave whose chambers connect.
+**Never looked at in a room:** dimming, the handles on the two amount tools, and the red junction on
+a doomed stub — which is a deliberate over-claim, so the question is whether it reads as *this is
+going* or as *look here*.
 
-It also ran the **megapixel budget** for the first time in the project's life, which §4 now covers in
-full.
-
-**What this session built**, on `main`: **the cover** — a lid over the map picker and the ink side,
-raised while the walls hold hand edits, with the ink tools legible at half strength underneath it
-and a press raising the existing review. *The cover* in §10 carries the whole of it.
-
-**The session before that** built **the three clear buttons** — *Clear ink edits* and *Clear wall
-edits* as acts at the foot of their band in the strip, *Clear all marks* in *Suppress region*'s
-first drawer — and the one before that **Suppress blob** (§10), **a distribution drawn on each ink
-filter's own rail** (§4), and **the map drawn at the trace's raster** when the budget reduced it,
-with the full-resolution decode released once it is (§4).
-
-**17 commits are not pushed** (measured 2026-09-20, before the commit that writes this line). **A push deploys** the published site, so it waits for
-the user to want the public build to have them — never offer it per change.
-
-> The figure here read **37** until 2026-09-20 and was wrong: `origin/main` had moved on since it was
-> written, and the count had been carried forward as a label rather than re-measured. It is one
-> command — `git rev-list --count origin/main..main` — so **measure it rather than editing the number
-> that is there.**
-
-**What rooms have confirmed**, so a cold session does not re-ask:
-
-- **Span — all of it** (user, 2026-09-16: *"Everything works very well"*): doorways on and off their
-  line, corridors, the preview keeping up, one click one step of undo.
-- **Suppress region — all of it**: marks placed and removed, a mark going solid once enclosed, marks
-  surviving a rebuild, a suppressed room's walls still blocking sight as lines.
-- **Dissolve region — in part**: the highlight, inner rooms keeping their walls, one step of undo.
-- **Graph units, Mend and the delta's review — used, not checked item by item** (*"I haven't tested
-  them carefully, but I've used them."*).
-- **The redrawn glyphs** — looked at in a room and judged good.
-- **Suppress blob — all of it** (2026-09-17 and -18): the flood picks out the marks a GM wants gone,
-  the preview keeps up, the tolerance slider, the glyph, and undo taking one fill back per click.
-- **The map drawn at the trace's raster, and the released decode** — *"Everything seems fine in a
-  room."*
-- **The three corrections to the amounts** — the readout in its own place and reading 1 to 100, the handles, and the junction
-  going red with its stub. None has been looked at, and the last is the one to watch: it is a
-  deliberate over-claim, so the question is whether a red junction reads as *this is going* rather
-  than as *look here*.
-- **Straighten and Prune, beyond working** — whether losing the combined commit is felt, and whether
-  ten buttons in one band is too many. The frame act and the three new glyphs go with them.
-- **Dimming** — everything about it, since it has never been drawn. The two figures first: **0.3
-  for the ink and 0.45 for the walls are guesses**, and how faint is too faint over a particular
-  map's artwork is the kind of question only a room answers. Then whether opening an edited map
-  already dim reads as helpful or as something being wrong; whether the ink at 0.3 is still enough
-  to judge a wall against; and whether *no drawer at all* on a map that is already chosen feels like
-  a clean start or like something failed to load.
-- **Straighten and Prune, as tools** (user, 2026-09-21): *"Straighten and prune both work."* The
-  first time either has been drawn at all — see the registry collision that had kept them off the
-  screen. What that does not cover is under *Unconfirmed*: the readout, the handles and the red
-  marks were all reported wanting in the same breath.
-- **The drawer opening on nothing, and the edited/unedited log line** (user, 2026-09-21): *"That
-  worked."* An already-nominated map opens with no drawer.
-- **The cover, including the start-up case** (user, 2026-09-20 and -21): *"The cover seems to work
-  correctly in the room"*, and then *"once I did a true wall edit it, it started correctly with the
-  cover up."* The lid appears, it is pressable, the question behind it works, and **opening a map
-  whose walls already hold hand edits raises it before anything is touched** — which is the half no
-  desk can reach, since it needs a scene, a stored document and a base that differ.
-
-  **Not itemised**, so it says nothing on its own about the four details that were listed to watch — whether the lid lands on the pixel
-  it should against the Ink/Walls rule, whether the covered glyphs at 0.5 read as *out of reach*
-  rather than murky, whether a drawer vanishing as the lid raises is welcome, and whether the blue
-  says *walls* to anyone who has not been told. None is suspected; none was reported on.
-- **Both ink profiles** — *"That looks good now."* Judged only after the width fault below was fixed;
-  every reading of them before that was of a shape a third of the track wide.
-
-**Unconfirmed, to look at whenever a room is open for another reason** — none is suspected:
-
-- **Dissolve region**: a stub hanging in goes; a room touching the outer wall at one point keeps its
-  walls; the first dissolve on an unedited map adopts the derivation and locks the rebuild controls; a
-  room on a building's edge opens to the outside.
-- **Mend**: whether the proposals are the breaks, whether 20 and 40 pixels are the right starting
-  distances, and whether split-the-difference lands where a GM would draw the wall.
-- **The delta's picture** on a real map — its state machine is checked, the drawing is not.
-- **View's Defaults** restoring all five colours — the button has not been pressed.
-- **The three clear buttons** — everything about them, since none has been in a room. Specifically:
-  whether the bin reads as *clear this band* from where it sits; whether *Clear ink edits* pressed
-  with a brush still in hand takes the unwritten strokes and leaves the brush working; whether one
-  press of undo brings each of the three back; and whether *Suppress region*'s new drawer appearing
-  on arming is welcome or in the way.
-
-**A scene still holding a graph saved before graph units** (format version 3) will not load its walls:
-they are refused, not converted, and *Remove ours* in the panel clears one.
-
-**Held deliberately, and why:**
-
-- **The map's information text should say the size it was reduced to** (user, 2026-09-17). The picker
-  reports each image's own resolution, which is the figure a GM can match against the file they
-  imported — and on a map over the megapixel budget that is no longer the resolution anything is
-  *read* at. Now that the workspace draws the reduced version, a GM can see the coarser pixels with
-  nothing on screen saying why. The reduction is already in the dev log; this is putting it where it
-  is looked at.
-
-- **Stale comments waiting for a quiet moment**, held so a room test was never sitting behind a change
-  — rooms have happened since, so they can go now: `reading.ts` argues a recompose needs no blanking
-  *because the ink layer draws the base*, untrue since 2026-09-14; `layers/paint.ts` says the paint is
-  drawn in the Walls step. **The walls layer's red "doomed" marks** justify themselves by a prune
-  *button* that no longer exists — and whether marking what a limit would take on the saved graph is
-  still right, now that pruning is a live slider that regenerates, is a question for the user rather
-  than a word to change.
-- **A longest span offered** — the remedy if Span's preview ever lags in open space (§10, *Span*). It
-  changes what the tool finds, so it waits for a room to show lag.
-- **Per-colour opacity** wants a conversation before code (decision 6).
-- **The small-region tool is answered** by Dissolve region and is no longer open.
-
-**A second map has now been through it** — a hatched cave system — and the reading held. What is still
-untried is a **printed floor grid** and a **scan**, which are different failures again: a grid is
-regular and as dark as the linework, and a scan brings tone drift and severed strokes that no graph
-tool can see.
-
-**Two agreements, both learned expensively:** do not edit the running modules while a room is open,
-and try a reopen before diagnosing anything. `CLAUDE.md` says why.
-
-### Painted ink looks like hand-drawn walls, and that is worth knowing — 2026-09-21
-
-**Not a defect, and recorded because it cost a diagnosis.** A room reported the cover missing on a
-map whose walls held *"walls inserted in a silly place that could not have come from the map"*, which
-is an exact description of a hand edit — and they were derived from **painted ink** (user, same day:
-*"I actually drew in ink, and that's why the walls are there"*). The cover was correct throughout:
-painting is an input to the reading, so it survives a re-derive and is not a wall edit.
-
-The distinction is real and the surface does carry it, but only where a GM has to go looking: the ink
-layer draws the **composite**, and the two paint layers appear in their own colours only while a
-**brush** is in hand, with the point probe as the per-pixel fallback. So at rest, a wall the trace
-derived from a stroke the GM painted is drawn exactly like any other wall — correctly, since that is
-what it is. **Nothing to fix; something to recognise**, and the first question to ask when walls
-appear where the map has no linework is *did I paint there*, which arming a brush answers at a
-glance.
-
-It also says something about where the diagnosis should start. Two hypotheses about the save paths
-were built and discarded from reading the code; `dev.log` read in timestamp order settled it in four
-greps, showing the insert at 21:54:14 and the agreed regenerate that discarded it nine seconds
-later.
-
-**And the log now says the answer rather than the inputs to it.** `graph: loaded …` reported the
-document's wall count and the base's, and *1113 against 1113* is consistent with an unedited graph
-without establishing one — **a dragged vertex leaves both counts identical**. It runs the same
-comparison the cover is gated on and prints which way it went, so the log and the lid cannot
-disagree, with "no base" kept as its own answer because that case is *assume edited* rather than
-edited. This is the rule in §8 about adding the number that would settle a question, applied the
-first time the question was asked.
+**35 commits are not pushed** (measured 2026-09-21 with `git rev-list --count origin/main..main`,
+before the commit that writes this line). **A push deploys**, so it waits for the user to want the
+public build to have them.
 
 ### The workflow rework — designed in full 2026-09-18, part built
 
