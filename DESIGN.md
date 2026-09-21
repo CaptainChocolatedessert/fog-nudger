@@ -3168,6 +3168,14 @@ were built and discarded from reading the code; `dev.log` read in timestamp orde
 greps, showing the insert at 21:54:14 and the agreed regenerate that discarded it nine seconds
 later.
 
+**And the log now says the answer rather than the inputs to it.** `graph: loaded …` reported the
+document's wall count and the base's, and *1113 against 1113* is consistent with an unedited graph
+without establishing one — **a dragged vertex leaves both counts identical**. It runs the same
+comparison the cover is gated on and prints which way it went, so the log and the lid cannot
+disagree, with "no base" kept as its own answer because that case is *assume edited* rather than
+edited. This is the rule in §8 about adding the number that would settle a question, applied the
+first time the question was asked.
+
 ### The workflow rework — designed in full 2026-09-18, part built
 
 **What it is for.** The lock that stops a GM destroying their wall edits was organised around a
@@ -3460,6 +3468,15 @@ frame button, the two clear acts in the strip, agreeing to regenerate, and `star
 - **`startOn` is not `workOn`.** It is the document speaking rather than the GM, and it has to move
   the subject in **both** directions: loading a clean map after an edited one is reachable by
   nominating a different image, and it has to come back to the ink.
+
+**The drawer opens on nothing, and that took a second attempt.** Deleting the advance left the
+drawer at its initial value, which was the **Map picker** — so a map that had already been nominated
+opened with the drawer asking the one question that had been answered, and a room found it the same
+evening (2026-09-21). The initial value is `null` now, and `mapSource` opens the picker in the one
+case that needs it: a load that finishes with **no map**, which is the only thing a GM can do
+anything about from there. **It needs no guard against stealing a drawer they opened in the
+meantime**, unlike the advance it replaces, because with no map every other opener in the strip is
+disabled — the only drawer they could have opened is the picker itself.
 
 **Two deletions fell out of it.** `advanceTo` went, with the cover guard added to it that morning —
 it was the only route to an open drawer that was not a press, and a drawer is a guess at *which

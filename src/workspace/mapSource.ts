@@ -28,7 +28,7 @@
 
 import { devLog } from "../devlog";
 import { resolveTraceMap } from "../map/mapImage";
-import { renderPanel } from "./drawer";
+import { openPanel, renderPanel } from "./drawer";
 import { loadPaint } from "./paintState";
 import { adoptReading, describeMaskFailure, requestRecompose, takeReading } from "./reading";
 import { loadMarks } from "./regionMarks";
@@ -83,6 +83,17 @@ export async function loadNominatedMap(): Promise<void> {
   const outcome = await takeReading();
   chosen = outcome.ok;
   if (!outcome.ok) {
+    /*
+      No map, so the picker opens — the one case where a drawer is the right answer at start-up,
+      because it is the only thing a GM can do anything about from here and every other opener in
+      the strip is disabled until they do.
+
+      **The mirror of what this branch used to hold.** The old start-up advance moved the GM *to*
+      Ink when a map turned out to be chosen, and needed a flag to avoid relocating somebody who had
+      already pressed something. This moves them to Map when one turns out **not** to be, and needs
+      no flag: with the rest of the strip shut, the only drawer they could have opened is this one.
+    */
+    openPanel("map");
     // Rebuilt because the gate has just closed: whatever was open below Map is now about a picture
     // that is not there, and its header has to stop offering to go back into it.
     renderPanel();

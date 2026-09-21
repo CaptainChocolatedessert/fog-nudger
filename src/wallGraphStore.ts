@@ -48,6 +48,7 @@ import {
   encodeWallGraph,
   type WallGraph,
 } from "./trace/wallGraph";
+import { graphsDiffer } from "./trace/wallGraphDiff";
 
 const GRAPH_KEY = key("graph");
 
@@ -119,10 +120,29 @@ export async function readWallGraph(mapId: string | null): Promise<{
   */
   const base = readRecord(storedBase, mapId, "base graph").graph;
 
+  /*
+    **Whether the document still is what the trace derived**, said outright rather than left to be
+    inferred from two counts.
+
+    This line reported the document's counts and the base's, and a room asked a question it could not
+    answer (2026-09-21): the cover was missing on a map whose walls looked hand-edited, and 1113
+    against 1113 is *consistent* with an unedited graph without establishing one — **a dragged vertex
+    leaves both counts identical**. Settling it took four greps through the history and two wrong
+    hypotheses read out of the save paths.
+
+    It is the same comparison the cover is gated on, so the log and the lid cannot disagree. `null`
+    is deliberately its own answer: no base means *assume it was edited*, which is what the gate
+    decides, and reporting it as "edited" would hide the reason.
+  */
+  const edited = graphsDiffer(base, document.graph);
   devLog(
     "info",
     `graph: loaded ${document.graph.nodes.length} nodes and ${document.graph.edges.length} walls` +
-      (base ? `, with a derived base of ${base.edges.length} walls` : ", with no derived base"),
+      (base
+        ? `, with a derived base of ${base.edges.length} walls — ${
+            edited ? "the document holds hand edits, so the cover is up" : "unedited, so no cover"
+          }`
+        : ", with no derived base — assumed edited, so the cover is up"),
   );
   return { graph: document.graph, base, corrupt: false };
 }

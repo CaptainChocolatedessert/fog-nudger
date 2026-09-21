@@ -54,7 +54,6 @@ import {
   toolHint,
   toolIsInkSide,
   ungroupedControls,
-  workspaceSteps,
   type Step,
   type StepId,
 } from "../steps";
@@ -118,7 +117,21 @@ type Drawer =
    */
   | { readonly kind: "review" };
 
-let drawer: Drawer | null = { kind: "params", step: workspaceSteps()[0]?.id ?? "map" };
+/**
+ * Nothing open, and the surface opens on the plain map.
+ *
+ * **It was the picker, unconditionally**, which was right only while `advanceTo` moved the GM off it
+ * the moment a map turned out to be chosen. Deleting the advance on 2026-09-20 left the picker
+ * showing on every map that had already been nominated — the drawer asking a question that had been
+ * answered — and a room found it the same evening.
+ *
+ * **The picker is opened by the one case that needs it**: a load that finishes with no map, where
+ * `mapSource` opens it because that is the only thing a GM can do anything about. It needs no guard
+ * against stealing a drawer the GM opened in the meantime, unlike the advance it replaces, because
+ * with no map every other opener in the strip is disabled — so the only drawer they could have
+ * opened is the picker itself, and opening it twice is opening it once.
+ */
+let drawer: Drawer | null = null;
 
 /** Whether the drawer is showing the layer switches. */
 export function showingLayers(): boolean {
