@@ -151,8 +151,29 @@ export function renderAmountControls(body: HTMLElement): void {
   */
   const armed = ROWS.filter((row) => row.which === currentToolDrawer());
   for (const row of armed) {
+    /*
+      **The ordinary row's markup, which this did not use** (room, 2026-09-21: the readout printed
+      as part of the label, *"Straighten7"*).
+
+      It set `setting` and `readout`, and **neither class exists in the stylesheet** — so the label
+      and the readout were two inline elements with nothing placing them and nothing colouring them,
+      and they ran together. `settingRows.ts` builds `row > top > (label, value)` with the slider
+      under it: `.row .top` is the flex that pushes the readout to the right, and `.row .value` is
+      what makes it the monospace yellow.
+
+      This is §8's rule from the other side. The sweep there finds classes a stylesheet styles that
+      nothing sets; this was a class something set that nothing styles, which fails **silently** —
+      the element is there, it is simply unstyled, and only a room can see that.
+
+      No `track` wrapper, unlike a setting row: that exists to position a ghost mark and an ink
+      profile against the rail, and an amount has neither. `.row input[type="range"]` styles a bare
+      slider inside a row, which is what this is.
+    */
     const wrapper = document.createElement("div");
-    wrapper.className = "setting";
+    wrapper.className = "row";
+
+    const top = document.createElement("div");
+    top.className = "top";
 
     const label = document.createElement("label");
     label.htmlFor = row.sliderId;
@@ -160,7 +181,8 @@ export function renderAmountControls(body: HTMLElement): void {
 
     const readout = document.createElement("span");
     readout.id = row.readoutId;
-    readout.className = "readout";
+    readout.className = "value";
+    top.append(label, readout);
 
     const slider = document.createElement("input");
     slider.type = "range";
@@ -176,7 +198,7 @@ export function renderAmountControls(body: HTMLElement): void {
       aim(row, Number(slider.value));
     });
 
-    wrapper.append(label, readout, slider);
+    wrapper.append(top, slider);
     body.append(wrapper);
   }
 

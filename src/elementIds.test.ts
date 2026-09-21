@@ -121,6 +121,53 @@ const sources = Object.entries(
   >,
 ).filter(([path]) => !path.endsWith(".test.ts"));
 
+/**
+ * Every class a module sets, as a literal.
+ *
+ * `className = "a b"` and `classList.add("a", "b")` both, split on spaces because the first takes a
+ * list. Anything built from a variable is invisible here and is meant to be — the point is the ones
+ * that look like constants.
+ */
+function classesIn(source: string): string[] {
+  const assigned = [...source.matchAll(/className = "([^"]*)"/g)].map((match) => match[1]!);
+  const added = [...source.matchAll(/classList\.add\(([^)]*)\)/g)].flatMap((match) =>
+    [...match[1]!.matchAll(/"([^"]*)"/g)].map((inner) => inner[1]!),
+  );
+  return [...assigned, ...added].flatMap((value) => value.split(/\s+/)).filter((name) => name !== "");
+}
+
+/** Every class name a stylesheet has a rule for, however the selector is built around it. */
+function styledIn(html: string): Set<string> {
+  return new Set([...html.matchAll(/\.([A-Za-z][A-Za-z0-9_-]*)/g)].map((match) => match[1]!));
+}
+
+/**
+ * Which classes a module sets that its page has no rule for.
+ *
+ * **A function rather than a loop in the assertion**, for the reason above it: over the real sources
+ * it can only return nothing, and so can a check that examines nothing.
+ */
+function unstyledClasses(files: readonly (readonly [string, string])[]): string[] {
+  const missing: string[] = [];
+  for (const [path, source] of files) {
+    /*
+      **The module's own text counts as a stylesheet**, because one module is one.
+      `confirmDialog.ts` carries its rules in a template string rather than in a page — which is what
+      let it leave `workspace/` when the panel needed it, since the two surfaces style everything
+      else differently. Reading the source for selectors as well as for classes covers that without
+      naming the module, so a second one doing the same thing needs no entry here.
+    */
+    const available = new Set([
+      ...Object.values(pagesFor(path)).flatMap((html) => [...styledIn(html)]),
+      ...styledIn(source),
+    ]);
+    for (const name of classesIn(source)) {
+      if (!available.has(name)) missing.push(`${path} sets .${name}`);
+    }
+  }
+  return missing;
+}
+
 describe("element ids", () => {
   it("finds lookups to check, so a broken pattern cannot pass by finding nothing", () => {
     /*
@@ -183,5 +230,84 @@ describe("element ids", () => {
       Object.values(pagesFor("./workspaceProbe.ts")).flatMap((html) => [...idsIn(html)]),
     );
     expect(forProbe.has(probeOnly!)).toBe(true);
+  });
+});
+
+/**
+ * The same contract as the ids, from the other side: a class a module sets that nothing styles.
+ *
+ * ## Why this is its own failure and not the sweep already recorded
+ *
+ * §8 describes a sweep comparing the classes a stylesheet styles against the classes the code sets,
+ * and what it found was a **dead rule** — `button.tool-band`, scoped to an element that had become a
+ * `<p>`. This is the mirror: a class something sets that no rule matches. It fails more quietly,
+ * because the element is *there* and merely unstyled, so nothing is missing and nothing is
+ * misplaced — it simply looks wrong, and only to someone looking.
+ *
+ * **Found in a room on 2026-09-21.** The two amount sliders set `setting` and `readout`, neither of
+ * which exists in `workspace.html`, so the label and the readout were two inline elements with
+ * nothing placing them: the value printed as part of the name, *"Straighten7"*. The ordinary rows
+ * use `row > top > (label, value)`, where `.row .top` is the flex that pushes the readout right and
+ * `.row .value` is what makes it monospace and yellow.
+ *
+ * ## What it cannot cover
+ *
+ * A class set from a variable or a template, exactly as with the ids. And it asks only whether a
+ * rule **mentions** the name — not whether the rule's own selector matches the element it is put on,
+ * which is the dead-rule direction and needs the element read. The two together are what §8's sweep
+ * does by hand; this is the half a suite can hold.
+ *
+ * **Five mutations, five caught**: a class pattern matching nothing, a selector pattern matching
+ * nothing, the detection reporting nothing whatever it is handed, a multi-class string taken whole,
+ * and `classList.add` going unread — the last only after a fixture was written for it, since every
+ * class added that way happens to be styled today and the branch was never exercised.
+ */
+describe("class names", () => {
+  it("finds classes to check, so a broken pattern cannot pass by finding nothing", () => {
+    // The guard that makes the assertion below mean anything: "no class is unstyled" is satisfied
+    // perfectly by a pattern that finds no classes.
+    const found = sources.flatMap(([, source]) => classesIn(source));
+    expect(found.length).toBeGreaterThan(20);
+    expect(found).toContain("row");
+  });
+
+  it("reads a class added rather than assigned, and splits a list", () => {
+    /*
+      The fixture a mutation asked for. Dropping the `classList.add` half survived the whole suite,
+      because every class added that way happens to be styled today — so the branch was never
+      exercised by the real sources and only a written case can hold it.
+
+      The split matters for the same reason: `className = "chip quiet"` is two classes, and taking
+      the string whole would ask the stylesheet for a rule on `.chip quiet`, which nothing can have.
+    */
+    expect(classesIn('x.classList.add("under-cover");')).toEqual(["under-cover"]);
+    expect(classesIn('x.classList.add("a", "b");')).toEqual(["a", "b"]);
+    expect(classesIn('x.className = "chip quiet";')).toEqual(["chip", "quiet"]);
+  });
+
+  it("finds rules to check them against", () => {
+    const styled = styledIn(workspaceHtml);
+    expect(styled.size).toBeGreaterThan(20);
+    expect(styled.has("row")).toBe(true);
+  });
+
+  it("styles every class the modules set", () => {
+    expect(unstyledClasses(sources)).toEqual([]);
+  });
+
+  it("reports one that is not styled, so the check is known to be able to fail", () => {
+    // The fixture the real sources cannot provide. `setting` is the name that actually shipped
+    // unstyled, kept here so the case this was written for stays exercised.
+    expect(unstyledClasses([["./workspace/made-up.ts", 'x.className = "setting";']])).toEqual([
+      "./workspace/made-up.ts sets .setting",
+    ]);
+  });
+
+  it("accepts a class the module styles itself, which is how the confirmation carries its own", () => {
+    // `confirmDialog.ts` is the real case: plain DOM with its rules in a template string, which is
+    // what let it leave `workspace/` when the panel needed it. Without this the check would demand
+    // that every module's classes appear in a page, which is the opposite of what that module is.
+    const carried = 'const css = `.mine { color: red }`; x.className = "mine";';
+    expect(unstyledClasses([["./made-up.ts", carried]])).toEqual([]);
   });
 });

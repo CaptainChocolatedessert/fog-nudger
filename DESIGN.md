@@ -2598,7 +2598,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**994 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,000 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3090,7 +3090,7 @@ the user to want the public build to have them — never offer it per change.
   the preview keeps up, the tolerance slider, the glyph, and undo taking one fill back per click.
 - **The map drawn at the trace's raster, and the released decode** — *"Everything seems fine in a
   room."*
-- **The three corrections to the amounts** — the 1-to-100 readout, the handles, and the junction
+- **The three corrections to the amounts** — the readout in its own place and reading 1 to 100, the handles, and the junction
   going red with its stub. None has been looked at, and the last is the one to watch: it is a
   deliberate over-claim, so the question is whether a red junction reads as *this is going* rather
   than as *look here*.
@@ -3469,6 +3469,23 @@ which is what the button builds: four segments as one closed run, corners shared
 **The band is ten buttons now** and has no settings opener, which is the first group without one.
 
 ##### Three corrections from the first room — 2026-09-21
+
+**The readout was printing inside the label** — *"Straighten7"* — and that was the whole of the
+original complaint. The amount rows set `setting` and `readout`, and **neither class exists in the
+stylesheet**, so the label and the readout were two inline elements with nothing placing them and
+nothing colouring them. They use the ordinary row's markup now: `row > top > (label, value)`, where
+`.row .top` is the flex that pushes the readout right and `.row .value` makes it monospace and
+yellow. No `track` wrapper, which exists to position a ghost mark and an ink profile against the
+rail; an amount has neither.
+
+> **This is §8's class sweep from the other side, and it now has a test.** That sweep finds a *dead
+> rule* — a selector nothing matches, like `button.tool-band` scoped to what had become a `<p>`.
+> This is a class something **sets** that no rule styles, which fails more quietly still: the element
+> is there and merely unstyled, so nothing is missing and nothing is misplaced. `elementIds.test.ts`
+> carries it, beside the id contract it already held, and a module's own source counts as a
+> stylesheet so `confirmDialog.ts` keeps carrying its rules in a template string. **Five mutations,
+> five caught**, the last only after a fixture was written for `classList.add`: every class added
+> that way happens to be styled today, so the branch was never exercised by the real sources.
 
 **The readout is the handle's place, 1 to 100, not the amount** (user): *"the values are not user
 friendly anyway, let's turn them into 1-100 just for remembering your place while trying them."* It
