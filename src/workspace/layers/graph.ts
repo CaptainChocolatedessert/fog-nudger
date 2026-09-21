@@ -47,8 +47,20 @@ import { graphOnScreen } from "../regions";
 import { pendingPrune } from "../wallAmounts";
 import { currentTool } from "../toolPalette";
 
-/** The tools a handle is for. Anything else in hand and a dot at every vertex is decoration. */
-const WALL_TOOLS = new Set(["move", "draw", "erase"]);
+/**
+ * The tools a handle is for.
+ *
+ * **It was the tools that grab a point**, which is why Mend, Dissolve region, Suppress region and
+ * Span are still absent: none of them takes hold of a vertex, so a dot at every one would be
+ * decoration over the marks those tools do draw.
+ *
+ * **The two amounts joined on 2026-09-21** (user: *"we need to see vertices for both tools"*), and
+ * they grab nothing — so the rule this set states is now *the tools whose work is at the vertices*.
+ * Straightening drops the ones between a run's ends, and pruning takes whole runs and the handles
+ * are what makes a few red pixels legible at map zoom. Both are about points even though neither
+ * aims at one.
+ */
+const WALL_TOOLS = new Set(["move", "draw", "erase", "straighten", "prune"]);
 import type { DrawPoint } from "../dragGesture";
 import {
   dissolvingWalls,
@@ -186,6 +198,7 @@ function doomed(graph: WallGraph): DoomedSpurs {
 const NOTHING_DOOMED: DoomedSpurs = {
   edges: new Set<number>(),
   vertices: new Set<number>(),
+  anchors: new Set<number>(),
   runs: 0,
   length: 0,
   rounds: 0,
@@ -379,7 +392,17 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     on them is what stops the resting state being the dense one — and it is the same rule the gap
     rings follow.
   */
-  if (WALL_TOOLS.has(currentTool())) paintHandles(context, graph, x, y, at, going.vertices);
+  /*
+    **Both sets, and only for the drawing.** The vertices that go, plus the junctions the doomed runs
+    hang off — which stay exactly where they are, and are marked anyway because a stub worth pruning
+    is a few pixels long and two red handles either end of it are far easier to catch than one.
+
+    Kept apart in `spurEdgesToPrune` rather than merged there, so the operation and the log still
+    read the honest set. This is the one place that over-claims, and it does it deliberately.
+  */
+  if (WALL_TOOLS.has(currentTool())) {
+    paintHandles(context, graph, x, y, at, new Set([...going.vertices, ...going.anchors]));
+  }
   context.restore();
 };
 
@@ -409,9 +432,14 @@ function paintHandles(
    * on (room, 2026-09-07). Its handles are the part that reads at a glance, and they are already
    * drawn — so marking them costs nothing and is what makes the preview legible at map zoom.
    *
-   * **Only vertices that actually go.** The junction where a stub meets the wall it hangs off keeps
-   * its other walls and stays exactly where it is; `spurEdgesToPrune` decides that by the same rule
-   * the compaction does, so the mark cannot claim more than the button takes.
+   * **The junctions are marked too, since 2026-09-21** (user): *"when a stub turns red, its base
+   * vertex should, too, even though it's not actually disappearing."* This used to take only the
+   * vertices that actually go, on the argument that marking the junction would be the preview lying
+   * about the one thing it is for — and a room weighed that against seeing a two-pixel stub at all,
+   * and chose seeing it.
+   *
+   * **The over-claim is confined to this argument.** `spurEdgesToPrune` still separates the two, so
+   * the operation and the log read the set that is true; the caller unions them.
    */
   doomedVertices: ReadonlySet<number>,
 ): void {

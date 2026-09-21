@@ -2598,7 +2598,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**992 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**994 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3090,10 +3090,12 @@ the user to want the public build to have them — never offer it per change.
   the preview keeps up, the tolerance slider, the glyph, and undo taking one fill back per click.
 - **The map drawn at the trace's raster, and the released decode** — *"Everything seems fine in a
   room."*
-- **Straighten and Prune** — everything, since neither has ever been drawn: whether the amounts do
-  what their names say, whether the latch's pin-and-apply reads as intended when the event is
-  arming and disarming a tool, whether losing the combined commit is felt, and whether ten buttons
-  in one band is too many. The frame act and the three new glyphs go with them.
+- **The three corrections to the amounts** — the 1-to-100 readout, the handles, and the junction
+  going red with its stub. None has been looked at, and the last is the one to watch: it is a
+  deliberate over-claim, so the question is whether a red junction reads as *this is going* rather
+  than as *look here*.
+- **Straighten and Prune, beyond working** — whether losing the combined commit is felt, and whether
+  ten buttons in one band is too many. The frame act and the three new glyphs go with them.
 - **Dimming** — everything about it, since it has never been drawn. The two figures first: **0.3
   for the ink and 0.45 for the walls are guesses**, and how faint is too faint over a particular
   map's artwork is the kind of question only a room answers. Then whether opening an edited map
@@ -3465,6 +3467,38 @@ through the stub, borrowing Dissolve region's rule that **where the mark sits sa
 which is what the button builds: four segments as one closed run, corners shared by construction.
 
 **The band is ten buttons now** and has no settings opener, which is the first group without one.
+
+##### Three corrections from the first room — 2026-09-21
+
+**The readout is the handle's place, 1 to 100, not the amount** (user): *"the values are not user
+friendly anyway, let's turn them into 1-100 just for remembering your place while trying them."* It
+printed graph units in exponential notation — a graph unit is a fraction of the map's longer side,
+so the useful settings sit around a thousandth and the readout was a mantissa and an exponent. **It
+is a position and makes no claim to be a measurement**, which is honest: nothing is stored, the
+handle starts at zero on every opening, and the only question it answers is *where was I before I
+dragged past it*. The real figure still reaches the log on every commit, and **"off" is read from
+the amount rather than the handle**, so a latch voided by an undo says so even with the handle left
+where the GM put it.
+
+**Both amounts draw handles.** The set that decides was *the tools that grab a point*, which is why
+Mend, Dissolve region, Suppress region and Span have none; the rule it states is now **the tools
+whose work is at the vertices**. Straightening drops the ones between a run's ends, and pruning
+needs them for the correction below. Neither grabs anything.
+
+**A doomed stub's junction goes red with it** (user): *"when a stub turns red, its base vertex
+should, too, even though it's not actually disappearing. That will help with visibility for tiny
+stubs."* **This reverses a recorded decision**, and the reasoning it overturns was sound: marking the
+junction is the preview claiming something the button does not do, since that vertex keeps its other
+walls and stays exactly where it is. What the room weighed against it is that a stub worth pruning is
+a couple of pixels at map zoom, and two red handles either end of it are far easier to catch than
+one — a preview nobody can see is worth less than one that over-claims by a vertex.
+
+> **The over-claim is confined to the drawing.** `spurEdgesToPrune` returns the junctions as their
+> own set, `anchors`, beside the `vertices` that actually go; the operation and the log read the
+> honest one and only the layer unions them. The two are **disjoint and cover** the doomed edges'
+> endpoints, which is what lets the caller union them without asking anything else, and is asserted.
+> **Five mutations, five caught** — one only after the off-state test was made to assert the set it
+> had never looked at.
 
 #### Dimming the side you are not working on
 

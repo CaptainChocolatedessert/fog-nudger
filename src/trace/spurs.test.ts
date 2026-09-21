@@ -179,6 +179,63 @@ describe("pruneWallGraph", () => {
     expect(pruned.graph.nodes).toHaveLength(wallWithBoth.nodes.length - going.vertices.size);
   });
 
+  /*
+    **Five mutations, five caught**, one only after this file was strengthened: anchors taking every
+    endpoint, the two sets swapping, anchors always empty, a doomed edge counting as kept, and the
+    off-state result carrying an anchor — which survived until the off-state test asserted the set
+    it had never looked at.
+  */
+  it("names the junction a doomed run hangs off, apart from the vertices that go", () => {
+    /*
+      **The over-claim the preview makes, kept out of the answer it makes it from** (user,
+      2026-09-21): *"when a stub turns red, its base vertex should, too, even though it's not
+      actually disappearing."* A stub worth pruning is a couple of pixels at map zoom, and two red
+      handles either end of it are far easier to catch than one.
+
+      The two sets are asserted **disjoint and covering**, which is the property that lets the layer
+      union them without asking anything else: every endpoint of a doomed edge is in exactly one,
+      by whether a surviving wall still names it. Merging them in here instead would have left the
+      operation and the log reading a set that claims the junction goes, and it does not — the
+      survivor count below is what would catch that.
+    */
+    const going = spurEdgesToPrune(wallWithBoth, 0.15);
+
+    // The spur is nodes 2-5-6 off the junction at 2: its own two go, and 2 is what it hangs off.
+    expect([...going.anchors]).toEqual([2]);
+    expect(going.vertices.has(2)).toBe(false);
+
+    // Disjoint, and between them exactly the endpoints of the doomed edges.
+    const endpoints = new Set<number>();
+    for (const index of going.edges) {
+      endpoints.add(wallWithBoth.edges[index]!.a);
+      endpoints.add(wallWithBoth.edges[index]!.b);
+    }
+    expect(endpoints.size).toBeGreaterThan(0);
+    for (const id of going.anchors) expect(going.vertices.has(id)).toBe(false);
+    expect([...going.vertices, ...going.anchors].sort((a, b) => a - b)).toEqual(
+      [...endpoints].sort((a, b) => a - b),
+    );
+
+    // And the operation still agrees with `vertices` alone, which is the set that is true.
+    const pruned = pruneWallGraph(wallWithBoth, 0.15);
+    expect(pruned.graph.nodes).toHaveLength(wallWithBoth.nodes.length - going.vertices.size);
+  });
+
+  it("names no junction for a wall that hangs off nothing", () => {
+    // Both ends go, so there is nothing for the run to hang off and the marked set is empty. This
+    // is what stops `anchors` degenerating into "the endpoints of the doomed edges".
+    const adrift = graphOf(
+      [
+        [0.4, 0.4],
+        [0.45, 0.4],
+      ],
+      [[0, 1]],
+    );
+    const going = spurEdgesToPrune(adrift, 0.2);
+    expect([...going.vertices].sort((a, b) => a - b)).toEqual([0, 1]);
+    expect(going.anchors.size).toBe(0);
+  });
+
   it("takes both ends of a wall that touches nothing", () => {
     const adrift = graphOf(
       [
@@ -195,6 +252,9 @@ describe("pruneWallGraph", () => {
     const going = spurEdgesToPrune(wallWithBoth, 0);
     expect(going.edges.size).toBe(0);
     expect(going.vertices.size).toBe(0);
+    // The anchors too. Added after a mutation survived: the early return builds its own empty
+    // result, so a set added to the shape has to be asserted here or the off state never checks it.
+    expect(going.anchors.size).toBe(0);
   });
 
   it("leaves the graph alone at a limit of zero", () => {

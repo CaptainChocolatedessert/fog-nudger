@@ -458,6 +458,21 @@ export interface DoomedSpurs {
    * this condition.
    */
   readonly vertices: ReadonlySet<number>;
+  /**
+   * The junctions a doomed run hangs off, which **stay** — marked so the preview can be seen.
+   *
+   * The complement of `vertices` among the endpoints of the doomed edges: every wall of a vertex in
+   * that set is going, and a vertex in this one keeps at least one. Pruning leaves these exactly
+   * where they are.
+   *
+   * **Marking them is a deliberate over-claim, asked for from a room** (user, 2026-09-21): *"when a
+   * stub turns red, its base vertex should, too, even though it's not actually disappearing. That
+   * will help with visibility for tiny stubs."* A stub short enough to be worth pruning is a few
+   * pixels of red at map zoom, and two red handles either end of it are far easier to catch than
+   * one. Kept as its own set rather than folded into `vertices`, so the honest answer stays
+   * available: the operation and the log read `vertices`, and only the drawing reads both.
+   */
+  readonly anchors: ReadonlySet<number>;
   /** Whole wall runs those segments make up. */
   readonly runs: number;
   /** Total length, in graph units. */
@@ -489,6 +504,7 @@ export function spurEdgesToPrune(graph: WallGraph, limit: number): DoomedSpurs {
   const empty = {
     edges: new Set<number>(),
     vertices: new Set<number>(),
+    anchors: new Set<number>(),
     runs: 0,
     length: 0,
     rounds: 0,
@@ -520,15 +536,22 @@ export function spurEdgesToPrune(graph: WallGraph, limit: number): DoomedSpurs {
     kept.add(edge.b);
   }
   const vertices = new Set<number>();
+  // The junctions the doomed runs hang off: touched by something going, and kept by something
+  // staying. The two sets partition the doomed edges' endpoints, which is what makes this a
+  // complement rather than a second walk.
+  const anchors = new Set<number>();
   for (const index of edges) {
     const edge = graph.edges[index]!;
-    if (!kept.has(edge.a)) vertices.add(edge.a);
-    if (!kept.has(edge.b)) vertices.add(edge.b);
+    for (const node of [edge.a, edge.b]) {
+      if (kept.has(node)) anchors.add(node);
+      else vertices.add(node);
+    }
   }
 
   return {
     edges,
     vertices,
+    anchors,
     runs: decision.removed.size,
     length: decision.length,
     rounds: decision.rounds,

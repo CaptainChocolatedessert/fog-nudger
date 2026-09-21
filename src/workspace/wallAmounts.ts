@@ -355,7 +355,26 @@ function refresh(): void {
     const scale = limitsFor(row);
     slider.disabled = scale === null || graph === null;
     const amount = latch[row.which];
-    readout.textContent = amount > 0 ? `${amount.toExponential(2)} graph units` : "off";
+    /*
+      **The handle's place on the track, 1 to 100 — not the value** (user, 2026-09-21).
+
+      It printed the amount in graph units, in exponential notation, and a room asked for something
+      it could use: *"the values are not user friendly anyway, let's turn them into 1-100 just for
+      remembering your place while trying them."* That names what the readout is for exactly. A
+      graph unit is a fraction of the map's longer side, so the useful settings are around a
+      thousandth and the number was three characters of mantissa and an exponent — unreadable, and
+      not comparable to anything a GM can see.
+
+      **It is a position, so it makes no claim to be a measurement.** Nothing is stored, the handle
+      starts at zero on every opening, and the only question it has to answer is *where was I before
+      I dragged past it*. The real figure still reaches the log on every commit.
+
+      **`off` comes from the amount rather than the handle**, which is why the two are read
+      separately. A latch voided by an undo or a derive landing leaves the handle where the GM left
+      it and aims nothing — saying "off" there is the same loud answer the note gives.
+    */
+    const place = Math.max(1, Math.round((Number(slider.value) / SLIDER_STEPS) * 100));
+    readout.textContent = amount > 0 ? String(place) : "off";
   }
 
   const note = document.getElementById(NOTE_ID);
