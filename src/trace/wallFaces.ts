@@ -168,6 +168,15 @@ export interface WallFaces {
   readonly zeroLength: number;
   /** Whether V − E + enclosing = components. */
   readonly eulerHolds: boolean;
+  /**
+   * Vertices with exactly one wall — the loose ends of the linework.
+   *
+   * **The figure a break moves and a total does not.** A closed room has none; a stub has one; a
+   * wall parting in the middle turns none into two. Every other number in this summary is a sum
+   * over the whole map, so a handful of broken corners is invisible in all of them and obvious in
+   * this one.
+   */
+  readonly freeEnds: number;
 }
 
 const twin = (half: number): number => half ^ 1;
@@ -416,6 +425,9 @@ export function buildWallFaces(graph: WallGraph): WallFaces {
     outward: outwardCycles.length,
     unbounded,
     components: roots.size,
+    // Degree exactly one: a wall that stops. Counted from the edges rather than from the node list,
+    // so a vertex no wall uses -- which erasing and merging both leave behind -- is not an end.
+    freeEnds: freeEndCount(edges),
     vertices,
     edges: edges.length,
     sourceEdges: sourceOf,
@@ -548,13 +560,47 @@ export function containsPoint(polygon: readonly Vector2[], point: Vector2): bool
   return inside;
 }
 
+/** How many vertices have exactly one wall. */
+function freeEndCount(edges: readonly { readonly a: number; readonly b: number }[]): number {
+  const degree = new Map<number, number>();
+  for (const edge of edges) {
+    degree.set(edge.a, (degree.get(edge.a) ?? 0) + 1);
+    degree.set(edge.b, (degree.get(edge.b) ?? 0) + 1);
+  }
+  let ends = 0;
+  for (const count of degree.values()) if (count === 1) ends += 1;
+  return ends;
+}
+
 /** One line for the log, in the same shape as stage one's area check. */
 export function describeWallFaces(result: WallFaces): string {
   const head = result.eulerHolds
     ? `${result.faces.length} faces from ${result.edges} walls, Euler holds`
     : `${result.faces.length} faces from ${result.edges} walls — EULER FAILED ` +
       `(${result.vertices} − ${result.edges} + ${result.enclosing} ≠ ${result.components})`;
-  const notes: string[] = [`${result.bridges} bridges`, `${result.walls.length} wall lines`];
+  /*
+    **Pieces and free ends, every time** (2026-09-21).
+
+    Both were already computed and neither was printed, and a room asked a question the log could
+    not answer: *tiny gaps at corners, on maps that used to have continuous walls*. Every other
+    figure reported is a **total over the map** — ink removed, points fitted, segments dropped — and
+    a handful of broken corners moves none of them enough to see. These two move by exactly two per
+    break: a wall parting in the middle adds a piece, and both new ends are free.
+
+    `components` is the right-hand side of Euler's identity, so it costs nothing and is already
+    trusted. Free ends are counted here rather than derived from the runs, because a run walk is a
+    different question and this one is *degree exactly one*.
+
+    **Unconditional**, per §8: a diagnostic that only fires when something is known to be wrong
+    cannot tell *fine* from *never ran*, and the whole use of these is comparing one derive against
+    the next.
+  */
+  const notes: string[] = [
+    `${result.bridges} bridges`,
+    `${result.walls.length} wall lines`,
+    `${result.components} pieces`,
+    `${result.freeEnds} free ends`,
+  ];
   if (result.outward !== result.components) {
     notes.push(`outward cycles ${result.outward} against ${result.components} pieces of linework`);
   }

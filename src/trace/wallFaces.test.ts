@@ -281,6 +281,8 @@ describe("the arithmetic check", () => {
     // Exactly one outward-facing cycle per piece of linework, which is what makes grouping total.
     expect(result.outward).toBe(result.components);
     expect(describeWallFaces(result)).toContain("Euler holds");
+    expect(describeWallFaces(result)).toContain("pieces");
+    expect(describeWallFaces(result)).toContain("free ends");
   });
 
   it.each(fixtures)("accounts for every wall exactly once on %s", (_name, graph) => {
@@ -387,5 +389,101 @@ describe("slivers and other degenerate shapes", () => {
     expect(result.faces).toHaveLength(1);
     expect(result.walls).toEqual([4]);
     expect(result.eulerHolds).toBe(true);
+  });
+});
+
+/**
+ * Free ends and pieces, which are the two figures a **break** moves.
+ *
+ * **Added for a question the log could not answer** (2026-09-21): a room reported tiny gaps at
+ * corners on maps that used to have continuous walls, and said the useful thing about it — *"it's a
+ * tiny amount of change in the ink that becomes wall, so checking how much ink is lost won't catch
+ * it."* That is exactly right about every other figure the derive reports, all of which are totals
+ * over the map: a handful of broken corners moves none of them enough to see.
+ *
+ * **`freeEnds` is the sensitive one and `components` is not**, which the fixture below corrected
+ * while it was being written: a loop broken once is still connected the long way round, so it stops
+ * being a loop and becomes an open chain. A parted wall turns no free ends into two and leaves the
+ * piece count alone. `components` moves when a break *severs* — a stub coming away, a network
+ * splitting — which is the louder failure and the rarer one.
+ *
+ * **Four mutations, four caught**: counting every vertex rather than the degree-one ones, counting
+ * degree two instead, counting each edge's endpoints once so a shared vertex reads as an end, and
+ * the summary dropping the pair from its notes.
+ */
+describe("free ends and pieces", () => {
+  it("finds none in a closed room, which is what makes a break visible", () => {
+    const result = buildWallFaces(ROOM);
+    expect(result.freeEnds).toBe(0);
+    expect(result.components).toBe(1);
+  });
+
+  it("counts both ends of a wall that stops", () => {
+    // A single segment joined to nothing: one piece, two ends.
+    const alone = graphOf(
+      [
+        [0.3, 0.3],
+        [0.6, 0.3],
+      ],
+      [[0, 1]],
+    );
+    const result = buildWallFaces(alone);
+    expect(result.freeEnds).toBe(2);
+    expect(result.components).toBe(1);
+  });
+
+  it("turns a closed room into two free ends when a wall is parted, and still one piece", () => {
+    /*
+      **The symptom, in the smallest form that has it** — and the fixture corrected a guess while it
+      was being written. The same four corners, with one wall parted and the two halves left a hair
+      apart, which is what a corner losing a pixel of ink leaves once the skeleton is chained.
+
+      **The piece count does not move**, because a loop broken once is still connected the long way
+      round: it stops being a loop and becomes an open chain. So `components` catches a break that
+      *severs* something — a stub coming away, a network splitting — and **`freeEnds` is the figure
+      for the case a room actually reports**, a wall parting where the room stays in one piece.
+      Asserted both ways here so the difference is written down rather than assumed.
+
+      Every total is unchanged or nearly so: the vertex count goes *up* by one, the wall count up by
+      one, and the ink is the same ink. Only the free ends say the room has stopped being closed.
+    */
+    const parted = graphOf(
+      [
+        [0.2, 0.2],
+        [0.6, 0.2],
+        [0.6, 0.6],
+        [0.2, 0.6],
+        [0.4, 0.2],
+        [0.41, 0.2],
+      ],
+      [
+        [0, 4],
+        [5, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+      ],
+    );
+    const result = buildWallFaces(parted);
+    expect(result.freeEnds).toBe(2);
+    expect(result.components).toBe(1);
+    expect(describeWallFaces(result)).toContain("2 free ends");
+  });
+
+  it("does not count a shared vertex as an end", () => {
+    // Two segments meeting head on: the joint has degree two, so only the far ends are free. The
+    // mutation this answers counted each edge's endpoints independently.
+    const bent = graphOf(
+      [
+        [0.2, 0.2],
+        [0.5, 0.2],
+        [0.5, 0.5],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+      ],
+    );
+    expect(buildWallFaces(bent).freeEnds).toBe(2);
   });
 });

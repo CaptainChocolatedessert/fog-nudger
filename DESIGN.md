@@ -3828,6 +3828,44 @@ maxima are meant to reach absurd values, and these are not the maxima.
 > distinct radius**, so a nudge crosses into the next one with the map redrawing identically on the
 > way.
 
+#### And then the symptom was described properly — 2026-09-21
+
+**The framing above is answering the wrong question**, which the user said outright: *"maps that used
+to have continuous walls robustly against the ink settings now get little gaps at corners. It's a
+tiny amount of change in the ink that becomes wall, so checking how much ink is lost won't catch
+it."* That is correct about every figure quoted above, all of which are **totals over the map**.
+
+Three more leads were closed on that reading, and one of them by a measurement worth keeping:
+
+- **`inkIslands.ts`' rewrite is faithful.** The diff was read rather than reasoned about: `walkIslands`
+  was extracted, the labels stayed consistent (island `i` carries label `i + 1`), and the test
+  `span >= minSpan` is unchanged. The note below dismissed it with a connectivity argument that has a
+  hole — the stroke filter runs *first* and can disconnect a corner — so it is worth saying that the
+  diff, not the argument, is what closes it.
+- **The fitting tolerance becoming computed did not change the fit.** `dev.log` happens to straddle
+  `0a6d734`, because the commit landed at 21:15 and the running page was not reloaded until after
+  21:29 — so there is a run on each side, on the same map at the same tolerance. **6331 points in
+  6256 commands before, 6332 in 6257 after**, both at 1.42px, both dropping 2 collinear points, 1
+  coincident segment and 2 of no length. One point.
+- **The coincident and zero-length drops are not new.** They are 1 and 2 on *both* sides of that
+  commit, so whatever they are costing, they were costing it before.
+
+**What was missing was an instrument, and now there is one.** Every figure the derive reported is a
+sum over the map, and a handful of broken corners moves none of them enough to see. `describeWallFaces`
+now prints **pieces** and **free ends** on every run, both of which were already computed —
+`components` is the right-hand side of Euler's identity.
+
+> **`freeEnds` is the sensitive figure and `components` is not**, which a fixture corrected while it
+> was being written. **A loop broken once is still connected the long way round**: it stops being a
+> loop and becomes an open chain, so the piece count does not move at all. A parted wall turns no
+> free ends into two. `components` moves only when a break *severs* something — a stub coming away,
+> a network splitting — which is the louder failure and the rarer one. **Four mutations, four
+> caught.**
+
+**The next step is a room, and it is cheap**: derive the map that shows the gaps and read the free-end
+count, then move the stroke slider one notch and read it again. A break shows as two. Nothing else
+about this can be settled from a desk, and the previous round of desk work is above.
+
 **What is still not established**, and it is the honest remainder: nothing here compares the *same
 map at the same setting* across the suspect commits. The decisive test is a room on an older build,
 and it is not worth one — the leads that would have made it a code change are closed, and
