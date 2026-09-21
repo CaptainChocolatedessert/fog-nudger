@@ -3100,6 +3100,10 @@ the user to want the public build to have them — never offer it per change.
   already dim reads as helpful or as something being wrong; whether the ink at 0.3 is still enough
   to judge a wall against; and whether *no drawer at all* on a map that is already chosen feels like
   a clean start or like something failed to load.
+- **Straighten and Prune, as tools** (user, 2026-09-21): *"Straighten and prune both work."* The
+  first time either has been drawn at all — see the registry collision that had kept them off the
+  screen. What that does not cover is under *Unconfirmed*: the readout, the handles and the red
+  marks were all reported wanting in the same breath.
 - **The drawer opening on nothing, and the edited/unedited log line** (user, 2026-09-21): *"That
   worked."* An already-nominated map opens with no drawer.
 - **The cover, including the start-up case** (user, 2026-09-20 and -21): *"The cover seems to work
