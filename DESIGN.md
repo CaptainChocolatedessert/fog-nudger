@@ -3799,7 +3799,51 @@ past 50ms, which is what would say whether the quadratic crossing sweep needs sp
 preview — the geometry-only preview with the sweep left to the commit is the change to make if a room
 reports the handle dragging heavily.
 
-### A suspected regression in the ink finding — reported 2026-09-18, NOT diagnosed
+### The suspected regression in the ink finding — leads closed 2026-09-21, no code change found
+
+**Every lead the note below named has now been checked, and none of them is a regression.** Measured
+from `dev.log`, which covers 2026-09-18 21:29 onward and so includes the window the report came from:
+
+- **The filter's default is `0`** — off — and `git log -S` finds no commit that has ever changed it.
+  Every run in the log has it on because the GM turned it on, at settings from 0.55 to 1.75.
+- **`morphology.ts` and `inkMetrics.ts` are untouched since 2026-09-15**, so neither the opening
+  itself nor the ink-width measurement moved in the window. The radius is computed in `pipeline.ts`
+  from the setting times the measured width, and that line is unchanged too.
+- **The second candidate is confirmed exactly.** *The Incandescent Grottoes* measures **2.9–3.4px**
+  of ink and *Lair of the Lamb* measures **5.3–5.9px** — about half, which is what the megapixel
+  budget's factor of 2 does to a raster. The same slider position is therefore a different radius,
+  and **"it didn't do that before" can be true with no code having changed: the input changed.**
+
+**What the control actually costs, which is the part worth keeping.** The radius is `round(setting ×
+ink width / 2)`, an **integer**, and an opening removes marks narrower than about twice it — so at any
+setting near or above **1.0 ink widths the threshold lands at or past the measured width of the
+linework itself**. The log says what that costs: 1.2 on the Lamb map's 5.7px ink removes **26.1%** of
+all ink; 1.15 on the Grottoes' 3.2px removes **58.9%**; 1.75 on the Lamb map removes **94.2%**. The
+maxima are meant to reach absurd values, and these are not the maxima.
+
+> **So the mechanism the user proposed is right and it is the control rather than a defect.** An
+> opening retracts a stroke's **end**, because the shape is locally narrow there along its own
+> direction — so a radius one notch high leaves exactly the reported artefact, *little bits missing
+> at the ends of walls, making small gaps all over the map*. And the slider has about **ten stops per
+> distinct radius**, so a nudge crosses into the next one with the map redrawing identically on the
+> way.
+
+**What is still not established**, and it is the honest remainder: nothing here compares the *same
+map at the same setting* across the suspect commits. The decisive test is a room on an older build,
+and it is not worth one — the leads that would have made it a code change are closed, and
+`inkIslands.ts`' rewrite still cannot produce this symptom for the reason the note gives: a bit at a
+wall's end is connected to the wall network, so it belongs to the one giant island and is never
+removed.
+
+**Held, not built:** the stops-per-outcome problem is real and now has a figure against it. Stepping
+the slider so that consecutive positions give consecutive radii is the fix, and it is the same
+defect this project already treated once — the gap width is stepped in twos *"because the value is
+halved and rounded to a closing radius, so consecutive odd and even settings produce the identical
+repair."*
+
+#### The original note, kept because it is what the checks above answered
+
+### A suspected regression in the ink finding — reported 2026-09-18
 
 **Reported (user, 2026-09-18), and nothing here is confirmed:** *"I get little gaps in the ink now
 that I never got before. I think they come from the setting for the thinnest line to keep. If it's
