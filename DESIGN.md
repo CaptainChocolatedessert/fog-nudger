@@ -3862,6 +3862,40 @@ now prints **pieces** and **free ends** on every run, both of which were already
 > a network splitting — which is the louder failure and the rarer one. **Four mutations, four
 > caught.**
 
+#### A severance costs an ink width, and that is why it belongs on the ink side — 2026-09-21
+
+**Measured in a room** (user): at the reported point, *"there's a 2 pixel gap in the ink, resulting
+in a ~9 pixel gap in the graph."* That is the amplification, and it is exactly what thinning's
+recorded free-end retraction predicts — Zhang–Suen pulls a free end back by `(w + 1) / 2`, and a
+severance has **two** ends:
+
+> **A break of `g` pixels in the ink becomes `g + w + 1` pixels in the graph.**
+
+On that map's 5.7px ink that is `2 + 6.7 = 8.7`, against a measured ~9. **The penalty is additive and
+does not shrink with the break**: a one-pixel nick in the ink still costs 7.7px of graph, because the
+retraction is a property of the stroke's width rather than of the damage.
+
+**Three things follow, and the third is the design conclusion.**
+
+- **Welding could never have healed this**, which corrects the section below: its radius defaulted to
+  3 and the skeleton gap here is ~9. The severance and its retraction both happen before any weld
+  would run. That section stands as the history of the only automatic healer there has been, and not
+  as the explanation of this gap.
+- **There is no such thing as a small break in the graph.** Every mend has to bridge at least an ink
+  width, which is why Mend's distances are seeded at 20 and 40 raster pixels rather than at
+  something small — a figure that looks generous and is not.
+- **Two pixels of ink is a far cheaper thing to fix than nine pixels of graph** (user's instinct,
+  2026-09-21: *"that might be the place to put it, since it comes from an ink parameter change"*).
+  Repairing before thinning means no free end, no retraction and no break at all; repairing after it
+  means bridging the full `g + w + 1`. The deleted comment said the same thing from the other side —
+  the repair *"has to see the damage"*.
+
+**What the ink side has ever had**, since the question was asked directly: `applyGapFill` ran inside
+the pipeline immediately after the stroke filter from 2026-08-23 until 2026-09-05. Its default was
+**12 for part of its first day, then 0** until it became a tool — so it was automatic *per derive*
+but never on unless a width was set. The tool's search default is 12 again today, which would find a
+two-pixel gap easily; what it does not do is run without being armed.
+
 #### The automatic healer was welding, and it went on 2026-08-30
 
 **Ruled out first** (user, 2026-09-21): the break repair below is *not* what they remember, because
