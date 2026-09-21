@@ -1071,8 +1071,27 @@ Three things follow:
   repair**, and the difference is enforced by construction.
 
 **The same radius as the opening, so nothing is set.** An opening at `radius` can only sever where
-the stroke dipped under about `2 * radius`, and a closing at `radius` bridges exactly that scale —
-self-tuning to the damage.
+the stroke dipped under about `2 * radius`, and the bridge reaches exactly that scale — self-tuning
+to the damage.
+
+**The erosion is one short of the dilation, and that is what makes a diagonal wall heal** (room,
+2026-09-21: a gap the first version missed, reported as *staggered by a pixel*). **A square erosion
+cannot fit inside a thin diagonal band** — the `(2r+1)` window needs that many consecutive full rows
+and columns and a diagonal never offers them — so a symmetric closing dilates the gap shut and then
+erodes the bridge straight back off. Measured: a severed two-pixel diagonal wall heals at **no radius
+at all** under a symmetric closing, and at **every** radius with the erosion one short. Closing at
+`radius + 1` does not help either, because the window grows with the band.
+
+> **The stagger was not the variable**, which a probe corrected on the way: a gap heals when it is
+> under `2 * radius` whether the two stumps are offset or not. What fails is the *angle* of the wall,
+> and it fails completely rather than marginally.
+
+**The cost of the asymmetry, measured:** the net one-pixel dilation restores a removed pixel that
+merely *touches* surviving ink rather than only one in a channel, so a stroke the filter removed
+leaves a one-pixel nub where it met a wall — 8 pixels of 64 removed on a hatched fixture at radius
+two, none at radius three. **Reasoned, not measured:** a one-pixel bump on the side of a five-pixel
+wall should not survive thinning as a branch, so it should cost no spurs; **the free-end count on the
+derive line is what would say otherwise**, and is the thing to watch.
 
 **It runs before the island filter**, so a restored bridge rejoins its fragment to the network
 rather than leaving it to be deleted as debris. That also makes the island profile's input the
@@ -1080,8 +1099,8 @@ healed mask, which is the honest one.
 
 **The cost, stated:** a thin stroke running through a narrow channel between two surviving walls
 comes back in the part inside the channel, because those pixels were ink and the channel is narrow.
-Bounded by `2 * radius`, and ambiguous anyway. **Six mutations, five caught and one equivalent** —
-the survivor relaxes a guard that `closeMask` already makes redundant, and is kept for cost.
+Bounded by `2 * radius`, and ambiguous anyway. **Seven mutations, six caught and one equivalent** —
+the survivor relaxes a guard that the radius-zero no-ops already make redundant, kept for cost.
 
 ### Connectivity — the pairing is not optional
 
@@ -2646,7 +2665,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,010 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,011 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -4942,7 +4961,7 @@ closed outright.
 | `trace/field.ts` | the integral images behind it |
 | `trace/polarity.ts` | which luminance class is ink |
 | `trace/inkMetrics.ts` | ink width, by erosion |
-| `trace/morphology.ts` | separable open/close, O(1) in the radius, and `healSeverances` — putting back the ink an opening severed, bounded by a closing and **intersected with the reading**, so it restores and never invents |
+| `trace/morphology.ts` | separable open/close, O(1) in the radius, and `healSeverances` — putting back the ink an opening severed, bridged by a dilation eroded one short (which is what heals a **diagonal** wall) and **intersected with the reading**, so it restores and never invents |
 | `trace/inkIslands.ts` | `walkIslands`, the one definition of an 8-connected lump of ink, and the island filter written in terms of it |
 | `trace/inkFlood.ts` | **Suppress blob's decision**: the connected set of map pixels within a tolerance of a clicked one's tone, 8-connected and measured against the seed |
 | `trace/inkProfile.ts` | **what each ink filter would take, band by band** — a granulometry over openings for stroke width, `walkIslands` binned by span for islands, and both placed on their own slider's track |

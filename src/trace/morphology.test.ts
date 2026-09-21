@@ -47,18 +47,19 @@ function rowsOf(mask: BinaryMask): string[] {
  * filtering, counting it as ground would erode a band off every edge and delete a wall drawn along
  * the border.
  */
-function slowClose(mask: BinaryMask, radius: number): BinaryMask {
+function slowBridge(mask: BinaryMask, radius: number): BinaryMask {
   const window = (
     source: BinaryMask,
     rule: (values: readonly number[]) => number,
     offEdge: number,
+    reach: number,
   ): BinaryMask => {
     const data = new Uint8Array(source.data.length);
     for (let y = 0; y < source.height; y++) {
       for (let x = 0; x < source.width; x++) {
         const values: number[] = [];
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -reach; dy <= reach; dy++) {
+          for (let dx = -reach; dx <= reach; dx++) {
             const nx = x + dx;
             const ny = y + dy;
             const outside = nx < 0 || nx >= source.width || ny < 0 || ny >= source.height;
@@ -70,8 +71,10 @@ function slowClose(mask: BinaryMask, radius: number): BinaryMask {
     }
     return { width: source.width, height: source.height, data };
   };
-  const dilated = window(mask, (v) => (v.some((n) => n === 1) ? 1 : 0), 0);
-  return window(dilated, (v) => (v.every((n) => n === 1) ? 1 : 0), 1);
+  const dilated = window(mask, (v) => (v.some((n) => n === 1) ? 1 : 0), 0, radius);
+  // One short, as the implementation is: see `healSeverances` on why a square erosion cannot fit
+  // inside a diagonal band.
+  return window(dilated, (v) => (v.every((n) => n === 1) ? 1 : 0), 1, Math.max(0, radius - 1));
 }
 
 /** Render a mask back to text, so a failure reads as a picture rather than as an index. */
@@ -431,6 +434,49 @@ describe("healSeverances", () => {
     expect(rowsOf(healed.mask)).toEqual(rowsOf(DOORWAY));
   });
 
+  it("heals a severed diagonal wall, which a symmetric closing never does", () => {
+    /*
+      **The case that changed the implementation** (room, 2026-09-21). A square erosion cannot fit
+      inside a thin diagonal band — the `(2r+1)` window needs that many consecutive full rows and
+      columns, and a diagonal never offers them — so a symmetric closing dilates the gap shut and
+      then erodes the bridge straight back off. Measured at the time: a severed two-pixel diagonal
+      wall healed at **no radius at all**, and at every radius once the erosion was one short.
+
+      Asserted against the closing, so the fixture states the difference rather than just the
+      outcome: `closeMask` does not cover the cut and the heal does.
+    */
+    const W = 22;
+    const H = 22;
+    const onWall = (x: number, y: number): boolean => x >= y && x < y + 2;
+    const cut = (y: number): boolean => y >= 10 && y < 12;
+    const build = (ink: (x: number, y: number) => boolean): BinaryMask => {
+      const data = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) if (ink(x, y)) data[y * W + x] = 1;
+      }
+      return { width: W, height: H, data };
+    };
+    const original = build(onWall);
+    const filtered = build((x, y) => onWall(x, y) && !cut(y));
+
+    // The symmetric closing leaves the cut open, which is what the old implementation did.
+    const closed = closeMask(filtered, 2);
+    let coveredByClosing = 0;
+    for (let i = 0; i < closed.data.length; i++) {
+      if (closed.data[i] === 1 && filtered.data[i] === 0 && original.data[i] === 1) {
+        coveredByClosing += 1;
+      }
+    }
+    expect(coveredByClosing).toBe(0);
+
+    // The asymmetric bridge closes it, and puts back only ink that was there.
+    const healed = healSeverances(filtered, original, 2);
+    expect(healed.restored).toBeGreaterThan(0);
+    for (let i = 0; i < healed.mask.data.length; i++) {
+      if (healed.mask.data[i] === 1) expect(original.data[i]).toBe(1);
+    }
+  });
+
   it("cannot resurrect a stroke the filter removed whole", () => {
     // A hairline with nothing surviving on either side: the closing has nothing to bridge between,
     // so there is no channel and nothing comes back however much ink the reading had there.
@@ -458,7 +504,7 @@ describe("healSeverances", () => {
       const opened = openMask(original, radius);
       const healed = healSeverances(opened, original, radius);
 
-      const oracle = slowClose(opened, radius);
+      const oracle = slowBridge(opened, radius);
       const expected = new Uint8Array(opened.data);
       for (let i = 0; i < expected.length; i++) {
         if (oracle.data[i] === 1 && opened.data[i] === 0 && original.data[i] === 1) expected[i] = 1;

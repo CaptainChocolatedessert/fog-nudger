@@ -183,14 +183,14 @@ export function closeMask(mask: BinaryMask, radius: number): BinaryMask {
  *
  * ## Restore, never invent — and that is enforced rather than warned about
  *
- * The closing says *where* a narrow channel is; `original` says *what may be put back*. Every
+ * The bridge says *where* the damage could be; `original` says *what may be put back*. Every
  * restored pixel was ink in the reading, so:
  *
  * - **It cannot invent ink.** An opening only removes, so `filtered ⊆ original`, and therefore
  *   `filtered ⊆ healed ⊆ original` for any input. The safety claim is an invariant, not a habit.
  * - **It cannot seal a doorway.** A doorway is a real opening in the drawing, so those pixels were
- *   ground before the filter ran and the intersection refuses them. Without it this is a plain
- *   closing, which would seal *any* opening under `2 * radius`.
+ *   ground before the filter ran and the intersection refuses them. Without it this is a blunt
+ *   dilation, which would seal *any* opening it reached.
  * - **It cannot resurrect a stroke the filter removed whole.** Nothing survives on either side, so
  *   the closing has nothing to bridge between.
  *
@@ -200,22 +200,39 @@ export function closeMask(mask: BinaryMask, radius: number): BinaryMask {
  *
  * ## The same radius as the opening, so there is nothing to set
  *
- * An opening at `radius` can only sever where the stroke dipped under about `2 * radius`, and a
- * closing at `radius` bridges exactly that scale. The repair is therefore **self-tuning to the
- * damage** and needs no control — which is also the house preference, since the result is drawn
- * before any act.
+ * An opening at `radius` can only sever where the stroke dipped under about `2 * radius`, and the
+ * bridge below reaches exactly that scale. The repair is therefore **self-tuning to the damage** and
+ * needs no control — which is also the house preference, since the result is drawn before any act.
+ *
+ * ## The erosion is one short of the dilation, and that is what makes diagonals work
+ *
+ * **A square erosion cannot fit inside a thin diagonal band.** A symmetric closing dilates the gap
+ * shut and then erodes the bridge straight back off wherever the wall runs at an angle, because the
+ * `(2r+1)` square window needs that many consecutive full rows and columns and a diagonal band never
+ * offers them. Measured (2026-09-21): a severed two-pixel diagonal wall heals at **no radius at all**
+ * under a symmetric closing, and at **every** radius when the erosion is one short. Closing at
+ * `radius + 1` does not fix it either — the window grows with the band.
+ *
+ * **The cost of the asymmetry, measured:** the net one-pixel dilation restores a removed pixel that
+ * merely *touches* surviving ink, not only one in a channel — so a stroke the filter removed leaves a
+ * one-pixel nub where it met a wall. On a hatched fixture that was 8 pixels of 64 removed at radius
+ * two and none at radius three.
+ *
+ * **Reasoned, not measured:** a one-pixel bump on the side of a five-pixel wall should not survive
+ * thinning as a branch, so those nubs should cost no spurs in the graph. The free-end count on the
+ * derive line is what would say otherwise.
  *
  * **The cost, stated:** a thin stroke that ran through a narrow channel between two surviving walls
  * comes back in the part inside the channel, because those pixels were ink and the channel is
  * narrow. Bounded by `2 * radius`, and ambiguous anyway — a mark wedged between two walls is not
  * clearly decoration.
  *
- * **Six mutations, five caught and one equivalent.** Caught: dropping the continuity check, ignoring
- * the filter's output, opening where a closing belongs, halving the radius, and counting a
- * restoration without making it. **The equivalent one** is relaxing the `radius <= 0` guard to
- * `radius < 0`: `closeMask` already hands back its input at zero, so the loop compares an array with
- * itself and can never restore. The guard earns its place by **cost** — a pass over the raster on
- * every derive — rather than by correctness, and is kept for that.
+ * **Seven mutations, six caught and one equivalent.** Caught: dropping the continuity check,
+ * ignoring the filter's output, halving the radius, counting a restoration without making it,
+ * eroding by the full radius (the diagonal case), and eroding by two less. **The equivalent one** is
+ * relaxing the `radius <= 0` guard to `radius < 0`: at zero the dilation and the erosion are both
+ * no-ops, so the loop compares an array with itself and can never restore. The guard earns its place
+ * by **cost** — a pass over the raster on every derive — rather than by correctness.
  */
 export function healSeverances(
   filtered: BinaryMask,
@@ -229,12 +246,15 @@ export function healSeverances(
   // length, and a mismatched pair would read past the end and report a number rather than fail.
   if (filtered.data.length !== original.data.length) return { mask: filtered, restored: 0 };
 
-  const closed = closeMask(filtered, radius);
+  // Dilate by the radius, erode by one less. The asymmetry is deliberate and is the whole of why a
+  // diagonal wall heals -- see the header. `Math.max` because radius one erodes by nothing, which is
+  // the most permissive this gets and is still bounded by the intersection below.
+  const bridged = erodeMask(dilateMask(filtered, radius), Math.max(0, radius - 1));
   const data = Uint8Array.from(filtered.data);
   let restored = 0;
   for (let i = 0; i < data.length; i++) {
     // In a narrow channel, absent now, and present in the reading: all three, or nothing happens.
-    if (closed.data[i] === 1 && filtered.data[i] === 0 && original.data[i] === 1) {
+    if (bridged.data[i] === 1 && filtered.data[i] === 0 && original.data[i] === 1) {
       data[i] = 1;
       restored += 1;
     }
