@@ -969,7 +969,8 @@ island rather than two that can drift.
 **Neither profile depends on the slider it belongs to.** Each is measured from the ink *before* its
 own filter, so dragging that handle redraws the same curve with the marker somewhere new. The stroke
 profile depends on the reading alone; the island profile also moves with the stroke slider, which is
-real rather than an oversight — the islands the second filter sees are whatever the first left.
+real rather than an oversight — the islands the second filter sees are whatever the first left,
+after the severance repair between them.
 
 **Computed off the critical path.** The stroke profile is one opening per radius, the same order of
 work as the reading itself, so folding it in would roughly double what a slider release costs to draw
@@ -1034,6 +1035,53 @@ in twos *"because the value is halved and rounded to a closing radius, so consec
 settings produce the identical repair"* — and the stroke filter has a worse version that nobody has
 seen, because the map redraws identically either way. With the curve drawn, the handle slides a third
 of the way across a flat stretch while nothing moves.
+
+### Healing what the stroke filter severs — 2026-09-21
+
+**An opening retracts a stroke's end**, so a radius one notch too high nicks a corner — and a nick
+is not a small thing downstream. Thinning pulls each free end back by `(w + 1) / 2`, and a severance
+makes two, so:
+
+> **A break of `g` pixels in the ink arrives as `g + w + 1` pixels in the graph.**
+
+Measured in a room: two pixels of ink, about nine pixels of graph, on 5.7px linework. **The penalty
+is additive and does not shrink with the break** — a one-pixel nick still costs an ink width — so
+there is no such thing as a small break once it reaches the graph. That is the whole argument for
+repairing here, where two pixels are two pixels, rather than on the graph where every mend has to
+bridge the lot.
+
+**So the opening is followed by a closing at the same radius, intersected with the reading.**
+`healSeverances` puts a pixel back only if all three hold: the closing says it lies in a channel
+narrower than `2 * radius`, the filter has removed it, and **the reading had ink there**.
+
+**Restore, never invent — and it is an invariant rather than a habit.** An opening only removes, so
+`filtered ⊆ original`, and the heal may only add from `original`; therefore
+`filtered ⊆ healed ⊆ original` for any input, which is swept over random masks rather than argued.
+Three things follow:
+
+- **It cannot seal a doorway.** A doorway is a real opening in the drawing, so those pixels were
+  ground before the filter ran and the intersection refuses them. **Without the check this is a
+  plain closing**, which would seal any opening under `2 * radius` — six pixels on the map that
+  prompted it.
+- **It cannot resurrect a stroke the filter removed whole**, since nothing survives either side for
+  the closing to bridge between.
+- **It needs no control, no colour and no confirmation.** This is what the automatic gap repair
+  could not have: that one was retired because a non-zero threshold *re-invented ink on every
+  recompose*, so it was never one-time consent. **This is filter-damage repair rather than gap
+  repair**, and the difference is enforced by construction.
+
+**The same radius as the opening, so nothing is set.** An opening at `radius` can only sever where
+the stroke dipped under about `2 * radius`, and a closing at `radius` bridges exactly that scale —
+self-tuning to the damage.
+
+**It runs before the island filter**, so a restored bridge rejoins its fragment to the network
+rather than leaving it to be deleted as debris. That also makes the island profile's input the
+healed mask, which is the honest one.
+
+**The cost, stated:** a thin stroke running through a narrow channel between two surviving walls
+comes back in the part inside the channel, because those pixels were ink and the channel is narrow.
+Bounded by `2 * radius`, and ambiguous anyway. **Six mutations, five caught and one equivalent** —
+the survivor relaxes a guard that `closeMask` already makes redundant, and is kept for cost.
 
 ### Connectivity — the pairing is not optional
 
@@ -2598,7 +2646,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,000 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,010 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -4894,7 +4942,7 @@ closed outright.
 | `trace/field.ts` | the integral images behind it |
 | `trace/polarity.ts` | which luminance class is ink |
 | `trace/inkMetrics.ts` | ink width, by erosion |
-| `trace/morphology.ts` | separable open/close, O(1) in the radius |
+| `trace/morphology.ts` | separable open/close, O(1) in the radius, and `healSeverances` — putting back the ink an opening severed, bounded by a closing and **intersected with the reading**, so it restores and never invents |
 | `trace/inkIslands.ts` | `walkIslands`, the one definition of an 8-connected lump of ink, and the island filter written in terms of it |
 | `trace/inkFlood.ts` | **Suppress blob's decision**: the connected set of map pixels within a tolerance of a clicked one's tone, 8-connected and measured against the seed |
 | `trace/inkProfile.ts` | **what each ink filter would take, band by band** — a granulometry over openings for stroke width, `walkIslands` binned by span for islands, and both placed on their own slider's track |

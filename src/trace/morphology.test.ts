@@ -17,10 +17,62 @@ import {
   closeMask,
   dilateMask,
   erodeMask,
+  healSeverances,
   openMask,
   radiusForWidth,
   removedInk,
 } from "./morphology";
+import { seededRandom } from "./fixtures";
+import type { BinaryMask } from "./binarize";
+
+/** Rows back out of a mask, so a fixture's expectation can be written the way it was written in. */
+function rowsOf(mask: BinaryMask): string[] {
+  const rows: string[] = [];
+  for (let y = 0; y < mask.height; y++) {
+    let row = "";
+    for (let x = 0; x < mask.width; x++) row += mask.data[y * mask.width + x] === 1 ? "#" : ".";
+    rows.push(row);
+  }
+  return rows;
+}
+
+/**
+ * A closing done the slow, obvious way: a square window per pixel, twice.
+ *
+ * **Shares no code with the implementation**, which is separable running-count passes over lines
+ * addressed by a base and a stride. This is the definition — dilate is *any* ink in the window,
+ * erode is *all* ink in the window — written so that agreeing with it says something.
+ *
+ * Off-image counts as **ink** for erosion, which is the implementation's deliberate clamp: for
+ * filtering, counting it as ground would erode a band off every edge and delete a wall drawn along
+ * the border.
+ */
+function slowClose(mask: BinaryMask, radius: number): BinaryMask {
+  const window = (
+    source: BinaryMask,
+    rule: (values: readonly number[]) => number,
+    offEdge: number,
+  ): BinaryMask => {
+    const data = new Uint8Array(source.data.length);
+    for (let y = 0; y < source.height; y++) {
+      for (let x = 0; x < source.width; x++) {
+        const values: number[] = [];
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            const outside = nx < 0 || nx >= source.width || ny < 0 || ny >= source.height;
+            values.push(outside ? offEdge : source.data[ny * source.width + nx]!);
+          }
+        }
+        data[y * source.width + x] = rule(values);
+      }
+    }
+    return { width: source.width, height: source.height, data };
+  };
+  const dilated = window(mask, (v) => (v.some((n) => n === 1) ? 1 : 0), 0);
+  return window(dilated, (v) => (v.every((n) => n === 1) ? 1 : 0), 1);
+}
 
 /** Render a mask back to text, so a failure reads as a picture rather than as an index. */
 function rows(mask: { width: number; height: number; data: Uint8Array }): string[] {
@@ -309,5 +361,135 @@ describe("removedInk", () => {
   it("is zero when nothing changed", () => {
     const mask = maskFromRows(["###", "###", "###"]);
     expect(removedInk(mask, openMask(mask, 1))).toBe(0);
+  });
+});
+
+/**
+ * Putting back what the opening severed, and nothing else.
+ *
+ * The three claims worth testing are the three the design rests on: it restores a severance, it
+ * refuses a doorway, and it can never put back a pixel that was not ink. The last is an
+ * **invariant** rather than a case, so it is swept rather than exampled.
+ */
+describe("healSeverances", () => {
+  /*
+    A wall two pixels thick with a one-pixel nick out of its middle.
+
+    The nick is ground after the opening and was ink before it, and it sits in a channel narrower
+    than `2 * radius` — all three conditions, so it comes back.
+  */
+  const NICKED = maskFromRows([
+    "..........",
+    "##########",
+    "####..####",
+    "##########",
+    "..........",
+  ]);
+
+  it("does nothing at a radius of zero, and hands the mask straight back", () => {
+    // Radius zero is the filter being off, so there is no damage to repair. The same object, not a
+    // copy, on this file's convention for an operation that does nothing.
+    const healed = healSeverances(NICKED, NICKED, 0);
+    expect(healed.mask).toBe(NICKED);
+    expect(healed.restored).toBe(0);
+  });
+
+  it("puts back ink the opening removed from a narrow channel", () => {
+    const opened = openMask(NICKED, 1);
+    // The opening has taken something out: without this the test below could pass on a mask the
+    // filter never touched.
+    expect(removedInk(NICKED, opened)).toBeGreaterThan(0);
+
+    const healed = healSeverances(opened, NICKED, 1);
+    expect(healed.restored).toBeGreaterThan(0);
+    // And what it restored is exactly ink that was there: nothing outside the original.
+    for (let i = 0; i < healed.mask.data.length; i++) {
+      if (healed.mask.data[i] === 1) expect(NICKED.data[i]).toBe(1);
+    }
+  });
+
+  it("refuses a doorway, which is the whole reason for the continuity check", () => {
+    /*
+      **The case that fails without the intersection.** A wall with a real opening in it — ground
+      before the filter ran and ground after — sitting in a channel a plain closing would seal.
+
+      Asserted by comparing against the closing itself: the closing fills the doorway, and the heal
+      must not. Without the `original` term the two would be equal, which is the mutation.
+    */
+    const DOORWAY = maskFromRows([
+      "..........",
+      "####..####",
+      "####..####",
+      "####..####",
+      "..........",
+    ]);
+    const closed = closeMask(DOORWAY, 2);
+    expect(removedInk(closed, DOORWAY)).toBeGreaterThan(0);
+
+    const healed = healSeverances(DOORWAY, DOORWAY, 2);
+    expect(healed.restored).toBe(0);
+    expect(rowsOf(healed.mask)).toEqual(rowsOf(DOORWAY));
+  });
+
+  it("cannot resurrect a stroke the filter removed whole", () => {
+    // A hairline with nothing surviving on either side: the closing has nothing to bridge between,
+    // so there is no channel and nothing comes back however much ink the reading had there.
+    const HAIRLINE = maskFromRows(["......", "......", "######", "......", "......"]);
+    const opened = openMask(HAIRLINE, 2);
+    expect(opened.data.some((v) => v === 1)).toBe(false);
+    expect(healSeverances(opened, HAIRLINE, 2).restored).toBe(0);
+  });
+
+  it("agrees with a closing computed the slow way, over random masks", () => {
+    /*
+      The oracle: a square window per pixel, twice, sharing no code with the separable passes. What
+      is compared is the **restored set** rather than the closing, so the intersection is in the
+      comparison rather than assumed away.
+    */
+    const next = seededRandom(20260921);
+    let sawRestoration = false;
+    for (let trial = 0; trial < 60; trial++) {
+      const width = 12;
+      const height = 9;
+      const data = new Uint8Array(width * height);
+      for (let i = 0; i < data.length; i++) data[i] = next() < 0.55 ? 1 : 0;
+      const original: BinaryMask = { width, height, data };
+      const radius = 1 + Math.floor(next() * 2);
+      const opened = openMask(original, radius);
+      const healed = healSeverances(opened, original, radius);
+
+      const oracle = slowClose(opened, radius);
+      const expected = new Uint8Array(opened.data);
+      for (let i = 0; i < expected.length; i++) {
+        if (oracle.data[i] === 1 && opened.data[i] === 0 && original.data[i] === 1) expected[i] = 1;
+      }
+      expect([...healed.mask.data], `trial ${trial}`).toEqual([...expected]);
+      if (healed.restored > 0) sawRestoration = true;
+    }
+    // A sweep that never met its case is a green light about nothing.
+    expect(sawRestoration).toBe(true);
+  });
+
+  it("never puts back a pixel that was not ink, over random masks", () => {
+    /*
+      **The safety claim, stated directly.** An opening only removes, so `filtered ⊆ original`; the
+      heal may only add from `original`; therefore `filtered ⊆ healed ⊆ original` always. This is
+      what lets it run with nothing to set and nothing to confirm.
+    */
+    const next = seededRandom(717);
+    for (let trial = 0; trial < 80; trial++) {
+      const width = 14;
+      const height = 11;
+      const data = new Uint8Array(width * height);
+      for (let i = 0; i < data.length; i++) data[i] = next() < 0.5 ? 1 : 0;
+      const original: BinaryMask = { width, height, data };
+      const radius = 1 + Math.floor(next() * 3);
+      const opened = openMask(original, radius);
+      const healed = healSeverances(opened, original, radius);
+      for (let i = 0; i < data.length; i++) {
+        if (opened.data[i] === 1) expect(healed.mask.data[i], `trial ${trial}`).toBe(1);
+        if (healed.mask.data[i] === 1) expect(original.data[i], `trial ${trial}`).toBe(1);
+      }
+    }
   });
 });

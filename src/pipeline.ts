@@ -77,7 +77,12 @@ import type { RasterPlacement, WorldBounds } from "./map/placement";
 import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity, type PolarityReading } from "./trace/polarity";
 import { countInk } from "./trace/binarize";
-import { openMask, radiusForWidth, removedInk } from "./trace/morphology";
+import {
+  healSeverances,
+  openMask,
+  radiusForWidth,
+  removedInk,
+} from "./trace/morphology";
 import {
   islandPoints,
   islandProfile,
@@ -1013,7 +1018,26 @@ function composeInk(
   const openStarted = performance.now();
   const strokeFloor = settings.trace.minStrokeInkWidths * (reading.inkWidth ?? 0);
   const openRadius = radiusForWidth(strokeFloor);
-  const effectiveMask = openMask(reading.mask, openRadius);
+  const opened = openMask(reading.mask, openRadius);
+  /*
+    **Put back what the opening severed, before anything downstream amplifies it.**
+
+    An opening retracts a stroke's end, so a radius one notch high nicks a corner — and thinning then
+    pulls each free end back by `(w + 1) / 2`, so `g` pixels of ink arrive as `g + w + 1` pixels of
+    graph. Two pixels became about nine on 5.7px linework, measured in a room. The penalty is
+    additive, so there is no such thing as a small break once it reaches the graph, and this is the
+    last place it is cheap to undo.
+
+    **It restores and never invents**: `healSeverances` intersects the closing with the reading, so
+    every pixel it puts back was ink the trace found. That is what lets it run with nothing to set
+    and nothing to confirm, where the automatic gap repair could not — that one re-invented ink on
+    every recompose, and this cannot invent any.
+
+    **Before the island filter**, so a restored bridge rejoins its fragment to the network rather
+    than leaving it to be deleted as debris.
+  */
+  const healed = healSeverances(opened, reading.mask, openRadius);
+  const effectiveMask = healed.mask;
   /*
     Kept so the two sliders can be drawn with the distribution they act on, computed later and only
     if something asks.
@@ -1025,12 +1049,23 @@ function composeInk(
   */
   lastFilterInputs = {
     beforeStroke: reading.mask,
+    // What the island filter actually sees, which is the healed mask rather than the opening's
+    // output. The profile's rule is that each filter's plot is drawn from its own input, and the
+    // heal sits between the two.
     beforeIsland: effectiveMask,
     inkWidthPx: reading.inkWidth ?? 0,
   };
 
   if (openRadius > 0) {
     const removed = removedInk(reading.mask, effectiveMask);
+    if (healed.restored > 0) {
+      devLog(
+        "info",
+        `trace: put back ${healed.restored} px the stroke filter severed — ink the reading found, ` +
+          `in channels narrower than ${openRadius * 2}px. Nothing invented: every pixel restored ` +
+          `was ink before the filter ran.`,
+      );
+    }
     devLog(
       "info",
       `trace: minimum stroke width in ${Math.round(performance.now() - openStarted)}ms — ` +

@@ -166,6 +166,84 @@ export function closeMask(mask: BinaryMask, radius: number): BinaryMask {
 }
 
 /** How many ink pixels an opening removed, for the log. */
+/**
+ * Put back the ink an opening severed, and nothing else.
+ *
+ * ## What it is for
+ *
+ * *Thinnest stroke to keep* is an opening, and an opening retracts a stroke's **end** — the shape is
+ * locally narrow there along its own direction. So a radius one notch too high nicks a corner, and a
+ * nick is not a small thing downstream: **thinning pulls each free end back by `(w + 1) / 2`**, so a
+ * break of `g` pixels in the ink arrives as `g + w + 1` pixels in the graph. Measured in a room
+ * (2026-09-21): two pixels of ink, about nine pixels of graph, on 5.7px linework.
+ *
+ * That penalty is **additive and does not shrink with the break** — a one-pixel nick still costs an
+ * ink width — which is why the repair belongs here, before thinning, rather than on the graph where
+ * every mend has to bridge the whole of it.
+ *
+ * ## Restore, never invent — and that is enforced rather than warned about
+ *
+ * The closing says *where* a narrow channel is; `original` says *what may be put back*. Every
+ * restored pixel was ink in the reading, so:
+ *
+ * - **It cannot invent ink.** An opening only removes, so `filtered ⊆ original`, and therefore
+ *   `filtered ⊆ healed ⊆ original` for any input. The safety claim is an invariant, not a habit.
+ * - **It cannot seal a doorway.** A doorway is a real opening in the drawing, so those pixels were
+ *   ground before the filter ran and the intersection refuses them. Without it this is a plain
+ *   closing, which would seal *any* opening under `2 * radius`.
+ * - **It cannot resurrect a stroke the filter removed whole.** Nothing survives on either side, so
+ *   the closing has nothing to bridge between.
+ *
+ * **This is what lets it run unasked**, where the automatic gap repair could not. That was retired
+ * because a non-zero threshold *re-invented ink on every recompose*, so it was never one-time
+ * consent. This re-invents nothing: it is filter-damage repair, not gap repair.
+ *
+ * ## The same radius as the opening, so there is nothing to set
+ *
+ * An opening at `radius` can only sever where the stroke dipped under about `2 * radius`, and a
+ * closing at `radius` bridges exactly that scale. The repair is therefore **self-tuning to the
+ * damage** and needs no control — which is also the house preference, since the result is drawn
+ * before any act.
+ *
+ * **The cost, stated:** a thin stroke that ran through a narrow channel between two surviving walls
+ * comes back in the part inside the channel, because those pixels were ink and the channel is
+ * narrow. Bounded by `2 * radius`, and ambiguous anyway — a mark wedged between two walls is not
+ * clearly decoration.
+ *
+ * **Six mutations, five caught and one equivalent.** Caught: dropping the continuity check, ignoring
+ * the filter's output, opening where a closing belongs, halving the radius, and counting a
+ * restoration without making it. **The equivalent one** is relaxing the `radius <= 0` guard to
+ * `radius < 0`: `closeMask` already hands back its input at zero, so the loop compares an array with
+ * itself and can never restore. The guard earns its place by **cost** — a pass over the raster on
+ * every derive — rather than by correctness, and is kept for that.
+ */
+export function healSeverances(
+  filtered: BinaryMask,
+  original: BinaryMask,
+  radius: number,
+): { readonly mask: BinaryMask; readonly restored: number } {
+  // Radius zero is no filtering, so there is no damage. The caller's own mask back, not a copy, on
+  // this file's convention for an operation that is off.
+  if (radius <= 0) return { mask: filtered, restored: 0 };
+  // Cannot fire: both are readings of one raster. Here because the loop indexes three arrays on one
+  // length, and a mismatched pair would read past the end and report a number rather than fail.
+  if (filtered.data.length !== original.data.length) return { mask: filtered, restored: 0 };
+
+  const closed = closeMask(filtered, radius);
+  const data = Uint8Array.from(filtered.data);
+  let restored = 0;
+  for (let i = 0; i < data.length; i++) {
+    // In a narrow channel, absent now, and present in the reading: all three, or nothing happens.
+    if (closed.data[i] === 1 && filtered.data[i] === 0 && original.data[i] === 1) {
+      data[i] = 1;
+      restored += 1;
+    }
+  }
+  // Nothing to put back means the caller keeps the mask it had, rather than an identical copy.
+  if (restored === 0) return { mask: filtered, restored: 0 };
+  return { mask: { width: filtered.width, height: filtered.height, data }, restored };
+}
+
 export function removedInk(before: BinaryMask, after: BinaryMask): number {
   // Both callers pass two readings of one raster, so this cannot fire. It is here because the loop
   // indexes `after` on `before`'s length, and a mismatched pair would read past the end and report
