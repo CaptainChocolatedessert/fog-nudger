@@ -3862,7 +3862,47 @@ now prints **pieces** and **free ends** on every run, both of which were already
 > a network splitting — which is the louder failure and the rarer one. **Four mutations, four
 > caught.**
 
-#### Answered by a room — 2026-09-21: it is the rounding boundary
+#### The actual cause: the stroke filter lost its repair — found 2026-09-21
+
+**The user was right and the two sections below are both too narrow.** They said the complaint was
+not *where* on the slider the cliff sits but that the result *used to be more robust to slider
+position*, and asked for the full history of the filter and everything downstream. Every window
+searched before this one started at 2026-09-16; **the change is 2026-09-05**.
+
+`e118e00`, *Gap repair becomes a tool inside Add ink*, took the automatic repair out of
+`pipeline.ts`. The comment it deleted states the dependency in the code's own words:
+
+> *"Runs after the minimum stroke width specifically: **part of its job is repairing what that
+> control severed**, so it has to see the damage."*
+
+**The two were a designed pair.** The stroke filter severs thin things — which is what it is for —
+and the repair ran immediately after it, saw the damage, and closed it. Since 09-05 the filter
+severs and nothing closes. That is the robustness that went, and it went without the filter or any
+of its downstream changing: `radiusForWidth` has not been touched since it was written on 08-23,
+`morphology.ts`' only later change was an aliasing fix at radius 0, `inkMetrics.ts` has not changed
+since 09-01, and `inkIslands.ts`' rewrite is faithful.
+
+**Measured, and it bounds who this affected:** `gapFillPx` defaulted to **0**, so the repair was off
+unless a GM set a width. Anyone who had set one — which is the case here — got severances sealed on
+every derive.
+
+**Reasoned, not measured:** a corner severance should be exactly what that search finds. A gap is *a
+narrow channel of ground whose banks of ink are far apart measured along the ink*, and the two halves
+of a parted wall are as far apart along the ink as going the whole way round the room. What is not
+established is whether the width and travel settings in use would have caught these particular
+breaks.
+
+**Nothing here argues the change was wrong.** The reason it was made stands and is in §4: an
+automatic threshold *re-invented ink on every recompose*, so it was never one-time consent, and as a
+tool the writing is an act. What was lost with it is the pairing, and **the surface no longer says
+anywhere that the two controls belong together** — which is the part to fix, not the tool.
+
+> **Three candidates, none of them built.** Run the search automatically after the stroke filter
+> moves and *ring* what it finds without filling, which restores the visibility without re-inventing
+> ink. Or say it in the stroke control's own text, which is one sentence and no machinery. Or note
+> the severance count from the filter itself, which it already knows.
+
+#### Answered by a room — 2026-09-21: it is the rounding boundary, but that is not the complaint
 
 **The user found the setting it happens at**: on the map where they first saw it, *"for thinnest
 line, a gap opens between 0.85 and 0.9"*, near a named point with similar features nearby. That
