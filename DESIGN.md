@@ -3087,9 +3087,13 @@ the user to want the public build to have them — never offer it per change.
   already dim reads as helpful or as something being wrong; whether the ink at 0.3 is still enough
   to judge a wall against; and whether *no drawer at all* on a map that is already chosen feels like
   a clean start or like something failed to load.
-- **The cover** (user, 2026-09-20): *"The cover seems to work correctly in the room."* The lid
-  appears, it is pressable, and the question behind it works. **Not itemised**, so it says nothing
-  on its own about the four details that were listed to watch — whether the lid lands on the pixel
+- **The cover, including the start-up case** (user, 2026-09-20 and -21): *"The cover seems to work
+  correctly in the room"*, and then *"once I did a true wall edit it, it started correctly with the
+  cover up."* The lid appears, it is pressable, the question behind it works, and **opening a map
+  whose walls already hold hand edits raises it before anything is touched** — which is the half no
+  desk can reach, since it needs a scene, a stored document and a base that differ.
+
+  **Not itemised**, so it says nothing on its own about the four details that were listed to watch — whether the lid lands on the pixel
   it should against the Ink/Walls rule, whether the covered glyphs at 0.5 read as *out of reach*
   rather than murky, whether a drawer vanishing as the lid raises is welcome, and whether the blue
   says *walls* to anyone who has not been told. None is suspected; none was reported on.
@@ -3142,6 +3146,27 @@ tool can see.
 
 **Two agreements, both learned expensively:** do not edit the running modules while a room is open,
 and try a reopen before diagnosing anything. `CLAUDE.md` says why.
+
+### Painted ink looks like hand-drawn walls, and that is worth knowing — 2026-09-21
+
+**Not a defect, and recorded because it cost a diagnosis.** A room reported the cover missing on a
+map whose walls held *"walls inserted in a silly place that could not have come from the map"*, which
+is an exact description of a hand edit — and they were derived from **painted ink** (user, same day:
+*"I actually drew in ink, and that's why the walls are there"*). The cover was correct throughout:
+painting is an input to the reading, so it survives a re-derive and is not a wall edit.
+
+The distinction is real and the surface does carry it, but only where a GM has to go looking: the ink
+layer draws the **composite**, and the two paint layers appear in their own colours only while a
+**brush** is in hand, with the point probe as the per-pixel fallback. So at rest, a wall the trace
+derived from a stroke the GM painted is drawn exactly like any other wall — correctly, since that is
+what it is. **Nothing to fix; something to recognise**, and the first question to ask when walls
+appear where the map has no linework is *did I paint there*, which arming a brush answers at a
+glance.
+
+It also says something about where the diagnosis should start. Two hypotheses about the save paths
+were built and discarded from reading the code; `dev.log` read in timestamp order settled it in four
+greps, showing the insert at 21:54:14 and the agreed regenerate that discarded it nine seconds
+later.
 
 ### The workflow rework — designed in full 2026-09-18, part built
 
