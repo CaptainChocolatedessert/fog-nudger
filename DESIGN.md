@@ -3242,11 +3242,12 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: take the edge clamp into a room** (built 2026-09-22, never pressed in one). Drag a
-vertex hard past each edge of the map and past a corner: it should slide along the edge and stop, never
-leaving. Do it with the map's edge walled too, where the vertex should land on the frame and join it.
-Draw's far end clamps the same way, which is the half the room did not find. §5, *An edit stops at the
-map's edge*, has the reasoning and what was rejected.
+**Do this first: the tool for deleting a connected chain or network of walls** (user, 2026-09-22:
+*"Let's do the tool for deleting a chain"*; raised twice before that). In design conversation now — §5,
+*An edit stops at the map's edge*, is done and confirmed.
+
+**The edge clamp is confirmed in a room** (user, 2026-09-22: *"That works in the room"*), Move and
+Draw both.
 
 **The frame toggle is confirmed in a room** (user, 2026-09-22: *"It works."*), and so is the brush
 leaving the map without painting outside it (*"Visually, at least, the paint behvior is correct"* — it
