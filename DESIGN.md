@@ -3188,23 +3188,12 @@ a 6.7px limit) the log shows 193 to 419 dead ends taken per derive depending on 
 > GM had set a limit, and what 09-18 removed was a GM's own setting being re-applied. That argument
 > was about a handle reaching the longest wall on the map; it does not describe a fixed two ink widths.
 
-**Waiting for a room: *Collapse small regions* — built 2026-09-21, not yet looked at.** The tiny loops
-from the same report, which the prune did not take and which the user put down to *"a lot of details
-drawn alongside the walls"*. §10's *Collapse small regions* has the whole of it. **What to do first in
-a room:** arm it on the map that prompted it and look at what the rings catch at the starting size
-(eight square ink widths); click one and see that the room beside it keeps its wall; then try
-*Collapse every region shown*. **Worth checking specifically**, because a desk cannot:
-
-- **Long slivers along curved walls**, where the spokes replace the wall with straight chords — the
-  dashed star is drawn before the click so it can be judged.
-- **Whether the starting size is a good guess**, or wants to be four.
-- **Whether the ring and red read at map zoom**, where the regions are a few pixels across.
-- **The glyph** beside Prune, at its real size — chosen from a mock, and only the running thing
-  settles the build.
-
-**Decided while building, for the user to check:** *Collapse all* takes only regions ringed at the
-press, found in later rounds by a point inside each; a region under the size but refused (its spokes
-would leave it) is never ringed; and the size applies live as the handle moves.
+***Collapse small regions* — built 2026-09-21 and confirmed in a room 2026-09-22** (user: *"That works
+great in the room."*). The tiny loops from the same report, which the prune did not take and which the
+user put down to *"a lot of details drawn alongside the walls"*. §10's *Collapse small regions* has the
+whole of it. **Confirmed as a whole rather than point by point**: nothing has been reported either way
+on long slivers along curved walls, on whether eight square ink widths is the right start, or on the
+glyph at its real size.
 
 **Noted, to look into later: saves are very slow on this map** (user, 2026-09-21: *"I'm having a lot
 of very slow saves. I'm usually not waiting for them to finish, since we're just testing."*). The log
@@ -3219,7 +3208,7 @@ per wall (one item per wall *run* rather than per segment, which §6 decided aga
 Owlbear), or fewer walls (*Collapse small regions*, and the thin-lines ink tool). **Not
 established:** whether the per-edit graph writes are also slow; the log has no timing on them.
 
-**Then the four parked items**, none started. (*Mend moves below Prune* was the fifth, and went in
+**Then the five parked items**, none started. (*Mend moves below Prune* was the fifth, and went in
 with *Collapse small regions*, which sits between them.)
 
 1. **Prune acts like Mend** — rings on the candidates, click one to take it, a button for all. **This
@@ -3231,7 +3220,12 @@ with *Collapse small regions*, which sits between them.)
    split** when it went on, which cannot be unsplit without knowing which splits it caused.
 3. **The frame should be undoable**, and may already be: it goes through `saveEditedWalls`, which
    pushes an entry unconditionally. Check before building.
-4. **Delete a whole connected chain or network of walls**, complementing Dissolve region.
+4. **Delete a whole connected chain or network of walls**, complementing Dissolve region. Raised
+   again 2026-09-22 (user), so it is wanted rather than only noted.
+5. **Draw a chain of walls** (user, 2026-09-22): each click starts a new wall joined to the last, and
+   the chain stops on Escape, on right-click, or on a click on an existing vertex, which closes the
+   shape. Draw's two-click form already re-aims a far end between clicks, so this is that form not
+   stopping after one wall.
 
 **Parked from the ink investigation**, both recorded with measurements and neither built: the stroke
 slider's **stepping** (about ten stops per distinct radius, so six nudges do nothing and the seventh
@@ -4768,7 +4762,8 @@ and every one of its 9.4 million pixels taken, is 242 to 339ms.
 - **An anti-aliased or dusty edge can leave a scatter of survivors** that no tolerance cleanly
   reaches. The two proposed ink tools above are the answer if a room finds it.
 
-**6. Collapse small regions — built 2026-09-21, not yet in a room.** Rings every region under a size;
+**6. Collapse small regions — built 2026-09-21, confirmed in a room 2026-09-22** (*"That works great
+in the room"*). Rings every region under a size;
 a click inside a ring collapses that one, and a button collapses every one ringed.
 
 **What it is for**: the cells that detail drawn alongside a wall encloses — texture just inside it,
