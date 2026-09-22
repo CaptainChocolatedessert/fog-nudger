@@ -19,8 +19,8 @@
  *
  * ## All but two decide by looking
  *
- * Move takes a press only when a vertex is under it, Erase only when a wall is, Mend and Collapse small
- * regions only inside a ring, Dissolve only inside a region and Span only where it has a wall to place. So a drag anywhere
+ * Move takes a press only when a vertex is under it, Erase only when a wall is, Mend, Prune and Collapse
+ * small regions only inside a ring, Dissolve only inside a region and Span only where it has a wall to place. So a drag anywhere
  * else still pans, and Ctrl still pans anywhere. **Draw and Suppress region take every press**: a wall
  * has to be able to start on empty map, and a mark can go anywhere — the case the shell's brush branch
  * already anticipated.
@@ -49,6 +49,7 @@ import { applySpan, findSpan, type Span } from "../trace/span";
 import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { applyMends, type Mend } from "../trace/mends";
 import { applyCollapses, collapseAll, type Collapse } from "../trace/collapse";
+import { applyPrunePieces, type PrunePiece } from "../trace/prunePieces";
 import { dissolutionAt, type Dissolution } from "../trace/dissolve";
 import { buildWallFaces, type WallFaces } from "../trace/wallFaces";
 import {
@@ -65,7 +66,8 @@ import {
   type Grab,
 } from "./dragGesture";
 import { describeMends, mendAt } from "./mendGesture";
-import { collapseAt, describeCollapses } from "./collapseGesture";
+import { describeCollapses, describePrunes, ringAt } from "./ringGesture";
+import { currentPrunePieces, pruneLength, startPruneSearch, stopPruneSearch } from "./pruneSearch";
 import {
   collapseSize,
   currentCollapses,
@@ -96,6 +98,7 @@ export type WallTool =
   | "draw"
   | "erase"
   | "mend"
+  | "prune"
   | "collapse"
   | "dissolve"
   | "suppressRegion"
@@ -185,6 +188,10 @@ let hoveredMend = false;
 let pressedCollapse: { readonly collapse: Collapse; readonly graph: WallGraph } | null = null;
 /** Whether the pointer is inside a small region's ring. */
 let hoveredCollapse = false;
+/** The dead-end piece a press landed on, and the walls it was found on. Taken on release. */
+let pressedPrune: { readonly piece: PrunePiece; readonly graph: WallGraph } | null = null;
+/** Whether the pointer is inside a dead end's ring. */
+let hoveredPrune = false;
 /**
  * Dissolving: the region under the pointer, the walls a click would remove, and the graph they were
  * found on. Removed on release, as an erase is, so the highlight is exactly what goes.
@@ -353,6 +360,7 @@ export function setTool(next: WallTool): void {
   hoveredEdge = null;
   hoveredMend = false;
   hoveredCollapse = false;
+  hoveredPrune = false;
   hoveredRegion = null;
   markTarget = null;
   dropSpan();
@@ -378,6 +386,13 @@ export function setTool(next: WallTool): void {
     say(found === null ? "there are no walls on screen to search" : describeCollapses(found));
   } else {
     stopCollapseSearch();
+  }
+  // And the dead ends, at four ink widths, every time the tool is picked up.
+  if (next === "prune") {
+    const found = startPruneSearch();
+    say(found === null ? "there are no walls on screen to search" : describePrunes(found));
+  } else {
+    stopPruneSearch();
   }
   invalidate();
 }
@@ -431,6 +446,7 @@ function clearGesture(): void {
   pressedAt = null;
   pressedMend = null;
   pressedCollapse = null;
+  pressedPrune = null;
 }
 
 function start(point: MapPoint): boolean {
@@ -490,10 +506,19 @@ function start(point: MapPoint): boolean {
     press that turns into a drag is still a click on the ring rather than the start of something.
     Anywhere else declines, and the press pans.
   */
+  // Prune's rings, the same way: a press inside one is taken, and the piece goes on release.
+  if (tool === "prune") {
+    const pieces = currentPrunePieces();
+    const index = ringAt(pieces.map((piece) => piece.points), point.x, point.y, point.perPixel);
+    if (index === null) return false;
+    pressedPrune = { piece: pieces[index]!, graph };
+    return true;
+  }
+
   // The same shape as Mend's: a press inside a ring is taken, and collapses on release.
   if (tool === "collapse") {
     const collapses = currentCollapses();
-    const index = collapseAt(collapses, point.x, point.y, point.perPixel);
+    const index = ringAt(collapses.map((c) => c.outline), point.x, point.y, point.perPixel);
     if (index === null) return false;
     pressedCollapse = { collapse: collapses[index]!, graph };
     return true;
@@ -582,7 +607,7 @@ function cancel(): void {
  * drawing tools use for "not that one".
  */
 function escape(): boolean {
-  if (!anchor && !grab && !pressedMend && !pressedCollapse) return false;
+  if (!anchor && !grab && !pressedMend && !pressedCollapse && !pressedPrune) return false;
   cancel();
   say("cancelled");
   return true;
@@ -674,6 +699,16 @@ function end(): void {
     // A press that travelled was a drag, and a mark is placed by a click.
     if (!target || dragged) return;
     commitMark(target);
+    return;
+  }
+
+  if (tool === "prune") {
+    const pressed = pressedPrune;
+    clearGesture();
+    invalidate();
+    // Found on walls a derive or an edit has since replaced: its indices name walls no longer drawn.
+    if (!pressed || pressed.graph !== graph) return;
+    commit(applyPrunePieces(graph, [pressed.piece]), prunedMessage(1), "pruning a dead end", graph);
     return;
   }
 
@@ -786,6 +821,7 @@ function hover(point: MapPoint | null): void {
       hoveredEdge === null &&
       !hoveredMend &&
       !hoveredCollapse &&
+      !hoveredPrune &&
       hoveredRegion === null &&
       markTarget === null &&
       spanTarget === null
@@ -796,6 +832,7 @@ function hover(point: MapPoint | null): void {
     hoveredEdge = null;
     hoveredMend = false;
     hoveredCollapse = false;
+    hoveredPrune = false;
     hoveredRegion = null;
     markTarget = null;
     dropSpan();
@@ -882,9 +919,17 @@ function hover(point: MapPoint | null): void {
     return;
   }
 
+  if (tool === "prune") {
+    const over = ringAt(currentPrunePieces().map((piece) => piece.points), point.x, point.y, point.perPixel) !== null;
+    if (over === hoveredPrune) return;
+    hoveredPrune = over;
+    setGrabTarget(over);
+    return;
+  }
+
   if (tool === "collapse") {
     // A crosshair inside a ring, where a press will act; the hand everywhere else, where it will pan.
-    const over = collapseAt(currentCollapses(), point.x, point.y, point.perPixel) !== null;
+    const over = ringAt(currentCollapses().map((c) => c.outline), point.x, point.y, point.perPixel) !== null;
     if (over === hoveredCollapse) return;
     hoveredCollapse = over;
     setGrabTarget(over);
@@ -1008,6 +1053,38 @@ export function collapseEveryRegionShown(): void {
   });
 }
 
+/** What the state line says once dead ends are pruned: how many pieces went, and how many are left. */
+function prunedMessage(count: number): () => string {
+  return () => {
+    const left = currentPrunePieces().length;
+    return `pruned ${count} dead end${count === 1 ? "" : "s"} · ${left} left`;
+  };
+}
+
+/**
+ * Prune every piece ringed, as one edit and so one step of undo — the drawer's button.
+ *
+ * **Exactly what is ringed and drawn red**, because the pieces already carry the whole cascade
+ * (`trace/prunePieces.ts`): there are no rounds to run and nothing a later round could add. Quick, so no
+ * working indicator — it is the old amount's commit with the pieces named.
+ */
+export function pruneEveryDeadEndShown(): void {
+  if (busy || tool !== "prune") return;
+  const graph = editableGraph();
+  const pieces = graph ? currentPrunePieces() : [];
+  if (!graph || pieces.length === 0) {
+    say("nothing to prune — no dead ends that short are on offer");
+    return;
+  }
+  const length = pruneLength() ?? 0;
+  devLog(
+    "info",
+    `workspace: pruned ${pieces.length} dead-end pieces ` +
+      `(${pieces.reduce((total, piece) => total + piece.edges.length, 0)} segments) at ${length.toExponential(2)} graph units`,
+  );
+  commit(applyPrunePieces(graph, pieces), prunedMessage(pieces.length), "pruning every dead end shown", graph);
+}
+
 /**
  * Put the wall tools' searches down without choosing another wall tool — for when the strip moves to a
  * tool outside the Walls band, which does not come through `setTool` here. Mend's and the small
@@ -1021,6 +1098,8 @@ export function putDownSearches(): void {
   }
   stopCollapseSearch();
   hoveredCollapse = false;
+  stopPruneSearch();
+  hoveredPrune = false;
   invalidate();
 }
 

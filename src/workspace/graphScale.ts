@@ -46,6 +46,19 @@
 
 import { largestBend, longestRun, type WallGraph } from "../trace/wallGraph";
 
+/**
+ * Where both graph-derived tracks start — Straighten's and *Prune the dead ends*' — in graph units.
+ *
+ * **Pinned rather than the smallest thing in the graph**, and the reason is sharp: both delete from the
+ * bottom, so the smallest bend and the shortest dead end are the most mobile quantities there are. Prune
+ * at a length and the shortest surviving dead end is longer than it; a tracking floor would chase the
+ * handle upward every opening, and the same position would mean a larger bite each time. That is the
+ * non-monotonicity the two-slider gap design collapsed under.
+ *
+ * One constant for both, and *Collapse small regions*' area floor is its square.
+ */
+export const TRACK_FLOOR = 2e-4;
+
 interface Tops {
   /**
    * The longest wall run, in graph units. Zero when there is nothing to prune.

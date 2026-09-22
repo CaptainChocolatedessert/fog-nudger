@@ -57,6 +57,7 @@ import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerMendsLayer } from "./workspace/layers/mends";
 import { registerCollapsesLayer } from "./workspace/layers/collapses";
+import { registerPrunesLayer } from "./workspace/layers/prunes";
 import { registerDeltaLayer } from "./workspace/layers/delta";
 import { registerRegenerateReview } from "./workspace/regenerateGuard";
 import { registerRegionsLayer } from "./workspace/layers/regions";
@@ -70,6 +71,7 @@ import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderToolControls } from "./workspace/paintControls";
 import { renderMendControls } from "./workspace/mendControls";
 import { renderCollapseControls } from "./workspace/collapseControls";
+import { renderPruneControls } from "./workspace/pruneControls";
 import { renderMarkControls } from "./workspace/markControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
@@ -192,6 +194,8 @@ registerGraphLayer();
 registerMendsLayer();
 // And the small regions on offer, over the walls a collapse would take.
 registerCollapsesLayer();
+// And the rings round the dead ends Prune would take, over the red the walls layer draws.
+registerPrunesLayer();
 /*
   Last, so the delta draws over the walls it is about.
 
@@ -269,6 +273,8 @@ registerToolContent(renderToolControls);
 registerToolContent(renderMendControls);
 // *Collapse small regions*' size and its button, in the drawer arming the tool opens.
 registerToolContent(renderCollapseControls);
+// *Prune the dead ends*' length and its button. Straighten's handle is `renderAmountControls`, below.
+registerToolContent(renderPruneControls);
 /*
   And *Suppress region*'s, which is a drawer holding one button and no settings.
 
@@ -278,7 +284,8 @@ registerToolContent(renderCollapseControls);
 */
 registerToolContent(renderMarkControls);
 /*
-  And the two amounts, one slider each, in the drawer that arming the tool opens.
+  And Straighten's amount, in the drawer that arming the tool opens. (Prune shared this until
+  2026-09-22 and has its own drawer, above, now it is ringed.)
 
   **Registered as tool content since 2026-09-21**, which is what makes the latch work unchanged:
   it pins when the drawer opens and applies when it closes, and those are the same two events they

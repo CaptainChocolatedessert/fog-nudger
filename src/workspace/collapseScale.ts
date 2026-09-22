@@ -31,12 +31,13 @@
  */
 
 import type { ScaleLimits } from "../sliderScale";
+import { TRACK_FLOOR } from "./graphScale";
 
 /** Square ink widths the handle starts at. */
 export const START_INK_WIDTHS_SQUARED = 8;
 
-/** Where the log part of the track starts: the square of Straighten and Prune's floor of 2e-4. */
-export const AREA_FLOOR = 4e-8;
+/** Where the log part of the track starts: the square of Straighten and Prune's floor. */
+export const AREA_FLOOR = TRACK_FLOOR * TRACK_FLOOR;
 
 /** The start when no ink width was measured — 8 × (3 / 3300)², in graph units squared. */
 export const FALLBACK_START = START_INK_WIDTHS_SQUARED * (3 / 3300) ** 2;

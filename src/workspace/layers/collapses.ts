@@ -8,7 +8,7 @@
  *   is Dissolve region's highlight exactly.
  * - **The star is additive and proposed**, so dashed in the additive colour and cased like a wall, as
  *   Mend's proposals are. What is drawn is what a click puts in.
- * - **The ring is the target**, solid over a dark rim and sized by `collapseGesture.ts`, which is what a
+ * - **The ring is the target**, solid over a dark rim and sized by `ringGesture.ts`, which is what a
  *   click is tested against — so what is drawn and what is hit are one circle.
  *
  * **Before the click, and that is the licence** (§8: a control that can be wrong needs a visual channel
@@ -23,7 +23,7 @@
 
 import { colourFor } from "../palette";
 import { currentCollapses } from "../collapseSearch";
-import { collapseCentre, collapseRingRadius } from "../collapseGesture";
+import { ringCentre, ringRadius } from "../ringGesture";
 import { editableGraph } from "../regions";
 import { addPainter, type Painter } from "../shell";
 
@@ -50,10 +50,10 @@ const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight })
   context.save();
   context.lineCap = "round";
   for (const collapse of collapses) {
-    const centre = collapseCentre(collapse);
+    const centre = ringCentre(collapse.outline);
     const cx = x(centre.x);
     const cy = y(centre.y);
-    const radius = collapseRingRadius(collapse, perPixel);
+    const radius = ringRadius(collapse.outline, perPixel);
     if (cx + radius < 0 || cy + radius < 0 || cx - radius > width || cy - radius > height) continue;
 
     // What goes. The indices name walls in the graph the search ran on, which `currentCollapses` has

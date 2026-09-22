@@ -86,6 +86,7 @@ export const LAYERS = [
   "gaps",
   "mends",
   "collapses",
+  "prunes",
   "blob",
   "regions",
   "graph",
@@ -127,6 +128,8 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId | readonly LayerId[]>>
   mend: "mends",
   // The small regions on offer, their rings and what each would become — the tool is the switch.
   collapse: "collapses",
+  // And the rings round each piece a prune would take. Its red is the walls layer's own.
+  prune: "prunes",
   /*
     **Two**, and it is the first tool to want two (user, 2026-09-17).
 
@@ -253,23 +256,17 @@ export const TOOLS: readonly ToolChoice[] = [
   */
   { id: "blob", label: "Suppress blob", band: "ink", drag: "brush", hint: "" },
   /*
-    **The two amounts are tools, since 2026-09-21** (user): *"They should be distinct tools in the
-    rail."* They were two sliders at the foot of the Walls group's drawer, and that drawer is gone.
+    **Straighten is a tool, since 2026-09-21** (user): *"They should be distinct tools in the rail"* —
+    written of Straighten and Prune together, when both were amounts. Prune became ringed the next day.
 
-    `pan`, and that is the whole of what makes them unlike every other verb here: **neither takes a
+    `pan`, and that is the whole of what makes it unlike every other verb here: **it takes no
     gesture.** An amount applies to the walls in front of the GM rather than to a point they aim at,
-    so a plain drag still pans while one is in hand. What arming them is *for* is the drawer they
-    open, which is where the handle lives — and the drawer opening and closing is exactly the pin
-    and the commit the latch already keyed on, so moving them here changed the event's name and not
-    its shape.
+    so a plain drag still pans while it is in hand. What arming it is *for* is the drawer it opens,
+    which is where the handle lives — and the drawer opening and closing is exactly the pin and the
+    commit the latch keys on.
 
-    **They sit at the head of the band, above the verbs**, because they are what a GM does to a
-    freshly derived graph before they start correcting it by hand.
-
-    **The cost, stated:** each holds its own latch now, so arming one commits the other. Both used to
-    share one pinned base and one undo entry, and with both aimed the straightened result was
-    substituted and Prune's red marks went with it. That interaction is gone; two presses, two
-    entries, and never both aimed at once.
+    **It sits at the head of the band, above the verbs**, with Prune and Collapse under it, because
+    those are what a GM does to a freshly derived graph before they start correcting it by hand.
   */
   {
     id: "straighten",
@@ -278,20 +275,20 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "pan",
     hint: "Drag the amount to fit the walls you have. Closing this applies it, as one step of undo.",
   },
-  {
-    id: "prune",
-    label: "Prune the dead ends",
-    band: "walls",
-    drag: "pan",
-    hint: "Drag the amount to remove dead ends up to a length. What would go is drawn in red.",
-  },
+  /*
+    **Prune is ringed now, not an amount** (user, 2026-09-22: as an amount it *"feels inconsistent"*
+    beside Mend and *Collapse small regions*). `edit`, like them: a press inside a ring takes that piece
+    and anything else pans. Its hint is its group's blurb. Straighten above it stays an amount because
+    it changes every wall at once, so it is the one `pan` verb left.
+  */
+  { id: "prune", label: "Prune the dead ends", band: "walls", drag: "edit", hint: "" },
   /*
     Collapse the small regions detail leaves along the walls (user, 2026-09-21). `edit`, like Mend: it
     takes a press inside a ring and declines everything else, which falls through to a pan. Its hint is
     its group's blurb, because it has a control of its own and the blurb is the line above it.
 
-    **Under Prune and above Mend** (user), so the corrections sit together: the two amounts, then the
-    two ringed tools. Mend moved up to meet it, which was a parked item of its own.
+    **Under Prune and above Mend** (user), so the corrections sit together: Straighten's amount, then
+    the three ringed tools. Mend moved up to meet it, which was a parked item of its own.
   */
   { id: "collapse", label: "Collapse small regions", band: "walls", drag: "edit", hint: "" },
   /*
@@ -656,12 +653,12 @@ export const STEPS: readonly Step[] = [
         parameters: [],
       },
       /*
-        The two amounts, which declare no parameter and still want a drawer.
+        Straighten, which declares no parameter and still wants a drawer.
 
-        **Their handle is not a setting**, which is why `parameters` is empty: nothing is stored, the
+        **Its handle is not a setting**, which is why `parameters` is empty: nothing is stored, the
         slider starts at zero on every opening, and what it aims at is the graph in front of the GM.
-        `wallAmounts.ts` draws the row into the slot these open, exactly as *Suppress region*'s one
-        button is drawn into its own.
+        `wallAmounts.ts` draws the row into the slot this opens, exactly as *Suppress region*'s one
+        button is drawn into its own. Prune's group below was an amount's too until 2026-09-22.
 
         Declared here rather than listed in the module that draws them, for the reason that entry
         already carries: two lists of "which tools have a drawer" are one fact told twice, and
@@ -674,16 +671,25 @@ export const STEPS: readonly Step[] = [
         blurb: "",
         parameters: [],
       },
+      /*
+        *Prune the dead ends*: one handle and one button, and **no parameter**, as *Collapse small
+        regions* has — the handle is not stored and is back at its start every opening. The blurb is
+        Collapse's with its own nouns, because the gesture is the same.
+      */
       {
         tool: "prune",
         title: "Prune the dead ends",
-        blurb: "",
+        blurb:
+          "Rings every dead end shorter than the length, and what taking one would leave hanging. " +
+          "<b>Click inside a ring</b> to prune that one, or use the button below for all of them. " +
+          "Dragging pans.",
         parameters: [],
       },
       /*
         *Collapse small regions*: one handle and one button, and **no parameter** — the handle is not a
         setting. Nothing is stored and it is back at its starting point every time the drawer opens, so
-        the group exists for the drawer alone, as the amounts' do. `collapseControls.ts` draws the row.
+        the group exists for the drawer alone, as Straighten's and Prune's do. `collapseControls.ts`
+        draws the row.
 
         The blurb is Mend's, because the gesture is Mend's: rings, a click inside one, a button for all.
       */

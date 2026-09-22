@@ -1,7 +1,7 @@
 /**
  * *Collapse small regions*' own drawer: the size, and the button that collapses every region ringed.
  *
- * Registered with the drawer as tool content, as Mend's and the amounts' are, and drawn only while
+ * Registered with the drawer as tool content, as Mend's, Prune's and Straighten's are, and drawn only while
  * this tool's drawer is the one open. The line above it is the tool's group blurb, which the drawer
  * paints into the hint slot — so it is not drawn here a second time.
  *
@@ -24,7 +24,7 @@
  */
 
 import { SLIDER_STEPS, fromSlider, toSlider } from "../sliderScale";
-import { describeCollapses } from "./collapseGesture";
+import { describeCollapses } from "./ringGesture";
 import { collapseLimits } from "./collapseScale";
 import { collapseSize, setCollapseSize } from "./collapseSearch";
 import { currentToolDrawer } from "./drawer";

@@ -1,5 +1,13 @@
 /**
- * The latch behind the Walls drawer's two actions — *Prune the dead ends* and *Straighten*.
+ * The latch behind *Straighten* — the one action with an amount left.
+ *
+ * ## It was two amounts until 2026-09-22
+ *
+ * *Prune the dead ends* shared it, and left to become a ringed tool like Mend (user, 2026-09-22):
+ * rings on what it would take, one piece a click, a button for all. Each click there is its own edit,
+ * so there is nothing to pin. What follows was written for both and holds for the one; the passage on
+ * why one pin carried two amounts rather than two latches is kept because the reason still applies to
+ * anything that ever joins Straighten here.
  *
  * ## What an action with an amount is, and why it is not a setting
  *
@@ -27,15 +35,12 @@
  * more*, and three things fall out for free: a drawer closed untouched applies nothing, a drawer stolen
  * by another press commits nothing, and one opening is one undo entry.
  *
- * ## One pin and two amounts, not two latches
+ * ## If a second amount ever joins: one pin, not two latches
  *
- * Both sliders live in the same drawer, so two independent latches would pin the same graph and both
- * try to commit on the way out — and the first to save **replaces the document**, which voids the second
- * by the staleness rule below. The second amount would vanish with nothing said. One pin carrying both
- * amounts is what makes the drawer's commit a single operation, and a single undo entry.
- *
- * **The order the two are applied is the caller's**, not this module's: it holds numbers. `wallAmounts.ts`
- * applies pruning first and says why.
+ * Two sliders in one drawer with two independent latches would pin the same graph and both try to
+ * commit on the way out — and the first to save **replaces the document**, which voids the second by the
+ * staleness rule below. The second amount would vanish with nothing said. One pin carrying both is what
+ * made the drawer's commit a single operation while Prune shared it, and it is the shape to go back to.
  *
  * ## The staleness rule, which is the only subtle thing here
  *
@@ -54,9 +59,6 @@
 
 import type { WallGraph } from "../trace/wallGraph";
 
-/** Which of the drawer's two amounts a caller is aiming. */
-export type WallAmount = "prune" | "straighten";
-
 /** A pinned base and the amounts aimed at it. */
 export type GraphLatch = {
   /**
@@ -73,8 +75,6 @@ export type GraphLatch = {
    * at commit time instead would read a predicate that may have changed since the latch.
    */
   readonly fromDerivation: boolean;
-  /** How much dead end to remove, in graph units. Zero means pruning is off. */
-  readonly prune: number;
   /** How much to straighten by, in graph units. Zero means straightening is off. */
   readonly straighten: number;
 };
@@ -83,31 +83,30 @@ export type GraphLatch = {
 export const NO_LATCH: GraphLatch = {
   base: null,
   fromDerivation: false,
-  prune: 0,
   straighten: 0,
 };
 
 /**
  * Pin a graph as the drawer opens.
  *
- * **Both amounts are zero**, never carried over from the last opening, for the reason in the module
- * note. A `null` graph pins nothing, which is the state on a map with no walls yet.
+ * **The amount is zero**, never carried over from the last opening, for the reason in the module note.
+ * A `null` graph pins nothing, which is the state on a map with no walls yet.
  */
 export function openLatch(graph: WallGraph | null, fromDerivation: boolean): GraphLatch {
   if (!graph) return NO_LATCH;
-  return { base: graph, fromDerivation, prune: 0, straighten: 0 };
+  return { base: graph, fromDerivation, straighten: 0 };
 }
 
 /**
- * Aim one of the two handles.
+ * Aim the handle.
  *
  * Negative and non-finite values land on zero rather than being refused: this is a slider's live
  * position, so the safe reading of nonsense is *off*.
  */
-export function aimLatch(latch: GraphLatch, which: WallAmount, amount: number): GraphLatch {
+export function aimLatch(latch: GraphLatch, amount: number): GraphLatch {
   const wanted = Number.isFinite(amount) && amount > 0 ? amount : 0;
-  if (!latch.base || wanted === latch[which]) return latch;
-  return { ...latch, [which]: wanted };
+  if (!latch.base || wanted === latch.straighten) return latch;
+  return { ...latch, straighten: wanted };
 }
 
 /**
@@ -121,13 +120,10 @@ export function revalidate(latch: GraphLatch, current: WallGraph | null): GraphL
   return latch.base === current ? latch : NO_LATCH;
 }
 
-/** What the latch would apply: the base and the two amounts, or nothing when both are off. */
-export function previewOf(
-  latch: GraphLatch,
-): { base: WallGraph; prune: number; straighten: number } | null {
-  if (!latch.base) return null;
-  if (latch.prune <= 0 && latch.straighten <= 0) return null;
-  return { base: latch.base, prune: latch.prune, straighten: latch.straighten };
+/** What the latch would apply: the base and the amount, or nothing when it is off. */
+export function previewOf(latch: GraphLatch): { base: WallGraph; straighten: number } | null {
+  if (!latch.base || latch.straighten <= 0) return null;
+  return { base: latch.base, straighten: latch.straighten };
 }
 
 /**
@@ -139,23 +135,7 @@ export function previewOf(
  */
 export function commitOf(
   latch: GraphLatch,
-): { base: WallGraph; prune: number; straighten: number; fromDerivation: boolean } | null {
+): { base: WallGraph; straighten: number; fromDerivation: boolean } | null {
   const preview = previewOf(latch);
   return preview ? { ...preview, fromDerivation: latch.fromDerivation } : null;
-}
-
-/**
- * What the undo entry should be called, from which amounts are set.
- *
- * Named here rather than in the caller because it is a function of the latch and nothing else, and
- * because a label that disagrees with what was applied is exactly what undo's own rule forbids: the
- * button prints it, and the whole reason it does is that a GM has just done something whose effect they
- * misjudged.
- */
-export function labelFor(latch: GraphLatch): string {
-  const pruning = latch.prune > 0;
-  const straightening = latch.straighten > 0;
-  if (pruning && straightening) return "tidying the walls";
-  if (pruning) return "pruning the dead ends";
-  return "straightening the walls";
 }

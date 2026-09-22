@@ -35,16 +35,12 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import {
-  nodeDegrees,
-  spurEdgesToPrune,
-  type DoomedSpurs,
-  type WallGraph,
-} from "../../trace/wallGraph";
+import { nodeDegrees, type WallGraph } from "../../trace/wallGraph";
+import type { PrunePiece } from "../../trace/prunePieces";
 import { colourFor } from "../palette";
 import { addPainter, type Painter } from "../shell";
-import { graphOnScreen } from "../regions";
-import { pendingPrune } from "../wallAmounts";
+import { editableGraph, graphOnScreen } from "../regions";
+import { currentPrunePieces } from "../pruneSearch";
 import { currentTool } from "../toolPalette";
 
 /**
@@ -54,11 +50,11 @@ import { currentTool } from "../toolPalette";
  * Span are still absent: none of them takes hold of a vertex, so a dot at every one would be
  * decoration over the marks those tools do draw.
  *
- * **The two amounts joined on 2026-09-21** (user: *"we need to see vertices for both tools"*), and
- * they grab nothing — so the rule this set states is now *the tools whose work is at the vertices*.
- * Straightening drops the ones between a run's ends, and pruning takes whole runs and the handles
- * are what makes a few red pixels legible at map zoom. Both are about points even though neither
- * aims at one.
+ * **Straighten and Prune joined on 2026-09-21**, as the two amounts (user: *"we need to see vertices
+ * for both tools"*), and neither grabs anything — so the rule this set states is now *the tools whose
+ * work is at the vertices*. Straightening drops the ones between a run's ends, and pruning takes whole
+ * pieces with theirs, drawn red. Prune became ringed on 2026-09-22 and keeps its handles; confirmed
+ * fine in a room the same day.
  */
 const WALL_TOOLS = new Set(["move", "draw", "erase", "straighten", "prune"]);
 import type { DrawPoint } from "../dragGesture";
@@ -161,48 +157,46 @@ function graphOnCanvas(): WallGraph | null {
   return graphOnScreen();
 }
 
-/**
- * The doomed set, remembered between frames.
- *
- * A canvas redraws for every pan, zoom and hover, and none of those changes which walls a limit
- * would take. Recomputing per frame is a run walk plus a cascade — cheap on a real graph and pure
- * waste sixty times a second. Keyed on the graph object and the limit, both of which are replaced
- * rather than mutated when they change.
- */
-let doomedFor: { graph: WallGraph; limit: number; doomed: DoomedSpurs } | null = null;
-
-function doomed(graph: WallGraph): DoomedSpurs {
-  /*
-    Only while the graph on screen **is** the graph the pruning would act on.
-
-    The Walls drawer's two amounts share one pinned base. Straightening substitutes its result onto the
-    canvas, and the runs a prune would take are already absent from that result — so marking them would
-    claim the press removes walls that are not in the picture. Pruning alone substitutes nothing, which
-    is exactly the case this is for, and the identity test is what tells the two apart.
-
-    (It used to ask `showingSaved()`, on the ground that a fresh derivation already had the limit
-    applied because the trace pruned as it built. Since 2026-09-18 the limit is an amount a GM presses,
-    which no derive applies — the derive's own automatic prune, since 2026-09-21, is a fixed two ink
-    widths and is not this — so that condition would hide the marks on every unedited map.)
-  */
-  const pending = pendingPrune();
-  if (!pending || pending.base !== graph) return NOTHING_DOOMED;
-  const limit = pending.limit;
-
-  if (doomedFor && doomedFor.graph === graph && doomedFor.limit === limit) return doomedFor.doomed;
-  const found = spurEdgesToPrune(graph, limit);
-  doomedFor = { graph, limit, doomed: found };
-  return found;
+/** The walls a prune would take and the vertices that go with them. */
+interface Doomed {
+  readonly edges: ReadonlySet<number>;
+  readonly vertices: ReadonlySet<number>;
 }
 
-const NOTHING_DOOMED: DoomedSpurs = {
-  edges: new Set<number>(),
-  vertices: new Set<number>(),
-  anchors: new Set<number>(),
-  runs: 0,
-  length: 0,
-  rounds: 0,
-};
+const NOTHING_DOOMED: Doomed = { edges: new Set<number>(), vertices: new Set<number>() };
+
+/**
+ * The doomed set, remembered between frames — keyed on the pieces the search returned, which it
+ * replaces rather than mutates when the walls or the length change.
+ */
+let doomedFor: { pieces: readonly PrunePiece[]; doomed: Doomed } | null = null;
+
+/**
+ * What *Prune the dead ends* would take: every piece it has ringed, which is the whole cascade.
+ *
+ * **From the tool's own search since 2026-09-22**, where it used to come from the amount's latch. Prune
+ * is a ringed tool now, and the red and the rings are one list read two ways — the rings say what a
+ * click takes, the red says it inside each ring, and all of it together is what the button takes.
+ *
+ * **Only against the graph the search ran on**: the indices name walls in that graph and no other.
+ */
+function doomed(graph: WallGraph): Doomed {
+  const pieces = currentPrunePieces();
+  if (pieces.length === 0 || graph !== editableGraph()) return NOTHING_DOOMED;
+  if (doomedFor?.pieces === pieces) return doomedFor.doomed;
+  const edges = new Set<number>();
+  const vertices = new Set<number>();
+  for (const piece of pieces) {
+    for (const index of piece.edges) {
+      edges.add(index);
+      const edge = graph.edges[index]!;
+      for (const id of [edge.a, edge.b]) if (id !== piece.anchor) vertices.add(id);
+    }
+  }
+  const found = { edges, vertices };
+  doomedFor = { pieces, doomed: found };
+  return found;
+}
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const graph = graphOnCanvas();
@@ -393,15 +387,13 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     rings follow.
   */
   /*
-    **Both sets, and only for the drawing.** The vertices that go, plus the junctions the doomed runs
-    hang off — which stay exactly where they are, and are marked anyway because a stub worth pruning
-    is a few pixels long and two red handles either end of it are far easier to catch than one.
-
-    Kept apart in `spurEdgesToPrune` rather than merged there, so the operation and the log still
-    read the honest set. This is the one place that over-claims, and it does it deliberately.
+    **Only the vertices that go.** The junction a doomed stub hangs off was marked red too from
+    2026-09-21 until 2026-09-22 — a deliberate over-claim a room asked for, because a stub worth pruning
+    is a few pixels long and two red handles are easier to catch than one. The ring does that job now,
+    without marking a vertex that stays, so the honest set is back.
   */
   if (WALL_TOOLS.has(currentTool())) {
-    paintHandles(context, graph, x, y, at, new Set([...going.vertices, ...going.anchors]));
+    paintHandles(context, graph, x, y, at, going.vertices);
   }
   context.restore();
 };
@@ -432,14 +424,10 @@ function paintHandles(
    * on (room, 2026-09-07). Its handles are the part that reads at a glance, and they are already
    * drawn — so marking them costs nothing and is what makes the preview legible at map zoom.
    *
-   * **The junctions are marked too, since 2026-09-21** (user): *"when a stub turns red, its base
-   * vertex should, too, even though it's not actually disappearing."* This used to take only the
-   * vertices that actually go, on the argument that marking the junction would be the preview lying
-   * about the one thing it is for — and a room weighed that against seeing a two-pixel stub at all,
-   * and chose seeing it.
-   *
-   * **The over-claim is confined to this argument.** `spurEdgesToPrune` still separates the two, so
-   * the operation and the log read the set that is true; the caller unions them.
+   * **Only the vertices that actually go.** The junction was marked too for a day (user, 2026-09-21:
+   * *"when a stub turns red, its base vertex should, too"*), because a two-pixel stub was otherwise hard
+   * to see at all. Prune rings each piece now, which answers that without the preview claiming a vertex
+   * goes when it stays.
    */
   doomedVertices: ReadonlySet<number>,
 ): void {

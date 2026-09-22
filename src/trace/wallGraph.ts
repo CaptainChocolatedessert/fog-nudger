@@ -459,18 +459,16 @@ export interface DoomedSpurs {
    */
   readonly vertices: ReadonlySet<number>;
   /**
-   * The junctions a doomed run hangs off, which **stay** — marked so the preview can be seen.
+   * The junctions a doomed run hangs off, which **stay**.
    *
    * The complement of `vertices` among the endpoints of the doomed edges: every wall of a vertex in
    * that set is going, and a vertex in this one keeps at least one. Pruning leaves these exactly
    * where they are.
    *
-   * **Marking them is a deliberate over-claim, asked for from a room** (user, 2026-09-21): *"when a
-   * stub turns red, its base vertex should, too, even though it's not actually disappearing. That
-   * will help with visibility for tiny stubs."* A stub short enough to be worth pruning is a few
-   * pixels of red at map zoom, and two red handles either end of it are far easier to catch than
-   * one. Kept as its own set rather than folded into `vertices`, so the honest answer stays
-   * available: the operation and the log read `vertices`, and only the drawing reads both.
+   * **What groups the doomed runs into the pieces Prune rings** (`prunePieces.ts`, 2026-09-22): runs
+   * are joined through the vertices that go and never through these, so two hairs off one junction
+   * are two pieces. For a day before that they were drawn red beside the vertices that go — an
+   * over-claim a room asked for so a tiny stub could be seen — and the ring retired it.
    */
   readonly anchors: ReadonlySet<number>;
   /** Whole wall runs those segments make up. */

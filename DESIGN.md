@@ -76,7 +76,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **mark** | a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. |
 | **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. |
 | **collapse** | taking a small region out with *Collapse small regions*: its walls go, and a new vertex at the average of its **connections** — the outline vertices with a wall running elsewhere — is joined to each, so nothing outside it moves. **Not Straighten's *collapse guard***, which is about a closed run fitting to a point, the failure that guard prevents. |
-| **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten* and *Prune the dead ends*. Not a setting: nothing is stored, and the handle reads as *how much more*. |
+| **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten*, and only Straighten since *Prune the dead ends* became ringed on 2026-09-22. Not a setting: nothing is stored, and the handle reads as *how much more*. |
 | **the latch** | the graph pinned when a drawer opens, so an amount previews against a fixed base instead of against its own last result. Void the moment the document is replaced under it. |
 | **the fitting tolerance** | the number that turns pixel chains into fitted edges inside the derive, and escalates to meet the command cap. **Computed** — a quarter of the measured ink width — never chosen. |
 | **the automatic prune** | the dead ends every derive removes before handing the graph over: runs with a free end of up to **two measured ink widths**. Computed, never chosen, and nothing when no width was measured. Distinct from the **Prune** tool, which takes more on request. |
@@ -1599,7 +1599,8 @@ still on — the dragged one, or the one it was folded into.
 > fitting tolerance is computed rather than chosen.** The passage below describes both as live sliders
 > the derive read, which was true from 2026-09-14 until then. Read *Straighten and Prune became
 > actions* in §10 for what replaced it; the history here is kept because it is what that change had to
-> answer.
+> answer. **And Prune moved again on 2026-09-22**, from an amount to a ringed tool — §10's *Prune became
+> a ringed tool*.
 
 **Straightening and pruning were single live sliders, applied on every derive — 2026-09-14.** They
 were a slider each under Walls *and* a button each in the editor, and crossing the save turned one
@@ -1660,8 +1661,9 @@ deleting a whole edge takes one pixel further into every pruned junction. The ta
 
 ### The graph-derived tracks
 
-> **These are the two *amounts* now, not settings, since 2026-09-18** — `wallAmounts.ts` draws both
-> tracks and nothing stores either value. The measurement below is unchanged and still live; what went
+> **These were the two *amounts*, not settings, from 2026-09-18** — nothing stores either value. Since
+> 2026-09-22 only Straighten's is an amount (`wallAmounts.ts`); Prune's is the length its rings are
+> searched at (`pruneControls.ts`), with the same top and the same floor. The measurement below is unchanged and still live; what went
 > is the storage, and with it the cap at a declared ceiling that a stored value needed. Read *Straighten
 > and Prune became actions* in §10 first.
 
@@ -2619,7 +2621,7 @@ cannot recur.
 |---|---|---|
 | **Ink** | violet | what the trace read |
 | **Structure** | blue | the wall graph, cased |
-| **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed, a collapse's star and its ring |
+| **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed, a collapse's star, and every ring a click is aimed at |
 | **Subtractive** | amber | your suppression, and the marks that suppress a region |
 | **Destructive** | red | **reserved** — erase target, the walls a dissolve or a collapse would take, a mark a click would remove, doomed spurs, nothing else |
 | **Rooms** | a generated cycle | not semantic |
@@ -2708,7 +2710,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,041 tests across 73 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,051 tests across 75 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3216,21 +3218,24 @@ established:** whether the per-edit graph writes are also slow; the log has no t
 > this size and the linework is; what is left open is only a map whose honest walls are that many
 > segments.
 
-**Then the five parked items**, none started. (*Mend moves below Prune* was the fifth, and went in
-with *Collapse small regions*, which sits between them.)
+**Waiting for a room: *Prune the dead ends* as a ringed tool — built 2026-09-22.** One ring per
+piece the whole cascade would take; a click takes that piece, the button takes every ring; the length
+starts at four ink widths every opening. §10's *Prune became a ringed tool* has the whole of it.
+**What to look at**: whether a star of short strokes reads as one ring, whether four ink widths is a
+good first guess, and that the red junction is gone and not missed.
 
-1. **Prune acts like Mend** — rings on the candidates, click one to take it, a button for all. **This
-   may reverse the base-vertex decision** (user), since a ring makes a tiny stub visible without
-   marking a junction that does not go.
-2. **Toggle Map Frame** — rename *Add walls around the map edge*, and make the press toggle. The
+**Then the four parked items**, none started. (*Mend moves below Prune* went in with *Collapse small
+regions*, and *Prune acts like Mend* is the item above.)
+
+1. **Toggle Map Frame** — rename *Add walls around the map edge*, and make the press toggle. The
    detection half exists: `addFrameWalls` already has a strict already-framed test that asks whether
    a segment lies *along* an edge. **The open question is what a toggle does to walls the frame
    split** when it went on, which cannot be unsplit without knowing which splits it caused.
-3. **The frame should be undoable**, and may already be: it goes through `saveEditedWalls`, which
+2. **The frame should be undoable**, and may already be: it goes through `saveEditedWalls`, which
    pushes an entry unconditionally. Check before building.
-4. **Delete a whole connected chain or network of walls**, complementing Dissolve region. Raised
+3. **Delete a whole connected chain or network of walls**, complementing Dissolve region. Raised
    again 2026-09-22 (user), so it is wanted rather than only noted.
-5. **Draw a chain of walls** (user, 2026-09-22): each click starts a new wall joined to the last, and
+4. **Draw a chain of walls** (user, 2026-09-22): each click starts a new wall joined to the last, and
    the chain stops on Escape, on right-click, or on a click on an existing vertex, which closes the
    shape. Draw's two-click form already re-aims a far end between clicks, so this is that form not
    stopping after one wall.
@@ -3240,8 +3245,8 @@ slider's **stepping** (about ten stops per distinct radius, so six nudges do not
 severs), and **`round` versus `floor`** in `radiusForWidth`, where floor would guarantee the
 effective threshold never exceeds what was asked for.
 
-**Looked at in a room and fine** (user, 2026-09-22): dimming, and the handles the two amount tools
-draw at every vertex. **The red junction on a doomed stub goes with Prune's rework**, where a ring
+**Looked at in a room and fine** (user, 2026-09-22): dimming, and the handles Straighten and Prune
+draw at every vertex. **The red junction on a doomed stub is gone** with Prune's rework, where a ring
 makes a tiny stub visible without marking a vertex that stays.
 
 **Noted, not built — the review's drawing order** (user, 2026-09-22). When the cover's review draws
@@ -3249,7 +3254,11 @@ what a regenerate would take and bring back, *what comes back* should be drawn *
 Straightening replaces nearly every wall, so both sets lie on top of each other almost everywhere, and
 with *what goes* on top the picture reads as everything being deleted when it is being replaced.
 
-**36 commits are not pushed** (measured 2026-09-21 with `git rev-list --count origin/main..main`,
+**Noted, not built — the panel is too wide** (user, 2026-09-22). The popover Owlbear shows, not the
+workspace, is still sized for when it held the whole interface. It is three buttons now — *Open the
+workspace*, *Remove ours*, *Clear everything* — and should be narrowed to fit them.
+
+**42 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`,
 before the commit that writes this line). **A push deploys**, so it waits for the user to want the
 public build to have them.
 
@@ -3573,6 +3582,52 @@ one — a preview nobody can see is worth less than one that over-claims by a ve
 > endpoints, which is what lets the caller union them without asking anything else, and is asserted.
 > **Five mutations, five caught** — one only after the off-state test was made to assert the set it
 > had never looked at.
+
+#### Prune became a ringed tool — 2026-09-22
+
+**Built, not yet in a room.** *Prune the dead ends* rings what it would take, a click takes one ring,
+and a button takes them all — Mend's and *Collapse small regions*' gesture. **As an amount it "feels
+inconsistent"** (user) beside the two ringed tools under it, and the parked item was already there.
+Straighten stays an amount, because it changes every wall at once and has no piece to ring.
+
+**The whole cascade runs before the rings are placed** (user: *"so the rings and the red marks agree
+with what will actually happen"*). That forced the unit of a ring, and the shape of a cascade supplied
+it: **every connected lump of doomed runs is a tree hanging off exactly one vertex that stays**, or off
+none when it goes entirely. It cannot hang off two, because a run on a path between two surviving walls
+never becomes a dead end at any round. So **one ring per piece** (user, over one per run): a hair, or a
+whole star of short strokes, and the red inside a ring is exactly what a click on it takes. A ring per
+run would have put a ring on a star's middle arm whose click could not take that arm alone without
+leaving the strokes beyond it floating.
+
+- **`trace/prunePieces.ts` groups the doomed runs through the vertices that go and never through the one
+  that stays**, so two hairs off one junction are two pieces. It reads the existing decision,
+  `spurEdgesToPrune`, and adds only the grouping, so the rings, the red and the button cannot disagree
+  with the prune every derive already runs. **Six mutations, six caught** — the last after a fixture
+  pinned that a piece's points include the vertex it hangs off, which the ring is built from.
+- **The oracle checks the tree claim over random linework** rather than trusting the argument: the
+  pieces partition the doomed walls, each is a tree, each touches at most one surviving vertex read
+  straight off the walls that stay, **taking any one alone strands nothing** by a union-find of its own,
+  and taking all of them is exactly `pruneWallGraph`. Every case is asserted as reached — a freestanding
+  piece, an anchored one, a star, two pieces off one vertex.
+- **The length starts at four ink widths every opening**, decided in building: twice the automatic
+  prune's two, so the first rings are the next band of dead ends above what every derive already took.
+  **Reasoning, not measurement.** The track is unchanged — off, then log from the shared floor up to the
+  longest wall run.
+- **The red junction is gone.** It was the over-claim a room asked for on 2026-09-21 so a two-pixel stub
+  could be seen; the ring does that without marking a vertex that stays. The handles stay red for the
+  vertices that actually go.
+- **The latch is Straighten's alone now.** Prune's half of it would have been dead code the moment Prune
+  stopped being an amount, so it came out: one amount, one undo label, nine mutations nine caught.
+- **The ring hit-test is shared** with *Collapse small regions* — `ringGesture.ts`, which takes points
+  and knows neither tool's shape — rather than copied.
+- **The walls layer's red preview is unchanged in look**: wall width, red handles, drawn under the
+  rings. Only its source moved, from the latch to the tool's own search.
+- **One press, one undo step; the button, one step.** The old amount applied once on closing the drawer;
+  each click is an ordinary edit now, as Collapse's and Mend's are.
+
+**Costs, stated:** a click takes a whole star, not one arm of it — the price of never stranding a
+stroke; and the ringed pieces are the cascade *at this length*, so a hair a GM wants kept inside a star
+means taking the star and redrawing the hair, or shortening the length until the star breaks up.
 
 #### Dimming the side you are not working on
 
@@ -5079,6 +5134,7 @@ closed outright.
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
 | `trace/probePoint.ts` | the one surviving diagnostic |
+| `trace/prunePieces.ts` | **what Prune rings**: the doomed runs grouped into pieces through the vertices that go — each a tree hanging off at most one vertex that stays — and taking them |
 | `trace/collapse.ts` | **collapsing small regions**: which regions a size qualifies — area inside the outline, holes included — the two checks that decide whether one is offered, the star, a grid of the walls, and *Collapse all* in rounds, taking only what was ringed |
 | `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph |
 | `trace/suppression.ts` | **suppression**: which regions the marks suppress, the traversal as emitted without them, the mark hit test, and the marks' stored codec |
@@ -5137,7 +5193,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
   untouched**) · `mendGesture.ts` (a mend's ring and which one a click lands in — pure and tested) ·
   `paintControls.ts` (the tool in hand, drawn into **its own drawer**) · `mendControls.ts` (the mend
-  tool's drawer) · `collapseControls.ts` (*Collapse small regions*' drawer: the size, back at its start every opening, and the button) · `collapseGesture.ts` (a small region's ring and which one a click lands in — pure and tested) · `collapseScale.ts` (the size's track, off then log up to the whole map, and the start of eight square ink widths — pure and tested) · `collapseSearch.ts` (the search, following the walls on screen and the handle as it moves) · `markControls.ts` (*Suppress region*'s drawer, which is one button and no
+  tool's drawer) · `collapseControls.ts` (*Collapse small regions*' drawer: the size, back at its start every opening, and the button) · `ringGesture.ts` (the ring round what *Collapse small regions* and *Prune the dead ends* would take, and which one a click lands in — shared, pure and tested) · `pruneControls.ts` (Prune's drawer: the length, back at its start every opening, and the button) · `pruneScale.ts` (the length's track and the start of four ink widths — pure and tested) · `pruneSearch.ts` (the dead-end search, following the walls on screen and the handle as it moves) · `collapseScale.ts` (the size's track, off then log up to the whole map, and the start of eight square ink widths — pure and tested) · `collapseSearch.ts` (the search, following the walls on screen and the handle as it moves) · `markControls.ts` (*Suppress region*'s drawer, which is one button and no
   settings) · `paintState.ts` · `gapSearch.ts` · `mendSearch.ts` (the mend search, following the
   walls on screen and the settings on release)
 - **Acting on the document** — `undoAction.ts` (the undo/redo pair in the rail head, and their
@@ -5146,10 +5202,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   learns what it is restoring — pure and tested) · `regionMarks.ts` (the suppression marks for the map
   in hand: loaded with it, saved on every change, undone like any other act) · `editHistory.ts` (the bounded stack under it, pure and
   tested) · `frameAction.ts` (the button that walls the map's edge) ·
-  `wallAmounts.ts` (**Prune the dead ends** and **Straighten**: the two amounts at the foot of Walls,
-  the substituting preview, and the commit when the drawer closes) · `graphLatch.ts` (**the latch** — the graph pinned when a drawer
-  opens, the amount aimed at it, and the staleness rule that voids it when the document is replaced:
-  pure and tested) ·
+  `wallAmounts.ts` (**Straighten**, the one amount: its slider, the substituting preview, and the commit when
+  the drawer closes) · `graphLatch.ts` (**the latch** — the graph pinned when Straighten's drawer opens, the
+  amount aimed at it, and the staleness rule that voids it when the document is replaced: pure and tested) ·
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
   own limit at zero — pure and tested) ·
   `clearActions.ts` (**the clear family**: both paint layers, the wall document, every mark — each
@@ -5166,6 +5221,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `layers/delta.ts` (what a regenerate would take and bring back, while the question is up) ·
   `layers/mends.ts` (the proposed mends, dashed, and their rings, while the tool is in hand) ·
   `layers/collapses.ts` (the small regions on offer: rings, the walls that would go in red, the star dashed) ·
+  `layers/prunes.ts` (the rings round the pieces Prune would take; the red is the walls layer's) ·
   `layers/blob.ts` (what a fill would take, under the pointer — only the box it lies in, since a
   hover cannot rewrite the whole raster every frame) ·
   `bitmap.ts`

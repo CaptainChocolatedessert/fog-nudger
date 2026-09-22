@@ -362,13 +362,14 @@ describe("a step's groups", () => {
     }
   });
 
-  it("lets only Pan and the two amounts bind a plain pan, and names them", () => {
+  it("lets only Pan and Straighten bind a plain pan, and names them", () => {
     /*
       A verb taking `pan` is a button that changes nothing about a press, which is the defect this
-      guards. **The two amounts are exactly that and are correct** (2026-09-21): neither takes a
-      gesture, because an amount applies to the walls in front of the GM rather than to a point they
-      aim at. What arming one is *for* is the drawer it opens, where the handle lives — so a plain
-      drag must go on panning while one is in hand.
+      guards. **Straighten is exactly that and is correct** (2026-09-21): it takes no gesture, because
+      an amount applies to the walls in front of the GM rather than to a point they aim at. What arming
+      it is *for* is the drawer it opens, where the handle lives — so a plain drag must go on panning
+      while it is in hand. Prune was the second amount here until 2026-09-22, when it became ringed and
+      took a press inside a ring like Mend.
 
       **Named rather than counted**, which is this suite's rule wherever an exception is allowed: a
       cap would let a third through, and naming them means adding one fails here and has to be
@@ -376,15 +377,16 @@ describe("a step's groups", () => {
       wants a drag of its own and not this list.
     */
     const panning = TOOLS.filter((tool) => tool.drag === "pan").map((tool) => tool.id);
-    expect([...panning].sort()).toEqual(["pan", "prune", "straighten"]);
+    expect([...panning].sort()).toEqual(["pan", "straighten"]);
   });
 
   /*
-    **Six mutations, six caught** across these two: either amount losing its group, an amount gaining
-    a stored parameter, an amount binding a gesture, an ordinary verb quietly starting to pan, and an
-    amount losing its hint.
+    **Six mutations, six caught** across these two while both amounts were here: either amount losing
+    its group, an amount gaining a stored parameter, an amount binding a gesture, an ordinary verb
+    quietly starting to pan, and an amount losing its hint. Widened on 2026-09-22 to the three tools
+    whose handle is not a setting.
   */
-  it("gives the two amounts a drawer, or arming one clears the drawer instead of filling it", () => {
+  it("gives every tool whose handle is not a setting a drawer, or arming it clears the drawer instead", () => {
     /*
       **The contract that decides whether a control EXISTS**, and the one part of this a desk can
       check. `toolHasControls` asks the step declarations alone, so a tool with no group gets no
@@ -403,15 +405,16 @@ describe("a step's groups", () => {
     const groups = toolGroups(walls!);
     expect(groups.length).toBeGreaterThan(0);
     const withDrawers = groups.map((group) => group.tool);
-    for (const amount of ["straighten", "prune"]) {
-      expect(withDrawers, `${amount} has no group, so it has no drawer`).toContain(amount);
+    // Straighten's amount, and Prune's and Collapse's sizes: none stored, each back at its start on
+    // every opening.
+    const unstored = ["straighten", "prune", "collapse"];
+    for (const tool of unstored) {
+      expect(withDrawers, `${tool} has no group, so it has no drawer`).toContain(tool);
     }
-    // And no parameters, because the handle is not a setting: nothing is stored and it starts at
-    // zero on every opening. A parameter here would be a stored value governing the graph for ever.
+    // And no parameters, because the handle is not a setting. A parameter here would be a stored value
+    // governing the graph for ever.
     for (const group of groups) {
-      if (group.tool === "straighten" || group.tool === "prune") {
-        expect(group.parameters, group.tool).toEqual([]);
-      }
+      if (unstored.includes(group.tool ?? "")) expect(group.parameters, group.tool).toEqual([]);
     }
   });
 
