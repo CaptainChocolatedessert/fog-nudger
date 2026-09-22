@@ -215,6 +215,21 @@ const ICONS: Readonly<Record<string, string>> = {
     '<path d="M6 1.5v8.8M6 13.7v8.8" /><circle cx="6" cy="12" r="1.7" />' +
     '<circle cx="19.5" cy="12" r="1.7" /><path d="M7.7 12h10.1" /><path d="M11 16.5 16 7.5" />',
   /*
+    **Collapse small regions**: a small loop with three walls running off it to the edges, and a single
+    slash through the loop (user, 2026-09-21, chosen from four at strip size).
+
+    **Prune's slash, one row up, and the same rule** — *where the mark sits says what goes* — so the two
+    read as family: Prune strikes a stub off a long wall, this strikes a small loop off the walls that
+    reach it. At 18px the difference is a loop against a stub, which is the difference the tools make.
+
+    **The cost, chosen:** it shows the loop going and not the star it leaves. The candidate that drew
+    both, before and after, was laid out like Straighten two rows up and closest to a neighbour; the
+    dashed loop sat directly over Mend's dashed ring; the bare junction said nothing about small regions.
+  */
+  collapse:
+    '<circle cx="12" cy="12" r="3.6" /><path d="M12 1.5v6.9M2.9 17.3l6-3.5M21.1 17.3l-6-3.5" />' +
+    '<path d="M9.5 16 14.5 8" />',
+  /*
     **Add walls around the map edge**: the map picker's own picture with a vertex ring at each corner
     (user, 2026-09-21).
 

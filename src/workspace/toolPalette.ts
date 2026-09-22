@@ -61,7 +61,7 @@ import { COVER_ANCHOR, coverIsUp, reviewFromCover } from "./regenerateGuard";
 import { sideOfStep, workOn } from "./subject";
 import { requestPaintMode, setPaintTool } from "./paintTool";
 import { mapChosen } from "./mapSource";
-import { putDownMends, setTool as setWallTool, type WallTool } from "./wallEdit";
+import { putDownSearches, setTool as setWallTool, type WallTool } from "./wallEdit";
 import { invalidate, setDrag } from "./shell";
 import { proposeLayers } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
@@ -143,7 +143,7 @@ function apply(next: Tool): void {
     setPaintTool(next === "pan" ? "none" : (next as "suppress" | "ink" | "gaps" | "blob"));
     // The one piece of wall-tool state that is not harmless to keep: a running search would go on
     // re-running against every change to the walls with no rings on screen to show for it.
-    putDownMends();
+    putDownSearches();
   }
   setDrag(dragFor(next));
   requestPaintMode(next === "suppress" || next === "ink" || next === "gaps" || next === "blob");

@@ -1,6 +1,6 @@
 /**
- * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, dissolving a region,
- * suppressing one, and spanning an opening.
+ * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, collapsing a small
+ * region, dissolving a region, suppressing one, and spanning an opening.
  *
  * **The first things in this project that change the GM's own work rather than a setting.** Every
  * control before them turns a number and re-derives; these change the graph, and it stays changed
@@ -19,8 +19,8 @@
  *
  * ## All but two decide by looking
  *
- * Move takes a press only when a vertex is under it, Erase only when a wall is, Mend only inside a
- * ring, Dissolve only inside a region and Span only where it has a wall to place. So a drag anywhere
+ * Move takes a press only when a vertex is under it, Erase only when a wall is, Mend and Collapse small
+ * regions only inside a ring, Dissolve only inside a region and Span only where it has a wall to place. So a drag anywhere
  * else still pans, and Ctrl still pans anywhere. **Draw and Suppress region take every press**: a wall
  * has to be able to start on empty map, and a mark can go anywhere — the case the shell's brush branch
  * already anticipated.
@@ -48,6 +48,7 @@ import { markAt } from "../trace/suppression";
 import { applySpan, findSpan, type Span } from "../trace/span";
 import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { applyMends, type Mend } from "../trace/mends";
+import { applyCollapses, collapseAll, type Collapse } from "../trace/collapse";
 import { dissolutionAt, type Dissolution } from "../trace/dissolve";
 import { buildWallFaces, type WallFaces } from "../trace/wallFaces";
 import {
@@ -64,6 +65,13 @@ import {
   type Grab,
 } from "./dragGesture";
 import { describeMends, mendAt } from "./mendGesture";
+import { collapseAt, describeCollapses } from "./collapseGesture";
+import {
+  collapseSize,
+  currentCollapses,
+  startCollapseSearch,
+  stopCollapseSearch,
+} from "./collapseSearch";
 import {
   currentMends,
   mendSearchActive,
@@ -73,7 +81,7 @@ import {
 } from "./mendSearch";
 import { currentMarkStates, editableGraph } from "./regions";
 import { currentMarks, saveMarks } from "./regionMarks";
-import { invalidate, say, setGrabTarget, setMapDragHandler, type MapPoint } from "./shell";
+import { invalidate, say, setGrabTarget, setMapDragHandler, whileWorking, type MapPoint } from "./shell";
 import { saveEditedWalls } from "./stage";
 
 /*
@@ -83,7 +91,15 @@ import { saveEditedWalls } from "./stage";
 */
 
 /** Which verb a press means. */
-export type WallTool = "move" | "draw" | "erase" | "mend" | "dissolve" | "suppressRegion" | "span";
+export type WallTool =
+  | "move"
+  | "draw"
+  | "erase"
+  | "mend"
+  | "collapse"
+  | "dissolve"
+  | "suppressRegion"
+  | "span";
 
 /**
  * How close a press has to be to a vertex to grab it, to a wall to erase it, and to a vertex to
@@ -165,6 +181,10 @@ let busy = false;
 let pressedMend: { readonly mend: Mend; readonly graph: WallGraph } | null = null;
 /** Whether the pointer is inside a mend's ring, so the cursor changes only when that does. */
 let hoveredMend = false;
+/** The small region a press landed on, and the walls it was found on. Collapsed on release. */
+let pressedCollapse: { readonly collapse: Collapse; readonly graph: WallGraph } | null = null;
+/** Whether the pointer is inside a small region's ring. */
+let hoveredCollapse = false;
 /**
  * Dissolving: the region under the pointer, the walls a click would remove, and the graph they were
  * found on. Removed on release, as an erase is, so the highlight is exactly what goes.
@@ -332,6 +352,7 @@ export function setTool(next: WallTool): void {
   hovered = null;
   hoveredEdge = null;
   hoveredMend = false;
+  hoveredCollapse = false;
   hoveredRegion = null;
   markTarget = null;
   dropSpan();
@@ -346,6 +367,17 @@ export function setTool(next: WallTool): void {
     say(found === null ? "there are no walls on screen to search" : describeMends(found));
   } else {
     stopMendSearch();
+  }
+  /*
+    The same for the small regions, at the size the handle starts at — which is **every** time the
+    tool is picked up, since arming it is opening its drawer and the size is not stored (user,
+    2026-09-21).
+  */
+  if (next === "collapse") {
+    const found = startCollapseSearch();
+    say(found === null ? "there are no walls on screen to search" : describeCollapses(found));
+  } else {
+    stopCollapseSearch();
   }
   invalidate();
 }
@@ -398,6 +430,7 @@ function clearGesture(): void {
   armedBeforePress = false;
   pressedAt = null;
   pressedMend = null;
+  pressedCollapse = null;
 }
 
 function start(point: MapPoint): boolean {
@@ -457,6 +490,15 @@ function start(point: MapPoint): boolean {
     press that turns into a drag is still a click on the ring rather than the start of something.
     Anywhere else declines, and the press pans.
   */
+  // The same shape as Mend's: a press inside a ring is taken, and collapses on release.
+  if (tool === "collapse") {
+    const collapses = currentCollapses();
+    const index = collapseAt(collapses, point.x, point.y, point.perPixel);
+    if (index === null) return false;
+    pressedCollapse = { collapse: collapses[index]!, graph };
+    return true;
+  }
+
   if (tool === "mend") {
     const mends = currentMends();
     const index = mendAt(mends, point.x, point.y, point.perPixel);
@@ -540,7 +582,7 @@ function cancel(): void {
  * drawing tools use for "not that one".
  */
 function escape(): boolean {
-  if (!anchor && !grab && !pressedMend) return false;
+  if (!anchor && !grab && !pressedMend && !pressedCollapse) return false;
   cancel();
   say("cancelled");
   return true;
@@ -632,6 +674,21 @@ function end(): void {
     // A press that travelled was a drag, and a mark is placed by a click.
     if (!target || dragged) return;
     commitMark(target);
+    return;
+  }
+
+  if (tool === "collapse") {
+    const pressed = pressedCollapse;
+    clearGesture();
+    invalidate();
+    // Found on walls a derive or an edit has since replaced: its indices name walls no longer drawn.
+    if (!pressed || pressed.graph !== graph) return;
+    commit(
+      applyCollapses(graph, [pressed.collapse]),
+      collapsedMessage(1),
+      "collapsing a small region",
+      graph,
+    );
     return;
   }
 
@@ -728,6 +785,7 @@ function hover(point: MapPoint | null): void {
       hovered === null &&
       hoveredEdge === null &&
       !hoveredMend &&
+      !hoveredCollapse &&
       hoveredRegion === null &&
       markTarget === null &&
       spanTarget === null
@@ -737,6 +795,7 @@ function hover(point: MapPoint | null): void {
     hovered = null;
     hoveredEdge = null;
     hoveredMend = false;
+    hoveredCollapse = false;
     hoveredRegion = null;
     markTarget = null;
     dropSpan();
@@ -823,6 +882,15 @@ function hover(point: MapPoint | null): void {
     return;
   }
 
+  if (tool === "collapse") {
+    // A crosshair inside a ring, where a press will act; the hand everywhere else, where it will pan.
+    const over = collapseAt(currentCollapses(), point.x, point.y, point.perPixel) !== null;
+    if (over === hoveredCollapse) return;
+    hoveredCollapse = over;
+    setGrabTarget(over);
+    return;
+  }
+
   if (tool === "mend") {
     // A crosshair inside a ring, where a press will act; the hand everywhere else, where it will pan.
     const over = mendAt(currentMends(), point.x, point.y, point.perPixel) !== null;
@@ -881,13 +949,78 @@ export function refreshMends(): void {
 }
 
 /**
- * Put the mend search down without choosing another wall tool — for when the strip moves to a tool
- * outside the Walls band, which does not come through `setTool` here.
+ * What the state line says once small regions are collapsed: how many went, and how many are still on
+ * offer at the same size — worked out after the save, against the walls as they now are.
  */
-export function putDownMends(): void {
-  if (!mendSearchActive()) return;
-  stopMendSearch();
-  hoveredMend = false;
+function collapsedMessage(count: number, stopped = false): () => string {
+  return () => {
+    const left = currentCollapses().length;
+    const took = `collapsed ${count} small region${count === 1 ? "" : "s"} · ${left} left`;
+    return stopped ? `${took} — stopped early, which should not happen; the console has the detail` : took;
+  };
+}
+
+/**
+ * Collapse every ringed region still under the size, as one edit and so one step of undo — the
+ * drawer's button.
+ *
+ * **Under the working indicator**, because on a dense map at the far right of the track it is not
+ * quick: measured at 6 to 7.5 seconds on a mesh of 2,500 regions with the size at the whole map, and
+ * a quarter of a second there at the starting size. The real maps tried so far have tens of regions.
+ * `whileWorking` yields a painted frame before the work starts, which is the only way the indicator is
+ * ever seen while a synchronous computation holds the thread.
+ */
+export function collapseEveryRegionShown(): void {
+  if (busy || tool !== "collapse") return;
+  const graph = editableGraph();
+  const size = collapseSize();
+  if (!graph || !size || currentCollapses().length === 0) {
+    say("nothing to collapse — no regions that small are on offer");
+    return;
+  }
+  busy = true;
+  say("collapsing…", "working");
+  void whileWorking(() => collapseAll(graph, size)).then((all) => {
+    busy = false;
+    // A derive landing in the frames before the work started would have replaced the walls.
+    if (editableGraph() !== graph) {
+      say("the walls changed while collapsing, so nothing was saved", "bad");
+      return;
+    }
+    if (all.collapsed === 0) {
+      say("nothing to collapse — each ringed region grew past the size as its neighbours went");
+      return;
+    }
+    if (all.stopped) {
+      devLog("warn", `workspace: collapse all stopped after ${all.rounds} rounds — a round did not reduce the regions`);
+      console.error(
+        "Fog Nudger — collapsing every small region stopped early: a round left as many regions as it " +
+          "found, which a correct collapse cannot do. The rounds before it were kept.",
+        all,
+      );
+    }
+    devLog(
+      "info",
+      `workspace: collapsed ${all.collapsed} small regions in ${all.rounds} rounds at ` +
+        `${size.toExponential(2)} square graph units`,
+    );
+    commit(all, collapsedMessage(all.collapsed, all.stopped), "collapsing every small region shown", graph);
+  });
+}
+
+/**
+ * Put the wall tools' searches down without choosing another wall tool — for when the strip moves to a
+ * tool outside the Walls band, which does not come through `setTool` here. Mend's and the small
+ * regions' alike: a running search would go on re-running against every change to the walls with no
+ * rings on screen to show for it.
+ */
+export function putDownSearches(): void {
+  if (mendSearchActive()) {
+    stopMendSearch();
+    hoveredMend = false;
+  }
+  stopCollapseSearch();
+  hoveredCollapse = false;
   invalidate();
 }
 

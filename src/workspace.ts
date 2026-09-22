@@ -56,6 +56,7 @@ import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
 import { registerMendsLayer } from "./workspace/layers/mends";
+import { registerCollapsesLayer } from "./workspace/layers/collapses";
 import { registerDeltaLayer } from "./workspace/layers/delta";
 import { registerRegenerateReview } from "./workspace/regenerateGuard";
 import { registerRegionsLayer } from "./workspace/layers/regions";
@@ -68,6 +69,7 @@ import { noteReadingForGaps } from "./workspace/gapSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderToolControls } from "./workspace/paintControls";
 import { renderMendControls } from "./workspace/mendControls";
+import { renderCollapseControls } from "./workspace/collapseControls";
 import { renderMarkControls } from "./workspace/markControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
@@ -188,6 +190,8 @@ registerRegionsLayer();
 registerGraphLayer();
 // Over the walls, so a proposed mend sits on top of the break it would close.
 registerMendsLayer();
+// And the small regions on offer, over the walls a collapse would take.
+registerCollapsesLayer();
 /*
   Last, so the delta draws over the walls it is about.
 
@@ -263,6 +267,8 @@ registerStepContent("map", renderMapPicker);
 */
 registerToolContent(renderToolControls);
 registerToolContent(renderMendControls);
+// *Collapse small regions*' size and its button, in the drawer arming the tool opens.
+registerToolContent(renderCollapseControls);
 /*
   And *Suppress region*'s, which is a drawer holding one button and no settings.
 

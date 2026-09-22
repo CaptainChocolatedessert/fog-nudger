@@ -80,7 +80,17 @@ export type StepId = "map" | "ink" | "walls" | "view";
   drawing both would have put two answers to one question on the canvas -- and the graph is the
   honest one, because it is what gets stored.
 */
-export const LAYERS = ["ink", "paint", "gaps", "mends", "blob", "regions", "graph", "delta"] as const;
+export const LAYERS = [
+  "ink",
+  "paint",
+  "gaps",
+  "mends",
+  "collapses",
+  "blob",
+  "regions",
+  "graph",
+  "delta",
+] as const;
 
 /**
  * What the map shows from the moment one is chosen — user, 2026-09-14.
@@ -115,6 +125,8 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId | readonly LayerId[]>>
   // by the tool's id, `mend`, and not by the layer's name — keying it `mends` drew nothing, and
   // `steps.test.ts` now checks every key is a tool.
   mend: "mends",
+  // The small regions on offer, their rings and what each would become — the tool is the switch.
+  collapse: "collapses",
   /*
     **Two**, and it is the first tool to want two (user, 2026-09-17).
 
@@ -273,6 +285,21 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "pan",
     hint: "Drag the amount to remove dead ends up to a length. What would go is drawn in red.",
   },
+  /*
+    Collapse the small regions detail leaves along the walls (user, 2026-09-21). `edit`, like Mend: it
+    takes a press inside a ring and declines everything else, which falls through to a pan. Its hint is
+    its group's blurb, because it has a control of its own and the blurb is the line above it.
+
+    **Under Prune and above Mend** (user), so the corrections sit together: the two amounts, then the
+    two ringed tools. Mend moved up to meet it, which was a parked item of its own.
+  */
+  { id: "collapse", label: "Collapse small regions", band: "walls", drag: "edit", hint: "" },
+  /*
+    The graph's gap tool (user, 2026-09-16). `edit`, like the other three: it takes a press inside a
+    ring and declines everything else, which falls through to a pan. Its hint is its group's blurb,
+    because it has controls of its own and the blurb is the line above them.
+  */
+  { id: "mend", label: "Mend", band: "walls", drag: "edit", hint: "" },
   {
     id: "move",
     label: "Move",
@@ -301,12 +328,6 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "edit",
     hint: "Click a wall to remove it, <b>one segment at a time</b>. The highlight shows what would go.",
   },
-  /*
-    The graph's gap tool (user, 2026-09-16). `edit`, like the other three: it takes a press inside a
-    ring and declines everything else, which falls through to a pan. Its hint is its group's blurb,
-    because it has controls of its own and the blurb is the line above them.
-  */
-  { id: "mend", label: "Mend", band: "walls", drag: "edit", hint: "" },
   /*
     Delete the walls around a region with one click (user, 2026-09-16). `edit`, like the others: it
     takes a press inside a region and declines one outside every region, which pans. No controls, so
@@ -657,6 +678,21 @@ export const STEPS: readonly Step[] = [
         tool: "prune",
         title: "Prune the dead ends",
         blurb: "",
+        parameters: [],
+      },
+      /*
+        *Collapse small regions*: one handle and one button, and **no parameter** — the handle is not a
+        setting. Nothing is stored and it is back at its starting point every time the drawer opens, so
+        the group exists for the drawer alone, as the amounts' do. `collapseControls.ts` draws the row.
+
+        The blurb is Mend's, because the gesture is Mend's: rings, a click inside one, a button for all.
+      */
+      {
+        tool: "collapse",
+        title: "Collapse small regions",
+        blurb:
+          "Rings every region smaller than the size. <b>Click inside a ring</b> to collapse that one, " +
+          "or use the button below for all of them. Dragging pans.",
         parameters: [],
       },
     ],

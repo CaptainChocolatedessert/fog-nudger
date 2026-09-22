@@ -83,7 +83,7 @@ export const DIM: Readonly<Record<Side, number>> = {
  *   consequence a GM paints to fix, and the crowding this exists for is at the *stroke*, where the
  *   centrelines are and the fills are not.
  * - **`paint`, `gaps` and `blob`** are drawn only while an ink tool is armed, which *is* the ink
- *   side; **`mends`** likewise on the wall side. A tool layer can never be the dimmed side, so the
+ *   side; **`mends`** and **`collapses`** likewise on the wall side. A tool layer can never be the dimmed side, so the
  *   answer is `null` by construction rather than by decision.
  * - **`delta`** belongs to the review, which is a question about both sides at once.
  */
@@ -94,6 +94,8 @@ const SIDE_OF_LAYER: Readonly<Record<LayerId, Side | null>> = {
   paint: null,
   gaps: null,
   mends: null,
+  // A tool layer on the wall side, drawn only while its tool is in hand — so never the dimmed side.
+  collapses: null,
   blob: null,
   delta: null,
 };

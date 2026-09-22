@@ -75,6 +75,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **dissolve** | removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
 | **mark** | a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. |
 | **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. |
+| **collapse** | taking a small region out with *Collapse small regions*: its walls go, and a new vertex at the average of its **connections** — the outline vertices with a wall running elsewhere — is joined to each, so nothing outside it moves. **Not Straighten's *collapse guard***, which is about a closed run fitting to a point, the failure that guard prevents. |
 | **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten* and *Prune the dead ends*. Not a setting: nothing is stored, and the handle reads as *how much more*. |
 | **the latch** | the graph pinned when a drawer opens, so an amount previews against a fixed base instead of against its own last result. Void the moment the document is replaced under it. |
 | **the fitting tolerance** | the number that turns pixel chains into fitted edges inside the derive, and escalates to meet the command cap. **Computed** — a quarter of the measured ink width — never chosen. |
@@ -1535,12 +1536,13 @@ A drag can only mean one thing, so the editor has a sticky tool picker: **Move**
 Move by default. **Mend** joined them on 2026-09-16 — it proposes walls across breaks rather than
 taking a gesture — and **Dissolve region** the same day, which removes the walls around a region with
 one click, **Suppress region**, which leaves a region out of the fog with a mark, and **Span**, which
-walls an opening straight across from a click. §10 carries all four; Suppress region edits marks rather than walls, and sits with the wall tools because what it
+walls an opening straight across from a click. **Collapse small regions** followed on 2026-09-21, ringing
+regions under a size and turning each clicked one into a star of its connections. §10 carries all five; Suppress region edits marks rather than walls, and sits with the wall tools because what it
 decides is which regions the walls make count. The alternative — hiding draw and erase behind modifier keys — was rejected for
 putting a destructive action on an unannounced click and leaving both verbs undiscoverable.
 
 - **All but two decide by looking.** Move takes a press only when a vertex is under it, Erase only
-  when a wall is, Mend only inside a ring, Dissolve region only inside a region and Span only where it
+  when a wall is, Mend and Collapse small regions only inside a ring, Dissolve region only inside a region and Span only where it
   has a wall to place, so a plain drag anywhere else still pans. **Draw and Suppress region take every press**: a wall has to be able to
   start on empty map, and a mark can go anywhere, outside every region too. Ctrl pans regardless.
 - **Draw supports both forms.** Press-drag-release puts a wall down in one gesture; press-release then
@@ -2309,7 +2311,7 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 **Separate what a drag does from what controls you are reading.**
 
 - **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
-  probe), ink (suppress, add, gaps), walls (move, draw, erase, mend, dissolve region, suppress region, span). One click to switch, and switching a
+  probe), ink (suppress, add, gaps), walls (straighten, prune, collapse small regions, mend, move, draw, erase, dissolve region, suppress region, span). One click to switch, and switching a
   tool does not move the controls.
 - **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
   the group's own name in the strip. It slides out **beside** the strip rather than under it, is only
@@ -2617,9 +2619,9 @@ cannot recur.
 |---|---|---|
 | **Ink** | violet | what the trace read |
 | **Structure** | blue | the wall graph, cased |
-| **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed |
+| **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed, a collapse's star and its ring |
 | **Subtractive** | amber | your suppression, and the marks that suppress a region |
-| **Destructive** | red | **reserved** — erase target, the walls a dissolve would take, a mark a click would remove, doomed spurs, nothing else |
+| **Destructive** | red | **reserved** — erase target, the walls a dissolve or a collapse would take, a mark a click would remove, doomed spurs, nothing else |
 | **Rooms** | a generated cycle | not semantic |
 
 **Red earns its alarm value by being rare.** It did three jobs — default ink, emitted wall lines in
@@ -2706,7 +2708,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,017 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,041 tests across 73 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2765,6 +2767,17 @@ invisible. It costs almost nothing to keep.
   when a wall inside it ran beyond (2026-09-16). The random sweep against sampled directions caught
   both. Run it at its suite size afterwards and once at four times that, since the second fault was 1%
   on one graph in hundreds.
+
+  **The heavier run pays for itself even when the optimisation is innocent** (2026-09-21). After
+  *Collapse small regions* got its grid of the walls, the four-times sweep passed the grid and failed
+  something else: *Collapse all* taking a region that had never been ringed, in nine graphs of seven
+  hundred and none within the usual size. The rule is about the sweep's reach, not about the change
+  that prompted it.
+- **A cap on rounds is not a bound on work — check the invariant instead** (2026-09-21). *Collapse
+  all* was given a cap of one round per region after a mutation hung it, and the next mutation hung
+  under the cap: its rounds created regions, **doubling** them each time, 4,588 to 8,854, so each round
+  cost twice the last. What bounds both the rounds and the work is the property a correct round has —
+  here, fewer regions after than before — checked every round, with a round that fails it undone.
 - **A sweep has to be shown to reach the case, not only to pass.** Dissolve region's oracle sweep ran
   over the derivation's own random linework and agreed on every region of 510 maps — while keeping
   not a single wall, because skeletons of random ink runs almost never put one closed room inside
@@ -3175,13 +3188,23 @@ a 6.7px limit) the log shows 193 to 419 dead ends taken per derive depending on 
 > GM had set a limit, and what 09-18 removed was a GM's own setting being re-applied. That argument
 > was about a handle reaching the longest wall on the map; it does not describe a fixed two ink widths.
 
-**Still open from the same report: the tiny loops.** Some are spur-junction debris and should go
-with the hairs — the room will say how many. What remains is genuinely unanswered: sliver removal
-takes only **sub-pixel** cycles, and a small-but-real loop survives everything. **Straightening will
-not do it** — its collapse guard exists precisely to stop a closed run fitting to a point. And
-**`minRoomSquares` is not the answer and should not come back**: it depended on the grid **squared**,
-so a grid off by four put it off by sixteen, and a minimum-area filter **is not a pure delete**, since
-a hole is kept only when it encloses a surviving region. Its replacement was *Dissolve region*.
+**Waiting for a room: *Collapse small regions* — built 2026-09-21, not yet looked at.** The tiny loops
+from the same report, which the prune did not take and which the user put down to *"a lot of details
+drawn alongside the walls"*. §10's *Collapse small regions* has the whole of it. **What to do first in
+a room:** arm it on the map that prompted it and look at what the rings catch at the starting size
+(eight square ink widths); click one and see that the room beside it keeps its wall; then try
+*Collapse every region shown*. **Worth checking specifically**, because a desk cannot:
+
+- **Long slivers along curved walls**, where the spokes replace the wall with straight chords — the
+  dashed star is drawn before the click so it can be judged.
+- **Whether the starting size is a good guess**, or wants to be four.
+- **Whether the ring and red read at map zoom**, where the regions are a few pixels across.
+- **The glyph** beside Prune, at its real size — chosen from a mock, and only the running thing
+  settles the build.
+
+**Decided while building, for the user to check:** *Collapse all* takes only regions ringed at the
+press, found in later rounds by a point inside each; a region under the size but refused (its spokes
+would leave it) is never ringed; and the size applies live as the handle moves.
 
 **Noted, to look into later: saves are very slow on this map** (user, 2026-09-21: *"I'm having a lot
 of very slow saves. I'm usually not waiting for them to finish, since we're just testing."*). The log
@@ -3193,23 +3216,22 @@ second. The latest derives of *The Incandescent Grottoes* hold 3,242 wall lines 
 lead is the **item count** rather than the write path: detail drawn alongside the walls becomes open
 linework, and open linework is one item per segment. Two directions, neither examined: fewer items
 per wall (one item per wall *run* rather than per segment, which §6 decided against for nudging in
-Owlbear), or fewer walls (the tiny-regions tool under discussion, and the thin-lines ink tool). **Not
+Owlbear), or fewer walls (*Collapse small regions*, and the thin-lines ink tool). **Not
 established:** whether the per-edit graph writes are also slow; the log has no timing on them.
 
-**Then the five parked items**, none started:
+**Then the four parked items**, none started. (*Mend moves below Prune* was the fifth, and went in
+with *Collapse small regions*, which sits between them.)
 
-1. **Mend moves below Prune** in the Walls band, so the corrections sit together. A declaration-order
-   change in `steps.ts`.
-2. **Prune acts like Mend** — rings on the candidates, click one to take it, a button for all. **This
+1. **Prune acts like Mend** — rings on the candidates, click one to take it, a button for all. **This
    may reverse the base-vertex decision** (user), since a ring makes a tiny stub visible without
    marking a junction that does not go.
-3. **Toggle Map Frame** — rename *Add walls around the map edge*, and make the press toggle. The
+2. **Toggle Map Frame** — rename *Add walls around the map edge*, and make the press toggle. The
    detection half exists: `addFrameWalls` already has a strict already-framed test that asks whether
    a segment lies *along* an edge. **The open question is what a toggle does to walls the frame
    split** when it went on, which cannot be unsplit without knowing which splits it caused.
-4. **The frame should be undoable**, and may already be: it goes through `saveEditedWalls`, which
+3. **The frame should be undoable**, and may already be: it goes through `saveEditedWalls`, which
    pushes an entry unconditionally. Check before building.
-5. **Delete a whole connected chain or network of walls**, complementing Dissolve region.
+4. **Delete a whole connected chain or network of walls**, complementing Dissolve region.
 
 **Parked from the ink investigation**, both recorded with measurements and neither built: the stroke
 slider's **stepping** (about ten stops per distinct radius, so six nudges do nothing and the seventh
@@ -3494,6 +3516,7 @@ through the stub, borrowing Dissolve region's rule that **where the mark sits sa
 which is what the button builds: four segments as one closed run, corners shared by construction.
 
 **The band is ten buttons now** and has no settings opener, which is the first group without one.
+(Eleven since *Collapse small regions* joined it the same day, under Prune.)
 
 ##### Three corrections from the first room — 2026-09-21
 
@@ -4367,7 +4390,7 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Five tools built from conversations
+### Six tools built from conversations
 
 **1. Dissolve region — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
 pick this up* has which part). Click inside a region and the walls around it go.
@@ -4745,6 +4768,108 @@ and every one of its 9.4 million pixels taken, is 242 to 339ms.
 - **An anti-aliased or dusty edge can leave a scatter of survivors** that no tolerance cleanly
   reaches. The two proposed ink tools above are the answer if a room finds it.
 
+**6. Collapse small regions — built 2026-09-21, not yet in a room.** Rings every region under a size;
+a click inside a ring collapses that one, and a button collapses every one ringed.
+
+**What it is for**: the cells that detail drawn alongside a wall encloses — texture just inside it,
+pebbles against it — which the automatic prune does not take, because they are loops rather than dead
+ends (user: *"it's prevalent on this map because of a lot of details drawn alongside the walls"*).
+**Dissolve region is the wrong tool for them**, and that is why this exists: it takes every wall
+around the clicked region, so a cell against a building's outer wall takes that wall too, and the room
+beside it joins the outside and can never be revealed.
+
+**Decided (user, 2026-09-21), and the operation is the user's own design:**
+
+- **The star.** The region's walls go; a new vertex at the average of the *connections* — the
+  vertices on its outline with a wall running elsewhere — is joined to each. *"A circle with many
+  connections collapses into a star."* **Nothing else moves**, which is why the star replaced a first
+  version that merged the connections into one point: that dragged every wall ending at them, and on a
+  long sliver dragged its far ends to the middle. With nothing moving, the neighbours keep their shape
+  everywhere except inside the collapsed outline, where their boundaries now dip to the centre.
+- **Two connections make a straight wall through its own midpoint**, which Straighten takes at its
+  smallest amount — the user's reason not to special-case it. The commonest case, a cell against a
+  straight wall touching it twice, puts the centre on the wall, so the wall stays exactly where it was
+  drawn. **Fewer than two, no centre**: the loop just goes, since one spoke would be a new dead end.
+- **Measured by area** (user: *"we are really looking for things with small area, that are visually
+  small, whatever their shape"*), where the ink island filter measures its longest side because an ink
+  line has small area and large extent. **Area inside the outer boundary, holes included**, which was
+  raised in building and agreed: a wall drawn as two lines makes a thin ring of region round a whole
+  room, whose own area is small, and collapsing it would take the room inside with it.
+- **Rings and a button, like Mend**, and **a slider reading "off" to 100** like Straighten and Prune.
+  **The top is the whole map's area, on a log scale** (user: *"in keeping with Straighten, where we
+  intentionally made going too far possible so the user can find a middle ground"*). **The start is
+  eight square ink widths, every time the drawer opens**, never stored — a good guess for a Mend-style
+  control. Eight rather than the four also offered, because areas are measured between wall
+  centrelines and a cell with an ink width of open floor already measures about four. **Reasoning, not
+  measurement.**
+- **Its own tool, under Prune and above Mend** (user), rather than a *Simplify* drawer holding it with
+  Straighten and Prune: those are amounts with a latch, and accepting a collapse replaces the document,
+  which would void a pinned amount in silence. Placement gives the grouping instead. Mend moved up to
+  meet it, closing a parked item.
+- **Named** *Collapse small regions*, **drawn** as a small loop with three walls running off it and a
+  single slash through the loop — Prune's slash, one row up, on Dissolve region's rule that *where the
+  mark sits says what goes* (user, from four drawn at strip size). *Clear*, *Merge*, *Dissolve*,
+  *Pinch*, *Shrink* and *Remove* were ruled out, each for a collision or a false promise.
+
+**As built** — `trace/collapse.ts` is the decision, pure and tested; the tool is a wall tool, so a
+collapse saves through the one path every wall edit does.
+
+- **The region's outline is Dissolve's**: the outer cycle split into simple loops, the one positive
+  loop going round the region. **Exactly one positive loop was measured, not assumed** — 9,521
+  regions over 2,100 random graphs, every one — which is also the topology: a region is connected.
+- **Two checks decide whether a region is offered.** Every spoke must stay inside the region, since a
+  spoke that left it — from a C-shaped sliver whose centre falls in the room it curls round — would
+  slice that room into wedges **without crossing a single wall**, the region's own walls being the ones
+  deleted. And no spoke may meet a wall that stays, **by the crossing predicate the edit's sweep uses**,
+  which the oracle added (below): the sweep then has nothing to split.
+- **A neighbour touching the region in two places ends up touching itself at the centre and stays one
+  region.** The plan said it would split in two, and Euler's identity says it cannot — one vertex in,
+  walls unchanged, one region out. The oracle meets the case and checks it.
+- ***Collapse all* runs in rounds**, smallest first, skipping any region sharing a vertex with one
+  already taken that round, until nothing ringed is left under the size — one undo step. **It takes
+  only regions ringed at the press**, remembered by a point inside each, which stays inside because a
+  surviving region only ever gains area. That had to be enforced (below). **And every round must
+  reduce the number of regions**, or it is undone and the loop stops, because two mutations looped
+  there and one doubled the regions every round.
+- **A grid of the walls**, built once per graph, so each region looks only at walls near it. **Measured
+  before it was built**: on a mesh of 2,500 regions and 7,000 walls, *Collapse all* at the top of the
+  track took 14 to 15 seconds, with every region scanning every wall twice. After it, 6 to 7.5 seconds
+  there, a quarter of a second at the starting size, and a full drag across the track a median of a
+  quarter of a millisecond a step and a worst of 7ms. The top-of-track press runs under the working
+  indicator; the real map has 70 regions.
+- **The size applies live as the handle moves**, at most once a frame, which Mend's settings do not —
+  measured above, because the areas are worked out once per graph and a new size is a filter.
+
+**Checked against an oracle that shares none of its reasoning** — Dissolve's region lookup over sample
+points, asking whether any two regions outside the collapsed one merged or any one split, plus
+planarity, Euler, and that every segment afterwards is either one the graph had or a spoke to a point
+it had. Over 1,566 collapses from both random generators, with every case asserted as reached: no
+connections, one, two, three or more, a region refused, contents taken with it, a neighbour left
+touching itself. **Twenty-one mutations, eighteen caught**; one answered by deleting the redundant
+check it disabled, one measured as deciding nothing on a valid graph, one defence in depth.
+
+**Two faults found, both by the oracle, neither by a fixture.**
+
+- **Two vertices a float32 step apart** — about 1e-8 of the map, a quirk of the random generator's
+  fractional coordinates — either side of a region's boundary. The containment test passed a spoke
+  within that distance of the second; the edit's sweep split it there and left a doubled segment. What
+  fixed it was asking the sweep's own question before offering.
+- **At four times the usual sweep size, after the grid went in**: a region under the size but refused
+  qualified once a neighbour had gone, and *Collapse all* took it without its ever having been ringed —
+  nine graphs in seven hundred, none within the usual size. The grid itself was innocent; the heavier
+  run is what the house rule for optimisations asks for, and it paid for itself on something else.
+
+**Costs, stated:**
+
+- **A long thin sliver along a curved wall has its wall replaced by straight spokes.** Bounded, by
+  reasoning: two strokes cannot thin to centrelines much closer than an ink width, so area caps length,
+  and the dashed star shows it before the click.
+- ***Collapse all* can leave a ringed region**: one that grew past the size when its neighbour went,
+  or whose spokes now leave it. The rows-of-cells fixture pins the first.
+- **The top of the track takes seconds on a dense map.** Measured on a synthetic mesh, not a real map.
+- **It trusts the ink width for its starting point**, as the automatic prune does. Without one the start
+  is a fixed guess from the test map's figures.
+
 ### Two ink tools proposed and not built — 2026-09-17
 
 **Both are an existing slider turned into a tool**, which is the move Dissolve region already made
@@ -4946,6 +5071,7 @@ closed outright.
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
 | `trace/probePoint.ts` | the one surviving diagnostic |
+| `trace/collapse.ts` | **collapsing small regions**: which regions a size qualifies — area inside the outline, holes included — the two checks that decide whether one is offered, the star, a grid of the walls, and *Collapse all* in rounds, taking only what was ringed |
 | `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph |
 | `trace/suppression.ts` | **suppression**: which regions the marks suppress, the traversal as emitted without them, the mark hit test, and the marks' stored codec |
 | `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses; `randomInk`, straight runs of ink crossing and ending in the open, which the prune and dissolve sweeps derive from; and `randomWallGraph`, the generator whose shapes nest and touch — what the region tools' sweeps need |
@@ -5003,7 +5129,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
   untouched**) · `mendGesture.ts` (a mend's ring and which one a click lands in — pure and tested) ·
   `paintControls.ts` (the tool in hand, drawn into **its own drawer**) · `mendControls.ts` (the mend
-  tool's drawer) · `markControls.ts` (*Suppress region*'s drawer, which is one button and no
+  tool's drawer) · `collapseControls.ts` (*Collapse small regions*' drawer: the size, back at its start every opening, and the button) · `collapseGesture.ts` (a small region's ring and which one a click lands in — pure and tested) · `collapseScale.ts` (the size's track, off then log up to the whole map, and the start of eight square ink widths — pure and tested) · `collapseSearch.ts` (the search, following the walls on screen and the handle as it moves) · `markControls.ts` (*Suppress region*'s drawer, which is one button and no
   settings) · `paintState.ts` · `gapSearch.ts` · `mendSearch.ts` (the mend search, following the
   walls on screen and the settings on release)
 - **Acting on the document** — `undoAction.ts` (the undo/redo pair in the rail head, and their
@@ -5031,6 +5157,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `layers/graph.ts` (the walls, with handles only for the tools that can use them) ·
   `layers/delta.ts` (what a regenerate would take and bring back, while the question is up) ·
   `layers/mends.ts` (the proposed mends, dashed, and their rings, while the tool is in hand) ·
+  `layers/collapses.ts` (the small regions on offer: rings, the walls that would go in red, the star dashed) ·
   `layers/blob.ts` (what a fill would take, under the pointer — only the box it lies in, since a
   hover cannot rewrite the whole raster every frame) ·
   `bitmap.ts`
