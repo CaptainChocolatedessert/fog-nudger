@@ -335,9 +335,25 @@ export const TOOLS: readonly ToolChoice[] = [
     the hint is the only sentence on screen about it — and the second half is the part a GM could not
     guess, since "around" could as easily mean everything the region touches.
   */
+  /*
+    **Erase, Erase chain and Erase loop are one family** (user, 2026-09-22), named by how much each
+    takes: one segment, everything joined to it, or the walls around a space. *Dissolve region* was
+    this one's name until then, after the map-making operation that merges areas by deleting the
+    boundaries between them — accurate, and aimed at the wrong thing: *"I don't think the user is
+    thinking about the region, or they would reach for Suppress Region instead. What they are getting
+    rid of is the walls around a space."* The code keeps `dissolve` for the operation, which is still
+    what it is.
+  */
+  {
+    id: "eraseChain",
+    label: "Erase chain",
+    band: "walls",
+    drag: "edit",
+    hint: "Click a wall to remove <b>everything joined to it</b>. The red shows what would go — often the whole map.",
+  },
   {
     id: "dissolve",
-    label: "Dissolve region",
+    label: "Erase loop",
     band: "walls",
     drag: "edit",
     hint: "Click inside a region to remove the walls around it. Regions inside it keep theirs.",

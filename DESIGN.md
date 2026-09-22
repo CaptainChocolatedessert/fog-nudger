@@ -72,7 +72,8 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **sliver** | a cycle enclosing no lattice point — sub-pixel, an artefact of junction clusters. |
 | **gap** | a narrow channel of ground whose banks of ink are far apart *measured along the ink* — a place the drawing failed to close a wall. What merges two rooms. **Not a doorway**, which is a real opening and the tool's known false positive. **In the graph** the same fault is a break in the walls: two pieces close in space and far apart *measured along the walls*. |
 | **mend** | a proposed wall that closes a gap in the graph, and the act of accepting one. Once accepted it is an ordinary drawn wall. **Not a bridge** — a mend usually closes a loop and splits a region in two, which is the opposite of what a bridge is. |
-| **dissolve** | removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
+| **dissolve** | the operation behind the tool *Erase loop*, and still its name in the code: removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
+| **chain** | the GM-facing word for everything joined to one wall — the connected component through shared vertex ids, which *Erase chain* takes. It branches and can hold loops, so it is not a chain in the narrow sense, and on a real map it is usually every wall there is. |
 | **mark** | a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. |
 | **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. |
 | **collapse** | taking a small region out with *Collapse small regions*: its walls go, and a new vertex at the average of its **connections** — the outline vertices with a wall running elsewhere — is joined to each, so nothing outside it moves. **Not Straighten's *collapse guard***, which is about a closed run fitting to a point, the failure that guard prevents. |
@@ -1536,15 +1537,17 @@ points nobody can see.
 
 A drag can only mean one thing, so the editor has a sticky tool picker: **Move**, **Draw**, **Erase**,
 Move by default. **Mend** joined them on 2026-09-16 — it proposes walls across breaks rather than
-taking a gesture — and **Dissolve region** the same day, which removes the walls around a region with
+taking a gesture — and **Erase loop** the same day, which removes the walls around a region with
 one click, **Suppress region**, which leaves a region out of the fog with a mark, and **Span**, which
 walls an opening straight across from a click. **Collapse small regions** followed on 2026-09-21, ringing
-regions under a size and turning each clicked one into a star of its connections. §10 carries all five; Suppress region edits marks rather than walls, and sits with the wall tools because what it
+regions under a size and turning each clicked one into a star of its connections. **Erase chain** came
+on 2026-09-22, taking everything joined to the wall under the pointer — the third of the erasing family,
+which is named by how much a press takes rather than by three different verbs. §10 carries all five; Suppress region edits marks rather than walls, and sits with the wall tools because what it
 decides is which regions the walls make count. The alternative — hiding draw and erase behind modifier keys — was rejected for
 putting a destructive action on an unannounced click and leaving both verbs undiscoverable.
 
 - **All but two decide by looking.** Move takes a press only when a vertex is under it, Erase only
-  when a wall is, Mend and Collapse small regions only inside a ring, Dissolve region only inside a region and Span only where it
+  when a wall is, Mend and Collapse small regions only inside a ring, Erase loop only inside a region and Span only where it
   has a wall to place, so a plain drag anywhere else still pans. **Draw and Suppress region take every press**: a wall has to be able to
   start on empty map, and a mark can go anywhere, outside every region too. Ctrl pans regardless.
 - **Draw supports both forms.** Press-drag-release puts a wall down in one gesture; press-release then
@@ -2775,7 +2778,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,063 tests across 75 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,069 tests across 76 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -2798,7 +2801,7 @@ invisible. It costs almost nothing to keep.
   it, 7,926 of 19,061 mends ended beside the vertex they should share (2026-09-16). An estimate of
   rarity is reasoning; a sweep over the input space is the check.
 
-  **Sometimes the answer is that two rules overlap.** Dissolve region had a check for walls with the
+  **Sometimes the answer is that two rules overlap.** Erase loop had a check for walls with the
   region on both sides and a separate rule by the sign of a loop, and disabling the check survived
   every test — because once a loop of zero area goes, a wall walked out and back is such a loop, and
   the check never decided anything (2026-09-16). It was deleted rather than tested, leaving one rule.
@@ -2850,7 +2853,7 @@ invisible. It costs almost nothing to keep.
   under the cap: its rounds created regions, **doubling** them each time, 4,588 to 8,854, so each round
   cost twice the last. What bounds both the rounds and the work is the property a correct round has —
   here, fewer regions after than before — checked every round, with a round that fails it undone.
-- **A sweep has to be shown to reach the case, not only to pass.** Dissolve region's oracle sweep ran
+- **A sweep has to be shown to reach the case, not only to pass.** Erase loop's oracle sweep ran
   over the derivation's own random linework and agreed on every region of 510 maps — while keeping
   not a single wall, because skeletons of random ink runs almost never put one closed room inside
   another, which is the whole of what the rule decides (2026-09-16). A sweep that never meets its case
@@ -3247,9 +3250,14 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: the tool for deleting a connected chain or network of walls** (user, 2026-09-22:
-*"Let's do the tool for deleting a chain"*; raised twice before that). In design conversation now — §5,
-*An edit stops at the map's edge*, is done and confirmed.
+**Do this first: take *Erase chain* into a room** (built 2026-09-22, never pressed in one). Press it on
+a stranded thing inside a room and it should go in one press; press it on the main linework and the
+whole map should light red first. Worth checking that the red set is exactly what goes, and that Undo
+brings it back in one step. §10, tool 7, has the reasoning and what was rejected.
+
+**The erasing family was renamed with it**: *Erase*, *Erase chain*, *Erase loop* — the last was
+*Dissolve region*. Three presses named by how much each takes. The code keeps `dissolve` for the
+operation.
 
 **The edge clamp is confirmed in a room** (user, 2026-09-22: *"That works in the room"*), Move and
 Draw both.
@@ -3280,7 +3288,6 @@ defined?*, the one question, a picture if it is geometric, name and glyph, a num
 - **Draw a chain of walls** (user, 2026-09-22): each click starts a new wall joined to the last,
   stopping on Escape, on right-click, or on a click on an existing vertex, which closes the shape.
   Draw's two-click form already re-aims a far end between clicks, so this is that form not stopping.
-- **Delete a whole connected chain or network of walls**, complementing Dissolve region. Raised twice.
 - **Doors, the way Dynamic Fog makes them** (user, 2026-09-22: *"let's look into how Dynamic Fog makes
   doors and see if we can add that functionality"*). **Start by reading, not designing**: the local
   clone at `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts`
@@ -3607,7 +3614,7 @@ and drops what is between; **nothing sits between the two**, and a dot that said
 was the smallest mark in the band while dimming the crooked side was ruled out because the strip
 already dims a disabled glyph to 0.65 and the two would stack. *Prune* is a long wall — running off
 both edges, wearing no end rings, which is what says it is long — with a stub and a single slash
-through the stub, borrowing Dissolve region's rule that **where the mark sits says what goes**.
+through the stub, borrowing Erase loop's rule that **where the mark sits says what goes**.
 *Toggle walls around the map edge* is the map picker's own picture with a vertex ring at each corner,
 which is what the button builds: four segments as one closed run, corners shared by construction.
 
@@ -3644,7 +3651,7 @@ the amount rather than the handle**, so a latch voided by an undo says so even w
 where the GM put it.
 
 **Both amounts draw handles.** The set that decides was *the tools that grab a point*, which is why
-Mend, Dissolve region, Suppress region and Span have none; the rule it states is now **the tools
+Mend, Erase loop, Suppress region and Span have none; the rule it states is now **the tools
 whose work is at the vertices**. Straightening drops the ones between a run's ends, and pruning
 needs them for the correction below. Neither grabs anything.
 
@@ -4541,9 +4548,9 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Six tools built from conversations
+### Seven tools built from conversations
 
-**1. Dissolve region — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
+**1. Erase loop — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
 pick this up* has which part). Click inside a region and the walls around it go.
 
 This is **the small-area-face tool**, which stood here as wanted and undesigned, and it is the
@@ -4559,12 +4566,21 @@ region *is* deleting the walls that bound it. The questions it was carried with,
   lollipop's stem — while a stub sticking *out* is its neighbour's on both sides and stays, left
   freestanding (user, 2026-09-16).
 
-**Named** *Dissolve region*, after the map-making operation that merges areas by deleting the
-boundaries between them, and drawn as **a room with a single slash through each wall** (user, same
+**Named** *Erase loop* until 2026-09-22, after the map-making operation that merges areas by
+deleting the boundaries between them, and drawn as **a room with a single slash through each wall** (user, same
 day): where the mark sits says what goes. The room with a cross in the middle and its walls solid is
 *Suppress region*'s, which strikes the room and keeps the walls. It
 was that room dashed and crossed for its first day; a dashed wall is how the surface draws one that is
-going, so the tool that keeps its walls could not take it as it stood. *Clear* was ruled out by *Clear everything* in the panel, *Merge* by being this
+going, so the tool that keeps its walls could not take it as it stood.
+
+**It is *Erase loop* now** (user, 2026-09-22), one of a family of three named by how much each press
+takes: *Erase* one segment, *Erase chain* everything joined to it, *Erase loop* the walls around a
+space. The old name was accurate about the operation and aimed at the wrong thing — *"I don't think
+the user is thinking about the region, or they would reach for Suppress Region instead. What they are
+getting rid of is the walls around a space."* **The code keeps `dissolve`** for the operation, which
+is still exactly what it is; only the label changed. *Erase line* was rejected for the smallest of the
+three, because Erase takes one **segment** and a wall that looks like a single straight line is usually
+many — so the plain word, unqualified, is the one that promises nothing it cannot keep. *Clear* was ruled out by *Clear everything* in the panel, *Merge* by being this
 project's word for its worst failure, and *Erase room* by guessing intent — the region may be a table.
 
 **As built** — `trace/dissolve.ts` is the decision, pure and tested; the tool is a fifth wall tool, so
@@ -4722,7 +4738,7 @@ holding one gets no fog shape and its walls stay.
 **What it is for**: a region the walls enclose that is not a room — solid rock between rooms, a large
 pillar. It becomes what the outside already is: fogged, and never revealable. That is also why it is
 not the tool for a table inside a room, which would become a permanent hole in the room's fog;
-Dissolve region is.
+Erase loop is.
 
 **Decided (user, 2026-09-16):**
 
@@ -4741,12 +4757,12 @@ Dissolve region is.
 - **Drawn as a cased cross in the subtractive colour, with the Rooms layer**, dimmed when it suppresses
   nothing. Always drawn, because an unfilled region is also how a room that has leaked to the outside
   looks, and the mark is what tells the two apart.
-- **Named and drawn as Dissolve region's other half**: the same room, crossed in the middle.
+- **Named and drawn as Erase loop's other half**: the same room, crossed in the middle.
 
 **As built:**
 
 - **`trace/suppression.ts` is the decision**, pure and tested: the regions the marks suppress, found
-  with Dissolve region's own lookup, and the traversal as emitted without them. The traversal now
+  with Erase loop's own lookup, and the traversal as emitted without them. The traversal now
   hands out **`ringEdges` per region** — which walls its rings cover — so the walls can be recounted
   with a region taken out rather than re-walked.
 - **The preview and the push apply it with the same two functions.** The workspace's partition goes
@@ -4926,7 +4942,7 @@ a click inside a ring collapses that one, and a button collapses every one ringe
 **What it is for**: the cells that detail drawn alongside a wall encloses — texture just inside it,
 pebbles against it — which the automatic prune does not take, because they are loops rather than dead
 ends (user: *"it's prevalent on this map because of a lot of details drawn alongside the walls"*).
-**Dissolve region is the wrong tool for them**, and that is why this exists: it takes every wall
+**Erase loop is the wrong tool for them**, and that is why this exists: it takes every wall
 around the clicked region, so a cell against a building's outer wall takes that wall too, and the room
 beside it joins the outside and can never be revealed.
 
@@ -4960,7 +4976,7 @@ beside it joins the outside and can never be revealed.
   which would void a pinned amount in silence. Placement gives the grouping instead. Mend moved up to
   meet it, closing a parked item.
 - **Named** *Collapse small regions*, **drawn** as a small loop with three walls running off it and a
-  single slash through the loop — Prune's slash, one row up, on Dissolve region's rule that *where the
+  single slash through the loop — Prune's slash, one row up, on Erase loop's rule that *where the
   mark sits says what goes* (user, from four drawn at strip size). *Clear*, *Merge*, *Dissolve*,
   *Pinch*, *Shrink* and *Remove* were ruled out, each for a collision or a false promise.
 
@@ -5023,9 +5039,35 @@ check it disabled, one measured as deciding nothing on a valid graph, one defenc
 - **It trusts the ink width for its starting point**, as the automatic prune does. Without one the start
   is a fixed guess from the test map's figures.
 
+**7. Erase chain — built 2026-09-22, not yet in a room.** Click a wall and everything joined to it
+goes, in one undo entry.
+
+- **Why it exists, in the GM's words** (user, 2026-09-22): *"The use case is stranded things inside
+  rooms, which are complex and tedious to delete, but detached, or easily made detached and then
+  deleted with this tool."* So it pairs with Erase rather than replacing it: one erase to detach a
+  scribble from the wall it touches, then one press to take the rest.
+- **Joined means sharing a vertex id**, which is the document's standing identity rule and the whole
+  definition. Two ends that merely hold the same coordinates are two sets, and the GM sees that in the
+  preview: half the thing lights up and the half that did not was never attached.
+- **On a real map the set is usually every wall there is** — a dungeon's linework is one connected
+  component, and with the map's edge walled everything reaching the edge joins the frame too. **No
+  guard was added for that** (user: *"A red preview is sufficient warning if they are deleting the
+  whole wall network"*), which also follows the standing rule against a count: a number is a proxy for
+  something that should be looked at.
+- **The name is the GM's word, not the record's.** The set branches and can hold loops, so it is not a
+  *chain* in the narrow sense — and *network* was rejected as our word rather than a GM's, *island* for
+  claiming a detachment the tool cannot promise.
+- **As built** — `trace/connected.ts` is the decision, pure and tested against an oracle that walks the
+  rule as a fixpoint with no adjacency and no queue: eight mutations, eight caught. The tool is a wall
+  tool, so the press saves through the one path every wall edit does, which compacts the node table on
+  the way out. **Timed before being called cheap**: 0.65ms median and 2.19ms worst on a graph three
+  times denser than a real map, and the walk is re-run only when the wall under the pointer changes.
+- **The preview is Erase loop's**, drawn by the same layer through one accessor — the layer's question
+  is *what would this press take*, and only one tool can be armed to answer it.
+
 ### Two ink tools proposed and not built — 2026-09-17
 
-**Both are an existing slider turned into a tool**, which is the move Dissolve region already made
+**Both are an existing slider turned into a tool**, which is the move Erase loop already made
 against the deleted smallest-room filter and which the record judged correct: a threshold decides
 globally and silently, where a click decides one case with the answer drawn first.
 
@@ -5219,6 +5261,7 @@ closed outright.
 | `trace/wallGraphDiff.ts` | what the GM changed: two graphs compared by **segment endpoints**, never by node id, so compaction and renumbering cannot affect the answer. A move falls out as a removal plus an addition |
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several, split walls where a new wall will land — and the two queries the tools aim with |
+| `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |

@@ -59,7 +59,7 @@ import { currentTool } from "../toolPalette";
 const WALL_TOOLS = new Set(["move", "draw", "erase", "straighten", "prune"]);
 import type { DrawPoint } from "../dragGesture";
 import {
-  dissolvingWalls,
+  condemnedWalls,
   pendingSpan,
   draggedNode,
   hoveredNode,
@@ -283,16 +283,17 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   }
 
   /*
-    The walls a click would remove by dissolving the region under the pointer, in Erase's colour and
-    at Erase's width, because it is the same act on more walls.
+    The walls a click would remove — the region's, under Erase loop, or everything joined to the wall
+    under the pointer, under Erase chain — in Erase's colour and at Erase's width, because each is the
+    same act on more walls.
 
     Only against the graph they were found on: the indices name walls in that graph and no other, and
     a derive landing between the hover and this frame would otherwise mark a scatter of unrelated ones.
   */
-  const dissolving = dissolvingWalls();
-  if (dissolving !== null && dissolving.graph === graph) {
+  const condemned = condemnedWalls();
+  if (condemned !== null && condemned.graph === graph) {
     context.beginPath();
-    for (const index of dissolving.edges) {
+    for (const index of condemned.edges) {
       const edge = graph.edges[index];
       const from = edge ? at(edge.a) : undefined;
       const to = edge ? at(edge.b) : undefined;

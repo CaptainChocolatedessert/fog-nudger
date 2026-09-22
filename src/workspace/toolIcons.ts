@@ -140,6 +140,22 @@ const ICONS: Readonly<Record<string, string>> = {
   // The same wall, struck out.
   erase: '<circle cx="5.5" cy="18.5" r="2" /><circle cx="18.5" cy="5.5" r="2" /><path d="M7 17 17 7" stroke-dasharray="2.4 2.2" /><path d="M8.4 8.4l7.2 7.2M15.6 8.4l-7.2 7.2" />',
   /*
+    **Erase chain**: an open zigzag of four vertices with one cut across each segment (user,
+    2026-09-22, chosen from four at strip size).
+
+    **A mark per wall is Erase loop's own grammar** — where the mark sits says what goes — so the two
+    siblings read as one family, and the zigzag says *open run* against that tool's closed room. The
+    three ruled out at 18px: the same zigzag with an X on each segment (Erase's mark, but three of
+    them smudge at size); Erase loop's room with one wall missing (the cleanest sibling, and at 18px
+    beside the real thing the difference is a single absent stroke); and a branching Y, which tells
+    the truth that the set branches but reads as a sparse asterisk and says nothing about a chain.
+  */
+  eraseChain:
+    '<circle cx="4" cy="17" r="1.6" /><circle cx="10" cy="8" r="1.6" />' +
+    '<circle cx="16" cy="16" r="1.6" /><circle cx="21" cy="7" r="1.6" />' +
+    '<path d="M4.9 15.7 9.1 9.3M11 9.3 15 14.7M16.8 14.6 20.2 8.4" />' +
+    '<path d="M5.3 11.4 8.7 13.6M11.4 13.2 14.6 10.8M16.7 10.5 20.3 12.5" />',
+  /*
     A room with a single slash through each of its walls: every wall goes (user, 2026-09-16).
 
     **Where the mark sits says what goes**, and Suppress region is the other half of that: the same
