@@ -1252,6 +1252,9 @@ fit. Splitting puts a boundary — and therefore a wall — down the join, in th
 
 ### The hairs come off in the derive — 2026-09-21
 
+**Confirmed in a room the same day**: *"No more stubs."* Whether any stub a GM wanted went with them
+has not been reported either way.
+
 **Every derive prunes the dead ends of up to two measured ink widths** before it hands the graph over.
 A *dead end* is a wall run with a free end; pruning deletes such runs, in rounds, since removing one
 can leave a junction with another short arm hanging. Thinning grows one off every notch in a
@@ -3159,13 +3162,11 @@ next section.
 
 ### Where to pick this up
 
-**Waiting for a room: the automatic prune — built 2026-09-21, not yet looked at.** Every derive now
-removes dead ends of up to **two measured ink widths** before it hands the graph over, prompted by a
-room's *"a lot of tiny spurs and very small enclosed loops"*. §4's *The hairs come off in the derive*
-has the whole of it. **What to do first in a room:** derive the map that prompted it and look at
-whether the hairs are gone and the stubs you want are still there; the `trace: pruned N dead ends`
-line says how many went and at what length, and the free-end count on the faces line is what the
-prune left.
+**The automatic prune — built and confirmed in a room, 2026-09-21** (user: *"that looks right in a
+map. No more stubs."*). Every derive removes dead ends of up to **two measured ink widths** before it
+hands the graph over, prompted by a room's *"a lot of tiny spurs and very small enclosed loops"*. §4's
+*The hairs come off in the derive* has the whole of it. On *The Incandescent Grottoes* (3.4px ink, so
+a 6.7px limit) the log shows 193 to 419 dead ends taken per derive depending on the ink settings.
 
 > **This is new, not a restoration, and the record said otherwise for a day.** It called the missing
 > prune a regression — *"the trace pruned as it built"* until 2026-09-18. It did, but only from a
