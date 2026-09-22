@@ -571,6 +571,15 @@ export interface MapDragHandler {
    * wall and the workspace with it, in one keystroke that only meant the first.
    */
   readonly escape?: () => boolean;
+  /**
+   * What a right-click means, when it means something other than *abandon*.
+   *
+   * **The two were one gesture until 2026-09-22**, because everything that could be abandoned had
+   * only that one verb. *Draw chain* has two — finish what is drawn, or throw it away — so the
+   * spare gesture takes the new one and Escape keeps the meaning it has everywhere else. A handler
+   * that does not set this is asked `escape` instead, exactly as before.
+   */
+  readonly rightClick?: () => boolean;
 }
 
 /**
@@ -693,9 +702,16 @@ if (canvas instanceof HTMLCanvasElement) {
   // and the workspace did not inherit it.
   canvas.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    // The gesture most drawing tools use for "not that one". Suppressing the menu was already
-    // required; giving the press a meaning costs nothing and saves reaching for the keyboard.
-    activeDragHandler()?.escape?.();
+    /*
+      The gesture most drawing tools use for "not that one". Suppressing the menu was already
+      required; giving the press a meaning costs nothing and saves reaching for the keyboard.
+
+      A tool with its own answer for a right-click gets asked that first — Draw chain finishes on it
+      — and everything else falls through to abandoning, which is what this always did.
+    */
+    const handler = activeDragHandler();
+    if (handler?.rightClick?.()) return;
+    handler?.escape?.();
   });
 
   canvas.addEventListener("pointerdown", (event) => {

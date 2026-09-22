@@ -150,6 +150,15 @@ const ICONS: Readonly<Record<string, string>> = {
     beside the real thing the difference is a single absent stroke); and a branching Y, which tells
     the truth that the set branches but reads as a sparse asterisk and says nothing about a chain.
   */
+  /*
+    **Draw chain**: Erase chain's zigzag without the cuts (user, 2026-09-22) — the same four vertices
+    and three segments, so the pair reads as one shape in two tools and the cuts are the only thing
+    that says *going*.
+  */
+  drawChain:
+    '<circle cx="4" cy="17" r="1.6" /><circle cx="10" cy="8" r="1.6" />' +
+    '<circle cx="16" cy="16" r="1.6" /><circle cx="21" cy="7" r="1.6" />' +
+    '<path d="M4.9 15.7 9.1 9.3M11 9.3 15 14.7M16.8 14.6 20.2 8.4" />',
   eraseChain:
     '<circle cx="4" cy="17" r="1.6" /><circle cx="10" cy="8" r="1.6" />' +
     '<circle cx="16" cy="16" r="1.6" /><circle cx="21" cy="7" r="1.6" />' +

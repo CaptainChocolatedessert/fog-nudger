@@ -201,11 +201,20 @@ function readRecord(
  */
 export async function writeWallGraph(mapId: string, graph: WallGraph): Promise<void> {
   const encoded = encodeWallGraph(graph);
+  /*
+    **Timed, because the record could not say what this costs.** The emit's slowness was measured on
+    the day a room reported it; the per-edit graph write was listed as *not established*, and it is
+    the number behind every "should this be one act or several" question about a wall tool — a press
+    is refused while a write is in flight, so a write that takes the better part of a second is a
+    stretch where clicks land as pans.
+  */
+  const started = performance.now();
   await OBR.scene.setMetadata({ [GRAPH_KEY]: { map: mapId, graph: encoded } });
+  const ms = performance.now() - started;
   devLog(
     "info",
     `graph: stored ${graph.nodes.length} nodes and ${graph.edges.length} walls ` +
-      `in ${encoded.length} characters`,
+      `in ${encoded.length} characters, written in ${ms.toFixed(0)}ms`,
   );
 }
 

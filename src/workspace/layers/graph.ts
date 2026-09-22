@@ -65,6 +65,7 @@ import {
   hoveredNode,
   hoveredWall,
   pendingPoint,
+  pendingChain,
   pendingWall,
   snapTarget,
 } from "../wallEdit";
@@ -347,6 +348,29 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     context.restore();
   }
 
+  /*
+    The chain being drawn, dashed for the same reason the single wall is: the document does not hold
+    it yet. The run and the rubber band to the cursor are one path, so the whole thing reads as one
+    line in progress rather than as walls plus a tail.
+  */
+  const chain = pendingChain();
+  if (chain) {
+    context.save();
+    context.setLineDash([6, 4]);
+    context.beginPath();
+    const first = chain.points[0]!;
+    context.moveTo(x(first.at.x), y(first.at.y));
+    for (const point of chain.points.slice(1)) context.lineTo(x(point.at.x), y(point.at.y));
+    if (chain.to) context.lineTo(x(chain.to.at.x), y(chain.to.at.y));
+    context.strokeStyle = WALL_CASING;
+    context.lineWidth = WALL_WIDTH_PX + 2;
+    context.stroke();
+    context.strokeStyle = drawColour();
+    context.lineWidth = WALL_WIDTH_PX;
+    context.stroke();
+    context.restore();
+  }
+
   const pending = pendingWall();
   if (pending) {
     context.save();
@@ -516,7 +540,13 @@ function paintHandles(
   */
   const pending = pendingWall();
   const marks: DrawPoint[] = [];
-  if (pending) {
+  const chainMarks = pendingChain();
+  if (chainMarks) {
+    // Every corner placed, so a chain shows where it has been; and the moving end only when it would
+    // attach, which is the rule the single wall already follows.
+    marks.push(...chainMarks.points);
+    if (chainMarks.to && chainMarks.to.onNode !== null) marks.push(chainMarks.to);
+  } else if (pending) {
     marks.push(pending.from);
     if (pending.to.onNode !== null) marks.push(pending.to);
   } else {

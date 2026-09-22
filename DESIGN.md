@@ -2778,7 +2778,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,069 tests across 76 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,082 tests across 77 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3250,12 +3250,12 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is waiting for a room.** The next piece needs a design conversation first — the list is
-below, and the rhythm is in the operating notes.
+**Do this first: take *Draw chain* into a room** (built 2026-09-22, never pressed in one). Click a few
+corners and finish with a right-click; click the start and watch the shape close; press Escape part-way
+and confirm nothing was written. §10, tool 8, has the reasoning and the costs.
 
-**Erase chain is confirmed in a room** (user, 2026-09-22: *"It works in the room"*), §10 tool 7. The
-erasing family was renamed with it: *Erase*, *Erase chain*, *Erase loop* — the last was *Dissolve
-region*. Three presses named by how much each takes, with the code keeping `dissolve` for the operation.
+**And read one number off the log while you are there**: the graph write now reports how long it took,
+which the record has carried as *not established* since the slow-save work.
 
 **The edge clamp is confirmed in a room** (user, 2026-09-22: *"That works in the room"*), Move and
 Draw both.
@@ -3336,8 +3336,10 @@ enormously"*). Two pushes on close of the same map: **70 regions and 3,242 wall 
 seconds**, then, after collapsing, pruning and suppressing, **17 regions and 145 wall lines in 1.3
 seconds**. Twenty times fewer items, eighty times faster. **What is left open** is a map whose honest
 walls really are that many segments — the lever there would be one item per wall *run* rather than per
-segment, which §6 decided against for nudging in Owlbear. **Not established:** whether the per-edit
-graph writes are slow too; the log has no timing on them.
+segment, which §6 decided against for nudging in Owlbear. **The per-edit graph write is timed in the log**
+since 2026-09-22 (`written in NNNms`), after being carried as *not established*: it is the number behind
+every question about whether a wall tool can commit per press, since a press is refused while a write is
+in flight. The figure arrives from the next room.
 
 #### The automatic prune is new, not a restoration
 
@@ -4546,7 +4548,7 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Seven tools built from conversations
+### Eight tools built from conversations
 
 **1. Erase loop — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
 pick this up* has which part). Click inside a region and the walls around it go.
@@ -5063,6 +5065,33 @@ goes, in one undo entry.
 - **The preview is Erase loop's**, drawn by the same layer through one accessor — the layer's question
   is *what would this press take*, and only one tool can be armed to answer it.
 
+**8. Draw chain — built 2026-09-22, not yet in a room.** A press per corner, each wall joined to the
+last, and the run goes in as one act.
+
+- **A tool of its own, not Draw not stopping** (user, 2026-09-22). Draw's two-click form already
+  re-aims its far end between clicks, so the geometry was there; what is new is that the run
+  accumulates and commits once.
+- **One act, and the reason is a defect the other shape would have had.** Per-wall commits mean one
+  scene write and one undo entry each — and **a press is refused while a write is in flight**, so a GM
+  clicking briskly along a chain would have had clicks land as pans. One insert at the end gives one
+  crossing sweep, one write, one undo entry. The cost, stated: undo takes back the whole chain rather
+  than the last wall, and the room fills do not update until the chain ends.
+- **Right-click finishes, Escape abandons** (user, same day). Those were one gesture — the canvas sends
+  a right-click to `escape` — and a chain is the first thing here with two endings, so they part: Escape
+  keeps the meaning it has everywhere, and nothing was written, so abandoning costs no undo.
+- **Clicking the last point placed finishes**, which also absorbs Draw's *too short to aim at* refusal:
+  the snap radius is wider than that minimum, so a click too short to be a wall is already a click on
+  the last point. **There is no click that silently does nothing.**
+- **Clicking the start closes the shape**, and clicking a middle point joins it — a loop with a tail,
+  sharing that vertex rather than laying a second point on it. A closed run repeats its first point, the
+  way the map frame's ring does, so the corners are shared by construction.
+- **As built** — `workspace/chainGesture.ts` is the decision, pure and tested: **nine mutations, seven
+  caught and two surviving deliberately**, the survivors being the middle sweep's bounds, which cannot
+  fire because the ends are answered above. Two of the four first-pass survivors were answered by
+  deleting a guard that could not fire and by a fixture at the exact snap radius — written first with
+  0.02, where `0.3 + 0.02` is not 0.02 away from `0.3` in binary, so the fixture was testing its own
+  arithmetic until it was rewritten in powers of two.
+
 ### Two ink tools proposed and not built — 2026-09-17
 
 **Both are an existing slider turned into a tool**, which is the move Erase loop already made
@@ -5259,6 +5288,7 @@ closed outright.
 | `trace/wallGraphDiff.ts` | what the GM changed: two graphs compared by **segment endpoints**, never by node id, so compaction and renumbering cannot affect the answer. A move falls out as a removal plus an addition |
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several, split walls where a new wall will land — and the two queries the tools aim with |
+| `workspace/chainGesture.ts` | **what a click means while a chain is being drawn**: append, close, join or finish |
 | `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |

@@ -344,6 +344,24 @@ export const TOOLS: readonly ToolChoice[] = [
     rid of is the walls around a space."* The code keeps `dissolve` for the operation, which is still
     what it is.
   */
+  /*
+    **Draw chain — a tool of its own, not Draw not stopping** (user, 2026-09-22). One press per point,
+    each wall joined to the last, and the whole run goes in as **one act**: one crossing sweep, one
+    scene write, one undo entry. Per-wall commits were the alternative and they fail twice over — a
+    press is refused while a write is in flight, so a GM clicking along a chain would have clicks land
+    as pans, and undo would take a chain back a wall at a time.
+
+    **Right-click finishes and Escape abandons** (user, same day). The two gestures were one — the
+    canvas sends a right-click to `escape` — and a chain needs both verbs, so they part here: Escape
+    keeps the meaning it has everywhere else, and the spare gesture takes the new one.
+  */
+  {
+    id: "drawChain",
+    label: "Draw chain",
+    band: "walls",
+    drag: "edit",
+    hint: "Click each corner. Right-click finishes, Esc abandons, and a click on the start closes the shape.",
+  },
   {
     id: "eraseChain",
     label: "Erase chain",

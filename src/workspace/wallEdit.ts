@@ -48,6 +48,8 @@ import { markAt } from "../trace/suppression";
 import { applySpan, findSpan, type Span } from "../trace/span";
 import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { connectedEdges } from "../trace/connected";
+import { chainClick, chainRun } from "./chainGesture";
+import { insertEdge } from "../trace/planarOps";
 import { applyMends, type Mend } from "../trace/mends";
 import { applyCollapses, collapseAll, type Collapse } from "../trace/collapse";
 import { applyPrunePieces, type PrunePiece } from "../trace/prunePieces";
@@ -98,6 +100,7 @@ import { saveEditedWalls } from "./stage";
 export type WallTool =
   | "move"
   | "draw"
+  | "drawChain"
   | "erase"
   | "eraseChain"
   | "mend"
@@ -137,6 +140,17 @@ let dragState: DragState | null = null;
 /** Drawing: the fixed end, and the end following the cursor. */
 let anchor: DrawPoint | null = null;
 let reach: DrawPoint | null = null;
+/**
+ * Drawing a chain: the points placed so far, and whether the run is to be shut.
+ *
+ * **Nothing is written until it ends**, which is what makes a chain one act: one crossing sweep, one
+ * scene write, one undo entry. It also sidesteps a defect the per-wall version would have had — a
+ * press is refused while a write is in flight, so clicking briskly along a chain would have landed
+ * some clicks as pans.
+ */
+let chain: DrawPoint[] = [];
+let chainClosed = false;
+
 /** Erasing, and hovering with any tool: what is under the pointer. */
 let hovered: number | null = null;
 let hoveredEdge: number | null = null;
@@ -353,6 +367,30 @@ function commitMark(target: MarkTarget): void {
  * behind it is what costs the millisecond. Moving along one wall of a chain therefore costs nothing
  * after the first frame.
  */
+/**
+ * End a chain and write it, as one act.
+ *
+ * **One `insertEdge` for the whole run**, which is what makes it one crossing sweep and one undo
+ * entry. A closed chain repeats its first point, the same way the map frame's ring goes in, so the
+ * corners are shared vertices by construction rather than by coordinates agreeing.
+ *
+ * A chain of one point writes nothing: that is a press followed straight away by a finish, and there
+ * is no wall in it.
+ */
+function finishChain(graph: WallGraph): void {
+  const run = chainRun(chain.map((placed) => placed.at), chainClosed);
+  const walls = run ? run.length - 1 : 0;
+  clearGesture();
+  invalidate();
+  if (!run) return;
+  commit(
+    insertEdge(graph, run),
+    `drew a chain of ${walls} wall${walls === 1 ? "" : "s"}`,
+    "drawing a chain",
+    graph,
+  );
+}
+
 function aimChain(graph: WallGraph, point: MapPoint): void {
   const found = nearestEdge(graph, { x: point.x, y: point.y }, ERASE_RADIUS_PX * point.perPixel);
   if (found === null) {
@@ -466,6 +504,17 @@ export function condemnedWalls(): { readonly graph: WallGraph; readonly edges: r
   return hoveredRegion && { graph: hoveredRegion.graph, edges: hoveredRegion.dissolution.edges };
 }
 
+/**
+ * The chain being drawn: the points placed, and the end following the cursor.
+ *
+ * Drawn dashed by the graph layer, like the single wall being drawn and for the same reason — it is
+ * the one thing on the canvas the document does not hold yet, and a solid stroke would claim
+ * otherwise.
+ */
+export function pendingChain(): { readonly points: readonly DrawPoint[]; readonly to: DrawPoint | null } | null {
+  return chain.length > 0 ? { points: chain, to: reach } : null;
+}
+
 /** The wall being drawn: the fixed end and the end following the cursor, or `null`. */
 export function pendingWall(): { readonly from: DrawPoint; readonly to: DrawPoint } | null {
   return anchor && reach ? { from: anchor, to: reach } : null;
@@ -489,6 +538,8 @@ function clearGesture(): void {
   pressedCollapse = null;
   pressedPrune = null;
   chainTarget = null;
+  chain = [];
+  chainClosed = false;
 }
 
 function start(point: MapPoint): boolean {
@@ -532,6 +583,39 @@ function start(point: MapPoint): boolean {
     spanTarget = spanAt(graph, point);
     invalidate();
     return spanTarget !== null;
+  }
+
+  if (tool === "drawChain") {
+    const landed = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    const answer = chainClick(
+      chain.map((placed) => placed.at),
+      landed.at,
+      landed.onNode,
+      SNAP_RADIUS_PX * point.perPixel,
+    );
+    switch (answer.kind) {
+      case "append":
+        chain.push(landed);
+        reach = landed;
+        break;
+      case "close":
+        chainClosed = true;
+        finishChain(graph);
+        return true;
+      case "join":
+        // A loop with a tail: the run ends on a point it already holds, sharing that vertex rather
+        // than laying a second one on it.
+        chain.push(chain[answer.at]!);
+        finishChain(graph);
+        return true;
+      case "finish":
+        if (landed.onNode !== null && chain.length > 0) chain.push(landed);
+        finishChain(graph);
+        return true;
+    }
+    setGrabTarget(true);
+    invalidate();
+    return true;
   }
 
   /*
@@ -685,9 +769,31 @@ function cancel(): void {
  * drawing tools use for "not that one".
  */
 function escape(): boolean {
+  if (chain.length > 0) {
+    // A chain in progress is the one thing here that has two endings, and this is the one that keeps
+    // Escape's meaning: nothing was written, so nothing has to be taken back.
+    const placed = chain.length;
+    cancel();
+    say(`abandoned a chain of ${placed} point${placed === 1 ? "" : "s"}`);
+    return true;
+  }
   if (!anchor && !grab && !pressedMend && !pressedCollapse && !pressedPrune) return false;
   cancel();
   say("cancelled");
+  return true;
+}
+
+/**
+ * A right-click, where it means something other than abandoning.
+ *
+ * **Only Draw chain has a second verb**, and this is it: finish what is drawn. Everything else
+ * returns false and the shell asks `escape` instead, which is what a right-click has always done.
+ */
+function rightClick(): boolean {
+  if (tool !== "drawChain" || chain.length === 0) return false;
+  const graph = editableGraph();
+  if (!graph) return false;
+  finishChain(graph);
   return true;
 }
 
@@ -960,6 +1066,18 @@ function hover(point: MapPoint | null): void {
     return;
   }
 
+  if (tool === "drawChain") {
+    if (chain.length === 0) {
+      drawHover = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    } else {
+      const held = onMap(point);
+      reach = drawPoint(graph, held.x, held.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    }
+    setGrabTarget(true);
+    invalidate();
+    return;
+  }
+
   if (tool === "eraseChain") {
     aimChain(graph, point);
     return;
@@ -1204,5 +1322,5 @@ export function putDownSearches(): void {
 
 /** Wire the tools up. The step declares that a drag means this; the shell offers it every press. */
 export function registerWallEdit(): void {
-  setMapDragHandler("edit", { start, move, end, cancel, hover, escape });
+  setMapDragHandler("edit", { start, move, end, cancel, hover, escape, rightClick });
 }
