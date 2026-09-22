@@ -11,7 +11,7 @@
  *
  * ## Why the order is stated here rather than in the strip
  *
- * A band can hold more than one, and Walls now does: *Add walls around the map edge* and then
+ * A band can hold more than one, and Walls now does: *Toggle walls around the map edge* and then
  * *Clear wall edits*. Which comes first is a fact about the band, not about the loop that draws it —
  * and the strip's own rule is that **what a button acts on is said by where it is**, which only
  * holds if "where" is written down once.
@@ -21,9 +21,13 @@
  *
  * ## One shape for two families
  *
- * The clears confirm and are undoable in one step; the frame asks nothing, because it adds and there
- * is nothing to lose. That difference lives in each act's own `run`, not here — this only says which
- * band a press belongs to, what it looks like, and when it is structurally unavailable.
+ * The clears confirm and are undoable in one step; the frame asks nothing in either direction,
+ * because the opposite press puts back what it did. That difference lives in each act's own `run`,
+ * not here — this only says which band a press belongs to, what it looks like, and when it is
+ * structurally unavailable.
+ *
+ * **A toggle is still an act, and still never draws pressed.** The frame reads its state out of the
+ * document, and the GM reads it off the map; the name says *toggle*, so it is true in both states.
  */
 
 import { CLEAR_ACTS } from "./clearActions";

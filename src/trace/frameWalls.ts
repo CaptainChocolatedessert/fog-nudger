@@ -1,5 +1,10 @@
 /**
- * Adding walls around the map's edge, so the exterior becomes a room again.
+ * Walling the map's edge, and taking that wall off again, so the exterior can be a room.
+ *
+ * **It is a toggle** (user, 2026-09-22): one press walls the edge, the next takes it off. The state is
+ * read out of the document by `alreadyFramed` rather than stored, so nothing can disagree with the
+ * walls — and there is no record of *which* walls the framing placed, which is what `removeFrameWalls`
+ * says the cost of.
  *
  * ## Why this is a button rather than something the trace does
  *
@@ -58,6 +63,57 @@ export interface FramingResult {
   readonly overlaps: number;
   /** Whether a frame was already there, in which case nothing was added. */
   readonly alreadyFramed: boolean;
+  /** Walls lying along an edge that were taken out before laying the new frame. */
+  readonly cleared: number;
+}
+
+/**
+ * Every wall lying **wholly along** one of the four edge lines.
+ *
+ * The same question `alreadyFramed` asks, kept as a set rather than counted per side — one is "is
+ * each side covered", the other is "which walls are the covering". Both must read *along*, not
+ * *touching*: a wall from corner to corner has an endpoint on all four edges and is not one of these.
+ */
+export function edgeWallIndices(graph: WallGraph, extent: GraphExtent): number[] {
+  const far = documentPoint(extent.x, extent.y);
+  const found: number[] = [];
+  for (let index = 0; index < graph.edges.length; index++) {
+    const edge = graph.edges[index]!;
+    const a = graph.nodes[edge.a];
+    const b = graph.nodes[edge.b];
+    if (!a || !b) continue;
+    const along =
+      (a.x === 0 && b.x === 0) ||
+      (a.x === far.x && b.x === far.x) ||
+      (a.y === 0 && b.y === 0) ||
+      (a.y === far.y && b.y === far.y);
+    if (along) found.push(index);
+  }
+  return found;
+}
+
+/**
+ * Take the frame off: every wall along an edge goes, and nothing else moves.
+ *
+ * **The vertices stay**, which is `removeEdge`'s own rule — ids are the only stable identity the
+ * document has, and one with no walls draws no handle. A wall that *ended* on the frame keeps its
+ * endpoint and becomes a free end again, which is exactly where it ended before the frame went on.
+ *
+ * **What it cannot undo is a split.** A wall the frame cut is left as two pieces meeting at a vertex:
+ * the same line, one vertex more, because the document never recorded which cuts the framing made.
+ * Straighten takes such a vertex out; nothing else needs to.
+ *
+ * **A wall the GM drew along the edge themselves is indistinguishable from a frame wall** and goes
+ * with it. That is the accepted cost of the frame being a state of the document rather than a thing
+ * the document remembers placing (user, 2026-09-22).
+ */
+export function removeFrameWalls(graph: WallGraph, extent: GraphExtent): { graph: WallGraph; removed: number } {
+  const indices = new Set(edgeWallIndices(graph, extent));
+  if (indices.size === 0) return { graph, removed: 0 };
+  return {
+    graph: { nodes: graph.nodes, edges: graph.edges.filter((_, index) => !indices.has(index)) },
+    removed: indices.size,
+  };
 }
 
 /**
@@ -96,16 +152,31 @@ export function alreadyFramed(graph: WallGraph, extent: GraphExtent): boolean {
  */
 export function addFrameWalls(graph: WallGraph, extent: GraphExtent): FramingResult {
   if (alreadyFramed(graph, extent)) {
-    return { graph, splits: 0, overlaps: 0, alreadyFramed: true };
+    return { graph, splits: 0, overlaps: 0, alreadyFramed: true, cleared: 0 };
   }
+
+  /*
+    **Whatever already lies along an edge comes out first** (2026-09-22), and this is a correctness
+    guard rather than tidiness.
+
+    The refusal above is all-or-nothing: it asks whether *each* of the four sides is covered. A frame
+    with one side erased therefore reads as unframed, and laying a fresh one put three new segments
+    exactly on three existing ones — collinear overlaps, which splitting cannot separate and which
+    make Euler's identity fail. The document was corrupt with nothing to see until the next traversal,
+    which is the failure the refusal was written to prevent and did not reach.
+
+    Clearing first makes the press mean *the edge is walled by this frame*, in every starting state.
+  */
+  const cleared = removeFrameWalls(graph, extent);
 
   const around = corners(extent);
   const closed = [...around, around[0]!].map((corner) => documentPoint(corner.x, corner.y));
-  const result = insertEdge(graph, closed);
+  const result = insertEdge(cleared.graph, closed);
   return {
     graph: result.graph,
     splits: result.splits,
     overlaps: result.overlaps,
     alreadyFramed: false,
+    cleared: cleared.removed,
   };
 }

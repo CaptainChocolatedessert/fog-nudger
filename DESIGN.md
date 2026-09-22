@@ -494,7 +494,7 @@ one and touching-the-border matches both.
 every map.** It has no polygon, so it drops out for free with nothing to identify.
 
 **The cost, stated:** a GM who *wants* the outside revealable has to say so, by drawing walls at the
-map's edge. That is one button — *Add walls around the map edge* (§5) — and it is an ordinary edit
+map's edge. That is one button — *Toggle walls around the map edge* (§5) — and it is an ordinary edit
 afterwards.
 
 ### What emits as a shape and what emits as a line — the bridge criterion
@@ -1643,17 +1643,37 @@ derive rather than from a button. What each is:
   what the button does. **The handles go red too, and by a narrower rule than the walls**: only
   vertices that actually go, since the junction where a stub meets its wall keeps its other walls and
   stays put.
-**Add walls around the map edge** (`addFrameWalls`) is the one button left, at the foot of Walls —
-four segments at the map's extent as **one closed run**, so the corners are shared vertices by
-construction. **It adds, so it asks nothing first**, which is also why it never needed the pair's
-ceremony and why it survives them. **A second press is refused rather than absorbed**: four segments laid on four existing
-  ones are collinear overlaps, which splitting cannot separate and which make Euler's identity fail —
-  corrupt with nothing to see until the next traversal. **The already-framed test is strict on
-  purpose**: a segment must lie *along* an edge, not merely touch it, because a single wall drawn
-  corner to corner reaches all four edges and a looser test would call that map framed.
+**Toggle walls around the map edge** (`addFrameWalls` / `removeFrameWalls`) is the one button left, at
+the foot of Walls — four segments at the map's extent as **one closed run**, so the corners are shared
+vertices by construction. **It asks nothing in either direction**, because the opposite press puts back
+what it did, which is also why it never needed the pair's ceremony and why it survives them. **The
+already-framed test is strict on purpose**: a segment must lie *along* an edge, not merely touch it,
+because a single wall drawn corner to corner reaches all four edges and a looser test would call that
+map framed.
 
-  There is no un-frame button, and none is wanted: once added they are ordinary walls, and the erase
-  tool takes them a segment at a time.
+  **It became a toggle on 2026-09-22** (user: *"I do still want to make the wall frame a toggle, not
+  just use undo"*). Undo already reached the press; a toggle is for taking the frame off later, after
+  other work. Off is the mirror of the detection — every wall lying *along* an edge goes, their vertices
+  staying behind by `removeEdge`'s rule — and it is read out of the document rather than stored, so
+  nothing can disagree with the walls on the map.
+
+  **Two costs, both accepted.** A wall the GM drew along the map's edge themselves is indistinguishable
+  from a frame wall and goes with it. And a wall the frame *split* stays split: the document never
+  recorded which cuts the framing made, so the wall comes back as two pieces meeting at a vertex — the
+  same line with one vertex more, which Straighten removes.
+
+  **The on-press clears whatever lies along an edge before laying the frame**, and that closed a real
+  defect rather than tidying. The refusal above is all-or-nothing, so a frame with **one side erased
+  read as unframed**: the press then laid three new segments exactly on three existing ones, and those
+  collinear overlaps — which splitting cannot separate — make Euler's identity fail, corrupt with
+  nothing to see until the next traversal. Clearing first makes the press mean *the edge is walled by
+  this frame* from any starting state.
+
+  **What a fresh frame does to existing walls was measured, not reasoned** (2026-09-22, at the user's
+  request: *"as long as the new frame sides will split on vertices that are on the edges, and mutually
+  split any walls that cross the frame"*). Over 400 walls ending exactly on an edge, the frame shared
+  the wall's own vertex every time, with no second node at the same coordinates; over 400 walls crossing
+  an edge, every one split exactly once at a node the frame also uses.
 
 **Pruning does NOT rebuild the raster**, and the alternative was measured and abandoned. Prune the
 graph, rasterise the survivors, rebuild the graph: it works, and it leaves the sub-pixel-sliver
@@ -2262,10 +2282,17 @@ because *spur* is this document's vocabulary and not a GM's.
 **The frame button is the one case where naming the point turned out to be wrong**, and it took
 three names to find out. *Wall the map's edge* was rejected as a mechanism with its point left to
 four sentences underneath; *Make the outside a room* named the point and was doubted twice in
-rooms; it is **Add walls around the map edge** now (user, 2026-09-14): *"The user may not think of
+rooms; it became **Add walls around the map edge** (user, 2026-09-14): *"The user may not think of
 that exterior in terms of a room."* The lesson is narrower than "name the point" — a point that
 is only one of several reasons a GM might press the button is not a name, it is a guess at their
 intent.
+
+**It is *Toggle walls around the map edge* since 2026-09-22**, and the fourth name came from the
+button gaining a second meaning rather than from the third being wrong. An act **never draws pressed**
+— the only thing telling it from a verb in a column of glyphs — so the name carries the state instead
+(user: *"If it's name and hint are 'toggle' then it's always right, and the user can look at the map to
+see if the walls are there or not"*). **A name that is true in both states beats a name that has to
+change**, and the map is where the state is legible anyway.
 
 Three things kept their text, and each for a reason that generalises:
 
@@ -2718,7 +2745,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,051 tests across 75 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,057 tests across 75 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3190,12 +3217,11 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: make the map frame a toggle** (user, 2026-09-22, immediately after the four changes
-below were confirmed: *"I do still want to make the wall frame a toggle, not just use undo"*). It needs
-the design conversation before anything is built, and **the open question is what turning it off does to
-walls the frame split** when it went on: `addFrameWalls` reports its `splits`, but the document does not
-keep which they were, so a split cannot be undone without knowing that. Undo already takes the whole
-press back — what a toggle adds is taking it off later, after other work.
+**Do this first: take the frame toggle into a room** (built 2026-09-22, never pressed in one). Press
+the frame act on a map with walls, then press it again: the edge walls should go and nothing else
+should move. Worth looking at afterwards — a wall that ran out to the map's edge keeps the vertex the
+frame cut it at, which is the stated cost. §5 has the whole of it, including the partial-frame defect
+the on-press now closes.
 
 **The four small changes are confirmed in a room** (user, 2026-09-22: *"1-4 all work"*), each built the
 same day:
@@ -3210,7 +3236,7 @@ same day:
    **Not recorded:** whether the new size arrived from the manifest alone or needed a re-add under a new
    URL — so whether Owlbear re-reads an action's size, or keeps it with the listing as it keeps the name
    and icon, is **still not established**.
-4. **The map frame is undoable** — press *Add walls around the map edge*, then Undo. Seen, not just read.
+4. **The map frame is undoable** — press the frame act, then Undo. Seen, not just read.
 
 **Then, each needing a design conversation first** (the rhythm in the operating notes — *well
 defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3546,7 +3572,7 @@ was the smallest mark in the band while dimming the crooked side was ruled out b
 already dims a disabled glyph to 0.65 and the two would stack. *Prune* is a long wall — running off
 both edges, wearing no end rings, which is what says it is long — with a stub and a single slash
 through the stub, borrowing Dissolve region's rule that **where the mark sits says what goes**.
-*Add walls around the map edge* is the map picker's own picture with a vertex ring at each corner,
+*Toggle walls around the map edge* is the map picker's own picture with a vertex ring at each corner,
 which is what the button builds: four segments as one closed run, corners shared by construction.
 
 **The band is ten buttons now** and has no settings opener, which is the first group without one.
@@ -5158,7 +5184,7 @@ closed outright.
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several, split walls where a new wall will land — and the two queries the tools aim with |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
-| `trace/frameWalls.ts` | the four walls at the map's extent, and the strict already-framed test |
+| `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
 | `trace/probePoint.ts` | the one surviving diagnostic |
@@ -5231,7 +5257,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   stack, for the graph, the painted ink and the marks**: entries are labelled closures, so it never
   learns what it is restoring — pure and tested) · `regionMarks.ts` (the suppression marks for the map
   in hand: loaded with it, saved on every change, undone like any other act) · `editHistory.ts` (the bounded stack under it, pure and
-  tested) · `frameAction.ts` (the button that walls the map's edge) ·
+  tested) · `frameAction.ts` (the act that walls the map's edge, and unwalls it — one press each way, neither asking) ·
   `wallAmounts.ts` (**Straighten**, the one amount: its slider, the substituting preview, and the commit when
   the drawer closes — by its *Done*, which is a press on Pan, or by arming anything else) · `graphLatch.ts` (**the latch** — the graph pinned when Straighten's drawer opens, the
   amount aimed at it, and the staleness rule that voids it when the document is replaced: pure and tested) ·

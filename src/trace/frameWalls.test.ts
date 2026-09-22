@@ -11,11 +11,16 @@
  *
  * Two mutations on 2026-09-16 — the frame and the already-framed test each at the unit square — two
  * caught.
+ *
+ * **Eight mutations on 2026-09-22, eight caught**, over the toggle: the along-test loosened to either
+ * end and stripped of the right edge, any vertical wall called an edge wall, the clearing step skipped
+ * before laying a frame, the cleared count zeroed, the graph rebuilt when nothing was removed, the
+ * removal filter inverted, and the removed count zeroed.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { addFrameWalls, alreadyFramed } from "./frameWalls";
+import { addFrameWalls, alreadyFramed, edgeWallIndices, removeFrameWalls } from "./frameWalls";
 import { graphExtent } from "./graphUnits";
 import { buildWallFaces } from "./wallFaces";
 import { documentCoordinate, documentPoint, type WallGraph } from "./wallGraph";
@@ -28,6 +33,21 @@ function graphOf(
     nodes: points.map(([x, y]) => documentPoint(x, y)),
     edges: edges.map(([a, b]) => ({ a, b })),
   };
+}
+
+/**
+ * Every edge as its two endpoints' coordinates, sorted, so two graphs can be compared by what they
+ * draw rather than by how they are numbered. Removal leaves unused vertices behind on purpose, so the
+ * node tables differ even when the walls are identical.
+ */
+function edgesAsPoints(graph: WallGraph): [number, number][][] {
+  return graph.edges
+    .map((edge): [number, number][] => {
+      const a: [number, number] = [graph.nodes[edge.a]!.x, graph.nodes[edge.a]!.y];
+      const b: [number, number] = [graph.nodes[edge.b]!.x, graph.nodes[edge.b]!.y];
+      return a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]) ? [a, b] : [b, a];
+    })
+    .sort((x, y) => x[0]![0] - y[0]![0] || x[0]![1] - y[0]![1] || x[1]![0] - y[1]![0] || x[1]![1] - y[1]![1]);
 }
 
 /** The test map's proportions: landscape, so x runs to 1 and y stops short of it. */
@@ -190,5 +210,109 @@ describe("addFrameWalls", () => {
     expect(framed.graph.edges).toHaveLength(4);
     // One face: the whole map, with nothing in it.
     expect(buildWallFaces(framed.graph).faces).toHaveLength(1);
+  });
+
+  /*
+    The case the all-or-nothing refusal does not reach.
+
+    A frame with one side erased reads as unframed, so the press goes ahead — and before the clearing
+    step it laid three new segments exactly on three existing ones. `insertEdge` reports those as
+    collinear overlaps and leaves them, so the corruption is silent until something next walks the
+    graph. The oracle here is the traversal, which shares none of the framing's reasoning.
+  */
+  it("lays a clean frame over a partial one rather than doubling three of its sides", () => {
+    const once = addFrameWalls(ROOM, WIDE);
+    const top = edgeWallIndices(once.graph, WIDE).find((index) => {
+      const edge = once.graph.edges[index]!;
+      return once.graph.nodes[edge.a]!.y === 0 && once.graph.nodes[edge.b]!.y === 0;
+    })!;
+    const partial: WallGraph = {
+      nodes: once.graph.nodes,
+      edges: once.graph.edges.filter((_, index) => index !== top),
+    };
+    expect(alreadyFramed(partial, WIDE)).toBe(false);
+
+    const again = addFrameWalls(partial, WIDE);
+    expect(again.overlaps).toBe(0);
+    expect(again.cleared).toBe(3);
+    expect(alreadyFramed(again.graph, WIDE)).toBe(true);
+    const faces = buildWallFaces(again.graph);
+    expect(faces.eulerHolds).toBe(true);
+    // The same two faces a whole frame gives: the room, and the band around it.
+    expect(faces.faces).toHaveLength(2);
+  });
+});
+
+describe("removeFrameWalls", () => {
+  /*
+    Off then on is the identity, on a map where nothing reaches the edge.
+
+    Compared as coordinate pairs rather than ids: taking walls out leaves their vertices behind by
+    `removeEdge`'s rule, so the node table is deliberately not the same afterwards and comparing ids
+    would assert the wrong thing.
+  */
+  it("takes back exactly what framing added", () => {
+    const framed = addFrameWalls(ROOM, WIDE);
+    const back = removeFrameWalls(framed.graph, WIDE);
+    expect(back.removed).toBe(4);
+    expect(edgesAsPoints(back.graph)).toEqual(edgesAsPoints(ROOM));
+    expect(alreadyFramed(back.graph, WIDE)).toBe(false);
+  });
+
+  /*
+    A wall that ran out to the edge keeps the piece the frame cut.
+
+    The document never recorded which splits the framing made, so the two pieces stay as two, meeting
+    at a vertex where there was none. The **line** is unchanged, which is what a GM sees; the cost is
+    one extra vertex, and it is stated rather than silently repaired.
+  */
+  it("leaves a wall the frame split as two pieces on the same line", () => {
+    const reaching = graphOf(
+      [
+        [0.5, 0.4],
+        [0.5, 1.4],
+      ],
+      [[0, 1]],
+    );
+    const framed = addFrameWalls(reaching, WIDE);
+    const back = removeFrameWalls(framed.graph, WIDE);
+    // Outside the map and inside it, meeting where the frame was.
+    expect(back.graph.edges).toHaveLength(2);
+    const ys = new Set(edgesAsPoints(back.graph).flat().map(([, y]) => y));
+    expect(ys).toContain(documentCoordinate(WIDE.y));
+  });
+
+  it("takes a wall the GM drew along the edge, having no way to tell it apart", () => {
+    const drawn = graphOf(
+      [
+        [0.2, 0],
+        [0.6, 0],
+      ],
+      [[0, 1]],
+    );
+    expect(removeFrameWalls(drawn, WIDE).removed).toBe(1);
+  });
+
+  /*
+    The strict reading, from the other side: a wall is only a frame wall if it lies **along** an edge.
+    The diagonal touches all four and none of them lies along one, so nothing goes.
+  */
+  it("keeps a corner-to-corner wall, which touches every edge and lies along none", () => {
+    const diagonal = graphOf(
+      [
+        [0, 0],
+        [WIDE.x, WIDE.y],
+      ],
+      [[0, 1]],
+    );
+    expect(removeFrameWalls(diagonal, WIDE).removed).toBe(0);
+    expect(removeFrameWalls(diagonal, WIDE).graph).toBe(diagonal);
+  });
+
+  it("does not take a frame belonging to a different extent", () => {
+    const elsewhere = addFrameWalls({ nodes: [], edges: [] }, TALL).graph;
+    // Two of the four sides are shared by any extent — x = 0 and y = 0 — so the other two stay.
+    expect(removeFrameWalls(elsewhere, WIDE).removed).toBe(2);
+    expect(alreadyFramed(removeFrameWalls(elsewhere, WIDE).graph, TALL)).toBe(false);
   });
 });

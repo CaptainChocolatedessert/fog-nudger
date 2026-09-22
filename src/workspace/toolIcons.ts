@@ -232,7 +232,7 @@ const ICONS: Readonly<Record<string, string>> = {
     '<circle cx="12" cy="12" r="3.6" /><path d="M12 1.5v6.9M2.9 17.3l6-3.5M21.1 17.3l-6-3.5" />' +
     '<path d="M9.5 16 14.5 8" />',
   /*
-    **Add walls around the map edge**: the map picker's own picture with a vertex ring at each corner
+    **Toggle walls around the map edge**: the map picker's own picture with a vertex ring at each corner
     (user, 2026-09-21).
 
     Reusing `map`'s box, horizon and sun is the point — the subject is *this map's edge* — and the

@@ -12,22 +12,30 @@
  * can walk. This is the remedy, and it is a button rather than a setting because it changes the
  * document rather than the reading.
  *
- * ## It adds and does not delete, which is why it asks nothing first
+ * ## It is a toggle, and it asks nothing either way
  *
- * The two buttons beside it confirm, because pruning and straightening remove work that does not come
- * back. This only inserts four walls, and the result is drawn on the canvas the instant it lands —
- * the exterior appears as another coloured region. A GM who did not want it erases them, or presses
- * *Remove ours* and starts again.
+ * A second press takes the frame off (user, 2026-09-22: *"I do still want to make the wall frame a
+ * toggle, not just use undo"*) — undo already reached the press, and what a toggle adds is taking it
+ * off later, after other work. Neither direction confirms: the other press puts it back, the result is
+ * drawn on the canvas the instant it lands, and undo reaches both.
  *
- * **A second press is refused rather than absorbed**, and that is the one thing here that could go
- * quietly wrong: four segments laid exactly on four existing ones are collinear overlaps, which
- * splitting cannot separate and which make Euler's identity fail. The document would be corrupt with
- * nothing to see until the next traversal.
+ * **What is lost coming off** is a wall the GM drew along the map's edge themselves, which nothing can
+ * tell from a frame wall. `frameWalls.ts` carries that cost and the split one.
+ *
+ * ## No pressed look, and the name says so
+ *
+ * An act in the strip **never draws pressed** — that is the only thing telling it from a verb in a
+ * column of glyphs, and a toggle that lit up would spend it. So the name is *Toggle walls around the
+ * map edge*, which is true in both states (user, 2026-09-22: *"If it's name and hint are 'toggle' then
+ * it's always right, and the user can look at the map to see if the walls are there or not"*). The
+ * state is read off the map, where the walls either are or are not drawn.
  */
 
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
-import { addFrameWalls } from "../trace/frameWalls";
+import { addFrameWalls, alreadyFramed, removeFrameWalls } from "../trace/frameWalls";
+import type { GraphExtent } from "../trace/graphUnits";
+import type { WallGraph } from "../trace/wallGraph";
 import { mapExtent, say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
 import { workOn } from "./subject";
@@ -60,7 +68,7 @@ export const FRAME_ACT: BandAct = {
     necessarily think of as a room. The lesson is narrower than "name the point": a point that is
     only one of several is a guess at intent.
   */
-  label: "Add walls around the map edge",
+  label: "Toggle walls around the map edge",
   glyph: "frame",
   gate: () => wallGraph() !== null,
   run: frameTheMapEdge,
@@ -98,14 +106,15 @@ async function run(): Promise<void> {
     return;
   }
 
-  const framed = addFrameWalls(graph, extent);
-  if (framed.alreadyFramed) {
-    // Said plainly rather than done silently: pressing a button and seeing nothing happen reads as a
-    // broken button, where "it is already there" is an answer.
-    say("the map's edge is already walled");
+  if (alreadyFramed(graph, extent)) {
+    await takeItOff(graph, extent);
     return;
   }
+  await putItOn(graph, extent);
+}
 
+async function putItOn(graph: WallGraph, extent: GraphExtent): Promise<void> {
+  const framed = addFrameWalls(graph, extent);
   busy = true;
   say("walling the edge…", "working");
   try {
@@ -113,7 +122,8 @@ async function run(): Promise<void> {
     devLog(
       "info",
       `workspace: walled the map's edge — ${framed.splits} existing segments split where they met ` +
-        `it, ${framed.overlaps} collinear overlaps left alone`,
+        `it, ${framed.cleared} walls already along an edge cleared first, ${framed.overlaps} ` +
+        `collinear overlaps left alone`,
     );
     say(
       "the map's edge is walled — the outside is a room now" +
@@ -125,6 +135,32 @@ async function run(): Promise<void> {
     say(`could not save the edge walls: ${detail}`, "bad");
     devLog("error", "workspace: framing failed to save", detail);
     console.error("Fog Nudger — framing failed to save", error);
+  } finally {
+    busy = false;
+  }
+}
+
+/**
+ * The other half of the toggle.
+ *
+ * **It asks nothing first**, unlike the clears: one press puts the frame back, and undo reaches it
+ * like any other wall edit. What it cannot put back is a wall the GM drew along the edge themselves,
+ * which is indistinguishable from a frame wall and goes with it — the accepted cost of reading the
+ * state out of the document rather than storing it.
+ */
+async function takeItOff(graph: WallGraph, extent: GraphExtent): Promise<void> {
+  const bare = removeFrameWalls(graph, extent);
+  busy = true;
+  say("taking the edge walls off…", "working");
+  try {
+    await saveEditedWalls(bare.graph, "unwalling the map's edge");
+    devLog("info", `workspace: unwalled the map's edge — ${bare.removed} walls along an edge removed`);
+    say(`the map's edge is bare again — ${bare.removed} walls removed`);
+  } catch (error) {
+    const detail = describeError(error);
+    say(`could not save without the edge walls: ${detail}`, "bad");
+    devLog("error", "workspace: unframing failed to save", detail);
+    console.error("Fog Nudger — unframing failed to save", error);
   } finally {
     busy = false;
   }

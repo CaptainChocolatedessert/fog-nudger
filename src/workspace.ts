@@ -360,11 +360,12 @@ registerStepContent("view", renderSwatches, "bottom");
   the top against an *action* at the bottom, and these are two actions.
 */
 /*
-  **Add walls around the map edge**, at the foot of Walls (user, 2026-09-14).
+  **Toggle walls around the map edge**, at the foot of Walls (user, 2026-09-14).
 
   It was the last thing in Edit walls, which is gone. It belongs with the two sliders that shape
   the graph rather than in a group of its own: all three are things you do to the walls, and this
-  is the one that *adds*, which is why it is a deliberate press where they are live.
+  is the one that puts walls *there* rather than taking detail out, which is why it is a deliberate
+  press where they are live. It toggles since 2026-09-22, so the same press takes the frame off.
 */
 /*
   The Walls group registers nothing, and so has no drawer and no button in the strip (2026-09-21).
