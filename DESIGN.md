@@ -3305,15 +3305,10 @@ next section.
 
 **Do this first, and none of it has been seen yet** (2026-09-22):
 
-1. **Draw chain's dotted line on a map with no walls** — the fix for the room's report. Clear the walls
-   or empty them with *Erase chain*, then draw a chain: the run should be drawn while it is being made.
-   Its far end should also follow while the button is held, which is the second half of that fix.
-2. **Every vertex now draws** for the tools whose work is at one, with no ceiling, so a dense map shows
-   thousands of dots. Whether that is workable at map zoom or wants a lighter mark is still open — the
-   density argument behind the old cap was real, and what retired it was that a target you cannot see is
-   worse.
-3. **Read the write timing off the log** (`written in NNNms`), which the record carried as *not
-   established* since the slow-save work.
+**Nothing is waiting for a room.** The three things the last one carried are all answered: the dotted
+line draws on an empty document (user: *"The line drawing works now"*), the uncapped vertices are fine
+(*"they read like thick wall lines when zoomed out"* — the density worry resolved by the dots merging into
+the walls they sit on rather than washing over them), and the write timing is measured above.
 
 **The edge clamp is confirmed in a room** (user, 2026-09-22: *"That works in the room"*), Move and
 Draw both.
@@ -3394,10 +3389,21 @@ enormously"*). Two pushes on close of the same map: **70 regions and 3,242 wall 
 seconds**, then, after collapsing, pruning and suppressing, **17 regions and 145 wall lines in 1.3
 seconds**. Twenty times fewer items, eighty times faster. **What is left open** is a map whose honest
 walls really are that many segments — the lever there would be one item per wall *run* rather than per
-segment, which §6 decided against for nudging in Owlbear. **The per-edit graph write is timed in the log**
-since 2026-09-22 (`written in NNNms`), after being carried as *not established*: it is the number behind
-every question about whether a wall tool can commit per press, since a press is refused while a write is
-in flight. The figure arrives from the next room.
+segment, which §6 decided against for nudging in Owlbear. **The per-edit graph write is fast, measured 2026-09-22**: over 28 writes of a ~57KB graph in a room,
+**2ms at the quickest, 4ms median, 63ms at the worst**. It had been carried as *not established* since the
+slow-save work, and it is now a log line on every write (`written in NNNms`).
+
+**It also overturns an argument this record made the same day.** *Draw chain* commits its whole run as one
+act, and one of the reasons given was that a press is refused while a write is in flight, so per-wall
+commits would land clicks as pans — reasoned from the paint tool's note that *"a scene write takes the
+better part of a second"*. At 4ms that is wrong by two orders of magnitude: a window that size almost
+never catches a click. **The decision stands on its other reasons** — one gesture is one undo entry, and
+the run goes through one crossing sweep — but the dropped-click argument was not one of them.
+
+**And it leaves a claim worth checking**: `paintTool.ts` says a scene write takes the better part of a
+second and designs one write per *gesture* rather than per stroke on that basis. Either that measurement
+is of something else — the painted layers are a different payload — or it is stale. Nothing has been
+measured there, and the same log line would settle it.
 
 #### The automatic prune is new, not a restoration
 
