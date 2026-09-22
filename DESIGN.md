@@ -2775,6 +2775,11 @@ invisible. It costs almost nothing to keep.
   something else: *Collapse all* taking a region that had never been ringed, in nine graphs of seven
   hundred and none within the usual size. The rule is about the sweep's reach, not about the change
   that prompted it.
+- **A prediction about topology is arithmetic, so do the arithmetic before stating it** (2026-09-21).
+  The plan for *Collapse small regions* said a neighbour touching the collapsed region in two places
+  would split in two. Euler's identity says it cannot — one vertex arrives, the walls stay level, one
+  region goes — and the neighbour ends up touching itself at the centre. It was one line to check and
+  was stated instead; the oracle now meets the case and asserts it.
 - **A cap on rounds is not a bound on work — check the invariant instead** (2026-09-21). *Collapse
   all* was given a cap of one round per region after a mutation hung it, and the next mutation hung
   under the cap: its rounds created regions, **doubling** them each time, 4,588 to 8,854, so each round
@@ -3177,94 +3182,105 @@ next section.
 
 ### Where to pick this up
 
-**The automatic prune — built and confirmed in a room, 2026-09-21** (user: *"that looks right in a
-map. No more stubs."*). Every derive removes dead ends of up to **two measured ink widths** before it
-hands the graph over, prompted by a room's *"a lot of tiny spurs and very small enclosed loops"*. §4's
-*The hairs come off in the derive* has the whole of it. On *The Incandescent Grottoes* (3.4px ink, so
-a 6.7px limit) the log shows 193 to 419 dead ends taken per derive depending on the ink settings.
+**Do this first: four small changes, all decided, none needing a conversation** (user, 2026-09-22:
+*"Next thing will be implementing those small changes"*). Build them as one batch, check, commit, and
+hand the room the list.
 
-> **This is new, not a restoration, and the record said otherwise for a day.** It called the missing
-> prune a regression — *"the trace pruned as it built"* until 2026-09-18. It did, but only from a
-> stored limit whose **default was zero**, on the written ground that *"the first thing a GM should
-> see is the graph as fitting produced it, hairs and all"*. So a fresh map was never pruned unless the
-> GM had set a limit, and what 09-18 removed was a GM's own setting being re-applied. That argument
-> was about a handle reaching the longest wall on the map; it does not describe a fixed two ink widths.
+1. **Straighten gets a *Done* button** (user, 2026-09-22) — `wallAmounts.ts`. Today the latch commits
+   when the drawer closes, caused by leaving: putting the tool down or arming another. The button makes
+   that an act, matching Prune's and Collapse's *adjust, then press*. **The commit path needs no
+   change**: the button only has to put the tool down — `setTool("pan")` in `toolPalette.ts` is the
+   strip's own setter — and the `onStepChange` handler that already applies the latch on the way out
+   does the rest. Label it for what it does; *Done* is the user's word. The drawer's note (*"Applied
+   when this drawer closes"*) should then say the button does it.
+2. **The review draws what comes back over what goes** (user, 2026-09-22) — `layers/delta.ts`. The loop
+   near the end strokes `delta.removed` (additive: walls the regenerate would bring back) first and
+   `delta.added` (subtractive: the GM's walls that would go) second, so the subtractive set is on top.
+   Straightening replaces nearly every wall, the two sets lie on each other almost everywhere, and the
+   picture reads as everything being deleted when it is being replaced. **Swap the two entries.** The
+   comment above the loop says which is which and why the diff's own words run the other way.
+3. **The Owlbear panel is too wide** (user, 2026-09-22). It is sized for when it held the whole
+   interface and is three buttons now — *Open the workspace*, *Remove ours*, *Clear everything*. The
+   size is the `action`'s `width: 500` / `height: 800` in **both** `public/manifest.json` and
+   `public/manifest.dev.json`; `manifest.test.ts` asserts they differ only in five other fields, so
+   change both alike. **Not established:** whether Owlbear re-reads an action's size on a manifest
+   change or caches it with the listing, as it caches the name, icon and description at first add (the
+   operating notes in `CLAUDE.md` have that trap). `OBR.action.setWidth` / `setHeight` exist in the SDK
+   types and would settle it at run time if the manifest does not.
+4. **Check that the map frame is undoable** — `frameAction.ts` saves through `saveEditedWalls(framed.graph,
+   "walling the map's edge")`, which pushes an undo entry unconditionally, so it probably already is.
+   **Check in a room rather than building anything**: press *Add walls around the map edge*, then Undo.
 
-***Collapse small regions* — built 2026-09-21 and confirmed in a room 2026-09-22** (user: *"That works
-great in the room."*). The tiny loops from the same report, which the prune did not take and which the
-user put down to *"a lot of details drawn alongside the walls"*. §10's *Collapse small regions* has the
-whole of it. **Confirmed as a whole rather than point by point**: nothing has been reported either way
-on long slivers along curved walls, on whether eight square ink widths is the right start, or on the
-glyph at its real size.
+**Then, each needing a design conversation first** (the rhythm in the operating notes — *well
+defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
 
-**Noted, to look into later: saves are very slow on this map** (user, 2026-09-21: *"I'm having a lot
-of very slow saves. I'm usually not waiting for them to finish, since we're just testing."*). The log
-says which save and roughly why. A push on close at 21:54 was **60 regions and 3,419 wall lines**; the
-GM stopped it after **49 seconds with 2,280 of the 3,419 written**, which is about 46 wall segments a
-second. The latest derives of *The Incandescent Grottoes* hold 3,242 wall lines against 67–70 regions
-— **82% of all segments are bridges**, each a `LINE` item of its own, and the total is past the
-1,500-item push warning and not far short of the 5,881 that once could not be written at all. So the
-lead is the **item count** rather than the write path: detail drawn alongside the walls becomes open
-linework, and open linework is one item per segment. Two directions, neither examined: fewer items
-per wall (one item per wall *run* rather than per segment, which §6 decided against for nudging in
-Owlbear), or fewer walls (*Collapse small regions*, and the thin-lines ink tool). **Not
-established:** whether the per-edit graph writes are also slow; the log has no timing on them.
+- **Draw a chain of walls** (user, 2026-09-22): each click starts a new wall joined to the last,
+  stopping on Escape, on right-click, or on a click on an existing vertex, which closes the shape.
+  Draw's two-click form already re-aims a far end between clicks, so this is that form not stopping.
+- **Delete a whole connected chain or network of walls**, complementing Dissolve region. Raised twice.
+- **Toggle Map Frame** — rename *Add walls around the map edge* and make the press toggle. The detection
+  half exists (`addFrameWalls`' strict already-framed test). **The open question is what turning it off
+  does to walls the frame split** when it went on, which cannot be unsplit without knowing which splits
+  it caused.
+- **Doors, the way Dynamic Fog makes them** (user, 2026-09-22: *"let's look into how Dynamic Fog makes
+  doors and see if we can add that functionality"*). **Start by reading, not designing**: the local
+  clone at `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts`
+  and `DoorOverlayActor.ts`. What the record already holds, and what the reading has to reconcile with:
+  §2 — *door subtraction is global*, so a door cuts any wall drawing it overlaps, and one door serves a
+  wall represented twice; §2 — lights, unlike walls, are gated on Dynamic Fog's private metadata, so
+  doors may be too; §3 — mimicking Dynamic Fog's private format *"remains the shape of any eventual door
+  work"*; §12 — door work would write into its namespace, *"still interoperation rather than
+  derivation, but the closest this project gets"*. **Doors were left to Dynamic Fog by choice**, and
+  the first question is what this project would add over a GM using Dynamic Fog's own door tool
+  afterwards, which already cuts our walls.
+- **Two ink tools, small patches and thin lines**, each as a ringed tool (§10, *Two ink tools proposed*).
+  They would remove detail before it becomes walls — upstream of what Collapse and Prune now do after.
 
-> **Measured the next day, and the item count was the lead** (user, 2026-09-22: *"having those
-> simplification tools helped the closing time enormously"*). Two pushes on close of the same map in
-> `dev.log`: at 03:20, **70 regions and 3,242 wall lines took 1 minute 46 seconds**, about 31 items a
-> second; at 12:11, after pruning, collapsing and suppressing, **17 regions and 145 wall lines took 1.3
-> seconds**. Twenty times fewer items, eighty times faster. So the write path is not the problem at
-> this size and the linework is; what is left open is only a map whose honest walls are that many
-> segments.
+**Held, with the reason:**
 
-**Waiting for a room: *Prune the dead ends* as a ringed tool — built 2026-09-22.** One ring per
-piece the whole cascade would take; a click takes that piece, the button takes every ring; the length
-starts at four ink widths every opening. §10's *Prune became a ringed tool* has the whole of it.
-**What to look at**: whether a star of short strokes reads as one ring, whether four ink widths is a
-good first guess, and that the red junction is gone and not missed.
+- **The stroke slider's stepping and `round` versus `floor`** in `radiusForWidth` (§10's ink
+  investigation, with measurements). Real and not urgent: about ten slider stops per distinct radius, so
+  six nudges do nothing and the seventh severs corners. The fix is stops measured per map.
+- **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
+  *the scene has not finished loading* look the same, since the map list is briefly empty on load.
+- **A second map in a different style** — hatched stonework, a printed grid, a scan. Everything so far
+  was tuned on line-drawn maps, and the record has called this the most informative next step since
+  2026-09-13.
 
-**Then the five parked items**, none started. (*Mend moves below Prune* went in with *Collapse small
-regions*, and *Prune acts like Mend* is the item above.)
+**Confirmed in rooms this session**, each with its section: the automatic prune (§4, *The hairs come off
+in the derive*); *Collapse small regions* (§10, tool 6); *Prune the dead ends* as a ringed tool (user,
+2026-09-22: *"The Prune rings work and look great"*; §10, *Prune became a ringed tool*); the band's
+order, Collapse, Prune, Straighten; dimming and the amount tools' handles. **Slow saves are answered**
+in the main: the item count was the cause, and a tidied map went from 1 minute 46 seconds to 1.3 seconds
+(§10's measurement, below the tools).
 
-1. **Toggle Map Frame** — rename *Add walls around the map edge*, and make the press toggle. The
-   detection half exists: `addFrameWalls` already has a strict already-framed test that asks whether
-   a segment lies *along* an edge. **The open question is what a toggle does to walls the frame
-   split** when it went on, which cannot be unsplit without knowing which splits it caused.
-2. **The frame should be undoable**, and may already be: it goes through `saveEditedWalls`, which
-   pushes an entry unconditionally. Check before building.
-3. **Delete a whole connected chain or network of walls**, complementing Dissolve region. Raised
-   again 2026-09-22 (user), so it is wanted rather than only noted.
-4. **Draw a chain of walls** (user, 2026-09-22): each click starts a new wall joined to the last, and
-   the chain stops on Escape, on right-click, or on a click on an existing vertex, which closes the
-   shape. Draw's two-click form already re-aims a far end between clicks, so this is that form not
-   stopping after one wall.
-5. **Straighten gets a *Done* button** (user, 2026-09-22) that commits and closes the drawer, so its
-   interaction matches Prune and Collapse: adjust a slider, then press a button. Today the commit is
-   caused by leaving — putting the tool down or arming another — which the drawer's note says and
-   nothing on screen shows.
-
-**Parked from the ink investigation**, both recorded with measurements and neither built: the stroke
-slider's **stepping** (about ten stops per distinct radius, so six nudges do nothing and the seventh
-severs), and **`round` versus `floor`** in `radiusForWidth`, where floor would guarantee the
-effective threshold never exceeds what was asked for.
-
-**Looked at in a room and fine** (user, 2026-09-22): dimming, and the handles Straighten and Prune
-draw at every vertex. **The red junction on a doomed stub is gone** with Prune's rework, where a ring
-makes a tiny stub visible without marking a vertex that stays.
-
-**Noted, not built — the review's drawing order** (user, 2026-09-22). When the cover's review draws
-what a regenerate would take and bring back, *what comes back* should be drawn **over** *what goes*.
-Straightening replaces nearly every wall, so both sets lie on top of each other almost everywhere, and
-with *what goes* on top the picture reads as everything being deleted when it is being replaced.
-
-**Noted, not built — the panel is too wide** (user, 2026-09-22). The popover Owlbear shows, not the
-workspace, is still sized for when it held the whole interface. It is three buttons now — *Open the
-workspace*, *Remove ours*, *Clear everything* — and should be narrowed to fit them.
-
-**42 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`,
+**44 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`,
 before the commit that writes this line). **A push deploys**, so it waits for the user to want the
 public build to have them.
+
+#### The slow saves, measured
+
+**Reported** (user, 2026-09-21: *"I'm having a lot of very slow saves. I'm usually not waiting for them
+to finish, since we're just testing."*). A push on close of *The Incandescent Grottoes* was **60 regions
+and 3,419 wall lines**, stopped after **49 seconds with 2,280 written** — about 46 a second. **82% of the
+segments were bridges**, each a `LINE` item of its own: detail drawn alongside the walls becomes open
+linework, and open linework is one item per segment.
+
+**Answered the next day** (user, 2026-09-22: *"having those simplification tools helped the closing time
+enormously"*). Two pushes on close of the same map: **70 regions and 3,242 wall lines in 1 minute 46
+seconds**, then, after collapsing, pruning and suppressing, **17 regions and 145 wall lines in 1.3
+seconds**. Twenty times fewer items, eighty times faster. **What is left open** is a map whose honest
+walls really are that many segments — the lever there would be one item per wall *run* rather than per
+segment, which §6 decided against for nudging in Owlbear. **Not established:** whether the per-edit
+graph writes are slow too; the log has no timing on them.
+
+#### The automatic prune is new, not a restoration
+
+The record called the missing prune a regression for a day — *"the trace pruned as it built"* until
+2026-09-18. It did, but only from a stored limit whose **default was zero**, on the written ground that
+*"the first thing a GM should see is the graph as fitting produced it, hairs and all"*. So a fresh map
+was never pruned unless the GM had set a limit. That argument was about a handle reaching the longest
+wall on the map; it does not describe a fixed two ink widths.
 
 ### The workflow rework — designed in full 2026-09-18, part built
 
@@ -3589,7 +3605,8 @@ one — a preview nobody can see is worth less than one that over-claims by a ve
 
 #### Prune became a ringed tool — 2026-09-22
 
-**Built, not yet in a room.** *Prune the dead ends* rings what it would take, a click takes one ring,
+**Built, and confirmed in a room the same day** (user: *"The Prune rings work and look great"*).
+*Prune the dead ends* rings what it would take, a click takes one ring,
 and a button takes them all — Mend's and *Collapse small regions*' gesture. **As an amount it "feels
 inconsistent"** (user) beside the two ringed tools under it, and the parked item was already there.
 Straighten stays an amount, because it changes every wall at once and has no piece to ring.
