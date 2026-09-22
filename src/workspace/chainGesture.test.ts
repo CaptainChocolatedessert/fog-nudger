@@ -5,12 +5,13 @@
  * end up drawing something the GM did not ask for — a chain that will not stop, a loop that does not
  * close, a second point laid exactly on one that exists. None of them needs a DOM to pin.
  *
- * **Nine mutations on 2026-09-22, seven caught and two surviving deliberately**, at the foot of this file.
+ * **Nine mutations on 2026-09-22, seven caught and two surviving deliberately**, at the foot of this
+ * file — and three more for landing on the chain's own segments, all caught.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { chainClick, chainRun } from "./chainGesture";
+import { chainClick, chainRun, chainRunOntoSegment } from "./chainGesture";
 
 const at = (x: number, y: number): { x: number; y: number } => ({ x, y });
 /** Comfortably wider than the gaps used below, and narrower than the distances between points. */
@@ -100,6 +101,66 @@ describe("chainClick", () => {
   });
 });
 
+describe("landing on the chain's own segment", () => {
+  /*
+    The room's case: a click aimed at a line the GM is drawing. Without this it became an ordinary
+    point a hair past the line, and the run crossed itself — *"it overshot a bit and created a little
+    triangle on the other side"*.
+  */
+  const SEGMENT_RADIUS = 0.01;
+  /** Powers of two, so the point *on* the segment is exact and the fixture is about the rule. */
+  const placed = [at(0.125, 0.125), at(0.625, 0.125), at(0.625, 0.5)];
+
+  it("lands on the segment under the click, at the point on it", () => {
+    const answer = chainClick(placed, at(0.375, 0.13), null, RADIUS, SEGMENT_RADIUS);
+    expect(answer).toEqual({ kind: "onSegment", at: 0, point: { x: 0.375, y: 0.125 } });
+  });
+
+  it("is off when no segment radius is given, which is how a point-only click is asked", () => {
+    expect(chainClick(placed, at(0.375, 0.13), null, RADIUS)).toEqual({ kind: "append" });
+  });
+
+  it("appends when the click is further from the segment than its radius", () => {
+    expect(chainClick(placed, at(0.375, 0.16), null, RADIUS, SEGMENT_RADIUS)).toEqual({ kind: "append" });
+  });
+
+  /*
+    A point beats a segment when both are in reach, and here the point is a middle one — so the answer
+    is a join at that point, not a landing on either segment meeting it.
+  */
+  it("gives a point the answer when both a point and a segment are in reach", () => {
+    expect(chainClick(placed, at(0.625, 0.13), null, RADIUS, SEGMENT_RADIUS)).toEqual({ kind: "join", at: 1 });
+  });
+
+  /*
+    **Both runs in reach at once**, which is what makes this about *nearest* rather than *first*: the
+    two horizontal segments are 0.0625 apart and the radius is 0.05, so a click between them can reach
+    either. A mutation pass found the earlier fixture had only one segment in reach, where first and
+    nearest cannot differ.
+  */
+  it("takes the nearest segment when a chain doubles back over itself", () => {
+    const doubled = [at(0.125, 0.125), at(0.625, 0.125), at(0.625, 0.1875), at(0.125, 0.1875)];
+    const answer = chainClick(doubled, at(0.375, 0.17), null, 0.005, 0.05);
+    expect(answer).toEqual({ kind: "onSegment", at: 2, point: { x: 0.375, y: 0.1875 } });
+  });
+
+  it("builds a run that puts the landing in the segment and at the end", () => {
+    const run = chainRunOntoSegment(placed, 0, at(0.375, 0.125));
+    expect(run).toEqual([
+      at(0.125, 0.125),
+      at(0.375, 0.125),
+      at(0.625, 0.125),
+      at(0.625, 0.5),
+      at(0.375, 0.125),
+    ]);
+  });
+
+  it("has no run for a segment index that names nothing", () => {
+    expect(chainRunOntoSegment(placed, 5, at(0.375, 0.125))).toBeNull();
+    expect(chainRunOntoSegment(placed, -1, at(0.375, 0.125))).toBeNull();
+  });
+});
+
 describe("chainRun", () => {
   it("has nothing to draw from fewer than two points", () => {
     expect(chainRun([], false)).toBeNull();
@@ -145,4 +206,10 @@ describe("chainRun", () => {
 
   A tenth was run and retired rather than recorded: the close's `placed.length > 1` guard, which
   survived because it could not fire. It is deleted, so there is nothing left to mutate.
+
+  **Landing on the chain's own segments — three more, all caught:** asking the segments before the
+  points; taking the first segment in reach rather than the nearest; and leaving the landing out of the
+  segment it fell on, so the run ends at it without splitting there. The second of those **survived its
+  first fixture**, which had only one segment within reach — where first and nearest cannot differ. The
+  fixture now puts two runs 0.0625 apart with a radius of 0.05.
 */

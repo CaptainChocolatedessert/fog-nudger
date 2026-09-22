@@ -380,3 +380,160 @@ describe("erasing a wall", () => {
     expect(removeEdge(CORNER, 9).graph).toBe(CORNER);
   });
 });
+
+/**
+ * Landing on a wall rather than beside it — 2026-09-22.
+ *
+ * A room drew a chain, aimed a click at a line, and got *"a little triangle on the other side"*: the
+ * click became an ordinary point just past the wall, and the run crossed it. Nothing in this project
+ * had ever snapped to the middle of a line; only to vertices.
+ *
+ * **The split comes first and the wall is added by the landing's own coordinate**, which is what makes
+ * the join a shared vertex. Leaving it to the crossing sweep shares it only when the two quantise
+ * alike, and 7,926 of 19,061 did not.
+ *
+ * **Seven mutations, seven caught** — listed at the foot of this block.
+ */
+describe("landing on a wall", () => {
+  /** One horizontal wall across the middle, and nothing else. */
+  const WALL = graphOf(
+    [
+      [0.2, 0.5],
+      [0.8, 0.5],
+    ],
+    [[0, 1]],
+  );
+
+  it("takes the point on the wall, not the point the pointer was at", () => {
+    const landed = drawPoint(WALL, 0.5, 0.505, 0.001, false, 0.02);
+    expect(landed.onNode).toBeNull();
+    expect(landed.onEdge).toBe(0);
+    // On the wall's own line, at the pointer's x.
+    expect(landed.at).toEqual(documentPoint(0.5, 0.5));
+  });
+
+  it("prefers a vertex when both are in reach, because a point that exists is the answer", () => {
+    const landed = drawPoint(WALL, 0.795, 0.5, 0.02, false, 0.02);
+    expect(landed.onNode).toBe(1);
+    expect(landed.onEdge).toBeNull();
+  });
+
+  it("lands on nothing when the wall is further off than its radius", () => {
+    const landed = drawPoint(WALL, 0.5, 0.56, 0.001, false, 0.02);
+    expect(landed.onEdge).toBeNull();
+    expect(landed.at).toEqual(documentPoint(0.5, 0.56));
+  });
+
+  it("is suppressed by the modifier, like every other snap", () => {
+    expect(drawPoint(WALL, 0.5, 0.505, 0.02, true, 0.02).onEdge).toBeNull();
+  });
+
+  /*
+    The whole point: the wall is split at the landing and the new wall ends on that vertex, so the two
+    share a point rather than crossing near one.
+  */
+  it("splits the wall it lands on, and the new wall shares that vertex", () => {
+    const from = drawPoint(WALL, 0.5, 0.505, 0.001, false, 0.02);
+    const to = drawPoint(WALL, 0.5, 0.2, 0.001, false, 0.02);
+    const result = applyDraw(WALL, from, to)!;
+
+    // The crossed wall is now two, and the new wall is the third.
+    expect(result.graph.edges).toHaveLength(3);
+    const degrees = nodeDegrees(result.graph);
+    const junction = result.graph.nodes.findIndex(
+      (node) => node.x === documentPoint(0.5, 0.5).x && node.y === documentPoint(0.5, 0.5).y,
+    );
+    expect(junction).toBeGreaterThanOrEqual(0);
+    // Three walls meet there: the two halves of the split wall and the one just drawn.
+    expect(degrees[junction]).toBe(3);
+  });
+
+  /*
+    Move's half of the same rule. Dropping a vertex on a wall is a split and then a **merge**, so the
+    dragged vertex becomes the junction rather than a second point resting on it.
+  */
+  it("folds a dragged vertex into the wall it is dropped on", () => {
+    const graph = graphOf(
+      [
+        [0.2, 0.5],
+        [0.8, 0.5],
+        [0.5, 0.2],
+        [0.5, 0.3],
+      ],
+      [
+        [0, 1],
+        [2, 3],
+      ],
+    );
+    const grab = grabAt(graph, 0.5, 0.3, 0.02)!;
+    const state = dragTo(graph, grab, 0.5, 0.495, 0.001, false, 0.02);
+    expect(state.landOn?.edge).toBe(0);
+
+    const result = applyDrag(graph, grab, state)!;
+    const degrees = nodeDegrees(result.graph);
+    const junction = result.graph.nodes.findIndex(
+      (node) => node.x === documentPoint(0.5, 0.5).x && node.y === documentPoint(0.5, 0.5).y,
+    );
+    expect(degrees[junction]).toBe(3);
+    // No second vertex left at the same place: a merge, not a move onto it.
+    const sameSpot = result.graph.nodes.filter(
+      (node, id) => id !== junction && node.x === documentPoint(0.5, 0.5).x && node.y === documentPoint(0.5, 0.5).y,
+    );
+    expect(sameSpot).toHaveLength(0);
+  });
+
+  /*
+    **A case where splitting first is the only thing that shares the vertex**, found by probe rather
+    than by hand: 20,000 random walls with a click aimed a little off each, and adding the wall without
+    splitting first left the end beside the vertex **7,367 times**. Splitting first left none.
+
+    The coordinates are one of those 7,367, kept exactly as the probe found them — rounded prettier,
+    the arithmetic agrees again and the fixture stops testing anything. A mutation pass is what said
+    this was needed: with a tidy axis-aligned wall, both orders share the vertex and the mutation
+    survived.
+  */
+  it("shares the vertex on a wall where the crossing sweep alone would not", () => {
+    const awkward = graphOf(
+      [
+        [0.33721235394477844, 0.38040459156036377],
+        [0.054865479469299316, 0.018612056970596313],
+      ],
+      [[0, 1]],
+    );
+    const landed = drawPoint(awkward, 0.17952260393139258, 0.1778502583311313, 0.0001, false, 0.02);
+    expect(landed.onEdge).toBe(0);
+
+    const away = { at: documentPoint(0.4, 0.38), onNode: null, onEdge: null };
+    const result = applyDraw(awkward, landed, away)!;
+    const junction = result.graph.nodes.findIndex(
+      (node) => node.x === landed.at.x && node.y === landed.at.y,
+    );
+    expect(nodeDegrees(result.graph)[junction]).toBe(3);
+  });
+
+  it("does not offer a vertex the walls it already carries", () => {
+    const graph = graphOf(
+      [
+        [0.2, 0.5],
+        [0.8, 0.5],
+      ],
+      [[0, 1]],
+    );
+    // Dragging one end of the only wall: its own wall passes under it wherever it goes.
+    const grab = grabAt(graph, 0.2, 0.5, 0.02)!;
+    const state = dragTo(graph, grab, 0.4, 0.5, 0.001, false, 0.02);
+    expect(state.landOn).toBeNull();
+  });
+});
+
+/*
+  **The mutations for landing on a wall, 2026-09-22 — seven run, seven caught:**
+
+  1. Ask the wall before the vertex, so a click near both splits instead of merging.
+  2. Return the pointer's position rather than the point on the wall.
+  3. Ignore the wall radius and always land.
+  4. Let the modifier through, so a suppressed snap still lands.
+  5. Add the wall without splitting first, leaving the end beside the vertex it meant to share.
+  6. Move the dragged vertex onto the landing instead of merging into it, leaving two coincident points.
+  7. Drop the exclusion, so a dragged vertex lands on its own wall.
+*/

@@ -404,12 +404,34 @@ export function removeEdges(graph: WallGraph, indices: Iterable<number>): EditRe
  * are indistinguishable to the GM, and an arbitrary-but-repeatable answer beats one that changes
  * between frames while they hold still.
  */
-export function nearestEdge(graph: WallGraph, point: Vector2, radius: number): number | null {
-  let best: number | null = null;
+/**
+ * The nearest point **on** a wall, and which wall it is — or `null` when none is within `radius`.
+ *
+ * The landing a tool ends on when the GM aims at a wall rather than at a vertex. **Returning the
+ * point matters as much as the index**: a wall is split *at the landing* and the new wall is then
+ * added by that same coordinate, which is what makes the two share a vertex. Ending a wall inside
+ * another and leaving the crossing sweep to find the meeting point shares it only when the two
+ * quantise alike — 7,926 of 19,061 did not.
+ */
+export function nearestEdgePoint(
+  graph: WallGraph,
+  point: Vector2,
+  radius: number,
+  /**
+   * Skip every wall that meets this vertex.
+   *
+   * For a vertex being dragged: its own walls pass under it wherever it goes, so without this the
+   * answer would always be one of them, and landing on it would split a wall at the point its own end
+   * already occupies.
+   */
+  exclude?: number,
+): { readonly edge: number; readonly at: Vector2 } | null {
+  let best: { edge: number; at: Vector2 } | null = null;
   let bestDistance = radius * radius;
 
   for (let index = 0; index < graph.edges.length; index++) {
     const edge = graph.edges[index]!;
+    if (exclude !== undefined && (edge.a === exclude || edge.b === exclude)) continue;
     const from = graph.nodes[edge.a];
     const to = graph.nodes[edge.b];
     if (!from || !to) continue;
@@ -420,16 +442,25 @@ export function nearestEdge(graph: WallGraph, point: Vector2, radius: number): n
     // A wall of no length has no interior to be near; its ends are `nearestNode`'s business.
     const along = span > 0 ? ((point.x - from.x) * dx + (point.y - from.y) * dy) / span : 0;
     const clamped = along < 0 ? 0 : along > 1 ? 1 : along;
-    const offX = point.x - (from.x + clamped * dx);
-    const offY = point.y - (from.y + clamped * dy);
+    const onWall = { x: from.x + clamped * dx, y: from.y + clamped * dy };
+    const offX = point.x - onWall.x;
+    const offY = point.y - onWall.y;
     const distance = offX * offX + offY * offY;
-
-    if (distance <= bestDistance && (best === null || distance < bestDistance)) {
-      best = index;
-      bestDistance = distance;
-    }
+    if (distance > bestDistance) continue;
+    bestDistance = distance;
+    best = { edge: index, at: documentPoint(onWall.x, onWall.y) };
   }
   return best;
+}
+
+/**
+ * The wall nearest a point, or `null` when none is within `radius`.
+ *
+ * **The same sweep as `nearestEdgePoint`, asked for less** — the erasing tools want to know *which*
+ * wall and never where along it, so this drops the landing rather than repeating the arithmetic.
+ */
+export function nearestEdge(graph: WallGraph, point: Vector2, radius: number): number | null {
+  return nearestEdgePoint(graph, point, radius)?.edge ?? null;
 }
 
 /**

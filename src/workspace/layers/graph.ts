@@ -68,6 +68,8 @@ import {
   hoveredNode,
   hoveredWall,
   pendingPoint,
+  chainLandingMark,
+  dragLanding,
   pendingChain,
   pendingWall,
   snapTarget,
@@ -84,6 +86,15 @@ const wallColour = () => colourFor("structure");
  * of them and a thickened red would swamp the picture it is meant to be read against.
  */
 const doomedColour = () => colourFor("destructive");
+
+/**
+ * Whether a point of a wall being drawn would **join** something rather than start a new vertex.
+ *
+ * Two ways in since 2026-09-22: onto a vertex that exists, or onto a wall, which is split at the
+ * landing so the join is a shared vertex either way. They are drawn alike because they mean the same
+ * thing to the GM — press here and this is joined.
+ */
+const joins = (point: DrawPoint): boolean => point.onNode !== null || point.onEdge !== null;
 const WALL_CASING = colourFor("casing");
 /** Screen pixels. A hairline over busy map art is not a wall anybody can judge or aim at. */
 const WALL_WIDTH_PX = 2;
@@ -517,6 +528,10 @@ function paintHandles(
     const point = graph.nodes[snap];
     if (point) dot(x(point.x), y(point.y), MERGE_RADIUS, mergeFill(), ACTIVE_RIM);
   }
+  // A release onto a wall, marked the same way and for the same reason: it is a merge, into a vertex
+  // that does not exist yet.
+  const landing = dragLanding();
+  if (landing) dot(x(landing.x), y(landing.y), MERGE_RADIUS, mergeFill(), ACTIVE_RIM);
 
   /*
     Either end of a wall being drawn, marked green where it would **attach**.
@@ -545,17 +560,25 @@ function paintHandles(
     // Every corner placed, so a chain shows where it has been; and the moving end only when it would
     // attach, which is the rule the single wall already follows.
     marks.push(...chainMarks.points);
-    if (chainMarks.to && chainMarks.to.onNode !== null) marks.push(chainMarks.to);
+    if (chainMarks.to && joins(chainMarks.to)) marks.push(chainMarks.to);
   } else if (pending) {
     marks.push(pending.from);
-    if (pending.to.onNode !== null) marks.push(pending.to);
+    if (joins(pending.to)) marks.push(pending.to);
   } else {
     const next = pendingPoint();
-    if (next && next.onNode !== null) marks.push(next);
+    if (next && joins(next)) marks.push(next);
   }
 
+  /*
+    Where a click would land on the chain's **own** run — a point that is not in the graph and so has
+    no vertex of its own to mark. Same mark as any other join, because it means the same thing: press
+    here and these two share a point.
+  */
+  const ownRun = chainLandingMark();
+  if (ownRun) marks.push({ at: ownRun, onNode: null, onEdge: -1 });
+
   for (const point of marks) {
-    const attaching = point.onNode !== null;
+    const attaching = joins(point);
     dot(
       x(point.at.x),
       y(point.at.y),

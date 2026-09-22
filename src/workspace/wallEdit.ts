@@ -48,7 +48,7 @@ import { markAt } from "../trace/suppression";
 import { applySpan, findSpan, type Span } from "../trace/span";
 import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { connectedEdges } from "../trace/connected";
-import { chainClick, chainRun } from "./chainGesture";
+import { chainClick, chainRun, chainRunOntoSegment } from "./chainGesture";
 import { insertEdge } from "../trace/planarOps";
 import { applyMends, type Mend } from "../trace/mends";
 import { applyCollapses, collapseAll, type Collapse } from "../trace/collapse";
@@ -64,6 +64,7 @@ import {
   drawPoint,
   drawRelease,
   grabAt,
+  splitForLandings,
   type DragState,
   type DrawPoint,
   type Grab,
@@ -123,6 +124,15 @@ const GRAB_RADIUS_PX = 9;
 const SNAP_RADIUS_PX = 14;
 const ERASE_RADIUS_PX = 8;
 /**
+ * How close a press has to be to a **wall** to land on it rather than beside it.
+ *
+ * **Tighter than the vertex snap, deliberately** (user, 2026-09-22: *"Tighter, 8px"*). A vertex is a
+ * point and deserves a generous reach; a wall is a long target, and at the vertex radius almost any
+ * click on a real map would be within reach of one — which would make placing a free point in a
+ * corridor hard. Erase's radius, because it is the same question: did the GM aim at this wall.
+ */
+const LAND_RADIUS_PX = 8;
+/**
  * The shortest wall the draw tool will put down, in screen pixels.
  *
  * From a room: two clicks in nearly the same place made a wall too short to see and painfully hard
@@ -150,6 +160,16 @@ let reach: DrawPoint | null = null;
  */
 let chain: DrawPoint[] = [];
 let chainClosed = false;
+/** Where a chain ended on one of its own segments, if it did. */
+let chainOnSegment: { at: number; point: Vector2 } | null = null;
+/**
+ * Where a click **would** land on the chain's own run, drawn before the press.
+ *
+ * Without it the answer is invisible until the click has already been made — which is how the room
+ * found the rule missing (user, 2026-09-22: a click meant for a line *"overshot a bit and created a
+ * little triangle on the other side"*).
+ */
+let chainLanding: Vector2 | null = null;
 
 /** Erasing, and hovering with any tool: what is under the pointer. */
 let hovered: number | null = null;
@@ -378,13 +398,21 @@ function commitMark(target: MarkTarget): void {
  * is no wall in it.
  */
 function finishChain(graph: WallGraph): void {
-  const run = chainRun(chain.map((placed) => placed.at), chainClosed);
+  const placed = chain;
+  const points = chain.map((point) => point.at);
+  const run = chainOnSegment
+    ? chainRunOntoSegment(points, chainOnSegment.at, chainOnSegment.point)
+    : chainRun(points, chainClosed);
   const walls = run ? run.length - 1 : 0;
   clearGesture();
   invalidate();
   if (!run) return;
+  // Split what the points landed on first, then add the run by those same coordinates — the rule
+  // every tool that can end on a wall follows, and the reason a landing is a shared vertex.
+  const split = splitForLandings(graph, placed);
+  const added = insertEdge(split.graph, run);
   commit(
-    insertEdge(graph, run),
+    { ...added, splits: added.splits + split.splits },
     `drew a chain of ${walls} wall${walls === 1 ? "" : "s"}`,
     "drawing a chain",
     graph,
@@ -472,6 +500,16 @@ export function snapTarget(): number | null {
   return dragState?.snapTo ?? null;
 }
 
+/**
+ * Where a release would land the dragged vertex **on a wall**, or `null`.
+ *
+ * Drawn like a merge target, because that is what it becomes: the wall is split there and the vertex
+ * is folded into the new point, so a release joins them rather than leaving one resting on the other.
+ */
+export function dragLanding(): Vector2 | null {
+  return dragState?.landOn?.at ?? null;
+}
+
 /** The vertex under the pointer with no gesture running, so it can be shown as grabbable. */
 export function hoveredNode(): number | null {
   return hovered;
@@ -502,6 +540,11 @@ export function hoveredWall(): number | null {
 export function condemnedWalls(): { readonly graph: WallGraph; readonly edges: readonly number[] } | null {
   if (chainTarget) return chainTarget;
   return hoveredRegion && { graph: hoveredRegion.graph, edges: hoveredRegion.dissolution.edges };
+}
+
+/** Where a click would land on the chain's own run, or `null`. */
+export function chainLandingMark(): Vector2 | null {
+  return chainLanding;
 }
 
 /**
@@ -540,6 +583,8 @@ function clearGesture(): void {
   chainTarget = null;
   chain = [];
   chainClosed = false;
+  chainOnSegment = null;
+  chainLanding = null;
 }
 
 function start(point: MapPoint): boolean {
@@ -557,7 +602,7 @@ function start(point: MapPoint): boolean {
     const found = grabAt(graph, point.x, point.y, GRAB_RADIUS_PX * point.perPixel);
     if (!found) return false;
     grab = found;
-    dragState = { at: graph.nodes[found.id]!, snapTo: null };
+    dragState = { at: graph.nodes[found.id]!, snapTo: null, landOn: null };
     hovered = null;
     setGrabTarget(true);
     invalidate();
@@ -586,12 +631,20 @@ function start(point: MapPoint): boolean {
   }
 
   if (tool === "drawChain") {
-    const landed = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    const landed = drawPoint(
+      graph,
+      point.x,
+      point.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
     const answer = chainClick(
       chain.map((placed) => placed.at),
       landed.at,
       landed.onNode,
       SNAP_RADIUS_PX * point.perPixel,
+      LAND_RADIUS_PX * point.perPixel,
     );
     switch (answer.kind) {
       case "append":
@@ -606,6 +659,12 @@ function start(point: MapPoint): boolean {
         // A loop with a tail: the run ends on a point it already holds, sharing that vertex rather
         // than laying a second one on it.
         chain.push(chain[answer.at]!);
+        finishChain(graph);
+        return true;
+      case "onSegment":
+        // Landed part-way along one of its own segments: that segment gains a vertex there and the
+        // run ends on it. `finishChain` builds the run; this only says where.
+        chainOnSegment = { at: answer.at, point: answer.point };
         finishChain(graph);
         return true;
       case "finish":
@@ -671,7 +730,14 @@ function start(point: MapPoint): boolean {
   }
 
   // Draw takes every press: a wall has to be able to start on empty map.
-  const landed = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+  const landed = drawPoint(
+      graph,
+      point.x,
+      point.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
   if (!anchor) {
     anchor = landed;
     reach = landed;
@@ -712,7 +778,15 @@ function move(point: MapPoint): void {
   if (tool === "move") {
     if (!grab) return;
     const held = onMap(point);
-    dragState = dragTo(graph, grab, held.x, held.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    dragState = dragTo(
+      graph,
+      grab,
+      held.x,
+      held.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
     invalidate();
     return;
   }
@@ -751,7 +825,14 @@ function move(point: MapPoint): void {
 
   if (!anchor) return;
   const held = onMap(point);
-  reach = drawPoint(graph, held.x, held.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+  reach = drawPoint(
+      graph,
+      held.x,
+      held.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
   invalidate();
 }
 
@@ -1067,11 +1148,41 @@ function hover(point: MapPoint | null): void {
   }
 
   if (tool === "drawChain") {
+    const aim = drawPoint(
+      graph,
+      point.x,
+      point.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
+    const would = chainClick(
+      chain.map((placed) => placed.at),
+      aim.at,
+      aim.onNode,
+      SNAP_RADIUS_PX * point.perPixel,
+      LAND_RADIUS_PX * point.perPixel,
+    );
+    chainLanding = would.kind === "onSegment" ? would.point : null;
     if (chain.length === 0) {
-      drawHover = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+      drawHover = drawPoint(
+      graph,
+      point.x,
+      point.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
     } else {
       const held = onMap(point);
-      reach = drawPoint(graph, held.x, held.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+      reach = drawPoint(
+      graph,
+      held.x,
+      held.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
     }
     setGrabTarget(true);
     invalidate();
@@ -1109,7 +1220,14 @@ function hover(point: MapPoint | null): void {
   }
 
   if (tool === "draw") {
-    const landed = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    const landed = drawPoint(
+      graph,
+      point.x,
+      point.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
     // The far end keeps following even between clicks, which is what makes the two-click form
     // legible: the wall being drawn is on screen the whole time rather than only while a button is
     // held. With nothing started, the same point is what a press would place.

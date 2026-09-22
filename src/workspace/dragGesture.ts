@@ -29,7 +29,9 @@ import {
   insertEdge,
   mergeNodes,
   moveNode,
+  nearestEdgePoint,
   nearestNode,
+  splitEdgesAt,
   type EditResult,
 } from "../trace/planarOps";
 
@@ -52,6 +54,14 @@ export interface DragState {
   readonly at: Vector2;
   /** The vertex a release would fold this one into, or `null` for a plain move. */
   readonly snapTo: number | null;
+  /**
+   * The wall a release would land **on**, and where along it — or `null`.
+   *
+   * A vertex beats a wall when both are in reach, because folding into a point that already exists
+   * is the more specific answer. A wall is a long target and gets a tighter radius for it (user,
+   * 2026-09-22: *"Tighter, 8px"*), or on a map of any density every release would catch one.
+   */
+  readonly landOn: { readonly edge: number; readonly at: Vector2 } | null;
 }
 
 /**
@@ -86,10 +96,22 @@ export function dragTo(
   v: number,
   snapRadius: number,
   suppressSnap: boolean,
+  wallRadius = 0,
 ): DragState {
   const at = documentPoint(u + grab.offsetU, v + grab.offsetV);
   const snapTo = suppressSnap ? null : nearestNode(graph, at, snapRadius, grab.id);
-  return { at: snapTo === null ? at : graph.nodes[snapTo]!, snapTo };
+  if (snapTo !== null) return { at: graph.nodes[snapTo]!, snapTo, landOn: null };
+  /*
+    **The wall the vertex is being dropped on** (user, 2026-09-22: *"also move, because it could also
+    place a vertex on a wall"*). Without it the vertex sits where it was dropped — near the wall, not
+    joined to it, and the two come apart the moment either moves.
+
+    **The walls this vertex already carries are skipped.** They pass under it by definition, so
+    offering one would land the vertex on a wall it is an end of and split that wall where its own end
+    already is.
+  */
+  const landing = suppressSnap || wallRadius <= 0 ? null : nearestEdgePoint(graph, at, wallRadius, grab.id);
+  return { at, snapTo: null, landOn: landing };
 }
 
 /**
@@ -106,6 +128,23 @@ export function dragTo(
  */
 export function applyDrag(graph: WallGraph, grab: Grab, state: DragState): EditResult | null {
   if (state.snapTo !== null) return mergeNodes(graph, grab.id, state.snapTo);
+  /*
+    **Landing on a wall is a split and then a merge**, in that order, and the order is the whole of it.
+
+    Splitting puts a vertex on the wall *at the landing*, and merging folds the dragged vertex into
+    that one — so the two genuinely share a point, which is a T-junction. Moving the vertex onto the
+    wall and leaving the crossing sweep to notice would share it only when the two quantise alike, and
+    7,926 of 19,061 landings did not.
+  */
+  if (state.landOn !== null) {
+    const split = splitEdgesAt(graph, [{ edge: state.landOn.edge, at: state.landOn.at }]);
+    const landed = split.graph.nodes.findIndex(
+      (node) => node.x === state.landOn!.at.x && node.y === state.landOn!.at.y,
+    );
+    if (landed < 0 || landed === grab.id) return moveNode(graph, grab.id, state.at);
+    const merged = mergeNodes(split.graph, grab.id, landed);
+    return { ...merged, splits: merged.splits + split.splits };
+  }
   const from = graph.nodes[grab.id];
   // Exact, because both sides came through `documentPoint`: identity here is not approximate, and
   // an epsilon would silently discard a deliberate nudge of a fraction of a pixel.
@@ -149,6 +188,14 @@ export interface DrawPoint {
   readonly at: Vector2;
   /** The existing vertex it would attach to, or `null` for a new one. */
   readonly onNode: number | null;
+  /**
+   * The wall it would land **on**, or `null`.
+   *
+   * Set only when no vertex is in reach: a vertex that exists is the more specific answer, and a
+   * wall's own ends are `onNode`'s business. The wall is split at `at` before the new wall goes in,
+   * which is what makes the join a shared vertex rather than two points agreeing.
+   */
+  readonly onEdge: number | null;
 }
 
 /**
@@ -165,10 +212,29 @@ export function drawPoint(
   v: number,
   snapRadius: number,
   suppressSnap: boolean,
+  wallRadius = 0,
 ): DrawPoint {
   const onNode = suppressSnap ? null : nearestNode(graph, { x: u, y: v }, snapRadius);
-  if (onNode === null) return { at: documentPoint(u, v), onNode: null };
-  return { at: graph.nodes[onNode]!, onNode };
+  if (onNode !== null) return { at: graph.nodes[onNode]!, onNode, onEdge: null };
+  const landing =
+    suppressSnap || wallRadius <= 0 ? null : nearestEdgePoint(graph, { x: u, y: v }, wallRadius);
+  if (landing) return { at: landing.at, onNode: null, onEdge: landing.edge };
+  return { at: documentPoint(u, v), onNode: null, onEdge: null };
+}
+
+/**
+ * Split whatever these points land on, so a wall added by their coordinates shares those vertices.
+ *
+ * **Every split before any wall**, which is the rule `splitEdgesAt` already states: a landing names
+ * its wall by index, and adding a wall renumbers the edges. Points that land on nothing pass through
+ * untouched.
+ */
+export function splitForLandings(graph: WallGraph, points: readonly DrawPoint[]): EditResult {
+  const landings = points
+    .filter((point) => point.onEdge !== null)
+    .map((point) => ({ edge: point.onEdge!, at: point.at }));
+  if (landings.length === 0) return { graph, splits: 0, overlaps: 0 };
+  return splitEdgesAt(graph, landings);
 }
 
 /**
@@ -195,7 +261,11 @@ export function applyDraw(
   const dy = to.at.y - from.at.y;
   const length = Math.hypot(dx, dy);
   if (length === 0 || length < minLength) return null;
-  return insertEdge(graph, [from.at, to.at]);
+  // Split first, then add by the same coordinates: that is what makes an end that landed on a wall
+  // share the wall's new vertex instead of stopping beside it.
+  const split = splitForLandings(graph, [from, to]);
+  const added = insertEdge(split.graph, [from.at, to.at]);
+  return { ...added, splits: added.splits + split.splits };
 }
 
 /**

@@ -1598,6 +1598,42 @@ point.
 **A release ends the gesture, not the hovering**, so the hint persists over the vertex the pointer is
 still on — the dragged one, or the one it was folded into.
 
+### Landing on a wall, not beside it — 2026-09-22
+
+**Nothing in this project snapped to the middle of a line until a room asked for it.** Snapping was to
+*vertices*; a click aimed at a wall became an ordinary point beside it. A GM drawing a chain aimed at one
+of its own lines and reported the result exactly: *"it overshot a bit and created a little triangle on
+the other side."* The run crossed the line it meant to join, and the crossing was split, leaving a sliver.
+
+**The rule, shared by every tool that puts a point down**: the nearest **vertex** within its radius wins,
+because a point that already exists is the more specific answer; failing that, the nearest point **on**
+the nearest wall within a tighter radius; failing that, a free point. Shift suppresses both, as it always
+has.
+
+**A wall gets a tighter radius than a vertex** — 8 screen pixels against 14 (user, 2026-09-22:
+*"Tighter, 8px"*). A vertex is a point you aim at; a wall is a long target, and at the vertex radius
+almost any click on a real map is within reach of one, which would make placing a free point in a
+corridor hard.
+
+**Split first, then add by the landing's own coordinate.** That order is the whole of it, and it is
+measured rather than argued: over 20,000 random walls with a click aimed a little off each, adding the
+wall and leaving the crossing sweep to find the meeting point shared the vertex **12,633 times** and left
+the end beside it **7,367 times**; splitting at the landing first shared it every time. One of those
+7,367 is now a fixture, kept at the probe's own coordinates — rounded prettier, the arithmetic agrees
+again and it stops testing anything.
+
+**What each tool does with it:**
+
+- **Draw and Draw chain** split the wall they land on, and the new wall ends on that vertex.
+- **Draw chain also lands on its own pending segments**, which are not in the graph at all: the landing
+  goes into the run twice, once as a vertex inside the segment it fell on and once at the end, so one
+  `insertEdge` gives them a single shared node.
+- **Move** splits the wall and **merges** the dragged vertex into the new point, so the drop makes a real
+  T-junction rather than a vertex resting on a wall. **A vertex is never offered its own walls**: they
+  pass under it wherever it goes, and landing on one would split a wall where its own end already is.
+- **Every landing is drawn before the press**, in the same mark a vertex join uses, because it means the
+  same thing to the GM.
+
 ### An edit stops at the map's edge
 
 **A drag is the only gesture that can leave the map**, and that is deliberate on both sides. Every
@@ -2778,7 +2814,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,082 tests across 77 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,097 tests across 77 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3250,14 +3286,17 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: look at the vertices in a room** (changed 2026-09-22, not yet seen). Every vertex now
-draws for the tools whose work is at one — Move, Draw, Draw chain, Erase, Straighten, Prune — with no
-ceiling, so a dense map shows thousands of dots. The question the room answers is whether that is
-workable at map zoom or whether it wants a lighter mark; the density argument that put the old cap there
-was real, and what retired it was that a target you cannot see is worse.
+**Do this first, all from one room and none of it seen yet** (2026-09-22):
 
-**And read one number off the log while you are there**: the graph write now reports how long it took,
-which the record has carried as *not established* since the slow-save work.
+1. **Every vertex now draws** for the tools whose work is at one — Move, Draw, Draw chain, Erase,
+   Straighten, Prune — with no ceiling, so a dense map shows thousands of dots. The room says whether
+   that is workable at map zoom or wants a lighter mark; the density argument behind the old cap was
+   real, and what retired it was that a target you cannot see is worse.
+2. **Landing on a wall** — §5, *Landing on a wall, not beside it*. Draw a wall that ends on another and
+   check the join is a junction rather than a crossing; drop a dragged vertex on a wall and check it
+   folds in; and in a chain, click one of its own lines, which is the case that started this.
+3. **Read the write timing off the log** (`written in NNNms`), which the record carried as *not
+   established* since the slow-save work.
 
 **The edge clamp is confirmed in a room** (user, 2026-09-22: *"That works in the room"*), Move and
 Draw both.
