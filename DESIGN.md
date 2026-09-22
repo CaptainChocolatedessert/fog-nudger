@@ -1682,6 +1682,11 @@ map framed.
   staying behind by `removeEdge`'s rule — and it is read out of the document rather than stored, so
   nothing can disagree with the walls on the map.
 
+  **The off-press compacts before it saves.** An act is its own save path: every other wall edit goes
+  through `wallEdit`'s commit, which drops the vertices an edit leaves unused, and without this the
+  frame's four corners stayed in the document for the life of the map. Renumbering is safe here for the
+  same reason it is there — a press is not a gesture, so nothing holds an id to invalidate.
+
   **Two costs, both accepted.** A wall the GM drew along the map's edge themselves is indistinguishable
   from a frame wall and goes with it. And a wall the frame *split* stays split: the document never
   recorded which cuts the framing made, so the wall comes back as two pieces meeting at a vertex — the

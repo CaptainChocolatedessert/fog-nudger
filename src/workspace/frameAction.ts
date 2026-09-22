@@ -35,7 +35,7 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { addFrameWalls, alreadyFramed, removeFrameWalls } from "../trace/frameWalls";
 import type { GraphExtent } from "../trace/graphUnits";
-import type { WallGraph } from "../trace/wallGraph";
+import { compactNodes, type WallGraph } from "../trace/wallGraph";
 import { mapExtent, say } from "./shell";
 import { wallGraph, saveEditedWalls } from "./stage";
 import { workOn } from "./subject";
@@ -150,10 +150,20 @@ async function putItOn(graph: WallGraph, extent: GraphExtent): Promise<void> {
  */
 async function takeItOff(graph: WallGraph, extent: GraphExtent): Promise<void> {
   const bare = removeFrameWalls(graph, extent);
+  /*
+    **Compacted, because this is a save path of its own.** Every other wall edit goes through
+    `wallEdit`'s commit, which drops the vertices an edit leaves unused before writing; an act saves
+    straight from here and would otherwise leave the frame's corners in the document for the life of
+    the map. The condition that makes renumbering safe holds here for the same reason it does there:
+    a press is not a gesture, so nothing is holding an id to invalidate.
+
+    Only this direction needs it — laying a frame adds walls and orphans nothing.
+  */
+  const tidy = compactNodes(bare.graph);
   busy = true;
   say("taking the edge walls off…", "working");
   try {
-    await saveEditedWalls(bare.graph, "unwalling the map's edge");
+    await saveEditedWalls(tidy, "unwalling the map's edge");
     devLog("info", `workspace: unwalled the map's edge — ${bare.removed} walls along an edge removed`);
     say(`the map's edge is bare again — ${bare.removed} walls removed`);
   } catch (error) {
