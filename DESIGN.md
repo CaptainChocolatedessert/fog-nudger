@@ -3250,9 +3250,11 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: take *Draw chain* into a room** (built 2026-09-22, never pressed in one). Click a few
-corners and finish with a right-click; click the start and watch the shape close; press Escape part-way
-and confirm nothing was written. §10, tool 8, has the reasoning and the costs.
+**Do this first: look at the vertices in a room** (changed 2026-09-22, not yet seen). Every vertex now
+draws for the tools whose work is at one — Move, Draw, Draw chain, Erase, Straighten, Prune — with no
+ceiling, so a dense map shows thousands of dots. The question the room answers is whether that is
+workable at map zoom or whether it wants a lighter mark; the density argument that put the old cap there
+was real, and what retired it was that a target you cannot see is worse.
 
 **And read one number off the log while you are there**: the graph write now reports how long it took,
 which the record has carried as *not established* since the slow-save work.
@@ -5066,8 +5068,9 @@ goes, in one undo entry.
   is *what would this press take*, and only one tool can be armed to answer it.
 
 **8. Draw chain — built and confirmed in a room, 2026-09-22** (user: Escape, right-click and ending on
-the last vertex all work). **What the room asked for next: the vertices have to be visible while it is in
-hand**, since they are the click targets — and the same for *Move*. A press per corner, each wall joined to the
+the last vertex all work). **The room asked for the vertices to be visible while it is in hand**, since they
+are the click targets, and for *Move* as well. Draw chain had simply been left out of the set of tools
+that get handles; Move was in it and was losing them to the cap above, which is now gone. A press per corner, each wall joined to the
 last, and the run goes in as one act.
 
 - **A tool of its own, not Draw not stopping** (user, 2026-09-22). Draw's two-click form already
@@ -5164,8 +5167,15 @@ before it may ask, and *settled* is not something the SDK reports.
 
 ### Gaps in coverage, rather than missing features
 
-- **The handle cap has never been exercised.** It suppresses handles above 2,000 *on screen*, and the
-  test map has 410 points in total, so no amount of zooming out reaches it.
+- **The handle cap is gone — 2026-09-22.** This entry said it had never been exercised, because the
+  test map had 410 points; a real map has **3,791**, so it was being exercised constantly and silently.
+  A GM in a room found the effect from the other end: the vertices were not there to click. It
+  suppressed every handle above 2,000 *on screen*, its own note claimed a state line carried the total
+  and nothing did, and the legibility argument behind it was retired by the user — *"Let's keep the full
+  vertex display no matter how many there are. If it's too dense where you're trying to work, you zoom
+  in."* **A vertex is a click target**, and the GM already holds the control that fixes density.
+  Measured while removing it: 4,000 handles cost 0.6ms a frame and 8,000 cost 1.3ms, so it was never a
+  question of speed.
 - **The gap tool has never been in a room.** Whether a ring is easy to hit, whether the reshuffle
   after an accept reads as working or as flickering, and whether accept-all does what it is for on a
   map with many gaps are all open.

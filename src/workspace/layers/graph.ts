@@ -50,13 +50,16 @@ import { currentTool } from "../toolPalette";
  * Span are still absent: none of them takes hold of a vertex, so a dot at every one would be
  * decoration over the marks those tools do draw.
  *
+ * **Draw chain joined on 2026-09-22**, from the room that confirmed it: every point of the graph is a
+ * place a click can land on, close the shape or finish the run, so the targets have to be on screen.
+ *
  * **Straighten and Prune joined on 2026-09-21**, as the two amounts (user: *"we need to see vertices
  * for both tools"*), and neither grabs anything — so the rule this set states is now *the tools whose
  * work is at the vertices*. Straightening drops the ones between a run's ends, and pruning takes whole
  * pieces with theirs, drawn red. Prune became ringed on 2026-09-22 and keeps its handles; confirmed
  * fine in a room the same day.
  */
-const WALL_TOOLS = new Set(["move", "draw", "erase", "straighten", "prune"]);
+const WALL_TOOLS = new Set(["move", "draw", "drawChain", "erase", "straighten", "prune"]);
 import type { DrawPoint } from "../dragGesture";
 import {
   condemnedWalls,
@@ -123,17 +126,22 @@ const eraseColour = () => colourFor("destructive");
 const ERASE_WIDTH_PX = 5;
 const drawColour = () => colourFor("additive");
 
-/**
- * Past this many handles *on screen*, none are drawn.
- *
- * A real map's graph is thousands of points, and every one of them at zoom-out is a wash of dots
- * that hides the walls the handles are meant to sit on. The cap is on what is visible rather than on
- * the graph's size, which is the difference that matters: zooming in to work on a room brings the
- * handles back, and zooming out to judge the whole map leaves the linework readable. The state line
- * carries the total, so nothing is silently missing.
- */
-const MAX_HANDLES = 2000;
+/*
+  **There is no cap on how many handles are drawn, since 2026-09-22.**
 
+  There was one: past 2,000 on screen, none at all, on the argument that a real map's points at
+  zoom-out are a wash of dots hiding the walls they sit on. A room retired it (user): *"Let's keep the
+  full vertex display no matter how many there are. If it's too dense where you're trying to work, you
+  zoom in."* A vertex is a **click target** for the tools that get handles, and a target you cannot see
+  is worse than a busy picture — the GM already has the control that fixes density, and it is the zoom.
+
+  **It was also silent.** The cap's own note claimed the state line carried the total so nothing was
+  missing; nothing reported it. The summary that once did is gone, and what was left was a ceiling with
+  no way to tell it had bitten.
+
+  **And it never was about speed** (measured 2026-09-22, Chromium, a 1600x1000 canvas): the same arc,
+  fill and rim per handle costs **0.6ms for 4,000** and **1.3ms for 8,000**, against a frame of 16ms.
+  Firefox is what the GM uses and was not measured, but not by an order of magnitude.
 /** Degrees are derived per graph rather than per frame; the graph only changes on an edit. */
 let degreesOf: number[] = [];
 let degreesFor: WallGraph | null = null;
@@ -464,14 +472,6 @@ function paintHandles(
     py >= -HANDLE_RADIUS &&
     px <= width + HANDLE_RADIUS &&
     py <= height + HANDLE_RADIUS;
-
-  let visible = 0;
-  for (let id = 0; id < graph.nodes.length; id++) {
-    if ((degree[id] ?? 0) === 0) continue;
-    const node = graph.nodes[id]!;
-    if (onScreen(x(node.x), y(node.y))) visible += 1;
-    if (visible > MAX_HANDLES) return;
-  }
 
   const dragged = draggedNode();
   const snap = snapTarget();
