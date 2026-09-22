@@ -3190,29 +3190,27 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: take four small changes into a room.** All four are built (2026-09-22) and pass
-`tsc`, the suite and a build; none has been in a room. What to check:
+**Do this first: make the map frame a toggle** (user, 2026-09-22, immediately after the four changes
+below were confirmed: *"I do still want to make the wall frame a toggle, not just use undo"*). It needs
+the design conversation before anything is built, and **the open question is what turning it off does to
+walls the frame split** when it went on: `addFrameWalls` reports its `splits`, but the document does not
+keep which they were, so a split cannot be undone without knowing that. Undo already takes the whole
+press back — what a toggle adds is taking it off later, after other work.
 
-1. **Straighten has a *Done* button** — `wallAmounts.ts`. Arm Straighten, drag, press *Done*: the drawer
-   closes and the walls are straightened as one undo entry. Arming another tool with an amount set
-   should still apply it, and the note now says both. **A correction to what this list said**: the button
-   could not call `setTool("pan")`, because `setTool` does not touch the drawer — only the strip's own
-   press closes it, and the drawer closing is what the commit listens for. So the press moved out of the
-   strip's render into an exported `armTool`, and *Done* calls `armTool("pan")`, exactly a press on Pan.
-   Three comments claimed `setTool` clears the drawer; the claim was written on 2026-09-14 in the commit
-   that took the drawer handling *out* of `setTool`, so it was never true, and all three are corrected.
-2. **The review draws cyan over amber** — `layers/delta.ts`, the two entries swapped. Check with a
-   straightened map and the regenerate question up: the walls should read as replaced, with amber only
-   where no new wall lies over an old one.
-3. **The panel is 320 × 560**, down from 500 × 800, in both manifests (§7, *The panel*, has the
-   measurement). **Still not established** whether Owlbear re-reads an action's size on a manifest
-   change or keeps it with the listing it captured at first add. If the popover is still wide, re-add
-   the dev manifest under a new query (`manifest.dev.json?v=3`) — if that fixes it the size is cached
-   with the listing, and `OBR.action.setWidth` / `setHeight` at run time is the answer for the public
-   build, which cannot change its URL.
-4. **The map frame should already be undoable**: press *Add walls around the map edge*, then Undo. It
-   saves through `saveEditedWalls`, which pushes an undo entry unconditionally since 2026-09-15 — read,
-   not seen.
+**The four small changes are confirmed in a room** (user, 2026-09-22: *"1-4 all work"*), each built the
+same day:
+
+1. **Straighten's *Done*** — `wallAmounts.ts`. It is a press on Pan through `armTool`, because `setTool`
+   does not close the drawer and the drawer closing is what commits. **Three comments claimed `setTool`
+   clears the drawer**; the claim was written on 2026-09-14 in the commit that took drawer handling *out*
+   of `setTool`, so it was never true, and all three are corrected.
+2. **The review draws cyan over amber** — `layers/delta.ts`. A straightened map reads as replaced rather
+   than deleted.
+3. **The panel is 320 × 560**, from 500 × 800, in both manifests (§7, *The panel*, has the measurement).
+   **Not recorded:** whether the new size arrived from the manifest alone or needed a re-add under a new
+   URL — so whether Owlbear re-reads an action's size, or keeps it with the listing as it keeps the name
+   and icon, is **still not established**.
+4. **The map frame is undoable** — press *Add walls around the map edge*, then Undo. Seen, not just read.
 
 **Then, each needing a design conversation first** (the rhythm in the operating notes — *well
 defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3221,10 +3219,6 @@ defined?*, the one question, a picture if it is geometric, name and glyph, a num
   stopping on Escape, on right-click, or on a click on an existing vertex, which closes the shape.
   Draw's two-click form already re-aims a far end between clicks, so this is that form not stopping.
 - **Delete a whole connected chain or network of walls**, complementing Dissolve region. Raised twice.
-- **Toggle Map Frame** — rename *Add walls around the map edge* and make the press toggle. The detection
-  half exists (`addFrameWalls`' strict already-framed test). **The open question is what turning it off
-  does to walls the frame split** when it went on, which cannot be unsplit without knowing which splits
-  it caused.
 - **Doors, the way Dynamic Fog makes them** (user, 2026-09-22: *"let's look into how Dynamic Fog makes
   doors and see if we can add that functionality"*). **Start by reading, not designing**: the local
   clone at `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts`
@@ -3253,7 +3247,8 @@ defined?*, the one question, a picture if it is geometric, name and glyph, a num
 **Confirmed in rooms this session**, each with its section: the automatic prune (§4, *The hairs come off
 in the derive*); *Collapse small regions* (§10, tool 6); *Prune the dead ends* as a ringed tool (user,
 2026-09-22: *"The Prune rings work and look great"*; §10, *Prune became a ringed tool*); the band's
-order, Collapse, Prune, Straighten; dimming and the amount tools' handles. **Slow saves are answered**
+order, Collapse, Prune, Straighten; dimming and the amount tools' handles; the four small changes above.
+**Slow saves are answered**
 in the main: the item count was the cause, and a tidied map went from 1 minute 46 seconds to 1.3 seconds
 (§10's measurement, below the tools).
 
