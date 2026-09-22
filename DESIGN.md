@@ -3183,6 +3183,19 @@ not do it** — its collapse guard exists precisely to stop a closed run fitting
 so a grid off by four put it off by sixteen, and a minimum-area filter **is not a pure delete**, since
 a hole is kept only when it encloses a surviving region. Its replacement was *Dissolve region*.
 
+**Noted, to look into later: saves are very slow on this map** (user, 2026-09-21: *"I'm having a lot
+of very slow saves. I'm usually not waiting for them to finish, since we're just testing."*). The log
+says which save and roughly why. A push on close at 21:54 was **60 regions and 3,419 wall lines**; the
+GM stopped it after **49 seconds with 2,280 of the 3,419 written**, which is about 46 wall segments a
+second. The latest derives of *The Incandescent Grottoes* hold 3,242 wall lines against 67–70 regions
+— **82% of all segments are bridges**, each a `LINE` item of its own, and the total is past the
+1,500-item push warning and not far short of the 5,881 that once could not be written at all. So the
+lead is the **item count** rather than the write path: detail drawn alongside the walls becomes open
+linework, and open linework is one item per segment. Two directions, neither examined: fewer items
+per wall (one item per wall *run* rather than per segment, which §6 decided against for nudging in
+Owlbear), or fewer walls (the tiny-regions tool under discussion, and the thin-lines ink tool). **Not
+established:** whether the per-edit graph writes are also slow; the log has no timing on them.
+
 **Then the five parked items**, none started:
 
 1. **Mend moves below Prune** in the Walls band, so the corrections sit together. A declaration-order
