@@ -3217,11 +3217,15 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: take the frame toggle into a room** (built 2026-09-22, never pressed in one). Press
-the frame act on a map with walls, then press it again: the edge walls should go and nothing else
-should move. Worth looking at afterwards — a wall that ran out to the map's edge keeps the vertex the
-frame cut it at, which is the stated cost. §5 has the whole of it, including the partial-frame defect
-the on-press now closes.
+**Do this first: stop *Move* dragging a vertex off the map** (user, 2026-09-22, from the room that
+confirmed the frame toggle: *"I can use the move tool to move a vertex off the edge of the map. No other
+tool seems to be able to go off the map."*). With the frame on, the drag split the wall at the frame and
+left **a segment wholly outside the map, out of reach** — it could not be clicked, and the only way to it
+was pruning, by clicking the part of a ring that happened to land on the map. Design conversation first;
+the question is whether Move clamps or whether off-map walls are allowed in general.
+
+**The frame toggle is confirmed in a room** (user, 2026-09-22: *"It works."*). §5 has what it does, the
+two costs, and the partial-frame defect the on-press closes.
 
 **The four small changes are confirmed in a room** (user, 2026-09-22: *"1-4 all work"*), each built the
 same day:
