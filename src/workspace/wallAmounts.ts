@@ -22,8 +22,8 @@
  * ## One pin, one commit
  *
  * `graphLatch.ts` carries the reasoning. Arming the tool opens its drawer, which pins the graph; the
- * handle previews against that fixed base, so dragging back and forth is exact; putting the tool down
- * applies the result once as one undo entry. **The handle starts at zero every opening**, because at
+ * handle previews against that fixed base, so dragging back and forth is exact; putting the tool down —
+ * the drawer's *Done*, or arming anything else — applies the result once as one undo entry. **The handle starts at zero every opening**, because at
  * any other position it would describe work already done.
  *
  * ## The preview substitutes
@@ -50,6 +50,7 @@ import { editableGraph, substituteGraph } from "./regions";
 import { invalidate, say } from "./shell";
 import { saveEditedWalls, wallsEdited } from "./stage";
 import { workOn } from "./subject";
+import { armTool } from "./toolPalette";
 
 /**
  * The track's step. Its floor is `TRACK_FLOOR`, shared with Prune's and pinned for the reason given
@@ -126,6 +127,23 @@ export function renderAmountControls(body: HTMLElement): void {
   note.id = NOTE_ID;
   note.className = "sub";
   body.append(note);
+
+  /*
+    **Done makes the commit an act** (user, 2026-09-22), matching Prune's and Collapse's *adjust, then
+    press*. It is a press on Pan and nothing more: the drawer closing is what the `onStepChange` handler
+    below hears, and that applies the latch, so there is one commit path and the button is a second way
+    into it. **`armTool`, not `setTool`** — `setTool` leaves the drawer open, and an open drawer is a
+    tool not yet left. Leaving any other way still commits, as the paint tools do.
+  */
+  const actions = document.createElement("div");
+  actions.className = "step-actions";
+  const done = document.createElement("button");
+  done.type = "button";
+  done.className = "chip";
+  done.textContent = "Done";
+  done.addEventListener("click", () => armTool("pan"));
+  actions.append(done);
+  body.append(actions);
   refresh();
 }
 
@@ -265,8 +283,10 @@ function refresh(): void {
     note.textContent = "No walls yet, so there is nothing to straighten.";
     return;
   }
-  // Says what closing does, because the commit is caused by leaving rather than by a button.
-  note.textContent = previewOf(latch) ? "Applied when this drawer closes. One step of undo takes it back." : RESTING;
+  // Names leaving as well as the button, because arming another tool commits too.
+  note.textContent = previewOf(latch)
+    ? "Applied on Done, or on leaving the tool. One step of undo takes it back."
+    : RESTING;
 }
 
 /** Re-ask the readout when a graph arrives. */

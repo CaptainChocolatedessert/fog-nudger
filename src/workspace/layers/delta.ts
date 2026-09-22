@@ -127,9 +127,15 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     context.stroke();
   };
 
+  /*
+    **What comes back is drawn over what goes** (user, 2026-09-22). Straightening replaces nearly every
+    wall, so the two sets lie on each other almost everywhere, and with amber on top the picture read as
+    everything being deleted when it is being replaced. Cyan last means amber shows only where no new
+    wall lies over it. The names are the diff's, which run the other way — see this file's notes.
+  */
   for (const [segments, role] of [
-    [delta.removed, "additive"],
     [delta.added, "subtractive"],
+    [delta.removed, "additive"],
   ] as const) {
     if (segments.length === 0) continue;
     trace(segments);

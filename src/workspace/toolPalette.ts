@@ -344,6 +344,29 @@ export function setTool(next: Tool): void {
   invalidate();
 }
 
+/**
+ * Exactly what pressing a tool's button in the strip does: arm it, and move the drawer to match.
+ *
+ * **`setTool` alone leaves the drawer where it was**, so a drawer's own button that means "put this
+ * down" — Straighten's *Done* — comes here rather than there. Only a drawer closing tells the tools
+ * behind it that they were left.
+ */
+export function armTool(id: Tool): void {
+  setTool(id);
+  /*
+    The drawer follows the press, including when the answer is "nothing".
+
+    A tool with controls shows exactly those; one without **clears** the drawer (user, 2026-09-14).
+    Leaving it was the earlier rule and it produced a state that lied: with Add ink's drawer open,
+    arming Move left the drawer titled *Add ink* while the hint inside it had already become Move's,
+    because the hint follows the armed tool and the drawer did not. Clearing removes the disagreement
+    rather than papering over it, and it makes the whole strip one rule — every press shows that
+    button's own thing.
+  */
+  if (toolHasControls(id)) openToolDrawer(id);
+  else openPanel(null);
+}
+
 /*
   `BAND_LABELS` went with the Look band. Every caption in the strip is a group's own title now, which
   is one source rather than two that could disagree about what a band is called.
@@ -474,21 +497,6 @@ export function render(): void {
         button.addEventListener("click", () => {
           armTool(choice.id as Tool);
         });
-        const armTool = (id: Tool): void => {
-          setTool(id);
-          /*
-            The drawer follows the press, including when the answer is "nothing".
-
-            A tool with controls shows exactly those; one without **clears** the drawer (user,
-            2026-09-14). Leaving it was the earlier rule and it produced a state that lied: with Add
-            ink's drawer open, arming Move left the drawer titled *Add ink* while the hint inside it
-            had already become Move's, because the hint follows the armed tool and the drawer did
-            not. Clearing removes the disagreement rather than papering over it, and it makes the
-            whole strip one rule — every press shows that button's own thing.
-          */
-          if (toolHasControls(id)) openToolDrawer(id);
-          else openPanel(null);
-        };
         target.append(button);
       }
     };
@@ -576,8 +584,9 @@ export function render(): void {
       opener.disabled = shut;
       opener.addEventListener("click", () => {
         /*
-          Decided before anything moves, because `setTool` clears the drawer on its way past: asking
-          `currentPanel()` afterwards would always say "not open" and this would never close.
+          Decided before anything moves. `setTool` leaves the drawer alone today, so the order is not
+          load-bearing — but it is the question the press asks, and asking it first keeps it right if
+          putting the verb down ever does touch the drawer.
         */
         const wasOpen = currentPanel() === step.id;
         // The user's rule: reading a group's settings puts the verb down. See this module's notes.

@@ -300,9 +300,8 @@ export function openPanel(id: StepId | null): void {
 
 /*
   `togglePanel` was here and is gone. Its one caller decides the toggle itself now, because the press
-  that opens a group also puts the verb down — and `setTool` clears the drawer on its way past, so a
-  toggle that asked "is this already open" *after* that would always be told no and would never
-  close. The caller reads the answer before anything moves.
+  that opens a group also puts the verb down, and it reads "is this already open" before anything
+  moves. **`setTool` does not touch the drawer** — only `armTool`, a press on the strip, moves it.
 */
 
 /**

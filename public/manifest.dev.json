@@ -11,7 +11,7 @@
     "title": "Fog Nudger (dev)",
     "icon": "/fog-nudger/nudge-action-dev.svg",
     "popover": "/fog-nudger/panel.html",
-    "width": 500,
-    "height": 800
+    "width": 320,
+    "height": 560
   }
 }

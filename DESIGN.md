@@ -1404,7 +1404,9 @@ act on; they cannot know whether fourteen is a lot or whether those fourteen mat
 numeric proxy for something that should be looked at, which is the fault that retired the merge
 alarm. What replaces it is a mark with no number, and — at the moment a regenerate is offered — the
 **delta drawn on the map**: what would go in amber, what would arrive in cyan, the same subtractive
-and additive pair the painted ink already uses.
+and additive pair the painted ink already uses. **Cyan is drawn over amber** (user, 2026-09-22):
+straightening replaces nearly every wall, the two sets lie on each other almost everywhere, and with
+amber on top the picture read as everything being deleted when it is being replaced.
 
 **Segments are compared by their endpoint coordinates, never by node id.** This is not the identity
 rule being broken. That rule is about whether two walls *meet*, where a proximity test would join a
@@ -2129,6 +2131,12 @@ ahead of the map.
 
 **Three buttons**: *Open the workspace*, *Remove ours*, and *Clear everything*. One mode, so one door,
 and nothing else that acts on the scene.
+
+**Sized 320 × 560** (2026-09-22; it was 500 × 800, sized for when it held the whole interface). The
+`action`'s `width` and `height` in both manifests. Measured in the browser pane (Chromium) with the
+page at 320px: 484px tall at rest, 521px with the longest status and result lines in place, nothing
+overflowing sideways, the widest button ending at 164px. The 40px left over is for Firefox's font
+metrics, which were not measured.
 
 **The two destructive ones differ by how far they reach.** *Remove ours* takes our items and the saved
 wall graph, leaving the reading settings, both painted layers, the suppression marks and the map
@@ -3182,34 +3190,29 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: four small changes, all decided, none needing a conversation** (user, 2026-09-22:
-*"Next thing will be implementing those small changes"*). Build them as one batch, check, commit, and
-hand the room the list.
+**Do this first: take four small changes into a room.** All four are built (2026-09-22) and pass
+`tsc`, the suite and a build; none has been in a room. What to check:
 
-1. **Straighten gets a *Done* button** (user, 2026-09-22) — `wallAmounts.ts`. Today the latch commits
-   when the drawer closes, caused by leaving: putting the tool down or arming another. The button makes
-   that an act, matching Prune's and Collapse's *adjust, then press*. **The commit path needs no
-   change**: the button only has to put the tool down — `setTool("pan")` in `toolPalette.ts` is the
-   strip's own setter — and the `onStepChange` handler that already applies the latch on the way out
-   does the rest. Label it for what it does; *Done* is the user's word. The drawer's note (*"Applied
-   when this drawer closes"*) should then say the button does it.
-2. **The review draws what comes back over what goes** (user, 2026-09-22) — `layers/delta.ts`. The loop
-   near the end strokes `delta.removed` (additive: walls the regenerate would bring back) first and
-   `delta.added` (subtractive: the GM's walls that would go) second, so the subtractive set is on top.
-   Straightening replaces nearly every wall, the two sets lie on each other almost everywhere, and the
-   picture reads as everything being deleted when it is being replaced. **Swap the two entries.** The
-   comment above the loop says which is which and why the diff's own words run the other way.
-3. **The Owlbear panel is too wide** (user, 2026-09-22). It is sized for when it held the whole
-   interface and is three buttons now — *Open the workspace*, *Remove ours*, *Clear everything*. The
-   size is the `action`'s `width: 500` / `height: 800` in **both** `public/manifest.json` and
-   `public/manifest.dev.json`; `manifest.test.ts` asserts they differ only in five other fields, so
-   change both alike. **Not established:** whether Owlbear re-reads an action's size on a manifest
-   change or caches it with the listing, as it caches the name, icon and description at first add (the
-   operating notes in `CLAUDE.md` have that trap). `OBR.action.setWidth` / `setHeight` exist in the SDK
-   types and would settle it at run time if the manifest does not.
-4. **Check that the map frame is undoable** — `frameAction.ts` saves through `saveEditedWalls(framed.graph,
-   "walling the map's edge")`, which pushes an undo entry unconditionally, so it probably already is.
-   **Check in a room rather than building anything**: press *Add walls around the map edge*, then Undo.
+1. **Straighten has a *Done* button** — `wallAmounts.ts`. Arm Straighten, drag, press *Done*: the drawer
+   closes and the walls are straightened as one undo entry. Arming another tool with an amount set
+   should still apply it, and the note now says both. **A correction to what this list said**: the button
+   could not call `setTool("pan")`, because `setTool` does not touch the drawer — only the strip's own
+   press closes it, and the drawer closing is what the commit listens for. So the press moved out of the
+   strip's render into an exported `armTool`, and *Done* calls `armTool("pan")`, exactly a press on Pan.
+   Three comments claimed `setTool` clears the drawer; the claim was written on 2026-09-14 in the commit
+   that took the drawer handling *out* of `setTool`, so it was never true, and all three are corrected.
+2. **The review draws cyan over amber** — `layers/delta.ts`, the two entries swapped. Check with a
+   straightened map and the regenerate question up: the walls should read as replaced, with amber only
+   where no new wall lies over an old one.
+3. **The panel is 320 × 560**, down from 500 × 800, in both manifests (§7, *The panel*, has the
+   measurement). **Still not established** whether Owlbear re-reads an action's size on a manifest
+   change or keeps it with the listing it captured at first add. If the popover is still wide, re-add
+   the dev manifest under a new query (`manifest.dev.json?v=3`) — if that fixes it the size is cached
+   with the listing, and `OBR.action.setWidth` / `setHeight` at run time is the answer for the public
+   build, which cannot change its URL.
+4. **The map frame should already be undoable**: press *Add walls around the map edge*, then Undo. It
+   saves through `saveEditedWalls`, which pushes an undo entry unconditionally since 2026-09-15 — read,
+   not seen.
 
 **Then, each needing a design conversation first** (the rhythm in the operating notes — *well
 defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3254,7 +3257,7 @@ order, Collapse, Prune, Straighten; dimming and the amount tools' handles. **Slo
 in the main: the item count was the cause, and a tidied map went from 1 minute 46 seconds to 1.3 seconds
 (§10's measurement, below the tools).
 
-**44 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`,
+**45 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`,
 before the commit that writes this line). **A push deploys**, so it waits for the user to want the
 public build to have them.
 
@@ -5216,7 +5219,9 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   distances from the raster) · `inkProfiles.ts` (**the two distributions drawn on the ink filters'
   rails**, asked for a frame after a reading lands rather than inside it)
 - **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag, and
-  **anchors the drawer**, because it is the module that knows where its own buttons are) ·
+  **anchors the drawer**, because it is the module that knows where its own buttons are. **`armTool` is
+  a press and `setTool` is not**: `setTool` leaves the drawer where it was, so anything meaning "put this
+  down" goes through `armTool`) ·
   `toolIcons.ts` (the strip's and the undo pair's glyphs, inline) · `wallEdit.ts` and `paintTool.ts`
   (the pointer events — Mend's press and accept are `wallEdit`'s) ·
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
@@ -5233,7 +5238,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   in hand: loaded with it, saved on every change, undone like any other act) · `editHistory.ts` (the bounded stack under it, pure and
   tested) · `frameAction.ts` (the button that walls the map's edge) ·
   `wallAmounts.ts` (**Straighten**, the one amount: its slider, the substituting preview, and the commit when
-  the drawer closes) · `graphLatch.ts` (**the latch** — the graph pinned when Straighten's drawer opens, the
+  the drawer closes — by its *Done*, which is a press on Pan, or by arming anything else) · `graphLatch.ts` (**the latch** — the graph pinned when Straighten's drawer opens, the
   amount aimed at it, and the staleness rule that voids it when the document is replaced: pure and tested) ·
   `actionGate.ts` (**why a wall action cannot act, decided before the press**: no saved graph, or its
   own limit at zero — pure and tested) ·
