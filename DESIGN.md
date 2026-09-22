@@ -1595,6 +1595,31 @@ point.
 **A release ends the gesture, not the hovering**, so the hint persists over the vertex the pointer is
 still on — the dragged one, or the one it was folded into.
 
+### An edit stops at the map's edge
+
+**A drag is the only gesture that can leave the map**, and that is deliberate on both sides. Every
+press and every hover is handed nothing at all outside the map, so no tool can *start* off it. A drag
+in progress is handed the true pointer position **unclamped**, because the thing being dragged has to
+keep following the pointer.
+
+That is right for a brush and wrong for a vertex, and the difference is what happens to the position.
+The brush's position is consumed and thrown away: it clips **per pixel**, so a stroke that leaves the
+map and comes back paints the part that crossed and nothing outside — and clamping it would smear a
+mark along the border instead (user, 2026-09-22, confirmed in a room: *"the brush should be able to
+leave the map area, but not to draw any pixels outside the map"*). A vertex's position is **stored**.
+
+**So the two tools that store one clamp it** — Move's vertex and Draw's far end, through
+`clampToExtent`. Per axis, so a vertex pushed out through the left edge still follows the pointer up
+and down, and past a corner sits in the corner.
+
+**The failure it closes, found in a room** (user, 2026-09-22): a vertex dragged off the map could not
+be reached again, because a press off the map is not a press. With the map's edge walled, the drag also
+split the wall where it crossed the frame and left **a segment wholly outside the map**, which nothing
+could select — the way back was pruning it, by clicking the part of a ring that happened to fall on the
+map. **Off-map walls were rejected as the alternative**: allowing them means opening the press gate,
+drawing beyond the map, and deciding what the traversal does with faces outside it, which would emit fog
+over nothing.
+
 ### Straightening, pruning, and the one button left
 
 > **Straightening is an amount applied to the walls in front of the GM, since 2026-09-18, and the
@@ -2745,7 +2770,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,057 tests across 75 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,063 tests across 75 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3217,14 +3242,15 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: stop *Move* dragging a vertex off the map** (user, 2026-09-22, from the room that
-confirmed the frame toggle: *"I can use the move tool to move a vertex off the edge of the map. No other
-tool seems to be able to go off the map."*). With the frame on, the drag split the wall at the frame and
-left **a segment wholly outside the map, out of reach** — it could not be clicked, and the only way to it
-was pruning, by clicking the part of a ring that happened to land on the map. Design conversation first;
-the question is whether Move clamps or whether off-map walls are allowed in general.
+**Do this first: take the edge clamp into a room** (built 2026-09-22, never pressed in one). Drag a
+vertex hard past each edge of the map and past a corner: it should slide along the edge and stop, never
+leaving. Do it with the map's edge walled too, where the vertex should land on the frame and join it.
+Draw's far end clamps the same way, which is the half the room did not find. §5, *An edit stops at the
+map's edge*, has the reasoning and what was rejected.
 
-**The frame toggle is confirmed in a room** (user, 2026-09-22: *"It works."*). §5 has what it does, the
+**The frame toggle is confirmed in a room** (user, 2026-09-22: *"It works."*), and so is the brush
+leaving the map without painting outside it (*"Visually, at least, the paint behvior is correct"* — it
+already behaved that way; what changed is a test pinning a stroke that *crosses* the edge). §5 has what it does, the
 two costs, and the partial-frame defect the on-press closes.
 
 **The four small changes are confirmed in a room** (user, 2026-09-22: *"1-4 all work"*), each built the
@@ -5190,7 +5216,7 @@ closed outright.
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
-| `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, and raster pixels per unit |
+| `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, raster pixels per unit, and holding a dragged position on the map |
 | `trace/probePoint.ts` | the one surviving diagnostic |
 | `trace/prunePieces.ts` | **what Prune rings**: the doomed runs grouped into pieces through the vertices that go — each a tree hanging off at most one vertex that stays — and taking them |
 | `trace/collapse.ts` | **collapsing small regions**: which regions a size qualifies — area inside the outline, holes included — the two checks that decide whether one is offered, the star, a grid of the walls, and *Collapse all* in rounds, taking only what was ringed |

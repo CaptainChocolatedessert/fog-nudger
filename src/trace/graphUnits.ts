@@ -56,3 +56,31 @@ export function graphExtent(width: number, height: number): GraphExtent {
 export function rasterPixelsPerGraphUnit(rasterWidth: number, extent: GraphExtent): number {
   return extent.x > 0 ? rasterWidth / extent.x : 0;
 }
+
+/**
+ * A position held inside the map, each axis on its own.
+ *
+ * **What keeps an edit on the map**, and it is needed because a *drag* is the one gesture that
+ * carries a position past the map's edge: every press and hover is handed `null` outside the map,
+ * but a drag in progress is given the true pointer position unclamped, deliberately, so the thing
+ * being dragged keeps following. That is right for a brush, which clips per pixel and simply paints
+ * nothing outside — and wrong for a vertex, whose position is *stored*.
+ *
+ * A vertex dragged off the map could not be reached again, since a press off the map is not a press
+ * at all; with the map's edge walled it also split the wall it belonged to and left a piece outside,
+ * unreachable (user, 2026-09-22, in a room).
+ *
+ * **Per axis, so the vertex slides along the edge it met** rather than stopping dead where it
+ * crossed — pushed out through the left, it still follows the pointer up and down. Past a corner it
+ * sits in the corner.
+ */
+export function clampToExtent(
+  x: number,
+  y: number,
+  extent: GraphExtent,
+): { readonly x: number; readonly y: number } {
+  return {
+    x: x < 0 ? 0 : x > extent.x ? extent.x : x,
+    y: y < 0 ? 0 : y > extent.y ? extent.y : y,
+  };
+}

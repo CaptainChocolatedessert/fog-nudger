@@ -83,7 +83,8 @@ import {
 } from "./mendSearch";
 import { currentMarkStates, editableGraph } from "./regions";
 import { currentMarks, saveMarks } from "./regionMarks";
-import { invalidate, say, setGrabTarget, setMapDragHandler, whileWorking, type MapPoint } from "./shell";
+import { clampToExtent } from "../trace/graphUnits";
+import { invalidate, mapExtent, say, setGrabTarget, setMapDragHandler, whileWorking, type MapPoint } from "./shell";
 import { saveEditedWalls } from "./stage";
 
 /*
@@ -545,6 +546,23 @@ function start(point: MapPoint): boolean {
   return true;
 }
 
+/**
+ * Where a dragged position is allowed to be: on the map, and no further.
+ *
+ * **Only the two tools that *store* a position ask for this** — Move's vertex and Draw's far end.
+ * Every press and hover is already refused off the map, so a drag is the only way past the edge, and
+ * the shell hands a drag the true position on purpose: a brush that left the map would otherwise
+ * smear a mark along the border instead of leaving, and it clips per pixel so nothing lands outside
+ * anyway. A vertex is different because it is written into the document.
+ *
+ * **With no map there is nothing to clamp to**, and the position stands — the same answer the rest of
+ * this module gives when it cannot know something, rather than inventing a bound.
+ */
+function onMap(point: MapPoint): { readonly x: number; readonly y: number } {
+  const extent = mapExtent();
+  return extent ? clampToExtent(point.x, point.y, extent) : { x: point.x, y: point.y };
+}
+
 function move(point: MapPoint): void {
   const graph = editableGraph();
   if (!graph) return;
@@ -556,7 +574,8 @@ function move(point: MapPoint): void {
 
   if (tool === "move") {
     if (!grab) return;
-    dragState = dragTo(graph, grab, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+    const held = onMap(point);
+    dragState = dragTo(graph, grab, held.x, held.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
     invalidate();
     return;
   }
@@ -589,7 +608,8 @@ function move(point: MapPoint): void {
   }
 
   if (!anchor) return;
-  reach = drawPoint(graph, point.x, point.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
+  const held = onMap(point);
+  reach = drawPoint(graph, held.x, held.y, SNAP_RADIUS_PX * point.perPixel, point.modifier);
   invalidate();
 }
 

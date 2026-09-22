@@ -168,6 +168,26 @@ describe("the brush", () => {
     expect(isPaintEmpty(layer)).toBe(true);
   });
 
+  /*
+    A stroke that leaves the map paints the part that was on it, and nothing else.
+
+    This is what the brush position being **unclamped** buys, stated from the painting side (user,
+    2026-09-22: *"I would expect the brush to be able to leave the map area, but not to draw any
+    pixels outside the map"*). Clamping the excursion to the edge would smear a mark along the border
+    instead; clipping per pixel leaves the crossing honest — and the count has to agree with the
+    picture, because a pixel outside the raster is a write that is silently dropped.
+  */
+  it("paints the part of a crossing stroke that is on the raster, and no more", () => {
+    const layer = emptyPaint(5, 5);
+    const { changed, bounds } = paintStroke(layer, { x: 2.5, y: 2.5 }, { x: 2.5, y: -40 }, 0.5, true);
+
+    expect(rows(layer)).toEqual(["..#..", "..#..", "..#..", ".....", "....."]);
+    // One mutation, caught: letting the capsule's bounds run above the raster, which drops the
+    // writes silently and leaves the count claiming pixels it did not change.
+    expect(changed).toBe(paintedCount(layer));
+    expect(bounds).toEqual({ left: 2, top: 0, right: 2, bottom: 2 });
+  });
+
   it("edits a copy without disturbing the original", () => {
     const original = paintFromRows(["..#..", "....."]);
     const working = copyPaint(original);

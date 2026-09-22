@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { graphExtent, rasterPixelsPerGraphUnit } from "./graphUnits";
+import { clampToExtent, graphExtent, rasterPixelsPerGraphUnit } from "./graphUnits";
 
 describe("graphExtent", () => {
   it("makes the longer side exactly 1, whichever side that is", () => {
@@ -52,5 +52,51 @@ describe("rasterPixelsPerGraphUnit", () => {
 
   it("is zero rather than an infinity for an extent with no width", () => {
     expect(rasterPixelsPerGraphUnit(100, { x: 0, y: 1 })).toBe(0);
+  });
+});
+
+/**
+ * Keeping a dragged vertex on the map.
+ *
+ * A drag is the one gesture handed a position past the map's edge, and Move stored it — leaving a
+ * vertex that could not be grabbed again, because a press off the map is not a press. With the edge
+ * walled it also split the wall and left a piece outside, unreachable (user, 2026-09-22, in a room).
+ *
+ * **Five mutations on 2026-09-22, five caught**: each of the four bounds dropped in turn, and both
+ * axes clamped against the long side — which is the one that would pass on a square map.
+ */
+describe("clampToExtent", () => {
+  /** A landscape map: x runs to 1, y stops short. */
+  const WIDE = graphExtent(3300, 2550);
+
+  it("leaves a position already on the map exactly where it is", () => {
+    const held = clampToExtent(0.4, 0.3, WIDE);
+    expect(held).toEqual({ x: 0.4, y: 0.3 });
+  });
+
+  /*
+    Per axis, which is the whole behaviour a GM sees: pushed out through the left edge the vertex
+    keeps following the pointer up and down rather than stopping where it crossed.
+  */
+  it("slides along the edge it met, keeping the other axis", () => {
+    expect(clampToExtent(-0.5, 0.3, WIDE)).toEqual({ x: 0, y: 0.3 });
+    expect(clampToExtent(0.4, -0.2, WIDE)).toEqual({ x: 0.4, y: 0 });
+  });
+
+  it("stops at the far edges, which are the map's own and not the unit square", () => {
+    expect(clampToExtent(4, 0.3, WIDE)).toEqual({ x: 1, y: 0.3 });
+    // The short side: a clamp against 1 would let the vertex sit well below the map.
+    expect(clampToExtent(0.4, 4, WIDE)).toEqual({ x: 0.4, y: WIDE.y });
+    expect(WIDE.y).toBeLessThan(1);
+  });
+
+  it("puts a position dragged past a corner in the corner", () => {
+    expect(clampToExtent(-3, -3, WIDE)).toEqual({ x: 0, y: 0 });
+    expect(clampToExtent(9, 9, WIDE)).toEqual({ x: 1, y: WIDE.y });
+  });
+
+  it("holds a portrait map the other way round", () => {
+    const tall = graphExtent(2550, 3300);
+    expect(clampToExtent(9, 9, tall)).toEqual({ x: tall.x, y: 1 });
   });
 });
