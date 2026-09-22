@@ -3250,14 +3250,12 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: take *Erase chain* into a room** (built 2026-09-22, never pressed in one). Press it on
-a stranded thing inside a room and it should go in one press; press it on the main linework and the
-whole map should light red first. Worth checking that the red set is exactly what goes, and that Undo
-brings it back in one step. §10, tool 7, has the reasoning and what was rejected.
+**Nothing is waiting for a room.** The next piece needs a design conversation first — the list is
+below, and the rhythm is in the operating notes.
 
-**The erasing family was renamed with it**: *Erase*, *Erase chain*, *Erase loop* — the last was
-*Dissolve region*. Three presses named by how much each takes. The code keeps `dissolve` for the
-operation.
+**Erase chain is confirmed in a room** (user, 2026-09-22: *"It works in the room"*), §10 tool 7. The
+erasing family was renamed with it: *Erase*, *Erase chain*, *Erase loop* — the last was *Dissolve
+region*. Three presses named by how much each takes, with the code keeping `dissolve` for the operation.
 
 **The edge clamp is confirmed in a room** (user, 2026-09-22: *"That works in the room"*), Move and
 Draw both.
@@ -5039,7 +5037,7 @@ check it disabled, one measured as deciding nothing on a valid graph, one defenc
 - **It trusts the ink width for its starting point**, as the automatic prune does. Without one the start
   is a fixed guess from the test map's figures.
 
-**7. Erase chain — built 2026-09-22, not yet in a room.** Click a wall and everything joined to it
+**7. Erase chain — built and confirmed in a room, 2026-09-22.** Click a wall and everything joined to it
 goes, in one undo entry.
 
 - **Why it exists, in the GM's words** (user, 2026-09-22): *"The use case is stranded things inside
