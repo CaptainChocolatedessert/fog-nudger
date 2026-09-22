@@ -5065,7 +5065,9 @@ goes, in one undo entry.
 - **The preview is Erase loop's**, drawn by the same layer through one accessor — the layer's question
   is *what would this press take*, and only one tool can be armed to answer it.
 
-**8. Draw chain — built 2026-09-22, not yet in a room.** A press per corner, each wall joined to the
+**8. Draw chain — built and confirmed in a room, 2026-09-22** (user: Escape, right-click and ending on
+the last vertex all work). **What the room asked for next: the vertices have to be visible while it is in
+hand**, since they are the click targets — and the same for *Move*. A press per corner, each wall joined to the
 last, and the run goes in as one act.
 
 - **A tool of its own, not Draw not stopping** (user, 2026-09-22). Draw's two-click form already
