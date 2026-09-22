@@ -2313,7 +2313,7 @@ added: the nothing-open state, the no-tool state, and Ctrl-to-pan-anywhere.
 **Separate what a drag does from what controls you are reading.**
 
 - **A tool palette** — always visible, every tool in it, banded by what it acts on: navigate (pan,
-  probe), ink (suppress, add, gaps), walls (straighten, prune, collapse small regions, mend, move, draw, erase, dissolve region, suppress region, span). One click to switch, and switching a
+  probe), ink (suppress, add, gaps), walls (collapse small regions, prune, straighten, mend, move, draw, erase, dissolve region, suppress region, span). One click to switch, and switching a
   tool does not move the controls.
 - **The controls drawer** — the same groups in the same cascade order, **one at a time**, opened by
   the group's own name in the strip. It slides out **beside** the strip rather than under it, is only
@@ -3224,7 +3224,7 @@ starts at four ink widths every opening. §10's *Prune became a ringed tool* has
 **What to look at**: whether a star of short strokes reads as one ring, whether four ink widths is a
 good first guess, and that the red junction is gone and not missed.
 
-**Then the four parked items**, none started. (*Mend moves below Prune* went in with *Collapse small
+**Then the five parked items**, none started. (*Mend moves below Prune* went in with *Collapse small
 regions*, and *Prune acts like Mend* is the item above.)
 
 1. **Toggle Map Frame** — rename *Add walls around the map edge*, and make the press toggle. The
@@ -3239,6 +3239,10 @@ regions*, and *Prune acts like Mend* is the item above.)
    the chain stops on Escape, on right-click, or on a click on an existing vertex, which closes the
    shape. Draw's two-click form already re-aims a far end between clicks, so this is that form not
    stopping after one wall.
+5. **Straighten gets a *Done* button** (user, 2026-09-22) that commits and closes the drawer, so its
+   interaction matches Prune and Collapse: adjust a slider, then press a button. Today the commit is
+   caused by leaving — putting the tool down or arming another — which the drawer's note says and
+   nothing on screen shows.
 
 **Parked from the ink investigation**, both recorded with measurements and neither built: the stroke
 slider's **stepping** (about ten stops per distinct radius, so six nudges do nothing and the seventh
@@ -3628,6 +3632,14 @@ leaving the strokes beyond it floating.
 **Costs, stated:** a click takes a whole star, not one arm of it — the price of never stranding a
 stroke; and the ringed pieces are the cascade *at this length*, so a hair a GM wants kept inside a star
 means taking the star and redrawing the hair, or shortening the length until the star breaks up.
+
+#### The band's order: Collapse, Prune, Straighten — 2026-09-22
+
+**The order a GM works in, found by working** (user: *"the natural order of operations for simplifying
+this map is Collapse - Prune - Straighten"*). It is also the order the operations feed each other:
+collapsing turns small loops into junctions and dead ends, pruning takes the dead ends that leaves, and
+straightening last fits what remains rather than fitting walls about to be deleted. The strip is read
+top down, so the order it draws is the one it teaches. Mend follows the three, then the hand verbs.
 
 #### Dimming the side you are not working on
 
@@ -4865,7 +4877,8 @@ beside it joins the outside and can never be revealed.
   control. Eight rather than the four also offered, because areas are measured between wall
   centrelines and a cell with an ink width of open floor already measures about four. **Reasoning, not
   measurement.**
-- **Its own tool, under Prune and above Mend** (user), rather than a *Simplify* drawer holding it with
+- **Its own tool, placed under Prune and above Mend** (user) — **and moved to the head of the band on
+  2026-09-22**, when the band became Collapse, Prune, Straighten in the order a GM works (below) — rather than a *Simplify* drawer holding it with
   Straighten and Prune: those are amounts with a latch, and accepting a collapse replaces the document,
   which would void a pinned amount in silence. Placement gives the grouping instead. Mend moved up to
   meet it, closing a parked item.

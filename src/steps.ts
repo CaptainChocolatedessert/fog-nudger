@@ -256,8 +256,27 @@ export const TOOLS: readonly ToolChoice[] = [
   */
   { id: "blob", label: "Suppress blob", band: "ink", drag: "brush", hint: "" },
   /*
+    **The order is Collapse, Prune, Straighten** (user, 2026-09-22): *"the natural order of operations
+    for simplifying this map"*, found by doing it. Collapsing first turns small loops into junctions and
+    dead ends; pruning then takes the dead ends that leaves; straightening last fits what remains, so it
+    is not fitting walls about to be deleted. **The strip is read top down**, so the order it draws is
+    the order it teaches.
+
+    Collapse the small regions detail leaves along the walls (user, 2026-09-21). `edit`, like Mend: it
+    takes a press inside a ring and declines everything else, which falls through to a pan. Its hint is
+    its group's blurb, because it has a control of its own and the blurb is the line above it.
+  */
+  { id: "collapse", label: "Collapse small regions", band: "walls", drag: "edit", hint: "" },
+  /*
+    **Prune is ringed now, not an amount** (user, 2026-09-22: as an amount it *"feels inconsistent"*
+    beside Mend and *Collapse small regions*). `edit`, like them: a press inside a ring takes that piece
+    and anything else pans. Its hint is its group's blurb.
+  */
+  { id: "prune", label: "Prune the dead ends", band: "walls", drag: "edit", hint: "" },
+  /*
     **Straighten is a tool, since 2026-09-21** (user): *"They should be distinct tools in the rail"* —
-    written of Straighten and Prune together, when both were amounts. Prune became ringed the next day.
+    written of Straighten and Prune together, when both were amounts. Prune became ringed the next day,
+    and Straighten stays an amount because it changes every wall at once and has no piece to ring.
 
     `pan`, and that is the whole of what makes it unlike every other verb here: **it takes no
     gesture.** An amount applies to the walls in front of the GM rather than to a point they aim at,
@@ -265,8 +284,9 @@ export const TOOLS: readonly ToolChoice[] = [
     which is where the handle lives — and the drawer opening and closing is exactly the pin and the
     commit the latch keys on.
 
-    **It sits at the head of the band, above the verbs**, with Prune and Collapse under it, because
-    those are what a GM does to a freshly derived graph before they start correcting it by hand.
+    **The three sit at the head of the band, above the verbs**, because they are what a GM does to a
+    freshly derived graph before they start correcting it by hand. Mend follows them, so the
+    corrections sit together — it moved up to meet Collapse on 2026-09-21, a parked item of its own.
   */
   {
     id: "straighten",
@@ -275,22 +295,6 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "pan",
     hint: "Drag the amount to fit the walls you have. Closing this applies it, as one step of undo.",
   },
-  /*
-    **Prune is ringed now, not an amount** (user, 2026-09-22: as an amount it *"feels inconsistent"*
-    beside Mend and *Collapse small regions*). `edit`, like them: a press inside a ring takes that piece
-    and anything else pans. Its hint is its group's blurb. Straighten above it stays an amount because
-    it changes every wall at once, so it is the one `pan` verb left.
-  */
-  { id: "prune", label: "Prune the dead ends", band: "walls", drag: "edit", hint: "" },
-  /*
-    Collapse the small regions detail leaves along the walls (user, 2026-09-21). `edit`, like Mend: it
-    takes a press inside a ring and declines everything else, which falls through to a pan. Its hint is
-    its group's blurb, because it has a control of its own and the blurb is the line above it.
-
-    **Under Prune and above Mend** (user), so the corrections sit together: Straighten's amount, then
-    the three ringed tools. Mend moved up to meet it, which was a parked item of its own.
-  */
-  { id: "collapse", label: "Collapse small regions", band: "walls", drag: "edit", hint: "" },
   /*
     The graph's gap tool (user, 2026-09-16). `edit`, like the other three: it takes a press inside a
     ring and declines everything else, which falls through to a pan. Its hint is its group's blurb,

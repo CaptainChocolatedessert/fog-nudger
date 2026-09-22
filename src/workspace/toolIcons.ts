@@ -218,13 +218,15 @@ const ICONS: Readonly<Record<string, string>> = {
     **Collapse small regions**: a small loop with three walls running off it to the edges, and a single
     slash through the loop (user, 2026-09-21, chosen from four at strip size).
 
-    **Prune's slash, one row up, and the same rule** — *where the mark sits says what goes* — so the two
-    read as family: Prune strikes a stub off a long wall, this strikes a small loop off the walls that
-    reach it. At 18px the difference is a loop against a stub, which is the difference the tools make.
+    **Prune's slash, on the button beside it, and the same rule** — *where the mark sits says what goes* —
+    so the two read as family: Prune strikes a stub off a long wall, this strikes a small loop off the
+    walls that reach it. At 18px the difference is a loop against a stub, which is the difference the
+    tools make. (Chosen with Prune one row up; the band was reordered Collapse, Prune, Straighten on
+    2026-09-22, so it is one row down now.)
 
     **The cost, chosen:** it shows the loop going and not the star it leaves. The candidate that drew
     both, before and after, was laid out like Straighten two rows up and closest to a neighbour; the
-    dashed loop sat directly over Mend's dashed ring; the bare junction said nothing about small regions.
+    dashed loop sat directly over Mend's dashed ring, as the band stood then; the bare junction said nothing about small regions.
   */
   collapse:
     '<circle cx="12" cy="12" r="3.6" /><path d="M12 1.5v6.9M2.9 17.3l6-3.5M21.1 17.3l-6-3.5" />' +
