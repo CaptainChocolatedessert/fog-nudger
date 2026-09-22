@@ -3208,6 +3208,14 @@ per wall (one item per wall *run* rather than per segment, which §6 decided aga
 Owlbear), or fewer walls (*Collapse small regions*, and the thin-lines ink tool). **Not
 established:** whether the per-edit graph writes are also slow; the log has no timing on them.
 
+> **Measured the next day, and the item count was the lead** (user, 2026-09-22: *"having those
+> simplification tools helped the closing time enormously"*). Two pushes on close of the same map in
+> `dev.log`: at 03:20, **70 regions and 3,242 wall lines took 1 minute 46 seconds**, about 31 items a
+> second; at 12:11, after pruning, collapsing and suppressing, **17 regions and 145 wall lines took 1.3
+> seconds**. Twenty times fewer items, eighty times faster. So the write path is not the problem at
+> this size and the linework is; what is left open is only a map whose honest walls are that many
+> segments.
+
 **Then the five parked items**, none started. (*Mend moves below Prune* was the fifth, and went in
 with *Collapse small regions*, which sits between them.)
 
@@ -3232,9 +3240,14 @@ slider's **stepping** (about ten stops per distinct radius, so six nudges do not
 severs), and **`round` versus `floor`** in `radiusForWidth`, where floor would guarantee the
 effective threshold never exceeds what was asked for.
 
-**Never looked at in a room:** dimming, the handles on the two amount tools, and the red junction on
-a doomed stub — which is a deliberate over-claim, so the question is whether it reads as *this is
-going* or as *look here*.
+**Looked at in a room and fine** (user, 2026-09-22): dimming, and the handles the two amount tools
+draw at every vertex. **The red junction on a doomed stub goes with Prune's rework**, where a ring
+makes a tiny stub visible without marking a vertex that stays.
+
+**Noted, not built — the review's drawing order** (user, 2026-09-22). When the cover's review draws
+what a regenerate would take and bring back, *what comes back* should be drawn **over** *what goes*.
+Straightening replaces nearly every wall, so both sets lie on top of each other almost everywhere, and
+with *what goes* on top the picture reads as everything being deleted when it is being replaced.
 
 **36 commits are not pushed** (measured 2026-09-21 with `git rev-list --count origin/main..main`,
 before the commit that writes this line). **A push deploys**, so it waits for the user to want the
