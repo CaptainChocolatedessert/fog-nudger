@@ -775,6 +775,26 @@ function move(point: MapPoint): void {
     travelled = true;
   }
 
+  /*
+    The chain's far end follows a held press too, not only a free pointer. The shell hands a gesture in
+    progress to `move` and a free pointer to `hover`, so without this the run froze between press and
+    release — which on a quick click is a flicker and on a slow one looks like the tool has stopped.
+  */
+  if (tool === "drawChain") {
+    if (chain.length === 0) return;
+    const held = onMap(point);
+    reach = drawPoint(
+      graph,
+      held.x,
+      held.y,
+      SNAP_RADIUS_PX * point.perPixel,
+      point.modifier,
+      LAND_RADIUS_PX * point.perPixel,
+    );
+    invalidate();
+    return;
+  }
+
   if (tool === "move") {
     if (!grab) return;
     const held = onMap(point);

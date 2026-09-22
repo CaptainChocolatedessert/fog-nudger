@@ -220,7 +220,17 @@ function doomed(graph: WallGraph): Doomed {
 
 const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   const graph = graphOnCanvas();
-  if (!graph || graph.edges.length === 0) return;
+  /*
+    **Only a missing graph skips the frame, not an empty one** (room, 2026-09-22: Draw chain *"fails to
+    display the dotted line while drawing"*, with the right result at the end).
+
+    This read `graph.edges.length === 0` too, as an optimisation — and everything this painter draws
+    comes after it, including the gesture in progress. So on a map with no walls at all, which is a
+    fresh map, a cleared one, or one Erase chain has just emptied, the chain being drawn was invisible
+    while the commit behind it was perfectly correct. **A gesture is not a property of the document**,
+    and the loops below already draw nothing when there is nothing.
+  */
+  if (!graph) return;
 
   // Graph units to screen: the longer drawn side is one unit on both axes.
   const long = Math.max(drawWidth, drawHeight);

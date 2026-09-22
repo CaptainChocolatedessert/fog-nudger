@@ -1634,6 +1634,23 @@ again and it stops testing anything.
 - **Every landing is drawn before the press**, in the same mark a vertex join uses, because it means the
   same thing to the GM.
 
+**Confirmed in a room the same day** (user: *"Good that works"*).
+
+#### The gesture is not a property of the document
+
+The room that confirmed the landings also reported Draw chain *"fails to display the dotted line while
+drawing"*, with the right result at the end. The graph layer opened with `if (!graph || graph.edges.length
+=== 0) return` — a guard meant to skip drawing walls that are not there, with **everything else the
+painter draws sitting after it**: the chain in progress, the wall being drawn, the marks. So on a map with
+no walls — a fresh one, a cleared one, or one *Erase chain* had just emptied — a gesture was invisible
+while the commit behind it was correct.
+
+**Only a missing graph skips the frame now.** The loops already draw nothing when there is nothing, so the
+emptiness check bought a few microseconds and cost the picture of what the GM was doing.
+
+**A second gap beside it**: the shell hands a gesture in progress to `move` and a free pointer to `hover`,
+and the chain only had a `hover` branch — so its far end froze while the button was held.
+
 ### An edit stops at the map's edge
 
 **A drag is the only gesture that can leave the map**, and that is deliberate on both sides. Every
@@ -3286,15 +3303,15 @@ next section.
 
 ### Where to pick this up
 
-**Do this first, all from one room and none of it seen yet** (2026-09-22):
+**Do this first, and none of it has been seen yet** (2026-09-22):
 
-1. **Every vertex now draws** for the tools whose work is at one — Move, Draw, Draw chain, Erase,
-   Straighten, Prune — with no ceiling, so a dense map shows thousands of dots. The room says whether
-   that is workable at map zoom or wants a lighter mark; the density argument behind the old cap was
-   real, and what retired it was that a target you cannot see is worse.
-2. **Landing on a wall** — §5, *Landing on a wall, not beside it*. Draw a wall that ends on another and
-   check the join is a junction rather than a crossing; drop a dragged vertex on a wall and check it
-   folds in; and in a chain, click one of its own lines, which is the case that started this.
+1. **Draw chain's dotted line on a map with no walls** — the fix for the room's report. Clear the walls
+   or empty them with *Erase chain*, then draw a chain: the run should be drawn while it is being made.
+   Its far end should also follow while the button is held, which is the second half of that fix.
+2. **Every vertex now draws** for the tools whose work is at one, with no ceiling, so a dense map shows
+   thousands of dots. Whether that is workable at map zoom or wants a lighter mark is still open — the
+   density argument behind the old cap was real, and what retired it was that a target you cannot see is
+   worse.
 3. **Read the write timing off the log** (`written in NNNms`), which the record carried as *not
    established* since the slow-save work.
 
