@@ -11,14 +11,22 @@
 
 import { describe, expect, it } from "vitest";
 
-import { maskFromRows } from "./fixtures";
-import { deriveWalls, type DeriveWallsOptions } from "./deriveWalls";
+import { maskFromRows, randomInk, seededRandom } from "./fixtures";
+import {
+  AUTO_PRUNE_INK_WIDTHS,
+  autoPruneLimitPx,
+  deriveWalls,
+  type DeriveWallsOptions,
+} from "./deriveWalls";
 import { graphExtent } from "./graphUnits";
+import { pruneWallGraph } from "./wallGraph";
 import { commandCount } from "../geometry/ring";
 
+/** No automatic prune: most of this file tests what the derivation does before one. */
 const BASE = {
   tolerance: 0.5,
   maxTolerance: 4,
+  pruneLimit: 0,
 };
 
 /** Derive from a text fixture, into the fixture's own extent — the raster *is* the image here. */
@@ -86,6 +94,27 @@ const ROOM_WITH_STUB = [
   "..###############..",
   "..###############..",
   "...................",
+];
+
+/** The same room with a stub that runs in and then bends down — a bend a coarse fit drops. */
+const ROOM_WITH_CROOKED_STUB = [
+  "......................",
+  "......................",
+  "..##################..",
+  "..##################..",
+  "..##..............##..",
+  "..##..............##..",
+  "..#######.........##..",
+  "..#######.........##..",
+  "..##.....##.......##..",
+  "..##......##......##..",
+  "..##.......##.....##..",
+  "..##........##....##..",
+  "..##..............##..",
+  "..##..............##..",
+  "..##################..",
+  "..##################..",
+  "......................",
 ];
 
 describe("what deriving produces", () => {
@@ -214,8 +243,181 @@ describe("meeting the command cap", () => {
     const result = derive(STEPPED, {
       tolerance: 0,
       maxTolerance: 4,
+      pruneLimit: 0,
       maxCommands: 4,
     });
     expect(result.escalations).toBe(0);
   });
 });
+
+/*
+  The dead ends every derive removes on its way through — `autoPruneLimitPx` says why two ink widths.
+
+  **Nine mutations, nine caught** (2026-09-21): the prune skipped, its graph not handed over, the faces
+  walked on the unpruned build, the ladder's later rungs unpruned, one ink width, a prune when no width
+  was measured, the choice of graph inverted, the width test loosened — and the count carried from the
+  ladder's first rung, which survived until the crooked-stub fixture was written for it.
+*/
+describe("the automatic prune", () => {
+  it("is two measured ink widths, and nothing at all when no width was measured", () => {
+    expect(AUTO_PRUNE_INK_WIDTHS).toBe(2);
+    expect(autoPruneLimitPx(5.7)).toBeCloseTo(11.4, 10);
+    expect(autoPruneLimitPx(3)).toBe(6);
+    // Deleting on a guess is the direction that can be wrong, so the unknown width keeps the hairs.
+    expect(autoPruneLimitPx(null)).toBe(0);
+    expect(autoPruneLimitPx(0)).toBe(0);
+    expect(autoPruneLimitPx(Number.NaN)).toBe(0);
+  });
+
+  /** The stub's own length along the walls, in graph units, from a derivation that kept it. */
+  function stubLength(): number {
+    const kept = derive(ROOM_WITH_STUB, BASE);
+    // A limit of the whole map takes every dead end there is, and a closed room is never one, so
+    // what it removes is the stub alone.
+    const all = pruneWallGraph(kept.walls.graph, 1);
+    expect(all.removed).toBe(1);
+    return all.length;
+  }
+
+  /*
+    The limit is inclusive, and it is what decides — a stub exactly at it goes, and one a hair longer
+    stays. The length is measured on the same fit in both derivations, so equality is exact.
+  */
+  it("takes a dead end no longer than the limit, and leaves one longer", () => {
+    const length = stubLength();
+
+    const at = derive(ROOM_WITH_STUB, { ...BASE, pruneLimit: length });
+    expect(at.pruning.removed).toBe(1);
+    expect(at.faces.bridges).toBe(0);
+    expect(at.faces.freeEnds).toBe(0);
+
+    const under = derive(ROOM_WITH_STUB, { ...BASE, pruneLimit: length * 0.999 });
+    expect(under.pruning.removed).toBe(0);
+    expect(under.faces.bridges).toBeGreaterThan(0);
+  });
+
+  /*
+    What is handed over is the pruned graph, and the faces are its faces — not the build's before the
+    prune. The room survives whole: a closed loop can never present a free end.
+  */
+  it("hands over the pruned graph and walks its faces, keeping the room", () => {
+    const before = derive(ROOM_WITH_STUB, BASE);
+    const after = derive(ROOM_WITH_STUB, { ...BASE, pruneLimit: 1 });
+
+    expect(after.walls.graph.edges.length).toBe(
+      before.walls.graph.edges.length - after.pruning.segments,
+    );
+    expect(after.pruning.segments).toBeGreaterThan(0);
+    expect(after.faces.faces).toHaveLength(1);
+    expect(after.faces.walls).toHaveLength(0);
+    expect(after.faces.eulerHolds).toBe(true);
+  });
+
+  /*
+    The prune runs on every rung of the ladder, so the graph that comes out of an escalation is pruned
+    too. A prune applied only to the first build would hand the escalated graph over with its hairs.
+  */
+  it("prunes the graph the ladder ends on, not only the first attempt", () => {
+    const result = derive(ROOM_WITH_STUB, {
+      ...BASE,
+      tolerance: 0.1,
+      maxTolerance: 16,
+      maxCommands: 3,
+      pruneLimit: 1,
+    });
+    expect(result.escalations).toBeGreaterThan(0);
+    expect(result.pruning.removed).toBe(1);
+    expect(result.faces.bridges).toBe(0);
+  });
+
+  /*
+    And what it reports is the prune of that last rung. A crooked stub keeps its bend at a fine fit and
+    loses it at a coarse one, so the two rungs remove different numbers of segments — which the test
+    asserts first, or it could not tell them apart. Found as a surviving mutation: carrying the first
+    rung's count through the ladder passed everything above, since a straight stub is one segment at
+    any tolerance.
+  */
+  it("reports the prune of the rung it hands over", () => {
+    const ladder = { tolerance: 0.1, maxTolerance: 16, maxCommands: 3, pruneLimit: 1 };
+    const climbed = derive(ROOM_WITH_CROOKED_STUB, ladder);
+    expect(climbed.escalations).toBeGreaterThan(0);
+
+    const at = (tolerance: number) =>
+      derive(ROOM_WITH_CROOKED_STUB, { ...ladder, tolerance, maxTolerance: tolerance }).pruning;
+    const first = at(0.1);
+    const last = at(climbed.tolerance);
+    expect(first.segments).not.toBe(last.segments);
+
+    expect(climbed.pruning.segments).toBe(last.segments);
+  });
+
+  /*
+    ## Over random ink, against an oracle that walks the dead ends itself
+
+    Two properties, neither restating the implementation. **Nothing is invented**: every segment
+    handed over is one the unpruned derivation had, compared by endpoint coordinates. **Nothing
+    qualifying is left**: counting degree from the edges and walking each free end along degree-2
+    vertices — not with `walkRuns` — no dead end is at or under the limit. And the sweep has to be
+    shown to reach its case, so it counts the runs removed.
+  */
+  it("only deletes, and leaves no dead end within the limit, over random ink", () => {
+    let removed = 0;
+    for (let seed = 1; seed <= 120; seed++) {
+      const mask = randomInk(40, 30, seededRandom(seed), 22);
+      const options = { ...BASE, extent: graphExtent(40, 30) };
+      const limit = 4 / 40; // four raster pixels, in graph units
+      const plain = deriveWalls(mask, options);
+      const pruned = deriveWalls(mask, { ...options, pruneLimit: limit });
+      removed += pruned.pruning.removed;
+
+      const had = new Set(plain.walls.graph.edges.map((edge) => segmentKey(plain.walls.graph, edge)));
+      for (const edge of pruned.walls.graph.edges) {
+        expect(had.has(segmentKey(pruned.walls.graph, edge)), `seed ${seed}`).toBe(true);
+      }
+      const shortest = shortestDeadEnd(pruned.walls.graph);
+      expect(shortest, `seed ${seed}`).toBeGreaterThan(limit);
+      expect(pruned.faces.eulerHolds, `seed ${seed}`).toBe(true);
+    }
+    expect(removed).toBeGreaterThan(50);
+  });
+});
+
+type Graph = ReturnType<typeof derive>["walls"]["graph"];
+
+/** A segment by its two endpoints' coordinates, in either order. */
+function segmentKey(graph: Graph, edge: { a: number; b: number }): string {
+  const a = graph.nodes[edge.a]!;
+  const b = graph.nodes[edge.b]!;
+  const [p, q] = [`${a.x},${a.y}`, `${b.x},${b.y}`].sort();
+  return `${p}|${q}`;
+}
+
+/** The shortest dead end in a graph, walked from each free end; `Infinity` when there is none. */
+function shortestDeadEnd(graph: Graph): number {
+  const around = new Map<number, number[]>();
+  graph.edges.forEach((edge, index) => {
+    for (const node of [edge.a, edge.b]) {
+      const list = around.get(node) ?? [];
+      list.push(index);
+      around.set(node, list);
+    }
+  });
+  let shortest = Infinity;
+  for (const [start, edges] of around) {
+    if (edges.length !== 1) continue;
+    let node = start;
+    let via = edges[0]!;
+    let length = 0;
+    for (;;) {
+      const edge = graph.edges[via]!;
+      const next = edge.a === node ? edge.b : edge.a;
+      length += Math.hypot(graph.nodes[next]!.x - graph.nodes[node]!.x, graph.nodes[next]!.y - graph.nodes[node]!.y);
+      node = next;
+      const onward = around.get(node)!;
+      if (onward.length !== 2 || node === start) break;
+      via = onward[0] === via ? onward[1]! : onward[0]!;
+    }
+    shortest = Math.min(shortest, length);
+  }
+  return shortest;
+}

@@ -396,7 +396,10 @@ export function invalidateRegions(): void {
  * of date and there is nothing here worth re-pruning.
  */
 let derivation: {
-  /** The derivation's own output. Nothing here prunes it any more — the Walls drawer's amount does. */
+  /**
+   * The derivation's own output, with its hairs already off — the derive prunes dead ends of up to two
+   * ink widths on its way through. Nothing here prunes it further; the Prune tool does that on request.
+   */
   readonly graph: WallGraph;
   /** Segments the derivation dropped for lying on one already stored, plus any of no length. */
   readonly dropped: number;
@@ -416,21 +419,22 @@ let derivation: {
  */
 function publish(from: NonNullable<typeof derivation>, generation: number): void {
   /*
-    **The derivation is published as it came, unpruned — since 2026-09-18.**
+    **The derivation is published as it came.**
 
-    Pruning used to happen here, from the stored limit, on every traversal. It is an amount a GM presses
-    in the Walls drawer now, applied to the walls in front of them, so nothing on this path applies it.
-    The default was off, so a fresh map's picture is unchanged; what changes is that a *set* limit is no
-    longer re-applied behind the GM on every derive.
+    Pruning used to happen here, from a stored limit that defaulted to off, until 2026-09-18, when it
+    became the Prune tool's amount. Since 2026-09-21 the derive itself removes dead ends of up to two
+    ink widths before it hands anything over — `autoPruneLimitPx` in `deriveWalls.ts` says why — so
+    what arrives here is already free of hairs, and the push's own trace gets the same graph.
   */
   preview = from.graph;
   previewDropped = from.dropped;
   /*
-    Measured from the graph **before** pruning, which is the graph the slider's own limit acts on.
+    Measured from the graph the Prune tool will act on — after the derive's automatic prune, before
+    anything the tool takes.
 
-    Handing over the pruned one would make the top the longest spur that *survived* — which is the
-    limit itself, so raising the slider would raise the floor of what it measures against and the
-    handle would chase the setting. The bottom of these tracks is pinned for the same reason.
+    Measuring after the tool's own prune would make the top the longest spur that *survived* — which
+    is the limit itself, so raising the slider would raise the floor of what it measures against and
+    the handle would chase the setting. The bottom of these tracks is pinned for the same reason.
   */
   noteGraph(from.graph);
 

@@ -78,6 +78,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten* and *Prune the dead ends*. Not a setting: nothing is stored, and the handle reads as *how much more*. |
 | **the latch** | the graph pinned when a drawer opens, so an amount previews against a fixed base instead of against its own last result. Void the moment the document is replaced under it. |
 | **the fitting tolerance** | the number that turns pixel chains into fitted edges inside the derive, and escalates to meet the command cap. **Computed** — a quarter of the measured ink width — never chosen. |
+| **the automatic prune** | the dead ends every derive removes before handing the graph over: runs with a free end of up to **two measured ink widths**. Computed, never chosen, and nothing when no width was measured. Distinct from the **Prune** tool, which takes more on request. |
 | **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
 
 ### The stages — and the surface words for them are **retired**
@@ -1090,8 +1091,9 @@ at all** under a symmetric closing, and at **every** radius with the erosion one
 merely *touches* surviving ink rather than only one in a channel, so a stroke the filter removed
 leaves a one-pixel nub where it met a wall — 8 pixels of 64 removed on a hatched fixture at radius
 two, none at radius three. **Reasoned, not measured:** a one-pixel bump on the side of a five-pixel
-wall should not survive thinning as a branch, so it should cost no spurs; **the free-end count on the
-derive line is what would say otherwise**, and is the thing to watch.
+wall should not survive thinning as a branch, so it should cost no spurs. **Since the automatic prune
+(below), one that did would be removed at the derive**, being far under two ink widths — so the
+free-end count no longer shows it, and the prune line's count is where it would appear.
 
 **It runs before the island filter**, so a restored bridge rejoins its fragment to the network
 rather than leaving it to be deleted as debris. That also makes the island profile's input the
@@ -1247,6 +1249,42 @@ two ink filters. *"The user will be looking at the consequences."*
 
 **Never split a region to meet the 8192-command cap.** Raise the tolerance; report what still will not
 fit. Splitting puts a boundary — and therefore a wall — down the join, in the middle of a room.
+
+### The hairs come off in the derive — 2026-09-21
+
+**Every derive prunes the dead ends of up to two measured ink widths** before it hands the graph over.
+A *dead end* is a wall run with a free end; pruning deletes such runs, in rounds, since removing one
+can leave a junction with another short arm hanging. Thinning grows one off every notch in a
+hand-drawn edge that survives binarisation, and a room reported them as *"a lot of tiny spurs"*.
+
+**The argument is visibility, not measurement** (user): *"A spur the size of the ink width or two
+almost certainly isn't a real wall."* A measurement could not settle the figure, because it cannot say
+which spurs a GM wanted. What can be said is that a dead end no longer than the stroke is wide was not
+drawn as a wall.
+
+- **Computed, never chosen**, beside the fitting tolerance: `autoPruneLimitPx` in `deriveWalls.ts`,
+  converted to graph units by raster pixels per unit. **No ink width, no pruning** — the pipeline's
+  other fallback for a missing width is a tenth of a grid square, and nothing may depend on the grid
+  silently.
+- **Safe to automate where the gap repair was not**, by §4's rule: deleting is allowed, inventing is
+  not. It cannot put anything on the map the ink did not have. The **Prune** tool stays for more.
+- **Inside the escalation ladder, on every rung**, so the faces the command cap is counted against are
+  the ones a push writes. The push's own trace and the workspace get the same graph, because both are
+  the pipeline's.
+- **The limit is inclusive**, as `spursToPrune` has always been: a run exactly at it goes.
+- **The stored base is the pruned graph**, since the base is what the trace derived. So a pruned hair
+  is not a hand edit and raises no cover.
+
+**The costs, stated.** **It trusts the ink width**, an erosion estimate that is biased thin and
+unrepresentative on hatched or stippled maps — accepted for now (user). **A real feature that short
+goes too**: a serif across a wall's end, or both arms of a T-shaped door jamb; the wall it hung off
+stays. **A fragment between two breaks goes whole** when it is under the limit, which widens what Mend
+then has to bridge. And **it cascades**, so a small star of short strokes goes entire. **Reasoned, not
+measured:** all of these sit under two ink widths, where the argument above says nobody drew a wall.
+
+**Nine mutations, nine caught**, against a sweep over random ink with an oracle that walks each free
+end along degree-two vertices itself rather than through `walkRuns`, and checks that every segment
+handed over was in the unpruned derivation.
 
 ### The two caches, split where the pipeline stops reading the image
 
@@ -2665,7 +2703,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,011 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,017 tests across 70 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3121,27 +3159,28 @@ next section.
 
 ### Where to pick this up
 
-**Do this first: put the automatic prune back in the derive.** It is a regression with a safe fix
-and it is what a room is looking at right now (user, 2026-09-21: *"a lot of tiny spurs and very small
-enclosed loops"*).
+**Waiting for a room: the automatic prune — built 2026-09-21, not yet looked at.** Every derive now
+removes dead ends of up to **two measured ink widths** before it hands the graph over, prompted by a
+room's *"a lot of tiny spurs and very small enclosed loops"*. §4's *The hairs come off in the derive*
+has the whole of it. **What to do first in a room:** derive the map that prompted it and look at
+whether the hairs are gone and the stubs you want are still there; the `trace: pruned N dead ends`
+line says how many went and at what length, and the free-end count on the faces line is what the
+prune left.
 
-`spurPruneGraphUnits` was a **derive-time setting** until 2026-09-18 — the trace pruned as it built.
-When Prune became an amount, nothing applies it on the way through, so every derive now hands over
-the raw fitted graph with its hairs on. **Restoring it automatically is safe where the gap repair was
-not**, by this project's own rule: *deleting is allowed, inventing is not*. An automatic prune
-removes and cannot put anything on the map the ink did not have.
+> **This is new, not a restoration, and the record said otherwise for a day.** It called the missing
+> prune a regression — *"the trace pruned as it built"* until 2026-09-18. It did, but only from a
+> stored limit whose **default was zero**, on the written ground that *"the first thing a GM should
+> see is the graph as fitting produced it, hairs and all"*. So a fresh map was never pruned unless the
+> GM had set a limit, and what 09-18 removed was a GM's own setting being re-applied. That argument
+> was about a handle reaching the longest wall on the map; it does not describe a fixed two ink widths.
 
-- **Computed, not chosen**, beside the fitting tolerance — a limit off the measured ink width rather
-  than a handle. `seedDefaults.ts` is the precedent and `simplify.ts`' tolerance is the shape.
-- **The Prune tool stays** and does what it is for: more, on demand, against the graph in hand.
-- **The tiny loops are a separate problem and probably shrink with this.** Some are spur-junction
-  debris that goes with the hairs. What remains is genuinely unanswered: sliver removal takes only
-  **sub-pixel** cycles, and a small-but-real loop survives everything. **Straightening will not do
-  it** — its collapse guard exists precisely to stop a closed run fitting to a point.
-- **`minRoomSquares` is not the answer and should not come back.** The smallest-room control was
-  dropped on 2026-08-30 for two reasons that still hold: it depended on the grid **squared**, so a
-  grid off by four put it off by sixteen; and a minimum-area filter **is not a pure delete**, since a
-  hole is kept only when it encloses a surviving region. Its replacement was *Dissolve region*.
+**Still open from the same report: the tiny loops.** Some are spur-junction debris and should go
+with the hairs — the room will say how many. What remains is genuinely unanswered: sliver removal
+takes only **sub-pixel** cycles, and a small-but-real loop survives everything. **Straightening will
+not do it** — its collapse guard exists precisely to stop a closed run fitting to a point. And
+**`minRoomSquares` is not the answer and should not come back**: it depended on the grid **squared**,
+so a grid off by four put it off by sixteen, and a minimum-area filter **is not a pure delete**, since
+a hole is kept only when it encloses a surviving region. Its replacement was *Dissolve region*.
 
 **Then the five parked items**, none started:
 
@@ -3167,7 +3206,7 @@ effective threshold never exceeds what was asked for.
 a doomed stub — which is a deliberate over-claim, so the question is whether it reads as *this is
 going* or as *look here*.
 
-**35 commits are not pushed** (measured 2026-09-21 with `git rev-list --count origin/main..main`,
+**36 commits are not pushed** (measured 2026-09-21 with `git rev-list --count origin/main..main`,
 before the commit that writes this line). **A push deploys**, so it waits for the user to want the
 public build to have them.
 
@@ -4414,7 +4453,8 @@ turns the bounded flood into a shortest path.
   free end back about half an ink width, so a break is wider in the graph than in the ink (reasoning,
   to be checked in a room).
 - **Pruning can widen or remove a gap before this tool sees it**, since each half of a broken wall is a
-  dead end. Accepted as it is.
+  dead end. Accepted as it is. **Since 2026-09-21 every derive does this at two ink widths** (§4), so a
+  fragment shorter than that between two breaks is gone before Mend looks; a long half is untouched.
 - **Two sliders, as the ink tool has**: the largest gap to look for, and how far apart along the walls
   the two sides must be. A fixed ratio in place of the second was considered; kept as two, to be
   revisited if the second never gets used.
@@ -4880,7 +4920,7 @@ closed outright.
 | `trace/faces.ts` | the half-edge walk and sliver detection, and nothing else |
 | `trace/spurs.ts` | **which** dead-end wall runs a limit removes — the decision alone, no geometry and no raster |
 | `trace/simplify.ts` | Douglas–Peucker (`simplifyIndices` is the decision, `simplifyPolyline` that plus a lookup), `dropCollinear`, and `COMMAND_CAP` |
-| `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, and the escalation ladder that meets the command cap. It also keeps a space labelling, for the point probe and nothing else |
+| `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, **the automatic prune** (`autoPruneLimitPx`, two ink widths), and the escalation ladder that meets the command cap, pruning on every rung. It also keeps a space labelling, for the point probe and nothing else |
 | `trace/label.ts` | region labelling |
 | `trace/wallGraph.ts` | the document: build, encode, decode, compact, prune, and the two track measurements |
 | `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
@@ -4894,7 +4934,7 @@ closed outright.
 | `trace/probePoint.ts` | the one surviving diagnostic |
 | `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph |
 | `trace/suppression.ts` | **suppression**: which regions the marks suppress, the traversal as emitted without them, the mark hit test, and the marks' stored codec |
-| `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses, and `randomWallGraph`, the generator whose shapes nest and touch — what the region tools' sweeps need |
+| `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses; `randomInk`, straight runs of ink crossing and ending in the open, which the prune and dissolve sweeps derive from; and `randomWallGraph`, the generator whose shapes nest and touch — what the region tools' sweeps need |
 
 ### Scene, emit and state
 

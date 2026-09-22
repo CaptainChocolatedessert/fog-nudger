@@ -135,6 +135,36 @@ export function seededRandom(seed: number): () => number {
 }
 
 /**
+ * Straight one-pixel runs of ink, horizontal or vertical, kept off the border — what the derivation's
+ * sweeps thin and chain. Runs cross and end in the open, so the skeleton has junctions and dead ends
+ * in plenty, which is what the prune sweep needs; it rarely nests one room inside another, which is
+ * why Dissolve region's sweep also has `randomWallGraph` below.
+ */
+export function randomInk(
+  width: number,
+  height: number,
+  next: () => number,
+  runs: number,
+): BinaryMask {
+  const mask = emptyMask(width, height);
+  const put = (x: number, y: number) => {
+    if (x >= 1 && y >= 1 && x < width - 1 && y < height - 1) mask.data[y * width + x] = 1;
+  };
+  for (let i = 0; i < runs; i++) {
+    let x = 2 + Math.floor(next() * (width - 4));
+    let y = 2 + Math.floor(next() * (height - 4));
+    const length = 3 + Math.floor(next() * 8);
+    const horizontal = next() < 0.5;
+    for (let step = 0; step < length; step++) {
+      put(x, y);
+      if (horizontal) x += 1;
+      else y += 1;
+    }
+  }
+  return mask;
+}
+
+/**
  * Random rectangles, triangles and single walls on a coarse lattice, added the way Draw adds them.
  *
  * **Not the derivation's generator, and the reason is measured** (2026-09-16). Written for Dissolve

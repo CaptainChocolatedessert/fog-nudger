@@ -181,9 +181,9 @@ function doomed(graph: WallGraph): DoomedSpurs {
     is exactly the case this is for, and the identity test is what tells the two apart.
 
     (It used to ask `showingSaved()`, on the ground that a fresh derivation already had the limit
-    applied because the trace pruned as it built. Nothing applies it on the way through since
-    2026-09-18 — pruning is an amount a GM presses — so that condition would now hide the marks on
-    every unedited map.)
+    applied because the trace pruned as it built. Since 2026-09-18 the limit is an amount a GM presses,
+    which no derive applies — the derive's own automatic prune, since 2026-09-21, is a fixed two ink
+    widths and is not this — so that condition would hide the marks on every unedited map.)
   */
   const pending = pendingPrune();
   if (!pending || pending.base !== graph) return NOTHING_DOOMED;

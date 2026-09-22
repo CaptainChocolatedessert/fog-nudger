@@ -9,8 +9,12 @@
  *
  * A **stub** — a wall sticking a foot into a room and stopping — is the case this whole approach
  * exists to keep, and it looks exactly the same locally: a branch with a free end. **Only its length
- * separates them**, which is why this is a control with a number on it rather than a rule. Prune too
- * hard and real stubs go; prune not at all and the graph is hairy.
+ * separates them.** Prune too hard and real stubs go; prune not at all and the graph is hairy.
+ *
+ * **So it is a rule at the bottom and a control above it** (2026-09-21). Every derive removes dead ends
+ * of up to two measured ink widths, on the ground that nothing that short was drawn as a wall —
+ * `autoPruneLimitPx` in `deriveWalls.ts`. Above that the length stops being decisive, and the Prune
+ * tool takes more when the GM asks, with what it would take drawn in red first.
  *
  * ## This is the decision, not the deletion
  *

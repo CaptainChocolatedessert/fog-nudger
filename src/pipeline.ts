@@ -100,6 +100,8 @@ import type { SkeletonGraph } from "./trace/skeletonGraph";
 import { describeWallFaces } from "./trace/wallFaces";
 import { commandCount } from "./geometry/ring";
 import {
+  autoPruneLimitPx,
+  AUTO_PRUNE_INK_WIDTHS,
   deriveWalls,
   describeWallDerivation,
 } from "./trace/deriveWalls";
@@ -1518,10 +1520,14 @@ export async function runTrace(
   const extent = graphExtent(plan.sourceWidth, plan.sourceHeight);
   const rasterPerUnit = rasterPixelsPerGraphUnit(plan.width, extent);
   const tolerance = fittingTolerance(reading.inkWidth);
+  // Measured in raster pixels like the tolerance, and handed over in graph units because pruning acts
+  // on the wall graph. `autoPruneLimitPx` says why two ink widths, and why none when there is no width.
+  const pruneLimitPx = autoPruneLimitPx(reading.inkWidth);
 
   const derived = deriveWalls(inkMask, {
     tolerance,
     maxTolerance: MAX_SIMPLIFY_GRAPH_UNITS * rasterPerUnit,
+    pruneLimit: pruneLimitPx / rasterPerUnit,
     extent,
   });
   const labelled = derived.labelled;
@@ -1624,6 +1630,22 @@ export async function runTrace(
       `${derived.walls.collinear} points dropped as exactly collinear, which costs nothing; ` +
       `${derived.walls.duplicates} segments dropped as coincident and ` +
       `${derived.walls.zeroLength} as having no length`,
+  );
+
+  /*
+    Unconditional, including when it took nothing: a line that only fired when something was pruned
+    could not tell "no hairs on this map" from "the prune never ran". The free ends on the faces line
+    are counted after it, so that figure is what the prune left.
+  */
+  const { pruning } = derived;
+  devLog(
+    "info",
+    pruneLimitPx > 0
+      ? `trace: pruned ${pruning.removed} dead ends (${pruning.segments} segments, ` +
+          `${pruning.rounds} rounds) no longer than ${pruneLimitPx.toFixed(1)}px — ` +
+          `${AUTO_PRUNE_INK_WIDTHS} of a ${inkWidth.toFixed(1)}px ink width, computed rather than set`
+      : `trace: no dead ends pruned automatically — the reading measured no ink width, and the ` +
+          `limit is denominated in one`,
   );
 
   if (derived.walls.duplicates > 0) {

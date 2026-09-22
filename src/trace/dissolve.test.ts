@@ -14,7 +14,6 @@
 
 import { describe, expect, it } from "vitest";
 
-import { emptyMask, type BinaryMask } from "./binarize";
 import { deriveWalls } from "./deriveWalls";
 import { dissolutionAt, dissolvedEdges, regionAt, simpleLoops } from "./dissolve";
 import { graphExtent } from "./graphUnits";
@@ -22,7 +21,7 @@ import { findCrossings } from "./planarGraph";
 import { removeEdges } from "./planarOps";
 import { buildWallFaces, containsPoint, type WallFaces } from "./wallFaces";
 import { documentPoint, type WallGraph } from "./wallGraph";
-import { randomWallGraph, seededRandom } from "./fixtures";
+import { randomInk, randomWallGraph, seededRandom } from "./fixtures";
 
 /** A graph from plain coordinates, quantised the way the document holds them. */
 function graphOf(points: readonly [number, number][], edges: readonly [number, number][]): WallGraph {
@@ -303,25 +302,6 @@ describe("removeEdges", () => {
   Two generators feed it, for the reason given on `randomWallGraph` in `fixtures.ts`.
 */
 
-function randomInk(width: number, height: number, next: () => number, runs: number): BinaryMask {
-  const mask = emptyMask(width, height);
-  const put = (x: number, y: number) => {
-    if (x >= 1 && y >= 1 && x < width - 1 && y < height - 1) mask.data[y * width + x] = 1;
-  };
-  for (let i = 0; i < runs; i++) {
-    let x = 2 + Math.floor(next() * (width - 4));
-    let y = 2 + Math.floor(next() * (height - 4));
-    const length = 3 + Math.floor(next() * 8);
-    const horizontal = next() < 0.5;
-    for (let step = 0; step < length; step++) {
-      put(x, y);
-      if (horizontal) x += 1;
-      else y += 1;
-    }
-  }
-  return mask;
-}
-
 function expectedByReachability(faces: WallFaces, clicked: number): number[] {
   // Which region is on each side of each traversal edge; -1 is the outside.
   const faceOfHalf = new Int32Array(faces.edges * 2).fill(-1);
@@ -418,6 +398,7 @@ describe("dissolving over generated linework", () => {
         const { walls, faces } = deriveWalls(randomInk(width, height, seededRandom(seed), runs), {
           tolerance: 0,
           maxTolerance: 0,
+          pruneLimit: 0,
           extent: graphExtent(width, height),
         });
         for (let face = 0; face < faces.faces.length; face++) {
@@ -440,6 +421,7 @@ describe("dissolving over generated linework", () => {
       const { faces } = deriveWalls(randomInk(width, height, seededRandom(seed), 22), {
         tolerance: 0,
         maxTolerance: 0,
+        pruneLimit: 0,
         extent: graphExtent(width, height),
       });
       const extent = graphExtent(width, height);

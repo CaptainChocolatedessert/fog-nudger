@@ -37,6 +37,13 @@
  * the wall graph's faces. Anything still over the cap at the ceiling is reported rather than
  * fixed; the emit path skips it and names it.
  *
+ * ## The hairs come off on the way through — 2026-09-21
+ *
+ * Every derive prunes the dead ends shorter than **two measured ink widths** before it hands the
+ * graph over; `autoPruneLimitPx` carries why that figure and what trusting it costs. It happens
+ * inside the ladder, on every rung, so the faces escalation counts against are the ones a push
+ * writes.
+ *
  * Pure: no DOM, no SDK.
  */
 
@@ -45,7 +52,12 @@ import type { BinaryMask } from "./binarize";
 import { resolveFaces, type FittedEdge } from "./faces";
 import type { GraphExtent } from "./graphUnits";
 import { buildWallFaces, type WallFaces } from "./wallFaces";
-import { buildWallGraph, type WallGraphBuild } from "./wallGraph";
+import {
+  buildWallGraph,
+  pruneWallGraph,
+  type WallGraphBuild,
+  type WallPruning,
+} from "./wallGraph";
 import { labelSpace, type LabelledSpace } from "./label";
 import { COMMAND_CAP, simplifyPolyline } from "./simplify";
 import { thin } from "./thinning";
@@ -63,8 +75,63 @@ export interface DeriveWallsOptions {
   readonly extent: GraphExtent;
   /** Ceiling the tolerance may escalate to. */
   readonly maxTolerance: number;
+  /**
+   * Dead ends shorter than this go before the graph is handed over, **in graph units**, since that is
+   * what the wall graph is measured in. Zero prunes nothing. The pipeline passes
+   * `autoPruneLimitPx` converted by raster pixels per graph unit.
+   *
+   * Required rather than defaulted, so every caller says whether it wants the hairs: the randomised
+   * sweeps ask for none, because they are testing the derivation's own invariants rather than this.
+   */
+  readonly pruneLimit: number;
   /** Overridable only so tests can drive escalation on a fixture small enough to read. */
   readonly maxCommands?: number;
+}
+
+/** How many measured ink widths a dead end may reach and still be taken as a hair. */
+export const AUTO_PRUNE_INK_WIDTHS = 2;
+
+/**
+ * The longest dead end every derive removes on its own, in raster pixels.
+ *
+ * ## Why this is automatic now, when it was a slider that defaulted to off
+ *
+ * Until 2026-09-18 the limit was a setting, `spurPruneGraphUnits`, and its default was **zero**, on
+ * the argument that *"pruning is also destructive out of proportion to its number … so the first
+ * thing a GM should see is the graph as fitting produced it, hairs and all."* That was written about
+ * a handle whose top reached the longest wall on the map, where the cascade genuinely can erode the
+ * whole graph. It does not describe a figure fixed at two ink widths.
+ *
+ * **The argument for this figure is visibility, not measurement** (user, 2026-09-21): *"A spur the
+ * size of the ink width or two almost certainly isn't a real wall."* A measurement could not settle
+ * it, because it cannot say which spurs a GM wanted; what can be said is that a dead end no longer
+ * than the stroke is wide is not something anyone drew as a wall. Thinning grows one off every notch
+ * in a hand-drawn edge that survives binarisation, and they were reported from a room as *"a lot of
+ * tiny spurs"*.
+ *
+ * **Deleting is allowed; inventing is not** — which is why this may be automatic where the gap repair
+ * could not be. It only removes, so it cannot put anything on the map the ink did not have. **Prune
+ * the dead ends** stays as the tool for more.
+ *
+ * ## The costs, stated
+ *
+ * - **It trusts the ink width**, which is an erosion estimate — biased thin, saturating at 2px, and
+ *   unrepresentative on a hatched or stippled map. Accepted for now (user, same day). A map whose
+ *   width reads low keeps some hairs; one whose width reads high loses stubs a little longer.
+ * - **A real feature that short goes with them**: a serif across a wall's end, or the crossbar of a
+ *   T-shaped door jamb, whose two arms are each a dead end. The wall it hung off stays.
+ * - **A fragment between two breaks goes whole** when it is shorter than the limit, since both its
+ *   ends are free. That widens the break Mend then has to bridge — the same accepted cost Mend
+ *   already records for the Prune tool.
+ * - **It cascades**, as every prune does: a junction left with one short arm frees it. A little star
+ *   of short strokes goes entire.
+ *
+ * **No ink width, no pruning.** The pipeline's other fallback for a missing width is a tenth of a
+ * grid square, and nothing in the pipeline may depend on the grid silently. Deleting on a guess is
+ * the direction that can be wrong, so the unknown case keeps the hairs and the log says so.
+ */
+export function autoPruneLimitPx(inkWidth: number | null): number {
+  return inkWidth !== null && inkWidth > 0 ? AUTO_PRUNE_INK_WIDTHS * inkWidth : 0;
 }
 
 export interface WallDerivation {
@@ -85,6 +152,11 @@ export interface WallDerivation {
    * — more to the point — cannot repeat it *differently*.
    */
   readonly walls: WallGraphBuild;
+  /**
+   * What the automatic prune took on the way through, at the tolerance actually used. `walls.graph` is
+   * the graph **after** it; the build's own counts — collinear, coincident, no length — are from before.
+   */
+  readonly pruning: WallPruning;
   /** The faces of that document: what a push writes, and what the preview draws. */
   readonly faces: WallFaces;
   /**
@@ -125,6 +197,23 @@ function overCapCount(faces: WallFaces, cap: number): number {
   return faces.faces.filter((face) => commandCount(face.rings) > cap).length;
 }
 
+/**
+ * Build the wall graph from one fit, prune its hairs, and walk its faces.
+ *
+ * One function because the ladder runs it on every rung, and the faces it counts against the cap have
+ * to be the faces of the graph that is handed over — so the prune cannot be a step after the ladder.
+ */
+function buildPruned(
+  graph: SkeletonGraph,
+  fittedEdges: readonly FittedEdge[],
+  options: DeriveWallsOptions,
+): { walls: WallGraphBuild; pruning: WallPruning; faces: WallFaces } {
+  const built = buildWallGraph(graph, fittedEdges, options.extent);
+  const pruning = pruneWallGraph(built.graph, options.pruneLimit);
+  const walls = pruning.removed === 0 ? built : { ...built, graph: pruning.graph };
+  return { walls, pruning, faces: buildWallFaces(walls.graph) };
+}
+
 export function deriveWalls(
   ink: BinaryMask,
   options: DeriveWallsOptions,
@@ -161,8 +250,7 @@ export function deriveWalls(
   let tolerance = options.tolerance;
   let escalations = 0;
   let fittedEdges = fitEdges(graph, tolerance);
-  let walls = buildWallGraph(graph, fittedEdges, options.extent);
-  let faces = buildWallFaces(walls.graph);
+  let { walls, pruning, faces } = buildPruned(graph, fittedEdges, options);
 
   /*
     `tolerance > 0` is not decoration: doubling zero is zero, so a caller asking for no simplification
@@ -172,8 +260,7 @@ export function deriveWalls(
     tolerance = Math.min(tolerance * 2, ceiling);
     escalations += 1;
     fittedEdges = fitEdges(graph, tolerance);
-    walls = buildWallGraph(graph, fittedEdges, options.extent);
-    faces = buildWallFaces(walls.graph);
+    ({ walls, pruning, faces } = buildPruned(graph, fittedEdges, options));
   }
   const fitMs = performance.now() - fitStarted;
 
@@ -181,6 +268,7 @@ export function deriveWalls(
     graph,
     fittedEdges,
     walls,
+    pruning,
     faces,
     labelled,
     skeleton: thinned.mask,
