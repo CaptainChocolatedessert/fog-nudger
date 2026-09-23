@@ -331,8 +331,8 @@ function layersOpener(): HTMLButtonElement {
   button.className = "tool params";
   const glyph = toolIcon("view");
   if (glyph) button.append(glyph);
-  button.title = "What is drawn";
-  button.setAttribute("aria-label", "What is drawn");
+  button.title = "Layers";
+  button.setAttribute("aria-label", "Layers");
   button.setAttribute("aria-pressed", String(showingLayers()));
   button.dataset.opens = "layers";
   button.disabled = !mapChosen();

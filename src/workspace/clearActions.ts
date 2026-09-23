@@ -175,7 +175,7 @@ export async function clearWallEdits(): Promise<void> {
   if (busy) return;
 
   if (!wallsEdited()) {
-    say("these walls are exactly what the trace derived, so there is nothing of yours to clear");
+    say("these walls haven't been touched, so there is nothing of yours to clear");
     return;
   }
 

@@ -103,11 +103,11 @@ export type AdjustableRole = (typeof PALETTE_ROLES)[number];
  * have to agree.
  */
 export const ROLE_LABELS: Readonly<Record<AdjustableRole, { name: string; means: string }>> = {
-  ink: { name: "Ink", means: "what the trace read as a mark" },
-  structure: { name: "Walls", means: "the wall graph, drawn over its own linework" },
+  ink: { name: "Ink", means: "what counts as a mark on the map" },
+  structure: { name: "Walls", means: "the walls, drawn over the linework itself" },
   additive: { name: "Added", means: "ink you drew, gaps proposed, an end that would attach" },
   // "Covered" until 2026-09-10: the verb the Suppress tool used before both paint tools became Draw
   // and Erase. Named for the tool now, the way "Added" is named for Add ink.
-  subtractive: { name: "Suppressed", means: "ink you told the trace to ignore" },
+  subtractive: { name: "Suppressed", means: "ink you marked to ignore" },
   destructive: { name: "Going", means: "what the next click would remove" },
 };

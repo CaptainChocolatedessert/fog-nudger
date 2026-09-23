@@ -2860,9 +2860,31 @@ title was the one that was wrong, not the button.
    actually sees ("what's under the pointer", "anything that isn't a wall"), and the repeated "use the
    button below for all of them" down to "the button below for all" everywhere it appeared (Gaps,
    Suppress blobs, Mend, Prune, Collapse).
-3. **`controls.ts`** — the slider labels and the two surviving hints. Mostly already lean from the
-   first pass; a check for drift rather than a rewrite.
-4. **The tool strip's names and tooltips, the state line, and any remaining panel/dialog text.**
+3. **A sweep for leaked internal vocabulary and static panel text.** Done. `controls.ts` itself
+   turned out to need nothing — it was already lean from the first pass, labels carry the sliders on
+   their own, and the three surviving hints are unchanged. What needed cutting was elsewhere:
+   - **"the trace" as a stand-in for "the pipeline"** had leaked into three places a GM actually
+     reads — the Pan tool's hint, the Suppress blurb, and `clearActions.ts`'s "nothing to clear"
+     message — all rewritten in plain terms (what's under the pointer, what isn't a wall).
+   - **`palette.ts`'s `ROLE_LABELS`**, the one-line descriptions under each colour swatch in View, had
+     the same leak twice ("what the trace read as a mark", "ink you told the trace to ignore").
+   - **`layerRow.ts`'s layer names** mapped the internal ids `speckles` and `mends` straight to
+     "Speckles" and "Mends" — the exact thing this project's own vocabulary rule (§ Vocabulary) warns
+     against, though currently unreachable (only the three always-on layers draw a switch today).
+     Renamed to "Blobs" and "Mend proposals" so the mapping is correct if that ever changes.
+   - **The layers-drawer tooltip** read "What is drawn", the only tooltip on the strip that named a
+     description instead of the thing it opens. Renamed to "Layers", matching how every other opener
+     is titled by its own name.
+   - **Span's state-line message** distinguished *"spanned the opening"* from *"spanned the opening
+     between the wall ends beside the click"* depending on which internal search matched (through vs.
+     near) — a distinction with no visible consequence, since the placed wall is on screen either way.
+     Collapsed to one message.
+   - **Three static notes on the panel itself** (`panel.html`) — under *Open the workspace*, *Remove
+     ours* and *Clear everything* — were carrying "the fog layer", "no staging step" and "a hand edit
+     to one of our fog items" (all internal/historical vocabulary) or restating what the confirmation
+     dialog above already cut. Rewritten in the same plain terms as the dialogs, and worded to match
+     them ("Anything you drew by hand stays", "This can't be undone").
+4. **The tool strip's names and tooltips, remaining state-line text, and a final read-through.** Next.
 
 **Where to pick this up if this session ends mid-pass**: whichever batch above is not yet marked done.
 Nothing here has been in a room — this is prose, checked the way prose can be checked from a desk,

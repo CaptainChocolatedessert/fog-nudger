@@ -982,12 +982,7 @@ function end(): void {
     // A press that travelled was a drag; and a span found on walls a derive has since replaced names
     // walls that are no longer drawn.
     if (!target || dragged || target.graph !== graph) return;
-    commit(
-      applySpan(graph, target.span),
-      target.span.through ? "spanned the opening" : "spanned the opening between the wall ends beside the click",
-      "spanning an opening",
-      graph,
-    );
+    commit(applySpan(graph, target.span), "spanned the opening", "spanning an opening", graph);
     dropSpan();
     return;
   }

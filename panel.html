@@ -108,9 +108,8 @@
       because discovering it means having already lost a hand edit.
     -->
     <p class="note">
-      Saving puts the result straight on the fog layer, replacing whatever we put there before.
-      <strong>There is no staging step</strong> &mdash; a hand edit to one of our fog items does not
-      survive the next write.
+      Saving replaces everything this extension has put on the map. If you hand-edit one of its
+      shapes in Owlbear, <strong>that edit is gone the next time you save.</strong>
     </p>
 
     <p class="field">Our fog</p>
@@ -120,8 +119,7 @@
     <!-- Kept, halved. "Remove ours" does not say that the saved walls go too, and that is the
          destructive half of what the button does. -->
     <p class="note">
-      Takes out our fog <em>and the saved walls behind it</em>, and leaves anything you drew by hand
-      alone.
+      Takes out our fog <em>and the saved walls behind it</em>. Anything you drew by hand stays.
     </p>
 
     <!--
@@ -143,9 +141,8 @@
       <button id="clear" disabled>Clear everything</button>
     </div>
     <p class="note">
-      Removes everything this extension keeps in the scene: our fog, the saved walls, the ink you
-      painted, your settings and the map choice. Anything you drew by hand stays.
-      <strong>Undo does not reach this.</strong>
+      Removes our fog, the saved walls, the ink you painted, your settings and the map choice.
+      Anything you drew by hand stays. <strong>This can't be undone.</strong>
     </p>
 
     <!--
