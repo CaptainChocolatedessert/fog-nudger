@@ -247,7 +247,7 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Pan",
     band: "navigate",
     drag: "pan",
-    hint: "Drag to move the map. Click without dragging to ask what the trace made of that pixel.",
+    hint: "Drag to pan. Click without dragging to check what's under the pointer.",
   },
   { id: "suppress", label: "Suppress", band: "ink", drag: "brush", hint: "" },
   { id: "ink", label: "Add ink", band: "ink", drag: "brush", hint: "" },
@@ -267,7 +267,9 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Suppress blobs",
     band: "ink",
     drag: "brush",
-    hint: "Rings every lump under the span. Click one to take it, or click any ink at all.",
+    // Empty, like the other three ink tools: its group has a blurb of its own, and this had drifted
+    // into a shorter second copy of it — the exact duplication the interface's own doc warns against.
+    hint: "",
   },
   /*
     **The order is Collapse, Prune, Straighten** (user, 2026-09-22): *"the natural order of operations
@@ -307,7 +309,7 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Straighten",
     band: "walls",
     drag: "pan",
-    hint: "Drag the amount to fit the walls you have. Closing this applies it, as one step of undo.",
+    hint: "Drag to fit the walls you have. Closing applies it — one step of undo.",
   },
   /*
     The graph's gap tool (user, 2026-09-16). `edit`, like the other three: it takes a press inside a
@@ -334,7 +336,7 @@ export const TOOLS: readonly ToolChoice[] = [
     */
     hint:
       "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>this colour</b> " +
-      "where it would attach; <b>Shift</b> leaves it loose. <b>Ctrl</b> pans, Escape abandons.",
+      "when it will attach; <b>Shift</b> leaves it loose. <b>Ctrl</b> pans, Escape abandons.",
   },
   {
     id: "erase",
@@ -401,7 +403,7 @@ export const TOOLS: readonly ToolChoice[] = [
     band: "walls",
     drag: "edit",
     hint:
-      "Click to mark a region: it gets no fog shape, so it can never be revealed. Its walls stay. " +
+      "Click to mark a region — it gets no fog shape and can never be revealed. Walls stay. " +
       "Click a mark to remove it. <b>Ctrl</b> pans.",
   },
   /*
@@ -582,17 +584,17 @@ export const STEPS: readonly Step[] = [
         // verb the modifier actually performs, or Shift is documented as doing something the tool
         // no longer calls by that name.
         blurb:
-          "Drag over marks the trace should <b>ignore</b> &mdash; hatching, a printed floor grid, " +
-          "a compass rose. Your strokes show in <b class='suppress-key'>this colour</b>, and none of the " +
-          "map is lost. <b>Shift</b> erases, <b>Ctrl</b> pans.",
+          "Drag over anything that isn't a wall — hatching, a printed floor grid, a compass rose. " +
+          "Shown in <b class='suppress-key'>this colour</b>; nothing is lost from the map. " +
+          "<b>Shift</b> erases, <b>Ctrl</b> pans.",
         parameters: ["suppressBrushPx"],
       },
       {
         tool: "ink",
         title: "Add ink",
         blurb:
-          "Drag to draw linework the map lacks. Goes in <b>last of everything</b>, so no filter " +
-          "above can take it away again. Shows in <b class='addink-key'>this colour</b>. <b>Shift</b> " +
+          "Drag to add linework the map is missing — applied <b>last of everything</b>, so no " +
+          "filter above removes it. Shown in <b class='addink-key'>this colour</b>. <b>Shift</b> " +
           "erases, <b>Ctrl</b> pans.",
         parameters: ["inkBrushPx"],
       },
@@ -608,9 +610,9 @@ export const STEPS: readonly Step[] = [
           What is left says what a press does, which is what the slot is for.
         */
         blurb:
-          "Searches for places a wall stops short and rings each in " +
-          "<b class='gap-key'>this colour</b>. <b>Click inside a ring</b> to close that gap, or use the " +
-          "button below for all of them. A <b>dashed</b> ring is not offered. Dragging pans.",
+          "Rings every place a wall stops short, in <b class='gap-key'>this colour</b>. " +
+          "<b>Click inside a ring</b> to close it, or the button below for all. A <b>dashed</b> " +
+          "ring isn't offered. Dragging pans.",
         parameters: ["gapFillPx", "gapTravelPx"],
       },
       {
@@ -622,10 +624,9 @@ export const STEPS: readonly Step[] = [
           which derives as a ring with nothing inside it.
         */
         blurb:
-          "Rings every lump of ink under the span and <b>click one</b> to suppress it, or use the " +
-          "button below for all of them. A lump takes <b>whatever it encloses</b>, so a pit drawn as " +
-          "a big shape goes whole. <b>Click any ink at all</b> to take that lump, ringed or not. " +
-          "Dragging pans.",
+          "Rings every lump of ink under the span. <b>Click one</b> to suppress it, or the button " +
+          "below for all. A lump takes <b>whatever it encloses</b>, so a pit drawn solid goes " +
+          "whole. <b>Click any ink</b> to take its lump, ringed or not. Dragging pans.",
         parameters: [],
       },
     ],
@@ -676,9 +677,8 @@ export const STEPS: readonly Step[] = [
           and a word for a hue is a copy nothing can keep honest.
         */
         blurb:
-          "Looks for places the walls stop short and proposes a wall across each, ringed. " +
-          "<b>Click inside a ring</b> to mend that gap, or use the button below for all of them. " +
-          "Dragging pans.",
+          "Rings every place the walls stop short and proposes a wall across it. " +
+          "<b>Click inside a ring</b> to mend it, or the button below for all. Dragging pans.",
         parameters: ["mendReachGraphUnits", "mendTravelGraphUnits"],
       },
       /*
@@ -731,9 +731,8 @@ export const STEPS: readonly Step[] = [
         tool: "prune",
         title: "Prune the dead ends",
         blurb:
-          "Rings every dead end shorter than the length, and what taking one would leave hanging. " +
-          "<b>Click inside a ring</b> to prune that one, or use the button below for all of them. " +
-          "Dragging pans.",
+          "Rings every dead end shorter than the length, plus anything it would leave hanging. " +
+          "<b>Click inside a ring</b> to prune it, or the button below for all. Dragging pans.",
         parameters: [],
       },
       /*
@@ -748,8 +747,8 @@ export const STEPS: readonly Step[] = [
         tool: "collapse",
         title: "Collapse small regions",
         blurb:
-          "Rings every region smaller than the size. <b>Click inside a ring</b> to collapse that one, " +
-          "or use the button below for all of them. Dragging pans.",
+          "Rings every region smaller than the size. <b>Click inside a ring</b> to collapse it, " +
+          "or the button below for all. Dragging pans.",
         parameters: [],
       },
     ],

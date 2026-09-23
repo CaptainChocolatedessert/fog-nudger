@@ -2851,7 +2851,15 @@ title was the one that was wrong, not the button.
    one or two short sentences — what goes, what survives, undo or "can't be undone." Confirm-button
    labels were made specific to their dialog (*"Clear ink edits"* rather than the generic *"Clear
    them"*) so a button reads on its own if the title above it is not.
-2. **Tool hints and group blurbs in `steps.ts`.** Next.
+2. **Tool hints and group blurbs in `steps.ts`.** Done. One real bug found while reading rather than
+   guessed at: *Suppress blobs* carried its own one-line hint that shadowed its group's longer blurb —
+   `toolHint` prefers a tool's own hint when one is set, so the group's careful blurb was dead text.
+   That is the exact duplication `steps.ts`'s own doc warns against ("two copies an inch apart"); the
+   tool's hint is empty now, matching the other three ink tools, and the group blurb is what shows.
+   Also cut: "the trace" (an internal term) out of the Pan and Suppress hints in favour of what a GM
+   actually sees ("what's under the pointer", "anything that isn't a wall"), and the repeated "use the
+   button below for all of them" down to "the button below for all" everywhere it appeared (Gaps,
+   Suppress blobs, Mend, Prune, Collapse).
 3. **`controls.ts`** — the slider labels and the two surviving hints. Mostly already lean from the
    first pass; a check for drift rather than a rewrite.
 4. **The tool strip's names and tooltips, the state line, and any remaining panel/dialog text.**
