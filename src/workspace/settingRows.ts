@@ -358,7 +358,7 @@ export function settingRow(control: Control): HTMLElement {
       What it must not do is look current, so the state line says the slider is ahead of the map.
     */
     setPendingEdit(true);
-    say("slider moved — release to re-read", "working");
+    say("slider moved — release to update", "working");
   });
 
   input.addEventListener("change", () => {

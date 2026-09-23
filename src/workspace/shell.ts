@@ -306,7 +306,7 @@ export function say(text: string, tone: "" | "working" | "bad" = ""): void {
  * Report something finished, unless a slider has since been picked up.
  *
  * The race is real and reachable on the first open: a mask started at load can land while a slider
- * is already being dragged, and the plain success message would replace "release to re-read" with
+ * is already being dragged, and the plain success message would replace "release to update" with
  * "ink 7.2%" — announcing as current a figure for a value the GM is in the middle of moving away
  * from. The pending message wins, because it is the one that is still true.
  */

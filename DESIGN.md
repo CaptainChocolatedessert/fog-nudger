@@ -2884,12 +2884,23 @@ title was the one that was wrong, not the button.
      to one of our fog items" (all internal/historical vocabulary) or restating what the confirmation
      dialog above already cut. Rewritten in the same plain terms as the dialogs, and worded to match
      them ("Anything you drew by hand stays", "This can't be undone").
-4. **The tool strip's names and tooltips, remaining state-line text, and a final read-through.** Next.
+4. **A final read-through of the tool strip's tooltips and the remaining state-line text.** Done. The
+   tool strip's tooltips (`toolPalette.ts`) were already a plain name-of-what-you're-opening pattern
+   throughout, apart from the layers opener fixed in batch 3. The escape-hatch buttons (*Exit anyway*
+   / *Stop writing*) and the undo pair's naming (`undoAction.ts`) were re-read against this pass's
+   standard and left unchanged — both are already exact about what a press does and were reasoned
+   through in rooms already recorded above. One more cut: the slider-drag state message said "release
+   to re-read", naming the pipeline stage rather than the effect; changed to "release to update"
+   (`settingRows.ts`, and the doc comment in `shell.ts` that quoted the old string).
 
-**Where to pick this up if this session ends mid-pass**: whichever batch above is not yet marked done.
-Nothing here has been in a room — this is prose, checked the way prose can be checked from a desk,
-which is spelling, tone and the same three commands every change here gets. Whether a shorter dialog
-still says enough is a room's question, same as everything else on this surface.
+**All four batches are done.** Four commits, each `tsc` + the 1,107-test suite + a production build,
+green throughout. **Nothing here has been in a room** — this is prose, checked the way prose can be
+checked from a desk (spelling, tone, internal consistency, and that no test hardcoded the wording that
+moved). Whether a shorter dialog still says enough, whether "Blobs"/"Mend proposals" read right if
+that layer ever gets a switch, and whether the panel's three notes now say enough without the detail
+that was cut are all a room's questions. **If more turns up worth cutting, it is a fifth batch of the
+same kind, not a second pass on the same footing** — the whole surface has now been read against this
+rule once.
 ---
 
 ## 8. Testing and diagnostic practice
