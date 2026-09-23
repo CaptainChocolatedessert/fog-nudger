@@ -2831,7 +2831,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,117 tests across 78 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,107 tests across 77 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3093,7 +3093,7 @@ stale; nothing computes until a row that draws one is built.
 for the painting tools — wait until the tool is not in hand."*). Deriving continuously stands as the rule
 — the merge failure this project cares most about is visible in the partition rather than the mask — and
 what changed is what *counts as a change*: a brush's strokes have never recomposed per stroke, and
-*Suppress speckles* now holds its presses the same way. **The ink layer draws the base while it is in
+*Suppress blobs* now holds its presses the same way. **The ink layer draws the base while it is in
 hand**, so what a press took shows as suppression paint over ink that is still drawn, and one recompose
 on the way out derives once instead of once per press.
 
@@ -3352,7 +3352,7 @@ next section.
 walls already, and the two outlines conflict visually — the fill should be interior colour only, drawn
 under the walls.
 
-**Do this first: take *Suppress speckles* into a room** (built 2026-09-22, never pressed in one). Ring the
+**Do this first: take *Suppress blobs* into a room** (built 2026-09-22, never pressed in one). Ring the
 speckling and take it; then press one of the map's pits, which should go whole rather than leaving its
 middle. Check a pit against the map's edge, and check that a press on ink the span never offered takes it.
 **Suppress blob is still there deliberately**, to compare against and to fall back on — if the new tool
@@ -4969,7 +4969,17 @@ wall within it runs beyond it, skipped a stretch holding a wall 1% shorter.
   test's tolerance — measured twice in 3,072 random clicks, both on near-degenerate walls. The span
   itself stays one uncrossed wall.
 
-**5. Suppress blob — built 2026-09-17, after a spike a room approved.** Click a solid blob on the
+**5. Suppress blob — built 2026-09-17, retired 2026-09-22.** Its successor took its name, its glyph and
+its job; what follows is kept because the *reason* it flooded the image rather than the ink is what made
+the successor possible.
+
+**Deleted with it**: `trace/inkFlood.ts` and its tests, the blob layer and its fill preview,
+`floodMapFraction` in the pipeline, the `blobTolerance` setting and its control, and the `blob` layer id
+— the going-together the entry below always promised. **What replaced it does not flood at all**: it
+takes a lump of ink and what that lump encloses, so there is no tone, no tolerance, and none of the
+fringe a flood leaves inside an anti-aliased edge.
+
+**The original entry, for its reasoning:** Click a solid blob on the
 map — a pool, a hole drawn as a big black spot — and everything of that tone joined to it stops being
 ink.
 
@@ -5212,7 +5222,7 @@ last, and the run goes in as one act.
   0.02, where `0.3 + 0.02` is not 0.02 away from `0.3` in binary, so the fixture was testing its own
   arithmetic until it was rewritten in powers of two.
 
-**9. Suppress speckles — built 2026-09-22, not yet in a room.** A span rings every lump of ink under it;
+**9. Suppress blobs — built 2026-09-22, not yet in a room.** A span rings every lump of ink under it;
 a press takes one, the button takes them all, and a press on any ink at all takes that lump whether or not
 it was offered.
 
@@ -5238,6 +5248,12 @@ it was offered.
   the whole side filled the ordinary case wrong, and a fixture caught it.
 - **A broken ring encloses nothing**, and this says so rather than guessing: only the arc goes. The rings
   are drawn before the press, so it is visible.
+- **It took *Suppress blob*'s name and glyph on the day it replaced it** (user, 2026-09-22: *"This tool
+  can take over now, but it should adopt the name and glyph from Suppress blob. I suppose it should be
+  plural: suppress blobs."*). The GM's question never changed — *this mark on the map is not ink* — only
+  what answers it, so the name and the picture stay and the mechanism underneath is new. **The code keeps
+  `speckles`** as the tool's id and its modules' names, the way `dissolve` stayed when its tool became
+  *Erase loop*; the scatter glyph drawn for it hours earlier is deleted.
 - **Six things a room found on the first outing** (user, 2026-09-22), all fixed the same day: the rings
   drew *under* the walls, so they register last of every layer now; a press only took what pixel it
   landed on, where **the inside of a ring is mostly not ink** — a pit's middle never is — so a ring hit
@@ -5467,7 +5483,7 @@ closed outright.
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several, split walls where a new wall will land — and the two queries the tools aim with |
 | `workspace/chainGesture.ts` | **what a click means while a chain is being drawn**: append, close, join or finish |
-| `trace/inkPatches.ts` | **what *Suppress speckles* offers and takes**: lumps of ink under a span, and the pixels one covers including what it encloses |
+| `trace/inkPatches.ts` | **what *Suppress blobs* offers and takes**: lumps of ink under a span, and the pixels one covers including what it encloses |
 | `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |

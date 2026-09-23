@@ -213,26 +213,6 @@ export const CONTROLS: readonly Control[] = [
     derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
   },
   {
-    name: "blobTolerance",
-    label: "How alike the tone must be",
-    /*
-      The value beside the label carries the unit, and there is no line under the slider at all
-      (user, 2026-09-17).
-
-      Every other slider here prints a bare number and spends its derived line converting it into
-      something a GM can feel — pixels into grid squares, graph units into pixels. Tone needs no
-      conversion: a percentage of black-to-white *is* the feelable form, so putting it in the readout
-      leaves the line below with nothing to add. The rule the hint cull left is that a line survives
-      only if it says something the label and the readout cannot.
-    */
-    readout: "percent",
-    // Empty, by the rule the hint cull left: the label gives the direction and the readout beside it
-    // gives the quantity, so a sentence here would be restating both. The thing a GM could not guess
-    // — that the fill takes everything of that tone joined to the click, wall included — is the
-    // tool's own blurb rather than this control's, because it is about the press and not the number.
-    hint: "",
-  },
-  {
     name: "gapFillPx",
     label: "Largest gap to look for",
     // One of the two hints kept. Not a direction — the label and the readout give that — but the

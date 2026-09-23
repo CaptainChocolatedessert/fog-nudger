@@ -87,7 +87,7 @@ describe("what a side turns down", () => {
   it("never dims a tool's own layer", () => {
     // These are drawn only while a tool of their side is armed, which is the side that is *not*
     // dimmed. Pinned so that filing one under a side later has to be argued for here.
-    for (const layer of ["paint", "gaps", "mends", "blob", "delta"] as LayerId[]) {
+    for (const layer of ["paint", "gaps", "mends", "speckles", "delta"] as LayerId[]) {
       for (const side of SIDES) expect(alphaFor(layer, side)).toBe(1);
     }
   });

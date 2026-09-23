@@ -34,9 +34,7 @@
 
 import { devLog } from "../devlog";
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
-import { paintPixels, paintStroke, paintedCount } from "../trace/inkPaint";
-import { floodMapFraction } from "../pipeline";
-import { clearBlobPreview, setBlobPreview } from "./layers/blob";
+import { paintStroke, paintedCount } from "../trace/inkPaint";
 import { refreshPaintRegion, setBrushPosition } from "./layers/paint";
 import { describeAccepted, describeSearch, markAt } from "./gapGesture";
 import {
@@ -185,9 +183,6 @@ export function setPaintTool(next: PaintTool): void {
     clearSpeckleSearch();
   }
   specklesChanged();
-  // The fill preview belongs to the tool that draws it, so arming anything else takes it down. The
-  // same rule the mend rings follow, and for the same reason: a mark nothing can act on is a lie.
-  if (next !== "blob") clearBlobPreview();
   // The ring belongs to whichever brush is now in hand, and to no tool at all otherwise. Cleared
   // here because no pointer event fires on a click in the panel.
   setBrushPosition(null);
@@ -298,7 +293,6 @@ function start(point: MapPoint): boolean {
     else is a pan.
   */
   if (tool === "gaps") return acceptAt(point);
-  if (tool === "blob") return floodAt(point);
   if (tool === "speckles") return takeSpeckleAt(point);
 
   const kind = brushKind(tool);
@@ -346,7 +340,7 @@ function acceptAt(point: MapPoint): boolean {
  *
  * **Every press that lands on ink is taken**, ringed or not: the rings say what the span found, and a
  * press on anything else is the same act on a lump the span did not offer — which is how this reaches
- * a pit bigger than the slider, and how it does *Suppress blob*'s job without a tone.
+ * a pit bigger than the slider, and how it does the tone flood's job without a tone.
  *
  * A press on ground declines, so panning stays free on a map covered in rings. That is the gap tool's
  * rule and it is right for the same reason: this is a tool spent mostly looking.
@@ -446,54 +440,6 @@ function speckleTargetAt(point: MapPoint): boolean {
   return speckleAt(x, y) !== null || speckleEnclosing(x, y) !== null;
 }
 
-/**
- * Flood the map's tone from this press and suppress what it takes — the blob spike (2026-09-17).
- *
- * Built on `acceptAt` above, because the two are the same act: a search hands over a set of raster
- * pixels and they go into a paint layer as though a brush had covered them. The differences are
- * which layer (suppression rather than added ink) and that there is nothing to re-run afterwards,
- * since this proposes nothing and holds nothing between presses.
- *
- * **Takes every press that finds pixels**, so the crosshair is honest everywhere on the map and Ctrl
- * is how you pan. There is no "nothing here" — every pixel of the map has a tone and floods to at
- * least itself — so declining would only ever mean the map has not been read.
- */
-function floodAt(point: MapPoint): boolean {
-  const layer = workingLayer("suppress");
-  if (!layer) return false;
-
-  const found = floodMapFraction(point.u, point.v, currentSettings().trace.blobTolerance);
-  if (!found) {
-    say("nothing has been read from the map yet, so there is no tone to flood");
-    return false;
-  }
-
-  // Snapshotted before the write, as an accept is: after it the layer is already changed.
-  const before = snapshotPaint("suppress");
-  const result = paintPixels(layer, found.pixels);
-  if (result.changed === 0) {
-    say("that blob is already suppressed");
-    return true;
-  }
-
-  if (before !== null) rememberPaint("suppress", before, "suppressing a blob");
-  if (result.bounds) refreshPaintRegion(result.bounds);
-  /*
-    Recomposed here, unlike a brush stroke, and the difference is which picture answers the question.
-
-    The ink layer draws the **base** while a brush is in hand, so a stroke shows as the GM's own
-    colour over it and needs no recompose to be seen. This is not a brush, so the ink layer is
-    drawing the composite — and without asking for a new one the mark would still be there until the
-    tool was put down. What the spike is for is seeing the ink *go*, and the rooms move with it.
-  */
-  requestRecompose();
-  gapsChanged();
-  say(
-    `suppressed a blob of ${result.changed} px at tone ${found.seedTone.toFixed(2)} · ` +
-      "not saved until you leave Ink",
-  );
-  return true;
-}
 
 /**
  * Accept every gap currently on offer.
@@ -516,46 +462,7 @@ export function acceptAllShownGaps(): void {
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
 }
 
-/**
- * The pointer position the preview has not been computed for yet, and whether a frame is booked.
- *
- * **At most one flood a frame.** A hover fires far more often than the screen refreshes, and a flood
- * costs nothing on a pool and about 50ms on a fill the size of a map's whole ink network — so
- * searching per event would queue work nobody will ever see. Span's preview is throttled the same
- * way and for the same reason.
- */
-let pendingPreview: MapPoint | null = null;
-let previewBooked = false;
 
-/**
- * Show what a click here would fill, at most once a frame.
- *
- * **Measured before it was built** (2026-09-17, at the 3626×2598 raster that first hit the megapixel
- * budget): a mark-sized fill is under a millisecond, a fill covering the whole connected ink network
- * — 1.09 million pixels — is 44 to 50ms, and the hard ceiling, a field with no boundary anywhere and
- * so every one of its 9.4 million pixels taken, is 242 to 339ms. No real map is boundary-free, but a
- * click on the open ground of a large map is the case that approaches it, and the preview will
- * visibly lag there. **The stated cost**, against Span's accepted worst of 170ms.
- */
-function previewBlobAt(point: MapPoint | null): void {
-  pendingPreview = point;
-  if (previewBooked) return;
-  previewBooked = true;
-  requestAnimationFrame(() => {
-    previewBooked = false;
-    const at = pendingPreview;
-    // The tool may have been put down between booking the frame and running it, and a preview drawn
-    // for a tool nobody is holding is a mark with nothing able to act on it.
-    if (!at || tool !== "blob" || !workingLayer("suppress")) {
-      clearBlobPreview();
-      return;
-    }
-    const found = floodMapFraction(at.u, at.v, currentSettings().trace.blobTolerance, {
-      quiet: true,
-    });
-    setBlobPreview(found, found?.rasterWidth ?? 0, found?.rasterHeight ?? 0);
-  });
-}
 
 function move(point: MapPoint): void {
   // An accept is finished at the press. Nothing follows the pointer, so a drag that began on a ring
@@ -622,8 +529,6 @@ function hover(point: MapPoint | null): void {
     the gap tool the surface really does move on a drag, so the hand is right *except* over a ring,
     which is the one place a press does something.
   */
-  if (tool === "blob") previewBlobAt(point);
-
   if (!point) {
     setGrabTarget(false);
     return;
@@ -640,12 +545,6 @@ function hover(point: MapPoint | null): void {
   */
   if (tool === "speckles") {
     setGrabTarget(speckleTargetAt(point));
-    return;
-  }
-  // Suppress blob acts anywhere there is a layer to write into, so the crosshair is on throughout the
-  // map rather than over a target — which is what the tool actually does.
-  if (tool === "blob") {
-    setGrabTarget(workingLayer("suppress") !== null);
     return;
   }
 

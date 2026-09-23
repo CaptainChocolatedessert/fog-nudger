@@ -155,25 +155,6 @@ export interface TraceSettings {
    * scene storing it would silently have started inventing ink at whatever width had been chosen for
    * looking. A rename falls back to this default, which is the loud version of the same event.
    */
-  /**
-   * How far from the clicked pixel's tone a pixel may be and still join its mark, on luminance's
-   * own 0..1.
-   *
-   * *Suppress blob* floods the **map image** rather than the derived ink, and this is the whole of
-   * what it means by "the same mark". A big solid spot derives as an *outline* — Sauvola's window is
-   * uniformly dark in its middle and finds no contrast there — so the derived ink cannot answer the
-   * question this tool asks.
-   *
-   * **Not seeded per map, unlike every other tool distance.** Straightening and the mend tool's two
-   * reaches are seeded because they are denominated in pixels or graph units, which mean different
-   * lengths on different maps; luminance is 0 to 1 on every map, so a tolerance means the same thing
-   * everywhere and `seedDefaults.ts` stays out of it.
-   *
-   * **Zero is meaningful rather than off**: it takes only pixels of exactly the seed's tone, which on
-   * a flat fill is still the whole fill. There is no off state to key on, and none is wanted — a tool
-   * that does nothing is not armed.
-   */
-  readonly blobTolerance: number;
   readonly gapFillPx: number;
   /**
    * How far apart two banks of a gap may be **along the ink** and still count as one piece of
@@ -374,7 +355,6 @@ export const DEFAULT_SETTINGS: Settings = {
       warning argument; it is wide enough to catch a severed wall and well short of a doorway. Nothing
       about a default can be right for every map, which is what the slider is for.
     */
-    blobTolerance: 0.12,
     gapFillPx: 12,
     gapTravelPx: 40,
     /*
@@ -483,7 +463,6 @@ export const SETTING_LIMITS = {
     filters' rule — a control whose top end still looks reasonable gives no feel for where the edge
     is — and it is affordable for the same reason, that the fill is drawn before the click.
   */
-  blobTolerance: { min: 0, max: 0.5, step: 0.005 },
   gapFillPx: { min: 0, max: 80, step: 2 },
   // The top end calls almost any two pieces of one map's linework the same piece, which silences
   // the repair; the bottom end repairs every gap that passes through, doorways included.
@@ -589,7 +568,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   sauvolaRadiusPx: "read",
   minStrokeInkWidths: "read",
   minIslandPx: "read",
-  blobTolerance: "read",
   gapFillPx: "read",
   gapTravelPx: "read",
   suppressBrushPx: "read",
@@ -666,7 +644,6 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   minIslandPx: "pipeline",
   // The gap search proposes and the GM accepts; nothing is recomputed until the tool is run, and
   // what it writes goes into the added-ink layer rather than into a term of the composition.
-  blobTolerance: "tool",
   gapFillPx: "tool",
   gapTravelPx: "tool",
   suppressBrushPx: "tool",
@@ -912,7 +889,6 @@ export function normaliseSettings(raw: unknown): Settings {
         t.minStrokeInkWidths,
       ),
       minIslandPx: clamp(trace.minIslandPx, "minIslandPx", t.minIslandPx),
-      blobTolerance: clamp(trace.blobTolerance, "blobTolerance", t.blobTolerance),
       gapFillPx: clamp(trace.gapFillPx, "gapFillPx", t.gapFillPx),
       gapTravelPx: clamp(trace.gapTravelPx, "gapTravelPx", t.gapTravelPx),
       mendReachGraphUnits: clamp(trace.mendReachGraphUnits, "mendReachGraphUnits", t.mendReachGraphUnits),
@@ -976,7 +952,6 @@ export function describeSettings(settings: Settings): string {
     `min island ${trace.minIslandPx}px, ` +
     `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
     `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}; ` +
-    `blob tolerance ${trace.blobTolerance.toFixed(3)}; ` +
     `mends ${
       trace.mendReachGraphUnits === 0
         ? "off"

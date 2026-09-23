@@ -87,7 +87,6 @@ export const LAYERS = [
   "mends",
   "collapses",
   "prunes",
-  "blob",
   "speckles",
   "regions",
   "graph",
@@ -125,9 +124,9 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId | readonly LayerId[]>>
   gaps: "gaps",
   /*
     The rings, **and the paint** (user, 2026-09-22: *"since this tool is writing to the suppression
-    layer, that layer should be visible while we use it"*). The same pair *Suppress blob* asks for, and
-    for the same reason: the ink layer draws the composite, so what a press took is simply absent from
-    it — the paint layer is what shows it as something the GM did.
+    layer, that layer should be visible while we use it"*). The ink layer draws the **base** while this
+    tool is in hand, so what a press took shows as the GM's own mark over ink that is still drawn —
+    which is also what lets the recompose wait for the tool to be put down.
   */
   speckles: ["speckles", "paint"],
   // The proposed mends and their rings, which mean nothing while the mend tool is not in hand. Keyed
@@ -151,7 +150,6 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId | readonly LayerId[]>>
     coincidence and not a rule: `mend` maps to `mends`, and keying that entry by its layer's name
     instead drew nothing at all.
   */
-  blob: ["blob", "paint"],
 };
 
 /**
@@ -255,15 +253,6 @@ export const TOOLS: readonly ToolChoice[] = [
   { id: "ink", label: "Add ink", band: "ink", drag: "brush", hint: "" },
   { id: "gaps", label: "Gaps", band: "ink", drag: "brush", hint: "" },
   /*
-    A spike (2026-09-17), to see whether flooding the map's own tone picks out the marks a GM wants
-    gone — a pool or a hole drawn as a big solid spot. No settings, so the hint is the only sentence
-    about it, as Dissolve region's is. It takes every press, as the brushes do.
-
-    **Temporary**: if a room says the fill is not what a GM wants, the tool, its glyph and
-    `trace/inkFlood.ts` all go together.
-  */
-  { id: "blob", label: "Suppress blob", band: "ink", drag: "brush", hint: "" },
-  /*
     **Suppress speckles — 2026-09-22.** The island filter as a tool: it rings every lump of ink under a
     span and a press takes one, or the button takes them all. A press on ink the span never offered
     takes that too, which is how it reaches a pit bigger than the slider.
@@ -275,7 +264,7 @@ export const TOOLS: readonly ToolChoice[] = [
   */
   {
     id: "speckles",
-    label: "Suppress speckles",
+    label: "Suppress blobs",
     band: "ink",
     drag: "brush",
     hint: "Rings every lump under the span. Click one to take it, or click any ink at all.",
@@ -626,7 +615,7 @@ export const STEPS: readonly Step[] = [
       },
       {
         tool: "speckles",
-        title: "Suppress speckles",
+        title: "Suppress blobs",
         /*
           **Says what the press takes, including the part a GM could not guess**: a ring is round a
           lump of ink, and taking it takes what the lump encloses. That is what makes it reach a pit,
@@ -638,22 +627,6 @@ export const STEPS: readonly Step[] = [
           "a big shape goes whole. <b>Click any ink at all</b> to take that lump, ringed or not. " +
           "Dragging pans.",
         parameters: [],
-      },
-      {
-        tool: "blob",
-        title: "Suppress blob",
-        /*
-          "Blob" rather than "mark", throughout and deliberately.
-
-          A **mark** is already this surface's word for the point *Suppress region* places, two bands
-          down the same strip — so naming this one's subject a mark would put one word on two things a
-          GM meets side by side. The name and every sentence under it say blob instead.
-        */
-        blurb:
-          "Click a solid blob on the map — a pool, a hole — and it stops being ink. The fill is " +
-          "drawn under the pointer before you click. It takes everything of that tone joined to what " +
-          "you click, so a blob touching a wall takes the wall too. <b>Ctrl</b> pans.",
-        parameters: ["blobTolerance"],
       },
     ],
   },
@@ -856,7 +829,6 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
   inkBrushPx: "ink",
   gapFillPx: "ink",
   gapTravelPx: "ink",
-  blobTolerance: "ink",
   // Both of the controls that shape the graph, together. Pruning decides which walls survive and
   // smoothing decides what shape they are, and the step draws the result of both.
   /*

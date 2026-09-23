@@ -50,7 +50,6 @@ import { registerLayerRow } from "./workspace/layerRow";
 import { onToolChange, registerToolPalette } from "./workspace/toolPalette";
 import { registerUndoAction } from "./workspace/undoAction";
 import { markInkProfilesStale } from "./workspace/inkProfiles";
-import { registerBlobLayer } from "./workspace/layers/blob";
 import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerSpecklesLayer } from "./workspace/layers/speckles";
 import { registerInkLayer } from "./workspace/layers/ink";
@@ -185,7 +184,6 @@ registerGapsLayer();
   Over the paint and under the partition: a fill preview says what the ink is about to lose, so it
   belongs with the other marks on the ink rather than over the rooms those marks would change.
 */
-registerBlobLayer();
 /*
   The partition, under the graph in both modes.
 

@@ -171,8 +171,8 @@ describe("the step declaration", () => {
     */
     const shown = new Set<string>([
       ...ALWAYS_LAYERS,
-      // Flattened: a tool may own more than one layer, and Suppress blob owns two — what a click
-      // would take and what previous clicks already took.
+      // Flattened: a tool may own more than one layer, and Suppress blobs owns two — the rings it
+      // offers and the paint its presses have already laid down.
       ...Object.values(TOOL_LAYERS).flatMap((owned) =>
         typeof owned === "string" ? [owned] : [...owned],
       ),

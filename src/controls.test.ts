@@ -120,21 +120,6 @@ describe("readouts that depend on a measurement", () => {
     }
   });
 
-  /*
-    The one control whose *stored* unit is already the feelable one.
-
-    Everywhere else the readout prints a bare number and the line under the slider converts it into
-    something a GM can picture — pixels into grid squares, graph units into pixels. Tone has no such
-    conversion: a share of black-to-white is the picture, so it goes in the readout and the line below
-    has nothing left to say. Which is why this is the only control here with neither a hint nor a
-    derived line.
-  */
-  it("asks for a percentage readout on the one control stored as a share of the tone range", () => {
-    const blob = CONTROLS.find((control) => control.name === "blobTolerance");
-    expect(blob?.readout).toBe("percent");
-    expect(blob?.derive).toBeUndefined();
-    expect(blob?.hint).toBe("");
-  });
 
   /*
     Which controls draw a distribution, named rather than counted.
@@ -156,7 +141,6 @@ describe("readouts that depend on a measurement", () => {
       "spurPruneGraphUnits",
       "mendReachGraphUnits",
       "mendTravelGraphUnits",
-      "blobTolerance",
     ]);
     for (const control of CONTROLS) {
       if (named.has(control.name)) continue;

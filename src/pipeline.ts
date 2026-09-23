@@ -70,7 +70,6 @@ import {
   otsuSplit,
 } from "./trace/luminance";
 import { blur, luminanceField, type ScalarField } from "./trace/field";
-import { floodByTone, type FloodResult } from "./trace/inkFlood";
 import type { BinaryMask } from "./trace/binarize";
 import type { LabelledSpace } from "./trace/label";
 import type { RasterPlacement, WorldBounds } from "./map/placement";
@@ -453,18 +452,6 @@ export function probeMapFraction(u: number, v: number): string {
 }
 
 /**
- * A flood, plus the raster it is indexed into — which the caller needs and has no other way to know.
- *
- * The raster's size is the one thing a surface asking in map fractions still has to be told, because
- * the pixel indices are meaningless without it. Handed back with the answer rather than exposed as a
- * separate question, so the two can never describe different runs.
- */
-export interface MapFlood extends FloodResult {
-  readonly rasterWidth: number;
-  readonly rasterHeight: number;
-}
-
-/**
  * The masks the two ink filters were handed, kept for the profiles drawn on their sliders.
  *
  * Module state beside `lastRun`, and stale in the same way: it describes the last run, and a run
@@ -536,56 +523,6 @@ export function inkProfiles(maxInkWidths: number, maxSpanPx: number, spanBins: n
       `in ${Math.round(millis)}ms`,
   );
   return { stroke, island, millis };
-}
-
-/**
- * Flood the map's tone from one point of it, given as a fraction of the map.
- *
- * **The blob tool's spike (2026-09-17)** — see `trace/inkFlood.ts` for what it is and what it is
- * not. Here for the point probe's reason and through the point probe's seam: the luminance field is
- * a thing the pipeline keeps and nothing else has, and a **fraction** rather than a pixel is what
- * lets the surface ask without knowing the trace's raster, which the megapixel budget may have
- * reduced under it.
- *
- * The **unblurred** field, which is the one retained — the blurred one is consumed by the binariser
- * and dropped. That is also the right answer on its merits here: the question is what tone the map
- * has at this mark, not what the binariser made of it.
- *
- * Answers from the last full run when there is one and from the last reading otherwise, exactly as
- * the probe does, so it says something useful before a partition exists.
- */
-export function floodMapFraction(
-  u: number,
-  v: number,
-  tolerance: number,
-  options: { readonly quiet?: boolean } = {},
-): MapFlood | null {
-  const source = lastRun ?? lastReading;
-  if (!source) return null;
-
-  const { rawField, name } = source;
-  const x = Math.min(rawField.width - 1, Math.max(0, Math.floor(u * rawField.width)));
-  const y = Math.min(rawField.height - 1, Math.max(0, Math.floor(v * rawField.height)));
-
-  const started = performance.now();
-  const result = floodByTone(rawField, x, y, tolerance);
-  const millis = performance.now() - started;
-  if (!result) return null;
-
-  // `quiet` is the hover, which runs once a frame: a line each would bury the log in a picture
-  // nobody has acted on. A press is an act and always says what it did.
-  if (!options.quiet) {
-    const { left, top, right, bottom } = result.bounds;
-    devLog(
-      "info",
-      `blob: flood at (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — raster (${x}, ${y}), ` +
-        `seed tone ${result.seedTone.toFixed(3)}, tolerance ${tolerance.toFixed(3)}; ` +
-        `${result.pixels.length} px in a ${right - left + 1}x${bottom - top + 1} box ` +
-        `(${((result.pixels.length / (rawField.width * rawField.height)) * 100).toFixed(2)}% of the ` +
-        `raster) in ${Math.round(millis)}ms`,
-    );
-  }
-  return { ...result, rasterWidth: rawField.width, rasterHeight: rawField.height };
 }
 
 /**
