@@ -2831,7 +2831,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,097 tests across 77 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,108 tests across 78 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3303,9 +3303,13 @@ next section.
 
 ### Where to pick this up
 
-**Do this first, and none of it has been seen yet** (2026-09-22):
+**Do this first: take *Suppress speckles* into a room** (built 2026-09-22, never pressed in one). Ring the
+speckling and take it; then press one of the map's pits, which should go whole rather than leaving its
+middle. Check a pit against the map's edge, and check that a press on ink the span never offered takes it.
+**Suppress blob is still there deliberately**, to compare against and to fall back on — if the new tool
+covers it, that is the room that retires it.
 
-**Nothing is waiting for a room.** The three things the last one carried are all answered: the dotted
+**Everything before it is answered.** The three things the last one carried are all answered: the dotted
 line draws on an empty document (user: *"The line drawing works now"*), the uncapped vertices are fine
 (*"they read like thick wall lines when zoomed out"* — the density worry resolved by the dots merging into
 the walls they sit on rather than washing over them), and the write timing is measured above.
@@ -4612,7 +4616,7 @@ these are here so the reason survives the enforcement.
   entries without learning what it holds, and showing it would make it meaningful and take that
   back. The words already separate them.
 
-### Eight tools built from conversations
+### Nine tools built from conversations
 
 **1. Erase loop — built 2026-09-16, and confirmed in a room in part the same day** (*Where to
 pick this up* has which part). Click inside a region and the walls around it go.
@@ -5159,28 +5163,50 @@ last, and the run goes in as one act.
   0.02, where `0.3 + 0.02` is not 0.02 away from `0.3` in binary, so the fixture was testing its own
   arithmetic until it was rewritten in powers of two.
 
-### Two ink tools proposed and not built — 2026-09-17
+**9. Suppress speckles — built 2026-09-22, not yet in a room.** A span rings every lump of ink under it;
+a press takes one, the button takes them all, and a press on any ink at all takes that lump whether or not
+it was offered.
 
-**Both are an existing slider turned into a tool**, which is the move Erase loop already made
-against the deleted smallest-room filter and which the record judged correct: a threshold decides
-globally and silently, where a click decides one case with the answer drawn first.
+- **It is one tool with *Suppress blob*, and the room said so first** (user, 2026-09-22: *"These seem like
+  two versions of essentially the same tool. One that you pick with a single click, and one with a slider
+  to mass-pick them."*). Blob stays beside it for one room, then goes.
+- **What made that possible was a measurement.** The record said a big filled shape cannot be found in the
+  ink, because it derives as an outline. It does derive as an outline — and **the outline is a component**:
+  on a pit 90 raster pixels across, the centre is not ink, 3,112 of its 6,362 pixels are, and the island
+  walk sees one lump with a span of 91. A speck 7 across derives solid. So one rule reaches a speck and a
+  room-scale pit, which is the case the room actually had (*"a few pits drawn as pretty big black shapes
+  inside rooms... their extents are smaller than map walls because they are room scale"*).
+- **Taking what a lump encloses is what makes it equal to the tone flood** — and better at the thing the
+  flood is worst at, since a flood stops inside an anti-aliased edge and leaves traces, where this takes
+  exactly what was called ink and everything inside it.
+- **Over-suppressing was considered and measured away** (user: *"Would it make sense to re-run Sauvola with
+  slightly extreme settings...?"*). Across sensitivity 0.2–0.5 and window radius 8–20 the ring's **outer**
+  edge did not move — 45.0 px, drift 0.1 — while its **inner** edge moved from 36.1 to 23.3. The boundary
+  that moves is inside what the fill already takes, so a retune cannot reveal a ring. **Blur was not
+  measured.**
+- **The map's edge is a boundary, not a way in**: where a lump meets the image border, that stretch of
+  border is a wall, so a pit cut off by the edge still fills. Bounded to the stretch it touches — blocking
+  the whole side filled the ordinary case wrong, and a fixture caught it.
+- **A broken ring encloses nothing**, and this says so rather than guessing: only the arc goes. The rings
+  are drawn before the press, so it is visible.
+- **As built** — `trace/inkPatches.ts` is the decision, pure and tested: **nine mutations, six caught and
+  three equivalent**, two of the first pass's survivors being real gaps in the fixtures. The tool is
+  `workspace/speckleSearch.ts` on the gap search's shape, writing into the suppression layer through the
+  same `paintPixels` a gap and a blob already use.
 
-- **Small patches of ink** — *Smallest mark to keep*, the island filter, as a gap-finder-style tool:
-  find the candidates, ring them, click one to take it or a button to take them all, and what is
-  accepted goes into the suppression layer as paint.
-- **Thin lines** — *Thinnest stroke to keep*, the morphological opening, the same way.
+### The second ink tool was dropped — 2026-09-22
 
-**Why they belong together, and why now** (user, 2026-09-17): between them they would clear the
-speckling and the halo a blob removal can leave round its edge. A tone flood stops where the tone
-stops, so an anti-aliased or dusty edge can leave a scatter of survivors that no tolerance setting
-cleanly reaches — and those survivors are exactly small patches and thin strokes, which is what these
-two filters already know how to name.
+Two were proposed on 2026-09-17: *small patches of ink*, and *thin lines* by analogy. The first is tool 9
+above. The second is **dropped**, and the transcript is why: the whole of the request for it was *"We could
+do the same for thin lines."*
 
-The unfinished-tool costs the two filters carry (§4) are the argument for the tool form rather than
-against it: both deliberately run past useful, and set high enough to kill hatching they eventually
-eat a genuine closet. A click never has to be set high at all.
-
-**Explicitly not now** (user, same day). The blob tool's own full implementation comes first.
+**The analogy does not hold, and that is the finding.** *Smallest mark to keep* removes whole 8-connected
+components, so it already works in pieces a GM can be offered and click. *Thinnest stroke to keep* is a
+morphological **opening**, which shaves ink thinner than a width wherever it sits — it names no pieces at
+all, so a tool built on it would have had to invent a unit, and every candidate was either useless (only
+strokes that vanish whole) or dangerous (any removed pixels, which includes a two-pixel rind along a wall
+being kept, invisible at map zoom). **The user dropped it on reading that**: *"I think it was an off-hand
+suggestion that I didn't think through."*
 
 ### Orphaned data when the map goes — raised 2026-09-20, not designed
 
@@ -5363,6 +5389,7 @@ closed outright.
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several, split walls where a new wall will land — and the two queries the tools aim with |
 | `workspace/chainGesture.ts` | **what a click means while a chain is being drawn**: append, close, join or finish |
+| `trace/inkPatches.ts` | **what *Suppress speckles* offers and takes**: lumps of ink under a span, and the pixels one covers including what it encloses |
 | `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
