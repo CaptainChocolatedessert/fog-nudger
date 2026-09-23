@@ -114,12 +114,10 @@ export async function clearInkEdits(): Promise<void> {
   const yes = await confirmAction({
     title: "Clear your ink edits?",
     body: [
-      "Everything you have painted on this map goes — the suppression and the added ink together, " +
-        "including gaps and blobs you accepted, which are paint like any other.",
-      "The map, the reading settings, your walls and your region marks are untouched. One step of " +
-        "undo brings all of it back.",
+      "Removes everything you've painted or accepted here — suppression, added ink, gaps and blobs.",
+      "Your walls and marks stay. Undo brings it back.",
     ],
-    confirmLabel: "Clear them",
+    confirmLabel: "Clear ink edits",
     destructive: true,
   });
   if (!yes) return;
@@ -184,12 +182,11 @@ export async function clearWallEdits(): Promise<void> {
   const yes = await confirmAction({
     title: "Clear your wall changes?",
     body: [
-      "Every wall you moved, drew, erased, mended or spanned goes, and the walls become a fresh " +
-        "reading of the ink again.",
-      "Your painted ink and your region marks are untouched — a mark survives the walls being built " +
-        "again, so it survives this. One step of undo brings the walls back.",
+      "Every wall you moved, drew, erased, mended or spanned goes. The walls become a fresh reading " +
+        "of the ink again.",
+      "Painted ink and marks stay. Undo brings the walls back.",
     ],
-    confirmLabel: "Clear them",
+    confirmLabel: "Clear wall edits",
     destructive: true,
   });
   if (!yes) return;
@@ -230,13 +227,12 @@ export async function clearAllMarks(): Promise<void> {
   }
 
   const yes = await confirmAction({
-    title: `Remove ${marks.length === 1 ? "the mark" : `all ${marks.length} marks`}?`,
+    title: `Clear ${marks.length === 1 ? "the mark" : `all ${marks.length} marks`}?`,
     body: [
-      "Every region you marked becomes an ordinary room again, so it will be emitted as fog the " +
-        "party can be shown.",
-      "The walls are untouched. One step of undo brings the marks back.",
+      "Every region you marked becomes an ordinary room again — fog the party can reveal.",
+      "Walls stay. Undo brings the marks back.",
     ],
-    confirmLabel: "Clear them",
+    confirmLabel: "Clear marks",
     destructive: true,
   });
   if (!yes) return;

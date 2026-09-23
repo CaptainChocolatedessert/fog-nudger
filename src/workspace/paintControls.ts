@@ -273,13 +273,12 @@ async function clearWholeLayer(kind: PaintKind): Promise<void> {
 
   const raster = paintRaster();
   const yes = await confirmAction({
-    title: `Clear the whole ${PAINT_NAMES[kind]} layer?`,
+    title: `Clear the ${PAINT_NAMES[kind]} layer?`,
     body: [
-      `Every mark on the ${PAINT_NAMES[kind]} goes, including ones already saved.`,
-      "The reading settings, the other layer and the map are untouched. It goes on the undo stack " +
-        "like the strokes that filled it, so one step of undo brings the layer back.",
+      `Every mark on it goes, including ones already saved.`,
+      "The other layer and the map stay. Undo brings it back.",
     ],
-    confirmLabel: "Clear it",
+    confirmLabel: "Clear layer",
     destructive: true,
   });
   if (!yes) return;

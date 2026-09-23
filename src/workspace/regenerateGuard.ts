@@ -156,8 +156,8 @@ export function reviewFromCover(): void {
   // event. What it is not any more is where the *answer* lives.
   say(
     marked
-      ? `${COVER_SUBJECT} would build these walls again from the map — look at what changes, then choose`
-      : `${COVER_SUBJECT} would build these walls again from the map`,
+      ? `${COVER_SUBJECT} would rebuild these walls — look at what changes, then choose`
+      : `${COVER_SUBJECT} would rebuild these walls`,
   );
   announce();
 }
@@ -261,9 +261,8 @@ export function reviewBody(): HTMLElement {
   const said = document.createElement("p");
   said.className = "sub";
   said.innerHTML =
-    `<b>${COVER_SUBJECT}</b> builds these walls again from the map. Anything you moved, drew or ` +
-    "erased by hand goes with them, and the ink you painted does not — it is an input to the " +
-    "reading, so it survives.";
+    `<b>${COVER_SUBJECT}</b> rebuilds these walls from the map. Hand edits go with them; painted ` +
+    "ink stays — it feeds the rebuild.";
   body.append(said);
 
   /*

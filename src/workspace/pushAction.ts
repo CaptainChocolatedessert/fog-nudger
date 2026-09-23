@@ -287,13 +287,10 @@ async function mayBeTooLarge(): Promise<boolean> {
   return confirmAction({
     title: `Put ${items.toLocaleString()} items on the map?`,
     body: [
-      `This graph is ${items.toLocaleString()} separate scene items — ${currentRegions().length} ` +
-        `rooms and ${currentWalls().length} wall segments. A scene write that large may not ` +
-        "finish, and there is a point past which Owlbear refuses it outright.",
-      "Straighten and Prune the dead ends under Walls are what reduce it: every point either " +
-        "removes is a wall segment fewer. Both apply to the walls you have, so they cost what they " +
-        "take and one step of undo puts it back. If you go ahead, the write can be stopped part " +
-        "way, and pushing again afterwards replaces whatever landed.",
+      `${currentRegions().length} rooms and ${currentWalls().length} wall segments — large enough ` +
+        "that the write may stall, or Owlbear may refuse it outright.",
+      "Straighten and Prune under Walls cut the count and undo puts them back. You can stop the " +
+        "write partway through and push again later.",
     ],
     confirmLabel: "Put it on the map",
   });

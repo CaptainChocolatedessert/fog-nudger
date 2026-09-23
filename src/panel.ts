@@ -147,11 +147,11 @@ const running = new Set<HTMLButtonElement>();
  */
 async function askThenClear(): Promise<string> {
   const ok = await confirmAction({
-    title: "Clear everything in this scene?",
+    title: "Clear everything?",
     body: [
-      "Our fog, the saved walls, the ink you painted, your reading settings and the map choice all " +
-        "go. Anything you drew by hand stays.",
-      "Undo does not reach this. It is the one thing on this surface that cannot be taken back.",
+      "Removes our fog, your walls, painted ink, settings and map choice. Anything you drew by hand " +
+        "in Owlbear stays.",
+      "This can't be undone.",
     ],
     confirmLabel: "Clear everything",
     destructive: true,

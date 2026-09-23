@@ -2827,6 +2827,39 @@ coverage. The tests stay green throughout and were never evidence about any of i
 only instrument here**, which is an argument for building it in stages that can each be looked at
 rather than as one landing — and which is exactly how it went: two sessions, fifteen faults, and
 several of them invisible from a desk by construction.
+
+### A second text pass — 2026-09-23, in progress
+
+**The 2026-09-09 cull is a floor, not a ceiling.** That pass got the rail and panel from ~1,400 words
+to ~250 and set the rule — *a line survives only if it says something the label and readout beside it
+cannot*. This is a second pass over everything a GM reads on the surface, run to the same rule but
+further: names are open for renaming where they are still jargon, and confirmation dialogs are cut to
+what goes, what survives, and the undo fact, nothing else. Nothing architectural changes; this is text
+only, checked by `tsc`, the suite and a build after each batch and committed separately so it can be
+read in pieces.
+
+**One inconsistency found and fixed along the way**: the marks-removal dialog asked *"Remove the
+mark?"* while its own button said *"Clear it"*. `clearActions.ts`'s own header states the house rule —
+*"Clear destroys the stored thing. Nothing else on this surface may use the word."* — so the dialog
+title was the one that was wrong, not the button.
+
+**Batches, each its own commit:**
+
+1. **The confirmation dialogs and the regenerate-review body.** *Clear everything*, *Clear ink edits*,
+   *Clear wall edits*, *Clear marks*, *Clear a paint layer*, the push-size warning, and the sentence
+   under the cover's two buttons. Each was two paragraphs of consequence and reassurance; each is now
+   one or two short sentences — what goes, what survives, undo or "can't be undone." Confirm-button
+   labels were made specific to their dialog (*"Clear ink edits"* rather than the generic *"Clear
+   them"*) so a button reads on its own if the title above it is not.
+2. **Tool hints and group blurbs in `steps.ts`.** Next.
+3. **`controls.ts`** — the slider labels and the two surviving hints. Mostly already lean from the
+   first pass; a check for drift rather than a rewrite.
+4. **The tool strip's names and tooltips, the state line, and any remaining panel/dialog text.**
+
+**Where to pick this up if this session ends mid-pass**: whichever batch above is not yet marked done.
+Nothing here has been in a room — this is prose, checked the way prose can be checked from a desk,
+which is spelling, tone and the same three commands every change here gets. Whether a shorter dialog
+still says enough is a room's question, same as everything else on this surface.
 ---
 
 ## 8. Testing and diagnostic practice
