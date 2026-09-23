@@ -30,7 +30,7 @@ import {
   type Scale,
   type ScaleLimits,
 } from "../sliderScale";
-import { onInkProfiles, profileFor } from "./inkProfiles";
+import { onInkProfiles, profileFor, unwatchInkProfiles, watchInkProfiles } from "./inkProfiles";
 import { ghostPosition } from "./ghostMark";
 import { recomputeFor } from "./recompute";
 import { sideOfStep, workOn } from "./subject";
@@ -177,6 +177,8 @@ export function refreshHints(): void {
 export function resetHints(): void {
   hintPainters = [];
   profilePainters.length = 0;
+  // Nothing on screen wants the ink profiles until a row that draws one is built again.
+  unwatchInkProfiles();
 }
 
 /*
@@ -440,6 +442,8 @@ export function settingRow(control: Control): HTMLElement {
     has to fill its box.
   */
   const profile = control.profile ? profileSvg() : null;
+  // This row draws one, so the shape is worth its second and a half. Nothing computes it otherwise.
+  if (profile) watchInkProfiles();
   if (profile) {
     track.classList.add("with-profile");
     track.append(profile.element);

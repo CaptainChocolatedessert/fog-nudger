@@ -3071,6 +3071,31 @@ Two things from it that still bind:
 - **Holes can be mis-parented**, which is why a cycle is only ever tested against cycles of *other*
   pieces (§5).
 
+### What a single click costs, measured — 2026-09-22
+
+A room reported the tool feeling slow after each press, and the log carried the whole chain for one
+click on a deliberately busy map:
+
+| stage | cost |
+|---|---|
+| the speckle walk | 73ms — now kept until the ink changes, so a slider move is free |
+| the recompose | ~700ms, of which the stroke filter is **408ms** |
+| the ink profiles | **~1.5s** |
+| the derive | **1502ms** |
+
+**About 4.1 seconds, of which the tool's own work was 73ms.**
+
+**The profiles are deferred now.** They are the distribution shapes drawn beside the two ink sliders,
+and they were recomputed on every reading whether or not that drawer was open. A reading marks them
+stale; nothing computes until a row that draws one is built.
+
+**The derive is left alone, and deliberately.** It runs continuously by a decision this record argues
+for: *"the merge failure this project cares most about is visible in the partition, not in the mask, so
+deriving continuously shows it at the moment it is caused instead of whenever the GM next goes to
+look."* Its cost is stated there as ~700ms on a cached mask, and a busy map makes it 1502ms. **Changing
+it is a live question**, and the shapes it could take are a debounce that coalesces a run of presses, or
+the worker that section already names as the real answer.
+
 ### A long sweep needs its own timeout — 2026-09-22
 
 `collapse.test.ts`'s oracle sweep runs 450 graphs and takes a few seconds alone. Under a full suite's

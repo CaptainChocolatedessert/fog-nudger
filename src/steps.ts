@@ -123,8 +123,13 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId | readonly LayerId[]>>
   suppress: "paint",
   ink: "paint",
   gaps: "gaps",
-  // The rings round every lump the span found; they mean nothing with another tool in hand.
-  speckles: "speckles",
+  /*
+    The rings, **and the paint** (user, 2026-09-22: *"since this tool is writing to the suppression
+    layer, that layer should be visible while we use it"*). The same pair *Suppress blob* asks for, and
+    for the same reason: the ink layer draws the composite, so what a press took is simply absent from
+    it — the paint layer is what shows it as something the GM did.
+  */
+  speckles: ["speckles", "paint"],
   // The proposed mends and their rings, which mean nothing while the mend tool is not in hand. Keyed
   // by the tool's id, `mend`, and not by the layer's name — keying it `mends` drew nothing, and
   // `steps.test.ts` now checks every key is a tool.

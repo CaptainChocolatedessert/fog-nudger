@@ -49,7 +49,7 @@ import { applyPalette } from "./workspace/palette";
 import { registerLayerRow } from "./workspace/layerRow";
 import { onToolChange, registerToolPalette } from "./workspace/toolPalette";
 import { registerUndoAction } from "./workspace/undoAction";
-import { refreshInkProfiles } from "./workspace/inkProfiles";
+import { markInkProfilesStale } from "./workspace/inkProfiles";
 import { registerBlobLayer } from "./workspace/layers/blob";
 import { registerGapsLayer } from "./workspace/layers/gaps";
 import { registerSpecklesLayer } from "./workspace/layers/speckles";
@@ -133,7 +133,7 @@ onReading((result) => {
     it inside this listener would roughly double what a slider release costs, to draw a hint. The map
     goes up first and the shape follows it.
   */
-  refreshInkProfiles();
+  markInkProfilesStale();
 });
 
 /*

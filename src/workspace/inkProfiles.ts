@@ -57,7 +57,38 @@ export function onInkProfiles(listener: () => void): void {
  * sweeping a slider, where each release lands its own — does the work once at the end instead of
  * once per release.
  */
-export function refreshInkProfiles(): void {
+/**
+ * Whether a row that draws a profile is on screen.
+ *
+ * **The shape costs about a second and a half on a real map** — measured in a room, 2026-09-22, where
+ * every speckle suppressed paid for it — and it is a hint beside two sliders in one drawer. So a
+ * reading marks it stale and nothing is computed until something is there to draw it.
+ *
+ * Set by the rows as they are built and cleared when the panel is rebuilt, which is the same lifetime
+ * the painters themselves have.
+ */
+let watched = false;
+/** Whether the shape in hand is for the reading now in hand. */
+let stale = true;
+
+/** Told by the rows: one of them draws a profile, so the shape is worth computing. */
+export function watchInkProfiles(): void {
+  watched = true;
+  if (stale) refreshInkProfiles();
+}
+
+/** Told by the panel: whatever was drawing a profile is gone. */
+export function unwatchInkProfiles(): void {
+  watched = false;
+}
+
+/** A reading landed, so whatever shape is in hand describes ink that has been replaced. */
+export function markInkProfilesStale(): void {
+  stale = true;
+  if (watched) refreshInkProfiles();
+}
+
+function refreshInkProfiles(): void {
   if (booked) return;
   booked = true;
   requestAnimationFrame(() => {
@@ -65,6 +96,7 @@ export function refreshInkProfiles(): void {
     const maxInkWidths = SETTING_LIMITS.minStrokeInkWidths.max;
     const maxSpanPx = SETTING_LIMITS.minIslandPx.max;
     const next = inkProfiles(maxInkWidths, maxSpanPx, ISLAND_BANDS);
+    stale = false;
     // Kept rather than cleared when there is nothing: before the first reading there is no shape to
     // draw, and after one there always is.
     if (!next) return;
