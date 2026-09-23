@@ -76,7 +76,7 @@ import { renderCollapseControls } from "./workspace/collapseControls";
 import { renderPruneControls } from "./workspace/pruneControls";
 import { renderSpeckleControls } from "./workspace/speckleControls";
 import { renderMarkControls } from "./workspace/markControls";
-import { finishPaint, registerPaintTool } from "./workspace/paintTool";
+import { finishPaint, refreshSpeckleSearch, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
 import { invalidateRegions, registerRegionInvalidation } from "./workspace/regions";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
@@ -122,6 +122,9 @@ onReading((result) => {
   */
   noteReadingForGaps(result.mask);
   noteReadingForSpeckles(result.mask);
+  // And run again if the tool is in hand, because a recompose arrives here as a new reading and the
+  // drop above would otherwise take every ring off the map until the slider was nudged.
+  refreshSpeckleSearch();
   /*
     And ask for the two ink filters' distributions, which arrive a frame later.
 
@@ -178,7 +181,6 @@ registerInkLayer();
 */
 registerPaintLayer();
 registerGapsLayer();
-registerSpecklesLayer();
 /*
   Over the paint and under the partition: a fill preview says what the ink is about to lose, so it
   belongs with the other marks on the ink rather than over the rooms those marks would change.
@@ -208,6 +210,12 @@ registerPrunesLayer();
   the blue centreline they lie exactly on top of would hide most of each one.
 */
 registerDeltaLayer();
+/*
+  The speckle rings last of all, so they sit over the walls and the regions (room, 2026-09-22: *"The red
+  rings need to draw above everything else. They're currently under the walls."*). They are a proposal
+  about ink, and every other layer here is something the map already holds.
+*/
+registerSpecklesLayer();
 // The two answers the delta is drawn for, in the bar rather than in a box over the map.
 registerRegenerateReview();
 /*

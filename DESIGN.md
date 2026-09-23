@@ -5189,6 +5189,18 @@ it was offered.
   the whole side filled the ordinary case wrong, and a fixture caught it.
 - **A broken ring encloses nothing**, and this says so rather than guessing: only the arc goes. The rings
   are drawn before the press, so it is visible.
+- **Six things a room found on the first outing** (user, 2026-09-22), all fixed the same day: the rings
+  drew *under* the walls, so they register last of every layer now; a press only took what pixel it
+  landed on, where **the inside of a ring is mostly not ink** — a pit's middle never is — so a ring hit
+  test comes first and the ink under the pointer second; the cursor stayed a hand, and is a crosshair
+  wherever a press would take something; every ring vanished after a take, because a recompose arrives as
+  a **new reading** and a new reading drops the search, so the tool re-runs it; the slider's top is the
+  whole map rather than a fifth of the shorter side; and the search cost **62–73ms on every frame the
+  slider moved**, because it re-walked the ink each time — the walk is now kept until the ink changes and
+  the span only re-filters it.
+- **What the room's log said about scale**: 2,465 lumps on a real map, with 788 to 1,585 of them ringed
+  at spans of 6 to 11 pixels. A thousand rings at map zoom is its own problem, and the reason "clicking
+  seems hit or miss" was reported alongside the hit test.
 - **As built** — `trace/inkPatches.ts` is the decision, pure and tested: **nine mutations, six caught and
   three equivalent**, two of the first pass's survivors being real gaps in the fixtures. The tool is
   `workspace/speckleSearch.ts` on the gap search's shape, writing into the suppression layer through the

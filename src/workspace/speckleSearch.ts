@@ -64,18 +64,56 @@ export function speckleSpan(): number {
  */
 export function noteReadingForSpeckles(mask: BinaryMask): void {
   base = mask;
-  composite = null;
-  walk = null;
+  forgetWalk();
   offered = [];
   raster = null;
 }
 
+/**
+ * Whether a search is worth running again: there is a reading, and a span to search at.
+ *
+ * **A recompose lands as a new reading**, and a new reading drops what the last search found — which,
+ * with this tool in hand, is every ring on screen. A room found exactly that: *"After I click a circle,
+ * they all disappear until I adjust the slider."* The caller that knows the tool is armed asks this and
+ * runs again.
+ */
+export function speckleSearchWanted(): boolean {
+  return base !== null && span > 0;
+}
+
 /** Forget everything, which is what leaving the tool or the step does. */
 export function clearSpeckleSearch(): void {
-  composite = null;
-  walk = null;
+  forgetWalk();
   offered = [];
   raster = null;
+}
+
+/**
+ * The lump whose **ring** a point falls inside, nearest centre first.
+ *
+ * **A press inside a ring takes that lump** (room, 2026-09-22: *"Clicking inside a ring should take that
+ * blob. I had to click on the ink of the ring itself to get a big blob suppressed."*). The lump under
+ * the pointer is the other way in, and the only one that reaches ink no ring was drawn for — but a pit's
+ * middle is not ink, so without this the very thing the tool exists for could only be taken by hitting
+ * its outline.
+ */
+export function speckleRingAt(u: number, v: number, floorRadius: number): Patch | null {
+  if (!raster) return null;
+  const x = u * raster.width;
+  const y = v * raster.height;
+  let best: Patch | null = null;
+  let bestAway = Number.POSITIVE_INFINITY;
+  for (const patch of offered) {
+    const cx = (patch.minX + patch.maxX + 1) / 2;
+    const cy = (patch.minY + patch.maxY + 1) / 2;
+    const away = Math.hypot(x - cx, y - cy);
+    // The ring as the layer draws it: half the lump's span, or the floor that keeps a speck clickable.
+    if (away > Math.max(floorRadius, patch.span / 2)) continue;
+    if (away >= bestAway) continue;
+    bestAway = away;
+    best = patch;
+  }
+  return best;
 }
 
 /** Start the search where the reading's own filter sits, so the two agree when the tool opens. */
@@ -91,24 +129,46 @@ export function setSpeckleSpan(next: number): boolean {
 }
 
 /**
- * Walk the ink as it now stands and keep what the span offers.
+ * Make sure there is a walk of the ink as it now stands.
+ *
+ * **The walk is the expensive half, and the span does not change it** — measured in a room: 62–73ms for
+ * 2,465 lumps, which the slider was paying on every frame it moved. It is dropped when the ink changes
+ * underneath it, which is a new reading or an accept, and re-filtered for nothing in between.
+ */
+function ensureWalk(): boolean {
+  if (!base) return false;
+  if (walk && composite && raster) return true;
+
+  const started = performance.now();
+  composite = composePaint(base, currentPaint());
+  walk = walkIslands(composite);
+  raster = { width: composite.width, height: composite.height };
+  devLog(
+    "info",
+    `speckles: walked ${walk.islands.length} lumps in ${(performance.now() - started).toFixed(0)}ms`,
+  );
+  return true;
+}
+
+/** Drop the walk, because the ink under it has changed. */
+function forgetWalk(): void {
+  composite = null;
+  walk = null;
+}
+
+/**
+ * Keep what the span offers, walking the ink first if the walk has gone.
  *
  * Returns whether it could run at all: before a reading there is no base to compose from, and the
  * caller says so rather than showing an empty result that reads as "nothing to take".
  */
 export function runSpeckleSearch(): boolean {
-  if (!base) return false;
-
-  const started = performance.now();
-  composite = composePaint(base, currentPaint());
-  walk = walkIslands(composite);
+  if (!ensureWalk() || !walk) return false;
   offered = patchesUnder(walk, span);
-  raster = { width: composite.width, height: composite.height };
-
   devLog(
     "info",
-    `speckles: ${offered.length} of ${walk.islands.length} lumps at a span of ${span}px, ` +
-      `biggest ${offered[0]?.span ?? 0}px, in ${(performance.now() - started).toFixed(0)}ms`,
+    `speckles: ${offered.length} of ${walk.islands.length} lumps ringed at a span of ${span}px, ` +
+      `biggest ${offered[0]?.span ?? 0}px`,
   );
   return true;
 }
@@ -118,12 +178,6 @@ export function speckleAt(x: number, y: number): Patch | null {
   if (!walk || !raster) return null;
   if (x < 0 || y < 0 || x >= raster.width || y >= raster.height) return null;
   return patchAt(walk, y * raster.width + x);
-}
-
-/** What a press would take, in raster indices — the lump and whatever it encloses. */
-export function specklePixels(patch: Patch): readonly number[] {
-  if (!composite || !walk) return [];
-  return patchPixels(composite, walk, patch);
 }
 
 export interface SpeckleAccept {
@@ -154,7 +208,11 @@ function accept(chosen: readonly Patch[]): SpeckleAccept {
     if (result.bounds.bottom > bottom) bottom = result.bounds.bottom;
   }
 
-  // Re-run before returning, so the caller never draws a lump the accept has just removed.
+  /*
+    The walk goes and is rebuilt before returning, so the caller never draws a lump the accept has just
+    taken — and so the one taken, plus anything its fill swallowed, stops being offered.
+  */
+  forgetWalk();
   runSpeckleSearch();
 
   return {

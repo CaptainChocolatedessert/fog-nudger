@@ -28,15 +28,15 @@ let pending = 0;
 /**
  * The track, in raster pixels.
  *
- * **The top is a fifth of the raster's shorter side**, which is the scale of a room on a map of rooms
- * — enough to reach a pit, and nowhere near the wall network, whose span is the map. A track that
- * reached the whole map would spend nine tenths of itself on settings that take everything.
+ * **The top is the whole map** (user, 2026-09-22: *"The top end of the slider might as well be the whole
+ * map size. That's worked ok with a log scale elsewhere."*). It was a fifth of the shorter side, on the
+ * argument that a room is the biggest thing worth offering — but the wall network is the only thing up
+ * there, the log scale spends its length where the lumps are, and the preview says what would go.
  */
 function limits(): ScaleLimits | null {
   const raster = speckleRaster();
   if (!raster) return null;
-  const top = Math.max(4, Math.round(Math.min(raster.width, raster.height) / 5));
-  return { min: 0, max: top, step: 1, floor: 1 };
+  return { min: 0, max: Math.max(4, Math.max(raster.width, raster.height)), step: 1, floor: 1 };
 }
 
 function readoutFor(position: number): string {

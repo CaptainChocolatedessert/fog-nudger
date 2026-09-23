@@ -54,11 +54,31 @@ import {
   acceptAllSpeckles,
   acceptSpeckle,
   clearSpeckleSearch,
+  runSpeckleSearch,
   speckleAt,
   speckleMarks,
   speckleRaster,
+  speckleRingAt,
+  speckleSearchWanted,
   startSpeckleSearch,
 } from "./speckleSearch";
+
+/**
+ * The smallest ring the speckles layer draws, in screen pixels — the same floor, so what a press hits
+ * is what the GM sees. Kept in step by hand, which is the cost of the layer owning how it draws.
+ */
+const RING_FLOOR_PX = 7;
+
+/**
+ * That floor in **raster** pixels, which is what the hit test compares against.
+ *
+ * `perPixel` is graph units per screen pixel and a graph unit is the map's **longer** side, so the
+ * conversion goes through the raster's longer side too. Written with the width first, which is right
+ * only on a landscape map — on a portrait one every ring would have been hit from too far away.
+ */
+function rasterFloor(point: MapPoint, raster: { width: number; height: number }): number {
+  return RING_FLOOR_PX * point.perPixel * Math.max(raster.width, raster.height);
+}
 import {
   brushKind,
   brushRadius,
@@ -326,10 +346,19 @@ function takeSpeckleAt(point: MapPoint): boolean {
   const layer = workingLayer("suppress");
   if (!raster || !layer) return false;
 
-  const x = Math.floor(point.u * raster.width);
-  const y = Math.floor(point.v * raster.height);
-  const patch = speckleAt(x, y);
-  if (!patch) return false;
+  /*
+    **The ring first, then the ink under the pointer** (room, 2026-09-22). A ring is drawn round the
+    lump, and the inside of one is mostly *not* ink — a pit's middle never is — so a press that only
+    asked what pixel it landed on could take the very thing this tool is for only by hitting its
+    outline, which is what the room reported.
+  */
+  const patch =
+    speckleRingAt(point.u, point.v, rasterFloor(point, raster)) ??
+    speckleAt(Math.floor(point.u * raster.width), Math.floor(point.v * raster.height));
+  if (!patch) {
+    devLog("info", "speckles: a press landed on no ring and no ink");
+    return false;
+  }
 
   const before = snapshotPaint("suppress");
   const result = acceptSpeckle(patch);
@@ -371,11 +400,31 @@ export function suppressEverySpeckleShown(): void {
   say(`suppressed ${result.accepted} lumps, ${result.pixels} px · not saved until you leave Ink`);
 }
 
-/** Search again, because the span moved. Silent when the tool is not the one in hand. */
+/**
+ * Re-run the search, because the ink underneath has changed.
+ *
+ * **A recompose arrives as a new reading**, which drops what the search was holding — and with this
+ * tool in hand that is every ring on screen. A room saw it as the rings vanishing after each take
+ * until the slider was nudged.
+ */
 export function refreshSpeckleSearch(): void {
   if (tool !== "speckles") return;
+  if (speckleSearchWanted()) runSpeckleSearch();
   specklesChanged();
   invalidate();
+}
+
+/**
+ * Whether a press here would take something, so the cursor can say so.
+ *
+ * The crosshair means *the tool will act at this point*, which for this tool is true inside a ring and
+ * over ink, and false over bare paper where the press pans.
+ */
+function speckleTargetAt(point: MapPoint): boolean {
+  const raster = speckleRaster();
+  if (!raster || !workingLayer("suppress")) return false;
+  if (speckleRingAt(point.u, point.v, rasterFloor(point, raster))) return true;
+  return speckleAt(Math.floor(point.u * raster.width), Math.floor(point.v * raster.height)) !== null;
 }
 
 /**
@@ -562,6 +611,16 @@ function hover(point: MapPoint | null): void {
   }
   if (kind) {
     setGrabTarget(workingLayer(kind) !== null);
+    return;
+  }
+  /*
+    Speckles acts where there is something to take, so the crosshair follows the target rather than
+    the map (room, 2026-09-22: *"The mouse pointer should change to the cross when targeting
+    something."*). Inside a ring or over ink it will act; over bare paper the press pans, and the hand
+    is the honest answer.
+  */
+  if (tool === "speckles") {
+    setGrabTarget(speckleTargetAt(point));
     return;
   }
   // Suppress blob acts anywhere there is a layer to write into, so the crosshair is on throughout the
