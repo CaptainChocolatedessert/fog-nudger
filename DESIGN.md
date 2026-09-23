@@ -3106,6 +3106,24 @@ button Straighten grew — `doneAction.ts`, a press on Pan through `armTool`. **
 the drawer without the *step* visibly finishing, since the paint is still saved when the Ink side is
 left. A room called that *"a little odd... but it's ok for now."*
 
+### Write the mutation list after the run, not before — 2026-09-22
+
+**Twice in one session a mutation block was written claiming every mutant was caught, and both times
+the run disagreed** — four of nine, then two of six. The list reads perfectly well in advance, which is
+the trap: it is a plan wearing a result's clothes, and once it is in the file nobody re-reads it against
+the output.
+
+**The survivors were not near-misses.** Two were fixtures that never reached the code at all: one
+pressed on ink where the case under test was a press in the gap beside it, and one put a single speck
+inside a ring where the rule being tested is *which lump wraps the space* — picking the larger gives the
+same answer, so removing the rule passed. **A fixture can pass without exercising the line it is named
+after**, and a mutation run is the only thing here that says so.
+
+**Equivalent mutants are a real answer, and they are also an alibi.** Three in one block were genuinely
+unreachable and were written up with the argument for each. The discipline that keeps that honest is
+saying *what would have to be true* for the mutant to change an answer, and then looking for it — a
+guard that cannot fire, a tie-break with only one candidate, a marker the reader converts anyway.
+
 ### A long sweep needs its own timeout — 2026-09-22
 
 `collapse.test.ts`'s oracle sweep runs 450 graphs and takes a few seconds alone. Under a full suite's
@@ -3348,63 +3366,39 @@ next section.
 
 ### Where to pick this up
 
-**Note for later: the region fills should have no border** (user, 2026-09-22). They are bounded by
-walls already, and the two outlines conflict visually — the fill should be interior colour only, drawn
-under the walls.
+**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-22 ended with
+every tool it built confirmed in a room, the public build pushed, and eight commits since that push.
 
-**Do this first: take *Suppress blobs* into a room** (built 2026-09-22, never pressed in one). Ring the
-speckling and take it; then press one of the map's pits, which should go whole rather than leaving its
-middle. Check a pit against the map's edge, and check that a press on ink the span never offered takes it.
-**Suppress blob is still there deliberately**, to compare against and to fall back on — if the new tool
-covers it, that is the room that retires it.
+**Do this first: a short room pass on the two things that changed after their last one.**
 
-**Everything before it is answered.** The three things the last one carried are all answered: the dotted
-line draws on an empty document (user: *"The line drawing works now"*), the uncapped vertices are fine
-(*"they read like thick wall lines when zoomed out"* — the density worry resolved by the dots merging into
-the walls they sit on rather than washing over them), and the write timing is measured above.
+1. ***Suppress blobs*** — the tool was confirmed working under its old name (*"That all works"*), and
+   then took over from *Suppress blob*, which is deleted. What has not been seen is the **renamed tool
+   wearing the old glyph**, and that the old tool's absence leaves no hole: the ink band should read
+   Suppress, Add ink, Gaps, Suppress blobs.
+2. **The *Done* buttons** in the ink drawers and Straighten's, which are the same shared control now.
+   Pressing Done is what recomposes the ink and derives the walls once, instead of once per press.
 
-**The edge clamp is confirmed in a room** (user, 2026-09-22: *"That works in the room"*), Move and
-Draw both.
+**Then the first note waiting**: the region fills should have **no border** (user, 2026-09-22). They are
+bounded by walls already, and the two outlines conflict visually — the fill should be interior colour
+only, drawn under the walls. Small, decided, no conversation needed.
 
-**The frame toggle is confirmed in a room** (user, 2026-09-22: *"It works."*), and so is the brush
-leaving the map without painting outside it (*"Visually, at least, the paint behvior is correct"* — it
-already behaved that way; what changed is a test pinning a stroke that *crosses* the edge). §5 has what it does, the
-two costs, and the partial-frame defect the on-press closes.
+**Then, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
+the one question, a picture if it is geometric, name and glyph, a numbered plan):
 
-**The four small changes are confirmed in a room** (user, 2026-09-22: *"1-4 all work"*), each built the
-same day:
-
-1. **Straighten's *Done*** — `wallAmounts.ts`. It is a press on Pan through `armTool`, because `setTool`
-   does not close the drawer and the drawer closing is what commits. **Three comments claimed `setTool`
-   clears the drawer**; the claim was written on 2026-09-14 in the commit that took drawer handling *out*
-   of `setTool`, so it was never true, and all three are corrected.
-2. **The review draws cyan over amber** — `layers/delta.ts`. A straightened map reads as replaced rather
-   than deleted.
-3. **The panel is 320 × 560**, from 500 × 800, in both manifests (§7, *The panel*, has the measurement).
-   **Not recorded:** whether the new size arrived from the manifest alone or needed a re-add under a new
-   URL — so whether Owlbear re-reads an action's size, or keeps it with the listing as it keeps the name
-   and icon, is **still not established**.
-4. **The map frame is undoable** — press the frame act, then Undo. Seen, not just read.
-
-**Then, each needing a design conversation first** (the rhythm in the operating notes — *well
-defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
-
-- **Draw a chain of walls** (user, 2026-09-22): each click starts a new wall joined to the last,
-  stopping on Escape, on right-click, or on a click on an existing vertex, which closes the shape.
-  Draw's two-click form already re-aims a far end between clicks, so this is that form not stopping.
-- **Doors, the way Dynamic Fog makes them** (user, 2026-09-22: *"let's look into how Dynamic Fog makes
-  doors and see if we can add that functionality"*). **Start by reading, not designing**: the local
-  clone at `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts`
-  and `DoorOverlayActor.ts`. What the record already holds, and what the reading has to reconcile with:
-  §2 — *door subtraction is global*, so a door cuts any wall drawing it overlaps, and one door serves a
-  wall represented twice; §2 — lights, unlike walls, are gated on Dynamic Fog's private metadata, so
-  doors may be too; §3 — mimicking Dynamic Fog's private format *"remains the shape of any eventual door
-  work"*; §12 — door work would write into its namespace, *"still interoperation rather than
-  derivation, but the closest this project gets"*. **Doors were left to Dynamic Fog by choice**, and
-  the first question is what this project would add over a GM using Dynamic Fog's own door tool
-  afterwards, which already cuts our walls.
-- **Two ink tools, small patches and thin lines**, each as a ringed tool (§10, *Two ink tools proposed*).
-  They would remove detail before it becomes walls — upstream of what Collapse and Prune now do after.
+- **Delete a whole connected chain or network of walls** is **done** — that is *Erase chain*. What is
+  left of that family is porting the **free click** back to the ringed wall tools: the rings are a
+  suggestion, and a click on something they did not offer should still take it, as *Suppress blobs* now
+  does. Raised 2026-09-22 and parked.
+- **Doors, the way Dynamic Fog makes them.** **Start by reading, not designing**: the local clone at
+  `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts` and
+  `DoorOverlayActor.ts`. §2's *door subtraction is global*, §3 on mimicking the private format and §12
+  on writing into their namespace are what the reading has to reconcile with. **The first question is
+  what this project would add** over a GM using Dynamic Fog's own door tool afterwards, which already
+  cuts our walls.
+- **The derive still costs 1502ms on a busy map**, and §8's measurement of one click is where the
+  numbers are. The recompose now waits for a tool to be put down, so it is paid once per visit rather
+  than once per press — but the surface still freezes while it runs, and the record has named a worker
+  as the real answer since the continuous derive went in.
 
 **Held, with the reason:**
 
@@ -3415,19 +3409,18 @@ defined?*, the one question, a picture if it is geometric, name and glyph, a num
   *the scene has not finished loading* look the same, since the map list is briefly empty on load.
 - **A second map in a different style** — hatched stonework, a printed grid, a scan. Everything so far
   was tuned on line-drawn maps, and the record has called this the most informative next step since
-  2026-09-13.
+  2026-09-13. **It needs no build**, only a map.
+- **The code still says `speckles`** where the GM sees *Suppress blobs*, the way `dissolve` stayed when
+  its tool became *Erase loop*. A rename would touch four modules and a layer id for no behaviour.
 
-**Confirmed in rooms this session**, each with its section: the automatic prune (§4, *The hairs come off
-in the derive*); *Collapse small regions* (§10, tool 6); *Prune the dead ends* as a ringed tool (user,
-2026-09-22: *"The Prune rings work and look great"*; §10, *Prune became a ringed tool*); the band's
-order, Collapse, Prune, Straighten; dimming and the amount tools' handles; the four small changes above.
-**Slow saves are answered**
-in the main: the item count was the cause, and a tidied map went from 1 minute 46 seconds to 1.3 seconds
-(§10's measurement, below the tools).
+**Everything the 2026-09-22 session built was confirmed in a room**: Straighten's *Done*, the review
+drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge clamp on Move and Draw,
+*Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
+*Suppress blobs*. Each has its own section; §10's tool list runs to nine.
 
-**45 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`,
-before the commit that writes this line). **A push deploys**, so it waits for the user to want the
-public build to have them.
+**8 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`, before
+the commit that writes this line). The push earlier that day deployed everything before them. **A push
+deploys**, so it waits for the user to want the public build to have them.
 
 #### The slow saves, measured
 
