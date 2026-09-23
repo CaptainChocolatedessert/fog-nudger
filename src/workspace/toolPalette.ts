@@ -70,7 +70,7 @@ import { editableGraph, onDerived } from "./regions";
 import { onStageChange } from "./stage";
 import { deltaShowing, onDeltaChange } from "./layers/delta";
 
-export type Tool = "pan" | "suppress" | "ink" | "gaps" | "blob" | WallTool;
+export type Tool = "pan" | "suppress" | "ink" | "gaps" | "blob" | "speckles" | WallTool;
 
 
 /**
@@ -140,13 +140,16 @@ function apply(next: Tool): void {
       have used cannot matter. What must not happen is the strip reading its answer back — see
       `currentTool`.
     */
-    setPaintTool(next === "pan" ? "none" : (next as "suppress" | "ink" | "gaps" | "blob"));
+    setPaintTool(next === "pan" ? "none" : (next as "suppress" | "ink" | "gaps" | "blob" | "speckles"));
     // The one piece of wall-tool state that is not harmless to keep: a running search would go on
     // re-running against every change to the walls with no rings on screen to show for it.
     putDownSearches();
   }
   setDrag(dragFor(next));
-  requestPaintMode(next === "suppress" || next === "ink" || next === "gaps" || next === "blob");
+  // Speckles writes suppression paint like the rest, so it needs the working copies open.
+  requestPaintMode(
+    next === "suppress" || next === "ink" || next === "gaps" || next === "blob" || next === "speckles",
+  );
   proposeVisibleLayers();
 }
 

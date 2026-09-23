@@ -69,6 +69,17 @@ export interface Island {
   readonly span: number;
   /** Its ink pixels. */
   readonly area: number;
+  /**
+   * The bounding box itself, inclusive on both ends.
+   *
+   * The walk has always computed it to get `span`; it is **kept** since 2026-09-22 because *Suppress
+   * speckles* rings each island and fills what one encloses, and both need the box rather than the
+   * longer side of it.
+   */
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
 }
 
 /** Every island, and a label per pixel so a caller can write a decision back out. */
@@ -137,7 +148,7 @@ export function walkIslands(mask: BinaryMask): IslandWalk {
       }
     }
 
-    islands.push({ span: Math.max(maxX - minX + 1, maxY - minY + 1), area });
+    islands.push({ span: Math.max(maxX - minX + 1, maxY - minY + 1), area, minX, minY, maxX, maxY });
   }
 
   return { labels, islands };

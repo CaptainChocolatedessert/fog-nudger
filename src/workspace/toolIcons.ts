@@ -100,6 +100,26 @@ const ICONS: Readonly<Record<string, string>> = {
     **The rect is Suppress's, unchanged**, so the pair holds at any size: same width, same radius,
     same rotation about the same centre.
   */
+  /*
+    **Suppress speckles**: scattered ink under Suppress's own bar (user, 2026-09-22, chosen from four
+    at strip size, then from three scatters).
+
+    Built the way *Suppress blob* is — ink plus the bar — so the family reads at a glance: a stroke you
+    paint, a blob you click, a scatter you sweep up. Eight dots of differing size rather than a tidy
+    lattice, because the thing it takes is speckling. The three ruled out at 18px: one speck in a dashed
+    ring (the gap finder's idiom, which read as Gaps); both idioms at once (busy, and the shortened bar
+    read as a stray stroke); and a ring round a cluster (calm, and vague about what the press does).
+  */
+  speckles:
+    '<circle cx="5.4" cy="5.2" r="1.7" fill="currentColor" stroke="none" />' +
+    '<circle cx="9.8" cy="3.4" r="1.2" fill="currentColor" stroke="none" />' +
+    '<circle cx="3.4" cy="9.8" r="1.4" fill="currentColor" stroke="none" />' +
+    '<circle cx="8.2" cy="8.4" r="1.9" fill="currentColor" stroke="none" />' +
+    '<circle cx="15.4" cy="19.2" r="1.5" fill="currentColor" stroke="none" />' +
+    '<circle cx="19.6" cy="15.4" r="1.3" fill="currentColor" stroke="none" />' +
+    '<circle cx="20.4" cy="20.2" r="1.8" fill="currentColor" stroke="none" />' +
+    '<circle cx="12.8" cy="20.6" r="1.2" fill="currentColor" stroke="none" />' +
+    '<rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-45 12 12)" />',
   blob:
     '<path d="M13 5L4.5 13.5c-.9-.8-1.2-1.9-1-3 .5-2.8 3.1-5.2 6.1-5.8 1.3-.3 2.5-.1 3.4 .3z" fill="currentColor" stroke="none" />' +
     '<path d="M18.5 11.5L13 17c.9 1.4 2.2 2.3 3.4 2.3 2-.1 3.3-2.3 2.9-4.7-.2-1.1-.4-2.2-.8-3.1z" fill="currentColor" stroke="none" />' +

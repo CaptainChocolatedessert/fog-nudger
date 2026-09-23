@@ -88,6 +88,7 @@ export const LAYERS = [
   "collapses",
   "prunes",
   "blob",
+  "speckles",
   "regions",
   "graph",
   "delta",
@@ -122,6 +123,8 @@ export const TOOL_LAYERS: Readonly<Record<string, LayerId | readonly LayerId[]>>
   suppress: "paint",
   ink: "paint",
   gaps: "gaps",
+  // The rings round every lump the span found; they mean nothing with another tool in hand.
+  speckles: "speckles",
   // The proposed mends and their rings, which mean nothing while the mend tool is not in hand. Keyed
   // by the tool's id, `mend`, and not by the layer's name — keying it `mends` drew nothing, and
   // `steps.test.ts` now checks every key is a tool.
@@ -255,6 +258,23 @@ export const TOOLS: readonly ToolChoice[] = [
     `trace/inkFlood.ts` all go together.
   */
   { id: "blob", label: "Suppress blob", band: "ink", drag: "brush", hint: "" },
+  /*
+    **Suppress speckles — 2026-09-22.** The island filter as a tool: it rings every lump of ink under a
+    span and a press takes one, or the button takes them all. A press on ink the span never offered
+    takes that too, which is how it reaches a pit bigger than the slider.
+
+    **It is *Suppress blob*'s job done on the ink instead of the image**, and the two stand side by side
+    for one room before that one goes. What lets it reach a big filled shape at all is that such a shape
+    derives as a **ring** — measured, in `trace/inkPatches.ts` — and taking a ring takes what it
+    encloses.
+  */
+  {
+    id: "speckles",
+    label: "Suppress speckles",
+    band: "ink",
+    drag: "brush",
+    hint: "Rings every lump under the span. Click one to take it, or click any ink at all.",
+  },
   /*
     **The order is Collapse, Prune, Straighten** (user, 2026-09-22): *"the natural order of operations
     for simplifying this map"*, found by doing it. Collapsing first turns small loops into junctions and
@@ -598,6 +618,21 @@ export const STEPS: readonly Step[] = [
           "<b class='gap-key'>this colour</b>. <b>Click inside a ring</b> to close that gap, or use the " +
           "button below for all of them. A <b>dashed</b> ring is not offered. Dragging pans.",
         parameters: ["gapFillPx", "gapTravelPx"],
+      },
+      {
+        tool: "speckles",
+        title: "Suppress speckles",
+        /*
+          **Says what the press takes, including the part a GM could not guess**: a ring is round a
+          lump of ink, and taking it takes what the lump encloses. That is what makes it reach a pit,
+          which derives as a ring with nothing inside it.
+        */
+        blurb:
+          "Rings every lump of ink under the span and <b>click one</b> to suppress it, or use the " +
+          "button below for all of them. A lump takes <b>whatever it encloses</b>, so a pit drawn as " +
+          "a big shape goes whole. <b>Click any ink at all</b> to take that lump, ringed or not. " +
+          "Dragging pans.",
+        parameters: [],
       },
       {
         tool: "blob",

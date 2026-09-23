@@ -1,0 +1,175 @@
+/**
+ * *Suppress speckles* as a tool: find the lumps, hold them, write what the GM accepts.
+ *
+ * The gap search's shape, with a different question and the other paint layer — it offers, the GM
+ * takes one or all, and what is taken becomes **suppression paint**. From that moment it is paint like
+ * any other: one undo step, survives a re-derive, and both clears reach it.
+ *
+ * ## It searches the composite, for the reason the gap search does
+ *
+ * Not the base ink: a speck the GM has already brushed away is not a speck, and one their added ink
+ * created is. So it composes the same stack the pipeline does, through the same `composePaint`.
+ *
+ * ## Accepting re-runs the search
+ *
+ * Unlike the gaps, the remaining lumps do **not** reshuffle: components are independent, so taking one
+ * cannot merge or split another. The re-run is for the lump just taken, which has to stop being
+ * offered — and for anything the fill swallowed, since taking a ring takes the ink inside it too.
+ *
+ * ## The span is the tool's own, not the reading's
+ *
+ * *Smallest mark to keep* is a setting inside the reading and stays one; this is a search bound the GM
+ * moves to see more or fewer candidates, and it changes nothing until a press. It starts from that
+ * setting's value so the two agree at the moment the tool opens.
+ *
+ * No DOM, and the SDK is not reached: what this writes goes into the working paint layer, and saving
+ * it is the mode's Done.
+ */
+
+import { devLog } from "../devlog";
+import { composePaint, paintPixels } from "../trace/inkPaint";
+import { walkIslands, type IslandWalk } from "../trace/inkIslands";
+import { patchAt, patchPixels, patchesUnder, type Patch } from "../trace/inkPatches";
+import type { BinaryMask } from "../trace/binarize";
+import type { MarkRaster } from "./gapGesture";
+import { currentPaint, workingLayer } from "./paintState";
+import { currentSettings } from "./settingsState";
+
+/** The base ink of the last reading, which every search composes from. */
+let base: BinaryMask | null = null;
+/** The composite the current walk was made from, kept so a press can take pixels out of it. */
+let composite: BinaryMask | null = null;
+let walk: IslandWalk | null = null;
+let offered: readonly Patch[] = [];
+let raster: MarkRaster | null = null;
+let span = 0;
+
+export function speckleMarks(): readonly Patch[] {
+  return offered;
+}
+
+export function speckleRaster(): MarkRaster | null {
+  return raster;
+}
+
+export function speckleSpan(): number {
+  return span;
+}
+
+/**
+ * Adopt a reading's base ink, and drop what the last search found.
+ *
+ * **Dropping is not tidiness**, for the reason the gap search gives: the lumps describe ink that has
+ * just been replaced, and a ring over a map whose reading has moved is a stale diagnostic.
+ */
+export function noteReadingForSpeckles(mask: BinaryMask): void {
+  base = mask;
+  composite = null;
+  walk = null;
+  offered = [];
+  raster = null;
+}
+
+/** Forget everything, which is what leaving the tool or the step does. */
+export function clearSpeckleSearch(): void {
+  composite = null;
+  walk = null;
+  offered = [];
+  raster = null;
+}
+
+/** Start the search where the reading's own filter sits, so the two agree when the tool opens. */
+export function startSpeckleSearch(): boolean {
+  if (span <= 0) span = Math.max(1, currentSettings().trace.minIslandPx);
+  return runSpeckleSearch();
+}
+
+/** Move the search bound. Nothing is written: this only changes what is on offer. */
+export function setSpeckleSpan(next: number): boolean {
+  span = Math.max(0, Math.round(next));
+  return runSpeckleSearch();
+}
+
+/**
+ * Walk the ink as it now stands and keep what the span offers.
+ *
+ * Returns whether it could run at all: before a reading there is no base to compose from, and the
+ * caller says so rather than showing an empty result that reads as "nothing to take".
+ */
+export function runSpeckleSearch(): boolean {
+  if (!base) return false;
+
+  const started = performance.now();
+  composite = composePaint(base, currentPaint());
+  walk = walkIslands(composite);
+  offered = patchesUnder(walk, span);
+  raster = { width: composite.width, height: composite.height };
+
+  devLog(
+    "info",
+    `speckles: ${offered.length} of ${walk.islands.length} lumps at a span of ${span}px, ` +
+      `biggest ${offered[0]?.span ?? 0}px, in ${(performance.now() - started).toFixed(0)}ms`,
+  );
+  return true;
+}
+
+/** The lump under one raster pixel, which is what a press outside every ring takes. */
+export function speckleAt(x: number, y: number): Patch | null {
+  if (!walk || !raster) return null;
+  if (x < 0 || y < 0 || x >= raster.width || y >= raster.height) return null;
+  return patchAt(walk, y * raster.width + x);
+}
+
+/** What a press would take, in raster indices — the lump and whatever it encloses. */
+export function specklePixels(patch: Patch): readonly number[] {
+  if (!composite || !walk) return [];
+  return patchPixels(composite, walk, patch);
+}
+
+export interface SpeckleAccept {
+  readonly accepted: number;
+  readonly pixels: number;
+  readonly bounds: { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number } | null;
+}
+
+const NOTHING: SpeckleAccept = { accepted: 0, pixels: 0, bounds: null };
+
+function accept(chosen: readonly Patch[]): SpeckleAccept {
+  const layer = workingLayer("suppress");
+  if (!layer || chosen.length === 0 || !composite || !walk) return NOTHING;
+
+  let pixels = 0;
+  let left = layer.width;
+  let top = layer.height;
+  let right = -1;
+  let bottom = -1;
+
+  for (const patch of chosen) {
+    const result = paintPixels(layer, patchPixels(composite, walk, patch));
+    pixels += result.changed;
+    if (!result.bounds) continue;
+    if (result.bounds.left < left) left = result.bounds.left;
+    if (result.bounds.top < top) top = result.bounds.top;
+    if (result.bounds.right > right) right = result.bounds.right;
+    if (result.bounds.bottom > bottom) bottom = result.bounds.bottom;
+  }
+
+  // Re-run before returning, so the caller never draws a lump the accept has just removed.
+  runSpeckleSearch();
+
+  return {
+    accepted: chosen.length,
+    pixels,
+    bounds: right < left || bottom < top ? null : { left, top, right, bottom },
+  };
+}
+
+/** Accept one lump — from a ring, or from a press on ink the span never offered. */
+export function acceptSpeckle(patch: Patch): SpeckleAccept {
+  return accept([patch]);
+}
+
+/** Accept everything on offer. The free click is deliberately not part of this. */
+export function acceptAllSpeckles(): SpeckleAccept {
+  return accept(offered);
+}

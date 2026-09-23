@@ -97,7 +97,7 @@ export type PaintVerb = "paint" | "erase";
  * `"gaps"` is not a brush at all — it takes a click on a ring rather than a drag — which is why
  * the brush code asks for a kind and gets one only when the tool is a brush.
  */
-export type PaintTool = "none" | "suppress" | "ink" | "gaps" | "blob";
+export type PaintTool = "none" | "suppress" | "ink" | "gaps" | "blob" | "speckles";
 
 /**
  * The layer a tool paints into, or `null` when the tool is not a brush.

@@ -49,6 +49,16 @@ import {
   runGapSearch,
 } from "./gapSearch";
 import { gapsChanged } from "./layers/gaps";
+import { specklesChanged } from "./layers/speckles";
+import {
+  acceptAllSpeckles,
+  acceptSpeckle,
+  clearSpeckleSearch,
+  speckleAt,
+  speckleMarks,
+  speckleRaster,
+  startSpeckleSearch,
+} from "./speckleSearch";
 import {
   brushKind,
   brushRadius,
@@ -134,6 +144,17 @@ export function setPaintTool(next: PaintTool): void {
   } else {
     clearGapSearch();
   }
+  if (next === "speckles") {
+    if (startSpeckleSearch()) {
+      const found = speckleMarks().length;
+      say(`${found} lump${found === 1 ? "" : "s"} ringed · click one, or click any ink at all`);
+    } else {
+      say("nothing has been read from the map yet, so there is nothing to search");
+    }
+  } else {
+    clearSpeckleSearch();
+  }
+  specklesChanged();
   // The fill preview belongs to the tool that draws it, so arming anything else takes it down. The
   // same rule the mend rings follow, and for the same reason: a mark nothing can act on is a lie.
   if (next !== "blob") clearBlobPreview();
@@ -248,6 +269,7 @@ function start(point: MapPoint): boolean {
   */
   if (tool === "gaps") return acceptAt(point);
   if (tool === "blob") return floodAt(point);
+  if (tool === "speckles") return takeSpeckleAt(point);
 
   const kind = brushKind(tool);
   // No brush in hand — either no tool is chosen, or the layer could not be made because the map has
@@ -287,6 +309,73 @@ function acceptAt(point: MapPoint): boolean {
   gapsChanged();
   say(describeAccepted(result.accepted, result.pixels, fillableCount()));
   return true;
+}
+
+/**
+ * Take the lump of ink under this press, and whatever it encloses.
+ *
+ * **Every press that lands on ink is taken**, ringed or not: the rings say what the span found, and a
+ * press on anything else is the same act on a lump the span did not offer — which is how this reaches
+ * a pit bigger than the slider, and how it does *Suppress blob*'s job without a tone.
+ *
+ * A press on ground declines, so panning stays free on a map covered in rings. That is the gap tool's
+ * rule and it is right for the same reason: this is a tool spent mostly looking.
+ */
+function takeSpeckleAt(point: MapPoint): boolean {
+  const raster = speckleRaster();
+  const layer = workingLayer("suppress");
+  if (!raster || !layer) return false;
+
+  const x = Math.floor(point.u * raster.width);
+  const y = Math.floor(point.v * raster.height);
+  const patch = speckleAt(x, y);
+  if (!patch) return false;
+
+  const before = snapshotPaint("suppress");
+  const result = acceptSpeckle(patch);
+  if (result.pixels === 0) {
+    say("that is already suppressed");
+    return true;
+  }
+  if (before !== null) rememberPaint("suppress", before, "suppressing a speckle");
+  if (result.bounds) refreshPaintRegion(result.bounds);
+  // Recomposed for the reason the blob spike gives: this is not a brush, so the ink layer is drawing
+  // the composite and the mark would sit there until the tool was put down.
+  requestRecompose();
+  specklesChanged();
+  say(
+    `suppressed a lump of ${result.pixels} px, span ${patch.span} px · ` +
+      `${speckleMarks().length} still ringed · not saved until you leave Ink`,
+  );
+  return true;
+}
+
+/** Take everything the span is offering, which is the button in the drawer. */
+export function suppressEverySpeckleShown(): void {
+  if (tool !== "speckles") return;
+  const layer = workingLayer("suppress");
+  if (!layer || speckleMarks().length === 0) {
+    say("nothing is ringed, so there is nothing to take");
+    return;
+  }
+  const before = snapshotPaint("suppress");
+  const result = acceptAllSpeckles();
+  if (result.pixels === 0) {
+    say("those are already suppressed");
+    return;
+  }
+  if (before !== null) rememberPaint("suppress", before, "suppressing the speckles");
+  if (result.bounds) refreshPaintRegion(result.bounds);
+  requestRecompose();
+  specklesChanged();
+  say(`suppressed ${result.accepted} lumps, ${result.pixels} px · not saved until you leave Ink`);
+}
+
+/** Search again, because the span moved. Silent when the tool is not the one in hand. */
+export function refreshSpeckleSearch(): void {
+  if (tool !== "speckles") return;
+  specklesChanged();
+  invalidate();
 }
 
 /**

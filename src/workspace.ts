@@ -52,6 +52,7 @@ import { registerUndoAction } from "./workspace/undoAction";
 import { refreshInkProfiles } from "./workspace/inkProfiles";
 import { registerBlobLayer } from "./workspace/layers/blob";
 import { registerGapsLayer } from "./workspace/layers/gaps";
+import { registerSpecklesLayer } from "./workspace/layers/speckles";
 import { registerInkLayer } from "./workspace/layers/ink";
 import { registerPaintLayer } from "./workspace/layers/paint";
 import { registerGraphLayer } from "./workspace/layers/graph";
@@ -67,11 +68,13 @@ import { renderMapPicker, watchSceneMaps } from "./workspace/mapPicker";
 import { renderSwatches } from "./workspace/colourRows";
 import { loadNominatedMap } from "./workspace/mapSource";
 import { noteReadingForGaps } from "./workspace/gapSearch";
+import { noteReadingForSpeckles } from "./workspace/speckleSearch";
 import { noteRaster, onPaintWriteFailure } from "./workspace/paintState";
 import { renderToolControls } from "./workspace/paintControls";
 import { renderMendControls } from "./workspace/mendControls";
 import { renderCollapseControls } from "./workspace/collapseControls";
 import { renderPruneControls } from "./workspace/pruneControls";
+import { renderSpeckleControls } from "./workspace/speckleControls";
 import { renderMarkControls } from "./workspace/markControls";
 import { finishPaint, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
@@ -118,6 +121,7 @@ onReading((result) => {
     already paid for once — a diagnostic that looked clean and was answering about something else.
   */
   noteReadingForGaps(result.mask);
+  noteReadingForSpeckles(result.mask);
   /*
     And ask for the two ink filters' distributions, which arrive a frame later.
 
@@ -174,6 +178,7 @@ registerInkLayer();
 */
 registerPaintLayer();
 registerGapsLayer();
+registerSpecklesLayer();
 /*
   Over the paint and under the partition: a fill preview says what the ink is about to lose, so it
   belongs with the other marks on the ink rather than over the rooms those marks would change.
@@ -275,6 +280,7 @@ registerToolContent(renderMendControls);
 registerToolContent(renderCollapseControls);
 // *Prune the dead ends*' length and its button. Straighten's handle is `renderAmountControls`, below.
 registerToolContent(renderPruneControls);
+registerToolContent(renderSpeckleControls);
 /*
   And *Suppress region*'s, which is a drawer holding one button and no settings.
 

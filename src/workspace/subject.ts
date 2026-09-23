@@ -93,6 +93,7 @@ const SIDE_OF_LAYER: Readonly<Record<LayerId, Side | null>> = {
   regions: null,
   paint: null,
   gaps: null,
+  speckles: null,
   mends: null,
   // A tool layer on the wall side, drawn only while its tool is in hand — so never the dimmed side.
   collapses: null,
