@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BinaryMask } from "./binarize";
 import { walkIslands } from "./inkIslands";
-import { patchAt, patchEnclosing, patchPixels, patchesUnder } from "./inkPatches";
+import { enclosureMap, patchAt, patchEnclosing, patchPixels, patchesUnder } from "./inkPatches";
 
 /** A mask from rows of `#` for ink and `.` for ground. */
 function maskOf(rows: readonly string[]): BinaryMask {
@@ -102,10 +102,10 @@ describe("what is on offer", () => {
 });
 
 describe("what encloses a press", () => {
-  const enclosing = (rows: readonly string[], x: number, y: number, budget = 999) => {
+  const enclosing = (rows: readonly string[], x: number, y: number) => {
     const mask = maskOf(rows);
     const walk = walkIslands(mask);
-    return patchEnclosing(mask, walk, y * mask.width + x, budget);
+    return patchEnclosing(walk, enclosureMap(mask, walk), y * mask.width + x);
   };
 
   /*
@@ -134,14 +134,25 @@ describe("what encloses a press", () => {
   });
 
   /*
-    **The budget is what keeps the wall network out of reach by accident.** A press inside a room finds
-    the walls around it, and taking those would take every wall on the map with everything they enclose.
-    Spending the budget is the same answer as reaching the border: nothing.
+    **There is no bound on what a press inside can take** (user, 2026-09-22: *"It should delete the
+    whole wall network if that's what the user clicks."*). The first version stopped at a budget, which
+    made a press inside a room answer with nothing; now it answers with the walls around it.
   */
-  it("says nothing when the space inside is bigger than the budget", () => {
-    const rows = ["........", ".#####..", ".#...#..", ".#...#..", ".#####..", "........"];
-    expect(enclosing(rows, 3, 2, 3)).toBeNull();
-    expect(enclosing(rows, 3, 2, 6)?.span).toBe(5);
+  it("answers with whatever encloses the press, however large", () => {
+    const rows = [
+      "............",
+      ".##########.",
+      ".#........#.",
+      ".#..####..#.",
+      ".#..#..#..#.",
+      ".#..####..#.",
+      ".#........#.",
+      ".##########.",
+      "............",
+    ];
+    // Between the two: the outer ring. Inside the inner one: the inner ring.
+    expect(enclosing(rows, 2, 2)?.span).toBe(10);
+    expect(enclosing(rows, 5, 4)?.span).toBe(4);
   });
 
   /*
@@ -171,6 +182,39 @@ describe("what encloses a press", () => {
     // Pressed in the gap between the two, not on either: the ring is 44 pixels of ink and the block
     // inside it is 64, so picking by size would answer with the block.
     expect(enclosing(rows, 2, 2)?.span).toBe(12);
+  });
+
+  /*
+    **The image's border is what makes the outside the outside.** A channel that escapes only through
+    the top row is open map, not a pocket — and a mutation pass that stopped seeding the top and bottom
+    rows passed every other fixture here, because they all escape sideways.
+  */
+  it("counts ground that escapes through the top as outside", () => {
+    expect(enclosing(["#.#", "#.#", "###"], 1, 1)).toBeNull();
+    // The same shape closed at the top does enclose it.
+    expect(enclosing(["###", "#.#", "###"], 1, 1)?.span).toBe(3);
+  });
+
+  /*
+    **Two lumps can wrap one pocket**, when the inner one is broken so the space inside it joins the
+    space between them. The larger wins: it is the thing that actually encloses the ground, and taking
+    it takes the other with it.
+  */
+  it("takes the larger of two lumps that both wrap the space", () => {
+    const rows = [
+      "..........",
+      ".########.",
+      ".#......#.",
+      ".#.####.#.",
+      ".#.#..#.#.",
+      ".#.#....#.",
+      ".#.####.#.",
+      ".#......#.",
+      ".########.",
+      "..........",
+    ];
+    // The inner box is open on its right, so a press in its middle touches both rings.
+    expect(enclosing(rows, 4, 4)?.span).toBe(8);
   });
 
   /*
@@ -278,23 +322,25 @@ describe("what a press takes", () => {
     mutant keeps.
   - `patchAt`'s `label === 0` check: without it the lookup is `islands[-1]`, which is undefined, and
     the function answers `null` anyway.
-  **Six more for the enclosing lookup — four caught, two equivalent.** This block was written claiming
-  all six before the run, which was wrong twice over: two of them survived on fixtures that never
-  reached the code. One fixture pressed **on the ink** rather than in the gap, so the flood never ran;
-  the other had a single speck inside the ring, where picking the largest lump gives the same answer as
-  picking the one that wraps. Both are fixed — a press in the gap, and an inner block holding more ink
-  than the ring around it.
+  **The enclosing lookup became a map — 2026-09-22**, when the bound on it was removed (user: *"It
+  should delete the whole wall network if that's what the user clicks."*). A per-press flood with no
+  bound would walk a room on every pointer move, since the cursor asks the same question; one pass over
+  the raster answers it everywhere instead.
 
-  Caught: ignoring the budget; taking a lump that sits inside the space; flooding 8-connected, which
-  slips out between sides that meet at their corners; and skipping the ink shortcut.
+  **Six mutations on the map, four caught and two equivalent.** Caught: never seeding the image's
+  border, so open map reads as enclosed; flooding the outside 8-connected, which slips out between sides
+  that meet at their corners; dropping the containment test, which then answers with a speck sitting
+  inside rather than the ring around it; and skipping the ink shortcut.
 
-  **Equivalent, checked by hand**: returning early when the flood reaches the image border, which the
-  containment test rejects anyway — it is there so an open-map press stops at once instead of walking
-  the raster, and the measurement below is what it buys. And preferring the largest wrapping lump over
-  the smallest, where only one lump can wrap a given space at all.
+  **Two survived and were checked by hand.** Preferring the largest wrapping lump over the smallest is
+  unreachable: a lump the pocket *touches* and whose box *contains* the pocket cannot be one of two, since
+  a second such lump would have to be reached past the first. And clearing the outside marker at the end
+  is cosmetic — the lookup reads a negative label as no lump either way, so it is there to make the
+  array's meaning plain rather than to change an answer.
 
-  Measured on a 3300x2550 raster with 1,999 lumps: **0.6ms inside a pit, 0.6ms on open paper, 1.5ms
-  near the edge**, against a walk of 38ms.
+  **Measured on a 3626x2598 raster with 2,476 lumps**: the walk 47ms, the map **321ms** and 36MB, and a
+  lookup 0.0003ms. The map is built on first need and dropped when the ink changes, so a GM who never
+  presses inside anything never pays for it.
 
   - Growing the flood's box by one: where the margin would matter the lump's own bounding box is
     entirely its own pixels, so there are no seeds either way and the answer is the same. It is written

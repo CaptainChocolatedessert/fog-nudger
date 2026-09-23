@@ -29,7 +29,14 @@
 import { devLog } from "../devlog";
 import { composePaint, paintPixels } from "../trace/inkPaint";
 import { walkIslands, type IslandWalk } from "../trace/inkIslands";
-import { patchAt, patchEnclosing, patchPixels, patchesUnder, type Patch } from "../trace/inkPatches";
+import {
+  enclosureMap,
+  patchAt,
+  patchEnclosing,
+  patchPixels,
+  patchesUnder,
+  type Patch,
+} from "../trace/inkPatches";
 import type { BinaryMask } from "../trace/binarize";
 import type { MarkRaster } from "./gapGesture";
 import { currentPaint, workingLayer } from "./paintState";
@@ -40,6 +47,14 @@ let base: BinaryMask | null = null;
 /** The composite the current walk was made from, kept so a press can take pixels out of it. */
 let composite: BinaryMask | null = null;
 let walk: IslandWalk | null = null;
+/**
+ * Which lump encloses each pixel, built on first need and dropped with the walk.
+ *
+ * **Lazy, because it is a pass over the whole raster** and a GM may never press inside anything. Once
+ * built, every press and every hover is a lookup — which is what lets the enclosing rule be unbounded
+ * (user, 2026-09-22: *"It should delete the whole wall network if that's what the user clicks."*).
+ */
+let enclosing: Int32Array | null = null;
 let offered: readonly Patch[] = [];
 let raster: MarkRaster | null = null;
 let span = 0;
@@ -154,6 +169,7 @@ function ensureWalk(): boolean {
 function forgetWalk(): void {
   composite = null;
   walk = null;
+  enclosing = null;
 }
 
 /**
@@ -181,25 +197,22 @@ export function speckleAt(x: number, y: number): Patch | null {
 }
 
 /**
- * How much enclosed space a press inside a shape may claim, as a share of the raster.
- *
- * **It is what stops a press inside a room taking the map.** The walls around a room enclose it, so
- * without a bound the answer there would be the whole wall network and everything inside it. A pit is
- * far under this; a room is not.
- */
-const ENCLOSED_SHARE = 0.02;
-
-/**
  * The lump a press landed **inside**, for ground that no ring covers.
  *
  * The third way in, after the ring and the ink: *"I should be able to click inside of it to kill it
- * (like the graph loop deletion tool)"* (user, 2026-09-22).
+ * (like the graph loop deletion tool)"* (user, 2026-09-22). **Unbounded** — a press inside a room finds
+ * the walls around it and takes them, which is the ruling the blob tool already made about its own
+ * worst case, left to the preview rather than guarded against.
  */
 export function speckleEnclosing(x: number, y: number): Patch | null {
   if (!walk || !raster || !composite) return null;
   if (x < 0 || y < 0 || x >= raster.width || y >= raster.height) return null;
-  const budget = Math.max(64, Math.round(raster.width * raster.height * ENCLOSED_SHARE));
-  return patchEnclosing(composite, walk, y * raster.width + x, budget);
+  if (!enclosing) {
+    const started = performance.now();
+    enclosing = enclosureMap(composite, walk);
+    devLog("info", `speckles: mapped what encloses each pixel in ${(performance.now() - started).toFixed(0)}ms`);
+  }
+  return patchEnclosing(walk, enclosing, y * raster.width + x);
 }
 
 export interface SpeckleAccept {

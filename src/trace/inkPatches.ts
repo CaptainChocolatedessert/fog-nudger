@@ -92,80 +92,134 @@ export function patchAt(walk: IslandWalk, index: number): Patch | null {
 }
 
 /**
- * The lump that **encloses** a point, for a press that landed on open ground inside one.
+ * For every pixel, the lump that **encloses** it — or 0 for a pixel nothing encloses.
  *
- * **A press inside a shape should take it** (user, 2026-09-22: *"When I try to kill a large blob that
- * isn't in a ring, I have to hit its ink perimeter. I should be able to click inside of it to kill it
- * (like the graph loop deletion tool)."*). A pit's middle is not ink, so `patchAt` cannot answer there
- * and the ring is not drawn for anything over the span — which left the tool's own subject reachable
- * only by hitting its outline.
+ * **A press inside a shape takes the shape** (user, 2026-09-22: *"I should be able to click inside of
+ * it to kill it (like the graph loop deletion tool)"*), and with **no bound on what that can be**:
+ * *"It should delete the whole wall network if that's what the user clicks."* So a press inside a room
+ * offers the walls around it, which is the ruling the blob tool already made about its own worst case.
  *
- * It floods the ground from the point, 4-connected, and asks what bounds it:
+ * ## Why a map rather than a flood per press
  *
- * - **Reaching the image's border means nothing encloses it** — the point is outside, and the press has
- *   found open map rather than a shape.
- * - **Spending the budget means the same answer**, and deliberately: without it a press on open paper
- *   would walk the whole raster, and a press inside a *room* would find the wall network and offer to
- *   take every wall on the map with everything they enclose. The budget is what keeps that out of reach
- *   by accident; a GM who means it can still press the network's own ink.
- * - **Among the lumps the flood touched, the one whose box contains the flood's** is the answer. That is
- *   what tells an enclosing ring from a speck sitting inside it, since both are touched.
+ * The first version flooded the ground from each press and stopped at a budget, which is what a bound
+ * is *for* — and the bound had to go. Unbounded, a flood inside a room walks the room on every pointer
+ * move, because the cursor asks the same question to decide whether to show a crosshair. One pass over
+ * the raster answers it everywhere, and every press and every hover afterwards is a lookup.
+ *
+ * ## How it decides
+ *
+ * The ground reachable from the image's border is the outside; every other pocket of ground is
+ * enclosed by something. Among the lumps a pocket touches, the answer is the one whose bounding box
+ * **contains** the pocket's — that is what tells a ring wrapping the space from a speck sitting in it —
+ * and the largest by area if more than one qualifies.
+ *
+ * **Four-connected**, this project's pairing of 8 for ink and 4 for space: sides that meet only at
+ * their corners are not a way through, or a diamond would leak.
  */
-export function patchEnclosing(
-  mask: BinaryMask,
-  walk: IslandWalk,
-  index: number,
-  budget: number,
-): Patch | null {
+export function enclosureMap(mask: BinaryMask, walk: IslandWalk): Int32Array {
   const { width, height } = mask;
-  if (index < 0 || index >= walk.labels.length) return null;
-  if (walk.labels[index] !== 0) return patchAt(walk, index);
+  const enclosing = new Int32Array(width * height);
+  if (width === 0 || height === 0) return enclosing;
 
-  const seen = new Uint8Array(width * height);
-  const stack = [index];
-  seen[index] = 1;
-  let spent = 0;
-  let minX = width;
-  let minY = height;
-  let maxX = -1;
-  let maxY = -1;
-  const touched = new Set<number>();
+  const OUTSIDE = -1;
+  const stack: number[] = [];
+  const push = (index: number): void => {
+    if (walk.labels[index] !== 0 || enclosing[index] === OUTSIDE) return;
+    enclosing[index] = OUTSIDE;
+    stack.push(index);
+  };
 
+  for (let x = 0; x < width; x++) {
+    push(x);
+    push((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y++) {
+    push(y * width);
+    push(y * width + width - 1);
+  }
   while (stack.length > 0) {
     const at = stack.pop()!;
     const x = at % width;
-    const y = (at - x) / width;
-    // The border is the outside: a flood that reaches it was never in anything.
-    if (x === 0 || y === 0 || x === width - 1 || y === height - 1) return null;
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-    spent += 1;
-    if (spent > budget) return null;
+    if (x > 0) push(at - 1);
+    if (x < width - 1) push(at + 1);
+    if (at >= width) push(at - width);
+    if (at + width < enclosing.length) push(at + width);
+  }
 
-    for (const next of [at - 1, at + 1, at - width, at + width]) {
-      if (next < 0 || next >= seen.length || seen[next] === 1) continue;
-      const label = walk.labels[next]!;
-      if (label !== 0) {
-        touched.add(label);
-        continue;
-      }
-      seen[next] = 1;
-      stack.push(next);
+  /*
+    What is left is pockets. Each is walked once and every pixel in it gets the same answer.
+
+    **The pocket buffer and the touched set are reused**, not allocated per pocket: a speckled map has
+    thousands of pockets, and the allocation was most of the cost.
+  */
+  const pocket: number[] = [];
+  const touched = new Set<number>();
+  for (let start = 0; start < enclosing.length; start++) {
+    if (walk.labels[start] !== 0 || enclosing[start] !== 0) continue;
+
+    pocket.length = 0;
+    pocket.push(start);
+    enclosing[start] = OUTSIDE;
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    touched.clear();
+
+    for (let head = 0; head < pocket.length; head++) {
+      const at = pocket[head]!;
+      const x = at % width;
+      const y = (at - x) / width;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+
+      const step = (next: number): void => {
+        const label = walk.labels[next]!;
+        if (label !== 0) {
+          touched.add(label);
+          return;
+        }
+        if (enclosing[next] === OUTSIDE) return;
+        enclosing[next] = OUTSIDE;
+        pocket.push(next);
+      };
+      if (x > 0) step(at - 1);
+      if (x < width - 1) step(at + 1);
+      if (at >= width) step(at - width);
+      if (at + width < enclosing.length) step(at + width);
     }
+
+    let best = 0;
+    let bestArea = -1;
+    for (const label of touched) {
+      const island = walk.islands[label - 1];
+      if (!island) continue;
+      if (island.minX > minX || island.minY > minY || island.maxX < maxX || island.maxY < maxY) continue;
+      if (island.area <= bestArea) continue;
+      bestArea = island.area;
+      best = label;
+    }
+    for (const at of pocket) enclosing[at] = best;
   }
 
-  let best: Patch | null = null;
-  for (const label of touched) {
-    const island = walk.islands[label - 1];
-    if (!island) continue;
-    // The one that wraps the space, rather than one sitting in it.
-    if (island.minX > minX || island.minY > minY || island.maxX < maxX || island.maxY < maxY) continue;
-    if (best && island.area <= best.area) continue;
-    best = { ...island, label };
-  }
-  return best;
+  for (let at = 0; at < enclosing.length; at++) if (enclosing[at] === OUTSIDE) enclosing[at] = 0;
+  return enclosing;
+}
+
+/**
+ * The lump a press landed inside, read off the map above.
+ *
+ * A press on ink answers with that lump, so one call covers both ways a press can land on something.
+ */
+export function patchEnclosing(walk: IslandWalk, enclosing: Int32Array, index: number): Patch | null {
+  if (index < 0 || index >= walk.labels.length) return null;
+  if (walk.labels[index] !== 0) return patchAt(walk, index);
+  const label = enclosing[index] ?? 0;
+  if (label === 0) return null;
+  const island = walk.islands[label - 1];
+  return island ? { ...island, label } : null;
 }
 
 /**

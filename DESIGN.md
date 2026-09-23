@@ -2831,7 +2831,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,115 tests across 78 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,117 tests across 78 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -5208,6 +5208,15 @@ it was offered.
   whole map rather than a fifth of the shorter side; and the search cost **62–73ms on every frame the
   slider moved**, because it re-walked the ink each time — the walk is now kept until the ink changes and
   the span only re-filters it.
+- **Nothing bounds what a press takes** (user, 2026-09-22: *"I don't want an unnecessary limit on what
+  the tool will find. It should delete the whole wall network if that's what the user clicks."*). The
+  first build stopped the enclosing search at 2% of the raster to keep a press inside a room from
+  offering the walls; the bound is gone, and that press now offers the walls. It is the ruling the blob
+  tool already made about its own worst case.
+- **So the enclosing question became a map, not a flood.** Unbounded, a per-press flood would walk a
+  whole room on every pointer move, because the cursor asks the same question to decide its shape. One
+  pass over the raster answers it for every pixel: **321ms and 36MB** on a 3626x2598 raster with 2,476
+  lumps, built on first need, dropped when the ink changes, and **0.0003ms** per lookup after that.
 - **Three ways in, and the third came from the same room** (user, 2026-09-22: *"When I try to kill a
   large blob that isn't in a ring, I have to hit its ink perimeter. I should be able to click inside of
   it to kill it (like the graph loop deletion tool)."*). A press takes the lump whose **ring** it landed
