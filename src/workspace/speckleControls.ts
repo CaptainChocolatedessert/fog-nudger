@@ -17,6 +17,7 @@
 
 import { SLIDER_STEPS, fromSlider, toSlider, type ScaleLimits } from "../sliderScale";
 import { currentToolDrawer } from "./drawer";
+import { doneRow } from "./doneAction";
 import { suppressEverySpeckleShown } from "./paintTool";
 import { invalidate, say } from "./shell";
 import { setSpeckleSpan, speckleMarks, speckleRaster, speckleSpan } from "./speckleSearch";
@@ -101,4 +102,6 @@ export function renderSpeckleControls(rows: HTMLElement): void {
   });
   actions.append(all);
   rows.append(actions);
+  // Putting the tool down is what recomposes the ink and derives the walls once, rather than per press.
+  rows.append(doneRow());
 }

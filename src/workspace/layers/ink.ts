@@ -34,10 +34,21 @@ let painted: Bitmap | null = null;
 /** The last reading, kept so a tool change can redraw from the other half of it. */
 let reading: { readonly mask: BinaryMask; readonly composed: BinaryMask } | null = null;
 
-/** Whether a brush is in hand, which is when the base is wanted rather than the composite. */
+/**
+ * Whether the base is wanted rather than the composite.
+ *
+ * **True for a brush, and for *Suppress speckles* since 2026-09-22.** The rule is not "is this a
+ * brush" but *is the GM's paint the thing being edited*: with the base drawn and the paint layer over
+ * it, what they have taken shows as their own mark on ink that is still there — which is what lets the
+ * recompose, and the derive behind it, wait until the tool is put down (user, 2026-09-22: *"The derive
+ * can act like it does for the painting tools — wait until the tool is not in hand."*).
+ *
+ * *Suppress blob* is deliberately not in this list yet: it recomposes per press to show the ink go, and
+ * it is being compared against the speckle tool in a room before either changes.
+ */
 function painting(): boolean {
   const tool = currentTool();
-  return tool === "suppress" || tool === "ink";
+  return tool === "suppress" || tool === "ink" || tool === "speckles";
 }
 
 /** Which half of the reading to draw. */

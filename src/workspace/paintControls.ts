@@ -34,6 +34,7 @@ import { STEPS, groupControls, toolGroups } from "../steps";
 import { confirmAction } from "../confirmDialog";
 import { renderPanel } from "./drawer";
 import { brushKind } from "./paintGesture";
+import { doneRow } from "./doneAction";
 import {
   paintRaster,
   snapshotPaint,
@@ -115,6 +116,12 @@ export function renderToolControls(head: HTMLElement): void {
   */
   if (kind) head.append(brushActions(kind));
   else if (active === "gaps") head.append(gapActions());
+  /*
+    And *Done* for every ink tool, because every one of them finishes by being put down: a brush's
+    strokes, a gap's fills and a speckle's presses all sit in a working copy until then (user,
+    2026-09-22).
+  */
+  head.append(doneRow());
 }
 
 

@@ -155,6 +155,7 @@ export function setVerb(kind: PaintKind, next: PaintVerb): void {
  * a ring is never on screen while some other tool is in hand and cannot act on it.
  */
 export function setPaintTool(next: PaintTool): void {
+  const was = tool;
   tool = next;
   if (next === "gaps") {
     if (runGapSearch()) {
@@ -173,6 +174,14 @@ export function setPaintTool(next: PaintTool): void {
       say("nothing has been read from the map yet, so there is nothing to search");
     }
   } else {
+    if (was === "speckles") {
+      /*
+        Putting this tool down is what pays for it: the presses wrote paint and the picture behind them
+        is still the ink as it was read. One recompose here, and the derive follows it once rather than
+        once per press.
+      */
+      requestRecompose();
+    }
     clearSpeckleSearch();
   }
   specklesChanged();
@@ -374,9 +383,12 @@ function takeSpeckleAt(point: MapPoint): boolean {
   }
   if (before !== null) rememberPaint("suppress", before, "suppressing a speckle");
   if (result.bounds) refreshPaintRegion(result.bounds);
-  // Recomposed for the reason the blob spike gives: this is not a brush, so the ink layer is drawing
-  // the composite and the mark would sit there until the tool was put down.
-  requestRecompose();
+  /*
+    **No recompose here**, which is what the brushes do and why they are cheap. The ink layer draws the
+    base while this tool is in hand, so what a press took shows as suppression paint over ink that is
+    still drawn — and the recompose, with the ~1.5s derive chained behind it, waits until the tool goes
+    down. A room measured one press at about 4.1 seconds before this.
+  */
   specklesChanged();
   say(
     `suppressed a lump of ${result.pixels} px, span ${patch.span} px · ` +
@@ -401,7 +413,6 @@ export function suppressEverySpeckleShown(): void {
   }
   if (before !== null) rememberPaint("suppress", before, "suppressing the speckles");
   if (result.bounds) refreshPaintRegion(result.bounds);
-  requestRecompose();
   specklesChanged();
   say(`suppressed ${result.accepted} lumps, ${result.pixels} px · not saved until you leave Ink`);
 }

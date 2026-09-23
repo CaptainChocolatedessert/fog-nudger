@@ -50,7 +50,7 @@ import { editableGraph, substituteGraph } from "./regions";
 import { invalidate, say } from "./shell";
 import { saveEditedWalls, wallsEdited } from "./stage";
 import { workOn } from "./subject";
-import { armTool } from "./toolPalette";
+import { doneRow } from "./doneAction";
 
 /**
  * The track's step. Its floor is `TRACK_FLOOR`, shared with Prune's and pinned for the reason given
@@ -130,20 +130,11 @@ export function renderAmountControls(body: HTMLElement): void {
 
   /*
     **Done makes the commit an act** (user, 2026-09-22), matching Prune's and Collapse's *adjust, then
-    press*. It is a press on Pan and nothing more: the drawer closing is what the `onStepChange` handler
-    below hears, and that applies the latch, so there is one commit path and the button is a second way
-    into it. **`armTool`, not `setTool`** — `setTool` leaves the drawer open, and an open drawer is a
-    tool not yet left. Leaving any other way still commits, as the paint tools do.
+    press*. The drawer closing is what the `onStepChange` handler below hears, and that applies the
+    latch, so there is one commit path and the button is a second way into it. `doneAction.ts` is the
+    button itself, shared with the ink tools that finish the same way.
   */
-  const actions = document.createElement("div");
-  actions.className = "step-actions";
-  const done = document.createElement("button");
-  done.type = "button";
-  done.className = "chip";
-  done.textContent = "Done";
-  done.addEventListener("click", () => armTool("pan"));
-  actions.append(done);
-  body.append(actions);
+  body.append(doneRow());
   refresh();
 }
 

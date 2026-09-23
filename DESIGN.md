@@ -3089,12 +3089,22 @@ click on a deliberately busy map:
 and they were recomputed on every reading whether or not that drawer was open. A reading marks them
 stale; nothing computes until a row that draws one is built.
 
-**The derive is left alone, and deliberately.** It runs continuously by a decision this record argues
-for: *"the merge failure this project cares most about is visible in the partition, not in the mask, so
-deriving continuously shows it at the moment it is caused instead of whenever the GM next goes to
-look."* Its cost is stated there as ~700ms on a cached mask, and a busy map makes it 1502ms. **Changing
-it is a live question**, and the shapes it could take are a debounce that coalesces a run of presses, or
-the worker that section already names as the real answer.
+**The derive waits for the tool to be put down** (user, 2026-09-22: *"The derive can act like it does
+for the painting tools — wait until the tool is not in hand."*). Deriving continuously stands as the rule
+— the merge failure this project cares most about is visible in the partition rather than the mask — and
+what changed is what *counts as a change*: a brush's strokes have never recomposed per stroke, and
+*Suppress speckles* now holds its presses the same way. **The ink layer draws the base while it is in
+hand**, so what a press took shows as suppression paint over ink that is still drawn, and one recompose
+on the way out derives once instead of once per press.
+
+**So the rule is not "is this a brush" but *is the GM's paint the thing being edited*.** *Suppress blob*
+is deliberately still outside it: it recomposes per press to show the ink go, and the two are being
+compared in a room before either moves.
+
+**And every tool that finishes by being put down has a *Done*** (user, same day), which is the same
+button Straighten grew — `doneAction.ts`, a press on Pan through `armTool`. **Stated cost**: it closes
+the drawer without the *step* visibly finishing, since the paint is still saved when the Ink side is
+left. A room called that *"a little odd... but it's ok for now."*
 
 ### A long sweep needs its own timeout — 2026-09-22
 
@@ -3337,6 +3347,10 @@ fixed. The partition was judged in the first of them (above); the tools built on
 next section.
 
 ### Where to pick this up
+
+**Note for later: the region fills should have no border** (user, 2026-09-22). They are bounded by
+walls already, and the two outlines conflict visually — the fill should be interior colour only, drawn
+under the walls.
 
 **Do this first: take *Suppress speckles* into a room** (built 2026-09-22, never pressed in one). Ring the
 speckling and take it; then press one of the map's pits, which should go whole rather than leaving its
