@@ -491,7 +491,14 @@ describe("over random graphs, against an oracle that shares none of the reasonin
     expect(reach.refused, "regions not offered").toBeGreaterThan(0);
     expect(reach.contents, "something inside taken with it").toBeGreaterThan(0);
     expect(reach.pinched, "a neighbour left touching itself").toBeGreaterThan(0);
-  });
+    /*
+      **Thirty seconds, because this sweep is long by design.** 450 graphs against an oracle takes a few
+      seconds on its own and rather more under a full suite's parallel load — it failed on 2026-09-22 with
+      *"Test timed out in 5000ms"* while passing alone, which is a timeout rather than a wrong answer and
+      would otherwise read as a real defect. Shrinking the sweep to fit the default would be trading
+      coverage for a number.
+    */
+  }, 30_000);
 
   /*
     `collapseAll` at a limit that catches some regions and not others: nothing under the limit is left,

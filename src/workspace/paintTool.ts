@@ -58,6 +58,7 @@ import {
   speckleAt,
   speckleMarks,
   speckleRaster,
+  speckleEnclosing,
   speckleRingAt,
   speckleSearchWanted,
   startSpeckleSearch,
@@ -352,11 +353,16 @@ function takeSpeckleAt(point: MapPoint): boolean {
     asked what pixel it landed on could take the very thing this tool is for only by hitting its
     outline, which is what the room reported.
   */
+  const x = Math.floor(point.u * raster.width);
+  const y = Math.floor(point.v * raster.height);
   const patch =
     speckleRingAt(point.u, point.v, rasterFloor(point, raster)) ??
-    speckleAt(Math.floor(point.u * raster.width), Math.floor(point.v * raster.height));
+    speckleAt(x, y) ??
+    // Third: the shape this press landed *inside*, which is how a big pit is taken without hitting
+    // its outline. Bounded, so a press inside a room does not offer the wall network.
+    speckleEnclosing(x, y);
   if (!patch) {
-    devLog("info", "speckles: a press landed on no ring and no ink");
+    devLog("info", "speckles: a press took nothing — no ring, no ink, nothing enclosing it");
     return false;
   }
 
@@ -424,7 +430,9 @@ function speckleTargetAt(point: MapPoint): boolean {
   const raster = speckleRaster();
   if (!raster || !workingLayer("suppress")) return false;
   if (speckleRingAt(point.u, point.v, rasterFloor(point, raster))) return true;
-  return speckleAt(Math.floor(point.u * raster.width), Math.floor(point.v * raster.height)) !== null;
+  const x = Math.floor(point.u * raster.width);
+  const y = Math.floor(point.v * raster.height);
+  return speckleAt(x, y) !== null || speckleEnclosing(x, y) !== null;
 }
 
 /**

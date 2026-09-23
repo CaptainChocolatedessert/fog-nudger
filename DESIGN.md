@@ -2831,7 +2831,7 @@ several of them invisible from a desk by construction.
 
 ## 8. Testing and diagnostic practice
 
-**1,108 tests across 78 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,115 tests across 78 files**, all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3070,6 +3070,16 @@ Two things from it that still bind:
   from an outward-facing one, and reversing it inverts every room. Euler's identity guards it now.
 - **Holes can be mis-parented**, which is why a cycle is only ever tested against cycles of *other*
   pieces (§5).
+
+### A long sweep needs its own timeout — 2026-09-22
+
+`collapse.test.ts`'s oracle sweep runs 450 graphs and takes a few seconds alone. Under a full suite's
+parallel load it passed the **5-second default** and reported *"Test timed out in 5000ms"*, which reads
+exactly like a real failure and is not one: the test is deterministic and passed on its own three times
+running. It carries `30_000` now.
+
+**The tell is a failure that will not reproduce in isolation.** Check the message before the logic: a
+timeout names itself, and the seeded sweeps here cannot fail intermittently on their own arithmetic.
 
 ### The randomised sweep
 
@@ -5198,9 +5208,17 @@ it was offered.
   whole map rather than a fifth of the shorter side; and the search cost **62–73ms on every frame the
   slider moved**, because it re-walked the ink each time — the walk is now kept until the ink changes and
   the span only re-filters it.
-- **What the room's log said about scale**: 2,465 lumps on a real map, with 788 to 1,585 of them ringed
-  at spans of 6 to 11 pixels. A thousand rings at map zoom is its own problem, and the reason "clicking
-  seems hit or miss" was reported alongside the hit test.
+- **Three ways in, and the third came from the same room** (user, 2026-09-22: *"When I try to kill a
+  large blob that isn't in a ring, I have to hit its ink perimeter. I should be able to click inside of
+  it to kill it (like the graph loop deletion tool)."*). A press takes the lump whose **ring** it landed
+  in, else the lump it landed **on**, else the lump that **encloses** it. The third floods the ground
+  from the press and asks what wraps it — bounded to 2% of the raster, which is what keeps a press
+  inside a *room* from offering the wall network and everything it encloses. Measured at **0.6ms inside
+  a pit and on open map, 1.5ms near the edge**, so the cursor can ask it on every move.
+- **The room's log showed 2,465 lumps**, 788 to 1,585 of them ringed at spans of 6 to 11 pixels — but
+  that was a deliberately speckle-heavy setting (user: *"I'm running settings that cause a lot of
+  speckles, so it's not a normal condition creating so many rings"*), so it is not evidence about a
+  normal map and no thinning of the rings was built for it.
 - **As built** — `trace/inkPatches.ts` is the decision, pure and tested: **nine mutations, six caught and
   three equivalent**, two of the first pass's survivors being real gaps in the fixtures. The tool is
   `workspace/speckleSearch.ts` on the gap search's shape, writing into the suppression layer through the

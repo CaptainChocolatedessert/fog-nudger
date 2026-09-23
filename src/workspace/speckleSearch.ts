@@ -29,7 +29,7 @@
 import { devLog } from "../devlog";
 import { composePaint, paintPixels } from "../trace/inkPaint";
 import { walkIslands, type IslandWalk } from "../trace/inkIslands";
-import { patchAt, patchPixels, patchesUnder, type Patch } from "../trace/inkPatches";
+import { patchAt, patchEnclosing, patchPixels, patchesUnder, type Patch } from "../trace/inkPatches";
 import type { BinaryMask } from "../trace/binarize";
 import type { MarkRaster } from "./gapGesture";
 import { currentPaint, workingLayer } from "./paintState";
@@ -173,11 +173,33 @@ export function runSpeckleSearch(): boolean {
   return true;
 }
 
-/** The lump under one raster pixel, which is what a press outside every ring takes. */
+/** The lump under one raster pixel, which is what a press on ink takes. */
 export function speckleAt(x: number, y: number): Patch | null {
   if (!walk || !raster) return null;
   if (x < 0 || y < 0 || x >= raster.width || y >= raster.height) return null;
   return patchAt(walk, y * raster.width + x);
+}
+
+/**
+ * How much enclosed space a press inside a shape may claim, as a share of the raster.
+ *
+ * **It is what stops a press inside a room taking the map.** The walls around a room enclose it, so
+ * without a bound the answer there would be the whole wall network and everything inside it. A pit is
+ * far under this; a room is not.
+ */
+const ENCLOSED_SHARE = 0.02;
+
+/**
+ * The lump a press landed **inside**, for ground that no ring covers.
+ *
+ * The third way in, after the ring and the ink: *"I should be able to click inside of it to kill it
+ * (like the graph loop deletion tool)"* (user, 2026-09-22).
+ */
+export function speckleEnclosing(x: number, y: number): Patch | null {
+  if (!walk || !raster || !composite) return null;
+  if (x < 0 || y < 0 || x >= raster.width || y >= raster.height) return null;
+  const budget = Math.max(64, Math.round(raster.width * raster.height * ENCLOSED_SHARE));
+  return patchEnclosing(composite, walk, y * raster.width + x, budget);
 }
 
 export interface SpeckleAccept {

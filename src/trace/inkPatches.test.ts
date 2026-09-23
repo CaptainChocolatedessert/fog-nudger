@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BinaryMask } from "./binarize";
 import { walkIslands } from "./inkIslands";
-import { patchAt, patchPixels, patchesUnder } from "./inkPatches";
+import { patchAt, patchEnclosing, patchPixels, patchesUnder } from "./inkPatches";
 
 /** A mask from rows of `#` for ink and `.` for ground. */
 function maskOf(rows: readonly string[]): BinaryMask {
@@ -98,6 +98,89 @@ describe("what is on offer", () => {
     const walk = walkIslands(mask);
     expect(patchesUnder(walk, 3)).toEqual([]);
     expect(patchAt(walk, 0)?.span).toBe(5);
+  });
+});
+
+describe("what encloses a press", () => {
+  const enclosing = (rows: readonly string[], x: number, y: number, budget = 999) => {
+    const mask = maskOf(rows);
+    const walk = walkIslands(mask);
+    return patchEnclosing(mask, walk, y * mask.width + x, budget);
+  };
+
+  /*
+    The case the room asked for: a press in the middle of a pit, which is not ink and carries no ring
+    because the span never offered it.
+  */
+  it("answers with the ring a press landed inside", () => {
+    const rows = ["........", ".#####..", ".#...#..", ".#...#..", ".#####..", "........"];
+    expect(enclosing(rows, 3, 2)?.span).toBe(5);
+  });
+
+  it("answers with the lump itself when the press lands on ink", () => {
+    const rows = ["........", ".#####..", ".#...#..", ".#...#..", ".#####..", "........"];
+    expect(enclosing(rows, 1, 1)?.span).toBe(5);
+  });
+
+  it("says nothing for a press on open map, which reaches the border", () => {
+    const rows = ["........", ".#####..", ".#...#..", ".#...#..", ".#####..", "........"];
+    expect(enclosing(rows, 7, 0)).toBeNull();
+    expect(enclosing(rows, 6, 3)).toBeNull();
+  });
+
+  it("says nothing when the ring is broken, since the flood walks out", () => {
+    const rows = ["........", ".#####..", ".#...#..", ".#......", ".#####..", "........"];
+    expect(enclosing(rows, 3, 2)).toBeNull();
+  });
+
+  /*
+    **The budget is what keeps the wall network out of reach by accident.** A press inside a room finds
+    the walls around it, and taking those would take every wall on the map with everything they enclose.
+    Spending the budget is the same answer as reaching the border: nothing.
+  */
+  it("says nothing when the space inside is bigger than the budget", () => {
+    const rows = ["........", ".#####..", ".#...#..", ".#...#..", ".#####..", "........"];
+    expect(enclosing(rows, 3, 2, 3)).toBeNull();
+    expect(enclosing(rows, 3, 2, 6)?.span).toBe(5);
+  });
+
+  /*
+    A speck inside the pit is touched by the same flood, so the answer has to tell the thing that wraps
+    the space from the thing sitting in it.
+
+    **The inner lump here holds more ink than the ring does**, which is what makes this about wrapping
+    rather than about size. The first version had a single speck inside, where picking the larger lump
+    gives the same answer — a mutation pass removing the containment test passed it.
+  */
+  it("takes the lump that wraps the space, even when the one inside holds more ink", () => {
+    const rows = [
+      "..............",
+      ".############.",
+      ".#..........#.",
+      ".#.########.#.",
+      ".#.########.#.",
+      ".#.########.#.",
+      ".#.########.#.",
+      ".#.########.#.",
+      ".#.########.#.",
+      ".#.########.#.",
+      ".#..........#.",
+      ".############.",
+      "..............",
+    ];
+    // Pressed in the gap between the two, not on either: the ring is 44 pixels of ink and the block
+    // inside it is 64, so picking by size would answer with the block.
+    expect(enclosing(rows, 2, 2)?.span).toBe(12);
+  });
+
+  /*
+    **Four-connected, so a diagonal is not a way out.** The diamond's sides meet only at their corners,
+    so an eight-connected flood slips between them and reaches the border — and reports that nothing
+    encloses a point that plainly is enclosed.
+  */
+  it("does not leak diagonally out of a shape whose sides meet at corners", () => {
+    const rows = ["..#..", ".#.#.", "#...#", ".#.#.", "..#.."];
+    expect(enclosing(rows, 2, 2)?.span).toBe(5);
   });
 });
 
@@ -195,6 +278,24 @@ describe("what a press takes", () => {
     mutant keeps.
   - `patchAt`'s `label === 0` check: without it the lookup is `islands[-1]`, which is undefined, and
     the function answers `null` anyway.
+  **Six more for the enclosing lookup — four caught, two equivalent.** This block was written claiming
+  all six before the run, which was wrong twice over: two of them survived on fixtures that never
+  reached the code. One fixture pressed **on the ink** rather than in the gap, so the flood never ran;
+  the other had a single speck inside the ring, where picking the largest lump gives the same answer as
+  picking the one that wraps. Both are fixed — a press in the gap, and an inner block holding more ink
+  than the ring around it.
+
+  Caught: ignoring the budget; taking a lump that sits inside the space; flooding 8-connected, which
+  slips out between sides that meet at their corners; and skipping the ink shortcut.
+
+  **Equivalent, checked by hand**: returning early when the flood reaches the image border, which the
+  containment test rejects anyway — it is there so an open-map press stops at once instead of walking
+  the raster, and the measurement below is what it buys. And preferring the largest wrapping lump over
+  the smallest, where only one lump can wrap a given space at all.
+
+  Measured on a 3300x2550 raster with 1,999 lumps: **0.6ms inside a pit, 0.6ms on open paper, 1.5ms
+  near the edge**, against a walk of 38ms.
+
   - Growing the flood's box by one: where the margin would matter the lump's own bounding box is
     entirely its own pixels, so there are no seeds either way and the answer is the same. It is written
     for the reader rather than for the arithmetic.

@@ -92,6 +92,83 @@ export function patchAt(walk: IslandWalk, index: number): Patch | null {
 }
 
 /**
+ * The lump that **encloses** a point, for a press that landed on open ground inside one.
+ *
+ * **A press inside a shape should take it** (user, 2026-09-22: *"When I try to kill a large blob that
+ * isn't in a ring, I have to hit its ink perimeter. I should be able to click inside of it to kill it
+ * (like the graph loop deletion tool)."*). A pit's middle is not ink, so `patchAt` cannot answer there
+ * and the ring is not drawn for anything over the span — which left the tool's own subject reachable
+ * only by hitting its outline.
+ *
+ * It floods the ground from the point, 4-connected, and asks what bounds it:
+ *
+ * - **Reaching the image's border means nothing encloses it** — the point is outside, and the press has
+ *   found open map rather than a shape.
+ * - **Spending the budget means the same answer**, and deliberately: without it a press on open paper
+ *   would walk the whole raster, and a press inside a *room* would find the wall network and offer to
+ *   take every wall on the map with everything they enclose. The budget is what keeps that out of reach
+ *   by accident; a GM who means it can still press the network's own ink.
+ * - **Among the lumps the flood touched, the one whose box contains the flood's** is the answer. That is
+ *   what tells an enclosing ring from a speck sitting inside it, since both are touched.
+ */
+export function patchEnclosing(
+  mask: BinaryMask,
+  walk: IslandWalk,
+  index: number,
+  budget: number,
+): Patch | null {
+  const { width, height } = mask;
+  if (index < 0 || index >= walk.labels.length) return null;
+  if (walk.labels[index] !== 0) return patchAt(walk, index);
+
+  const seen = new Uint8Array(width * height);
+  const stack = [index];
+  seen[index] = 1;
+  let spent = 0;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  const touched = new Set<number>();
+
+  while (stack.length > 0) {
+    const at = stack.pop()!;
+    const x = at % width;
+    const y = (at - x) / width;
+    // The border is the outside: a flood that reaches it was never in anything.
+    if (x === 0 || y === 0 || x === width - 1 || y === height - 1) return null;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    spent += 1;
+    if (spent > budget) return null;
+
+    for (const next of [at - 1, at + 1, at - width, at + width]) {
+      if (next < 0 || next >= seen.length || seen[next] === 1) continue;
+      const label = walk.labels[next]!;
+      if (label !== 0) {
+        touched.add(label);
+        continue;
+      }
+      seen[next] = 1;
+      stack.push(next);
+    }
+  }
+
+  let best: Patch | null = null;
+  for (const label of touched) {
+    const island = walk.islands[label - 1];
+    if (!island) continue;
+    // The one that wraps the space, rather than one sitting in it.
+    if (island.minX > minX || island.minY > minY || island.maxX < maxX || island.maxY < maxY) continue;
+    if (best && island.area <= best.area) continue;
+    best = { ...island, label };
+  }
+  return best;
+}
+
+/**
  * Every raster pixel one press takes: the lump itself, and anything it encloses.
  *
  * The flood runs over the lump's bounding box grown by one, so it stays proportional to the thing
