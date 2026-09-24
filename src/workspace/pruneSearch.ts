@@ -15,7 +15,7 @@
 import { devLog } from "../devlog";
 import { lastInkWidth, lastRasterPerGraphUnit } from "../pipeline";
 import { findPrunePieces, type PrunePiece } from "../trace/prunePieces";
-import type { WallGraph } from "../trace/wallGraph";
+import { longestRun, type WallGraph } from "../trace/wallGraph";
 import { startingLength } from "./pruneScale";
 import { editableGraph } from "./regions";
 
@@ -23,6 +23,11 @@ import { editableGraph } from "./regions";
 let limit: number | null = null;
 let searched: { readonly graph: WallGraph; readonly limit: number; readonly found: readonly PrunePiece[] } | null =
   null;
+/**
+ * Every piece there is, length ignored — for a free click. Kept apart from `searched`, which is the
+ * length-gated set the rings and the red preview draw, so the two cannot bleed into one another.
+ */
+let unbounded: { readonly graph: WallGraph; readonly pieces: readonly PrunePiece[] } | null = null;
 
 /**
  * The pieces on offer for the walls on screen, searching again only if the walls or the length changed.
@@ -71,4 +76,38 @@ export function pruneLength(): number | null {
 export function stopPruneSearch(): void {
   limit = null;
   searched = null;
+  unbounded = null;
+  hoveredFree = null;
+}
+
+/**
+ * The piece a specific wall belongs to, the length setting ignored entirely — for a direct click on a
+ * dead end too long to be rung at the current setting.
+ *
+ * `longestRun` is the graph's own bound: no piece can be longer than the longest run in it, so a
+ * search at that length can never miss one. `null` when the wall is not part of any dead-end piece at
+ * all — a wall on an ordinary loop, say — which is the same "nothing to take here" a click on it with
+ * Erase would answer.
+ */
+export function pieceAtFreeClick(edge: number): PrunePiece | null {
+  const graph = editableGraph();
+  if (!graph) return null;
+  if (!unbounded || unbounded.graph !== graph) {
+    unbounded = { graph, pieces: findPrunePieces(graph, longestRun(graph)) };
+  }
+  return unbounded.pieces.find((piece) => piece.edges.includes(edge)) ?? null;
+}
+
+/**
+ * The free-click piece the pointer is currently over, for the layer to preview — `null` when it is
+ * over a ringed one instead, or nothing at all.
+ */
+let hoveredFree: PrunePiece | null = null;
+
+export function setHoveredFreePiece(piece: PrunePiece | null): void {
+  hoveredFree = piece;
+}
+
+export function hoveredFreePiece(): PrunePiece | null {
+  return hoveredFree;
 }

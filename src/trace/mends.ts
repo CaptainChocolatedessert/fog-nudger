@@ -382,6 +382,45 @@ function crossesAnything(graph: WallGraph, mend: Mend, taken: readonly Mend[]): 
 }
 
 /**
+ * One free end's own best match, the reach ceiling ignored — for a direct click on an end whose true
+ * best candidate is farther than *Largest gap to look for* currently reaches.
+ *
+ * **The same-wall distance stays as set.** `travel` excludes a candidate already joined by a short
+ * walk through the existing walls, which is not a "how far away" ceiling in the same sense as reach —
+ * a free click has no business turning off a check the GM tuned on purpose.
+ *
+ * **Respects every mend already accepted.** A candidate whose target is another mend's own free end
+ * is not offered again: that mend's ring is what a click there should take, and this is deliberately
+ * not a second global reassignment that could disturb it. `crossesAnything` is checked against the
+ * same accepted set, for the same reason.
+ */
+export function mendForFreeEnd(
+  graph: WallGraph,
+  id: number,
+  travel: number,
+  taken: readonly Mend[],
+): Mend | null {
+  const degrees = nodeDegrees(graph);
+  if (degrees[id] !== 1) return null;
+
+  const used = new Set<number>();
+  for (const mend of taken) {
+    used.add(mend.from);
+    if (mend.to.kind === "end") used.add(mend.to.node);
+  }
+  if (used.has(id)) return null;
+
+  const neighbours = adjacency(graph);
+  const candidates = candidatesFor(graph, id, degrees, neighbours, Infinity, travel);
+  for (const candidate of candidates) {
+    if (candidate.mend.to.kind === "end" && used.has(candidate.mend.to.node)) continue;
+    if (crossesAnything(graph, candidate.mend, taken)) continue;
+    return candidate.mend;
+  }
+  return null;
+}
+
+/**
  * Accept mends: add each as a wall, splitting the segments they land partway along.
  *
  * **Every split first, then every wall**, and the order is what makes accepting several at once

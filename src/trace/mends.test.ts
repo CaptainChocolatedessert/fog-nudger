@@ -16,7 +16,7 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { describe, expect, it } from "vitest";
 
-import { applyMends, findMends, type Mend } from "./mends";
+import { applyMends, findMends, mendForFreeEnd, type Mend } from "./mends";
 import { buildWallFaces } from "./wallFaces";
 import { documentPoint, nodeDegrees, type WallGraph } from "./wallGraph";
 
@@ -411,6 +411,109 @@ describe("pairing across ends", () => {
     expect(gap?.to.kind).toBe("end");
     expect([gap!.from, (gap!.to as { node: number }).node].sort()).toEqual([x, xPrime].sort());
     expect(mends.find((mend) => mend.from === y)).toBeUndefined();
+  });
+});
+
+/*
+  Free click support (2026-09-24): a direct click on a free end too far from anything to have been
+  rung should still take that end's own best match — but only ever a match nothing else has already
+  spent, since a candidate close enough to be taken by someone else would already be inside that
+  mend's own ring.
+*/
+describe("mendForFreeEnd", () => {
+  it("finds a gap no reach ceiling would have rung", () => {
+    // The same broken room `findMends` cannot reach at 0.03 (above), gap 0.04. No reach argument
+    // exists here at all — travel at 0 so it cannot be mistaken for a hidden ceiling of its own —
+    // and the two ends still close.
+    const a = nodeAt(BROKEN_ROOM, 0.48, 0.8);
+    const b = nodeAt(BROKEN_ROOM, 0.52, 0.8);
+    expect(findMends(BROKEN_ROOM, { reach: 0.03, travel: 0 })).toEqual([]);
+
+    const free = mendForFreeEnd(BROKEN_ROOM, a, 0, []);
+    expect(free?.from).toBe(a);
+    expect(free?.to.kind).toBe("end");
+    expect((free!.to as { node: number }).node).toBe(b);
+  });
+
+  it("still leaves a kink alone within the same-wall distance — the ceiling that stays", () => {
+    const hook = graphOf(
+      [
+        [0.5, 0.5],
+        [0.5, 0.52],
+        [0.53, 0.52],
+        [0.53, 0.5],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+      ],
+    );
+    const end = nodeAt(hook, 0.5, 0.5);
+    // Within 0.1 of same-wall travel the two ends are one piece of wall already, exactly as
+    // `findMends` leaves them (above) — widening reach must not also widen this.
+    expect(mendForFreeEnd(hook, end, 0.1, [])).toBeNull();
+    // Narrow the same-wall distance below the 0.07 path and the gap is real again.
+    expect(mendForFreeEnd(hook, end, 0.05, [])).not.toBeNull();
+  });
+
+  it("declines a node that is not a free end", () => {
+    const a = nodeAt(BROKEN_ROOM, 0.2, 0.2); // a room corner, degree 2
+    expect(mendForFreeEnd(BROKEN_ROOM, a, 0.1, [])).toBeNull();
+  });
+
+  it("declines a free end that is itself already spent, not only its targets", () => {
+    const a = nodeAt(BROKEN_ROOM, 0.48, 0.8);
+    const b = nodeAt(BROKEN_ROOM, 0.52, 0.8);
+    const already: Mend = { from: a, to: { kind: "end", node: b }, start: { x: 0, y: 0 }, end: { x: 0, y: 0 }, length: 0 };
+    expect(mendForFreeEnd(BROKEN_ROOM, a, 0.1, [already])).toBeNull();
+  });
+
+  it("does not offer a target another accepted mend has already spent", () => {
+    const graph = graphOf(
+      [
+        [0.4, 0.5],
+        [0.5, 0.5],
+        [0.59, 0.5],
+        [0.69, 0.5],
+        [0.545, 0.68],
+        [0.545, 0.581],
+        [0.3, 0.4995],
+        [0.8, 0.4995],
+      ],
+      [
+        [0, 1],
+        [3, 2],
+        [4, 5],
+        [6, 7],
+      ],
+    );
+    const x = nodeAt(graph, 0.5, 0.5);
+    const xPrime = nodeAt(graph, 0.59, 0.5);
+    const y = nodeAt(graph, 0.545, 0.581);
+    const taken = findMends(graph, { reach: 0.09, travel: 0 });
+    expect(mendTouching(taken, x)).toBeDefined();
+
+    const free = mendForFreeEnd(graph, y, 0, taken);
+    // Whatever y's own free click lands on with x and x' already spent, it must not be either of them
+    // — a losing candidate that was in reach would already be inside the accepted mend's own ring.
+    if (free && free.to.kind === "end") {
+      expect(free.to.node).not.toBe(x);
+      expect(free.to.node).not.toBe(xPrime);
+    }
+  });
+
+  it("is empty-handed once its only candidate is spent, in a graph with nothing else", () => {
+    const a = nodeAt(BROKEN_ROOM, 0.48, 0.8);
+    const b = nodeAt(BROKEN_ROOM, 0.52, 0.8);
+    const already: Mend = mendForFreeEnd(BROKEN_ROOM, a, 0.1, [])!;
+    expect(already).not.toBeNull();
+    // b is now spent — but the room's own corners and walls are still there to fall back to, so this
+    // asks the narrower question: it is never the same mend offered again.
+    const second = mendForFreeEnd(BROKEN_ROOM, a, 0.1, [already]);
+    expect(second === null || second.to.kind !== "end" || (second.to as { node: number }).node !== b).toBe(
+      true,
+    );
   });
 });
 

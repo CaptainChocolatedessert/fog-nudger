@@ -434,6 +434,21 @@ function detail(graph: WallGraph, faces: WallFaces, face: number, outline: Outli
   };
 }
 
+/** `detail`, cached per face per traversal — the one path both a size-gated search and a direct click use. */
+function detailFor(graph: WallGraph, faces: WallFaces, face: number, outline: Outline): Collapse | null {
+  let cache = detailsOf.get(faces);
+  if (!cache) {
+    cache = new Map();
+    detailsOf.set(faces, cache);
+  }
+  let collapse = cache.get(face);
+  if (collapse === undefined) {
+    collapse = detail(graph, faces, face, outline);
+    cache.set(face, collapse);
+  }
+  return collapse;
+}
+
 /**
  * The regions a limit would collapse, smallest first.
  *
@@ -443,23 +458,29 @@ function detail(graph: WallGraph, faces: WallFaces, face: number, outline: Outli
 export function findCollapses(graph: WallGraph, faces: WallFaces, limit: number): Collapse[] {
   if (!(limit > 0)) return [];
   const known = outlines(graph, faces);
-  let cache = detailsOf.get(faces);
-  if (!cache) {
-    cache = new Map();
-    detailsOf.set(faces, cache);
-  }
-
   const found: Collapse[] = [];
   known.forEach((outline, face) => {
     if (!outline.loop || outline.area > limit) return;
-    let collapse = cache.get(face);
-    if (collapse === undefined) {
-      collapse = detail(graph, faces, face, outline);
-      cache.set(face, collapse);
-    }
+    const collapse = detailFor(graph, faces, face, outline);
     if (collapse) found.push(collapse);
   });
   return found.sort((left, right) => left.area - right.area || left.face - right.face);
+}
+
+/**
+ * Everything about collapsing the region at a point, **with no size limit at all** — for a direct
+ * click on a region the ring never offered because it is bigger than the drawer's own setting.
+ *
+ * The limit only ever decided which regions a size-gated search rings; whether a region *can*
+ * collapse — its spokes staying inside it, meeting no wall that stays — has never depended on its
+ * area. This is that same check, asked of one region rather than filtered from all of them.
+ */
+export function collapseAt(graph: WallGraph, faces: WallFaces, point: Vector2): Collapse | null {
+  const face = regionAt(faces, point);
+  if (face === null) return null;
+  // `outlines` maps `faces.faces` one for one, and `face` is `regionAt`'s own index into it — never
+  // out of range. `detail` (through `detailFor`) is what refuses a face with no simple outline.
+  return detailFor(graph, faces, face, outlines(graph, faces)[face]!);
 }
 
 /**

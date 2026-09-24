@@ -40,7 +40,7 @@ import type { PrunePiece } from "../../trace/prunePieces";
 import { colourFor } from "../palette";
 import { addPainter, type Painter } from "../shell";
 import { editableGraph, graphOnScreen } from "../regions";
-import { currentPrunePieces } from "../pruneSearch";
+import { currentPrunePieces, hoveredFreePiece } from "../pruneSearch";
 import { currentTool } from "../toolPalette";
 
 /**
@@ -186,27 +186,31 @@ interface Doomed {
 const NOTHING_DOOMED: Doomed = { edges: new Set<number>(), vertices: new Set<number>() };
 
 /**
- * The doomed set, remembered between frames — keyed on the pieces the search returned, which it
- * replaces rather than mutates when the walls or the length change.
+ * The doomed set, remembered between frames — keyed on the pieces the search returned and the
+ * free-click target the pointer is over, either of which it replaces rather than mutates when it
+ * changes.
  */
-let doomedFor: { pieces: readonly PrunePiece[]; doomed: Doomed } | null = null;
+let doomedFor: { pieces: readonly PrunePiece[]; free: PrunePiece | null; doomed: Doomed } | null = null;
 
 /**
- * What *Prune the dead ends* would take: every piece it has ringed, which is the whole cascade.
- *
- * **From the tool's own search since 2026-09-22**, where it used to come from the amount's latch. Prune
- * is a ringed tool now, and the red and the rings are one list read two ways — the rings say what a
- * click takes, the red says it inside each ring, and all of it together is what the button takes.
+ * What *Prune the dead ends* would take: every piece it has ringed, which is the whole cascade — plus
+ * whatever free-click piece the pointer is over, since that is exactly what a click there would take
+ * too (2026-09-24). The rings say what a click takes, the red says it inside each ring, and all of it
+ * together — the free target included — is what the button takes, since the button only ever spends
+ * what is ringed and the free target draws no button of its own.
  *
  * **Only against the graph the search ran on**: the indices name walls in that graph and no other.
  */
 function doomed(graph: WallGraph): Doomed {
+  if (graph !== editableGraph()) return NOTHING_DOOMED;
   const pieces = currentPrunePieces();
-  if (pieces.length === 0 || graph !== editableGraph()) return NOTHING_DOOMED;
-  if (doomedFor?.pieces === pieces) return doomedFor.doomed;
+  const free = hoveredFreePiece();
+  const all = free ? [...pieces, free] : pieces;
+  if (all.length === 0) return NOTHING_DOOMED;
+  if (doomedFor?.pieces === pieces && doomedFor.free === free) return doomedFor.doomed;
   const edges = new Set<number>();
   const vertices = new Set<number>();
-  for (const piece of pieces) {
+  for (const piece of all) {
     for (const index of piece.edges) {
       edges.add(index);
       const edge = graph.edges[index]!;
@@ -214,7 +218,7 @@ function doomed(graph: WallGraph): Doomed {
     }
   }
   const found = { edges, vertices };
-  doomedFor = { pieces, doomed: found };
+  doomedFor = { pieces, free, doomed: found };
   return found;
 }
 

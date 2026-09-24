@@ -18,7 +18,7 @@
  */
 
 import { devLog } from "../devlog";
-import { findMends, type Mend, type MendOptions } from "../trace/mends";
+import { findMends, mendForFreeEnd, type Mend, type MendOptions } from "../trace/mends";
 import type { WallGraph } from "../trace/wallGraph";
 import { editableGraph } from "./regions";
 import { currentSettings } from "./settingsState";
@@ -71,6 +71,35 @@ export function startMendSearch(): number | null {
 export function stopMendSearch(): void {
   options = null;
   searched = null;
+  hoveredFree = null;
+}
+
+/**
+ * The free end's own best match, the reach ceiling ignored — for a direct click on an end too far
+ * from anything to have been rung, and for the hover that previews it.
+ *
+ * The same-wall distance is the GM's current setting, not opened up: it is a check they tuned on
+ * purpose, not a "how far away" ceiling in the same sense as reach. Exclusive against `currentMends`,
+ * so a free click can never take a target another accepted mend has already spent.
+ */
+export function mendForFreeClick(id: number): Mend | null {
+  const graph = editableGraph();
+  if (!options || !graph) return null;
+  return mendForFreeEnd(graph, id, options.travel, currentMends());
+}
+
+/**
+ * The free-click mend the pointer is currently over, for the layer to preview — `null` when it is
+ * over a ringed one instead, or nothing at all.
+ */
+let hoveredFree: Mend | null = null;
+
+export function setHoveredFreeMend(mend: Mend | null): void {
+  hoveredFree = mend;
+}
+
+export function hoveredFreeMend(): Mend | null {
+  return hoveredFree;
 }
 
 /** Whether the search is running, which is whether the mend tool is in hand. */

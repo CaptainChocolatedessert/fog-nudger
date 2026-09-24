@@ -21,7 +21,7 @@
  */
 
 import { colourFor } from "../palette";
-import { currentMends } from "../mendSearch";
+import { currentMends, hoveredFreeMend } from "../mendSearch";
 import { mendCentre, mendRingRadius } from "../mendGesture";
 import { addPainter, type Painter } from "../shell";
 
@@ -31,7 +31,14 @@ const additive = () => colourFor("additive");
 const CASING = colourFor("casing");
 
 const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight }) => {
-  const mends = currentMends();
+  /*
+    **The free-click preview joins the same list** (2026-09-24): a free end too far to be rung draws
+    exactly the same proposal and ring a rung one does, since that is exactly what a click there would
+    take. It can never duplicate an entry here — the hover only ever computes one while the ring test
+    itself found nothing.
+  */
+  const free = hoveredFreeMend();
+  const mends = free ? [...currentMends(), free] : currentMends();
   if (mends.length === 0) return;
 
   // Graph units to screen: the longer drawn side is one unit on both axes.

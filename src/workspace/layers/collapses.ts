@@ -22,7 +22,7 @@
  */
 
 import { colourFor } from "../palette";
-import { currentCollapses } from "../collapseSearch";
+import { currentCollapses, hoveredFreeCollapse } from "../collapseSearch";
 import { ringCentre, ringRadius } from "../ringGesture";
 import { editableGraph } from "../regions";
 import { addPainter, type Painter } from "../shell";
@@ -36,7 +36,14 @@ const destructive = () => colourFor("destructive");
 const CASING = colourFor("casing");
 
 const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight }) => {
-  const collapses = currentCollapses();
+  /*
+    **A free-click target joins the same list** (2026-09-24): a region bigger than the drawer's own
+    size draws exactly the same going-red, star and ring a ringed one does, since that is exactly
+    what a click there would take. It never duplicates an entry here — the hover only computes one
+    while the ring test itself found nothing.
+  */
+  const free = hoveredFreeCollapse();
+  const collapses = free ? [...currentCollapses(), free] : currentCollapses();
   const graph = editableGraph();
   if (collapses.length === 0 || !graph) return;
 

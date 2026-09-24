@@ -3000,6 +3000,14 @@ invisible. It costs almost nothing to keep.
   opening at 2. The fixture written to catch it could not, and the comment justifying it was wrong.
   The measurement is the mutation run itself; what it asks for is a corrected comment, not a better
   test.
+- **A surviving mutation can also mean the fixture agrees with the wrong answer by coincidence, which
+  is not the same as the mutant being equivalent** (2026-09-24). `collapseAt`'s null-face guard was
+  swapped for a hardcoded face index, and the "is null outside every region" test still passed —
+  not because the guard was redundant, but because that particular fixture's face 0 was *itself*
+  refused, for an unrelated geometric reason, so the wrong code path happened to answer null too. A
+  throwaway probe against a fixture with exactly one, valid, non-null face is what told the two apart.
+  Where the equivalent-mutant case above asks "does this ever matter", this one asks "does my fixture
+  actually distinguish the two answers" — a different question, and both have to be asked.
 - **A mock drawn to settle a design cannot verify the code that follows it.** The ink profiles were
   designed by rendering candidates over a mock slider, which worked — and the mock was hand-written
   HTML whose SVG was sized by its container, so it could never exhibit the fault the real one shipped
@@ -3495,36 +3503,34 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-22 ended with
-every tool it built confirmed in a room, the public build pushed, and eight commits since that push.
+**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-24 built and
+committed two things in sequence — first the region border removal together with the stroke filter's
+measured step and its tick marks, then the free click ported to the three ringed wall tools with its
+hover preview — and only the second of those two has actually been looked at in a room so far.
 
-**Do this first: a short room pass on the two things that changed after their last one.**
+**Do this first: a room pass on everything built since the last one, oldest first.**
 
-1. ***Suppress blobs*** — the tool was confirmed working under its old name (*"That all works"*), and
-   then took over from *Suppress blob*, which is deleted. What has not been seen is the **renamed tool
-   wearing the old glyph**, and that the old tool's absence leaves no hole: the ink band should read
-   Suppress, Add ink, Gaps, Suppress blobs.
-2. **The *Done* buttons** in the ink drawers and Straighten's, which are the same shared control now.
-   Pressing Done is what recomposes the ink and derives the walls once, instead of once per press.
-
-**The first note waiting is built, 2026-09-24, not yet in a room**: the region fills have **no
-border** now. They are bounded by walls already, and the two outlines were competing visually — the
-fill is interior colour only, drawn under the walls (registration order was already fill-before-walls,
-so nothing moved there). Cost, decided while building: `review.strokeSquares` — the *Preview outline*
-control it leaves nothing for — is deleted rather than left as a dead slider, following the
-`inkOpacity` precedent.
-
-**Also built the same day, also not yet in a room**: the stroke filter's slider steps in units
-measured off the last reading's ink width, so consecutive settings are consecutive radii — §4's
-*Each filter draws the distribution it acts on* carries the mechanism and the mutation record.
+1. ***Suppress blobs*** and the ink drawers' **Done** buttons, carried since 2026-09-22 and still not
+   looked at. The tool was confirmed under its old name (*"That all works"*) and then took over from
+   *Suppress blob*, which is deleted — what has not been seen is the renamed tool wearing the old
+   glyph, and that the ink band reads Suppress, Add ink, Gaps, Suppress blobs with no gap where the old
+   one was. Done is what recomposes the ink and derives the walls once on the way out of a drawer,
+   instead of once per press.
+2. **The region fills losing their border**, and **the stroke filter's own step and tick marks**
+   (2026-09-24, both committed) — neither has been in a room. The fill is interior colour only now,
+   bounded by the walls layer already drawn under it. The stroke filter's slider steps in units measured
+   off the last reading's ink width rather than a fixed 0.05, so consecutive settings are consecutive
+   radii instead of one of a run of stops that do nothing; the rail carries a white tick at each real
+   stop, and the number beside it counts which one the handle is on. §4's *Each filter draws the
+   distribution it acts on* has the mechanism and the mutation record for both.
+3. ~~**The free click ported to Collapse, Prune and Mend, with a hover preview on all three**~~
+   **Confirmed 2026-09-24** (user: *"Those work well"*) — see *The free click, ported to the ringed wall
+   tools*, below the tool list. Not itemised further than that; if something specific needs a second
+   look, it will be reported as such.
 
 **Then, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
 the one question, a picture if it is geometric, name and glyph, a numbered plan):
 
-- **Delete a whole connected chain or network of walls** is **done** — that is *Erase chain*. What is
-  left of that family is porting the **free click** back to the ringed wall tools: the rings are a
-  suggestion, and a click on something they did not offer should still take it, as *Suppress blobs* now
-  does. Raised 2026-09-22 and parked.
 - **Doors, the way Dynamic Fog makes them.** **Start by reading, not designing**: the local clone at
   `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts` and
   `DoorOverlayActor.ts`. §2's *door subtraction is global*, §3 on mimicking the private format and §12
@@ -3545,14 +3551,17 @@ the one question, a picture if it is geometric, name and glyph, a numbered plan)
   2026-09-13. **It needs no build**, only a map.
 - **The code still says `speckles`** where the GM sees *Suppress blobs*, the way `dissolve` stayed when
   its tool became *Erase loop*. A rename would touch four modules and a layer id for no behaviour.
+- **The stroke slider's `round`-versus-`floor` question** — §4's ink investigation, resurfaced by the
+  2026-09-24 step fix. `Math.round` still gives slightly more filtering than a setting nominally asks
+  for at the top of each band; separate from — and not fixed by — the step now sitting on real stops.
 
 **Everything the 2026-09-22 session built was confirmed in a room**: Straighten's *Done*, the review
 drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge clamp on Move and Draw,
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
-*Suppress blobs*. Each has its own section; §10's tool list runs to nine.
+*Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click above.
 
-**8 commits are not pushed** (measured 2026-09-22 with `git rev-list --count origin/main..main`, before
-the commit that writes this line). The push earlier that day deployed everything before them. **A push
+**6 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 5
+before the commit that writes this line, which is this session's second and makes it 6). **A push
 deploys**, so it waits for the user to want the public build to have them.
 
 #### The slow saves, measured
@@ -5414,6 +5423,74 @@ it was offered.
   `workspace/speckleSearch.ts` on the gap search's shape, writing into the suppression layer through the
   same `paintPixels` a gap and a blob already use.
 
+### The free click, ported to the ringed wall tools — 2026-09-24
+
+**One sentence, agreed before anything was built**: a ring is only ever a suggestion at the current
+setting, and a click on a valid target should still take it even when that setting did not ring it —
+the same rule *Suppress blobs* already lives by. Confirmed well-defined for two of the three ringed
+tools straight away; the third needed one more decision.
+
+- **Collapse small regions.** The size limit was already known to decide nothing about *whether* a
+  region can collapse — only which ones a ringed search bothers to offer. `detail()` — the structural
+  check, spokes staying inside the region and meeting no wall that stays — has never taken a size at
+  all. `collapseAt(graph, faces, point)` (`trace/collapse.ts`) is that same check, found by a point
+  instead of filtered from every region by a limit, sharing the one `detailFor` cache both paths read
+  so a free click and a ringed one can never disagree about the same region.
+- **Prune the dead ends.** A dead-end piece is purely topological — peel free ends back to the vertex
+  that stays a junction regardless — so length only ever decided which pieces a ringed search rings,
+  never what one *is*. A free click hit-tests the wall itself (`nearestEdge`, Erase's own test, since a
+  piece is wall segments rather than an area) and looks it up in `findPrunePieces(graph,
+  longestRun(graph))` — the length ceiling opened to the graph's own longest run, which by definition
+  can never miss a piece. Declines exactly as Erase does when the wall is not part of any dead-end
+  piece at all — a wall on an ordinary loop.
+- **Mend — the one question.** Unlike the other two, "a ring you didn't offer" here could mean a free
+  end whose best match is simply farther than the reach setting, *or* one whose match is in reach but
+  lost it to a better-scoring pair elsewhere in the one greedy, every-end-once assignment. **Only the
+  first** (user, 2026-09-24): *"trust the best match machinery. It should offer a free end whose best
+  match is too far to be ringed, but not alternate matches that lost the contest — those would be
+  inside the ring anyway, and clicking in the ring should do what the ring indicates."*
+  `mendForFreeEnd(graph, id, travel, taken)` (`trace/mends.ts`) reuses the search's own per-end ranking
+  with the reach ceiling opened to infinity — **and the same-wall travel distance left exactly as the
+  GM set it**, since that is a check they tuned on purpose rather than a "how far away" ceiling in the
+  same sense as reach — filtered against every node `taken` (the currently accepted mends) has already
+  spent, so a losing candidate that is genuinely in reach is never offered: it is already inside the
+  mend that won it.
+
+**All three preview during hover, not only on press** (user, same day). Each search module now holds
+a `hoveredFree*` value the cursor sets and the corresponding layer draws, exactly as the ringed set
+already does — Collapse's and Mend's layers simply append the free target to the list they already
+draw in full (going-red, dashed star or proposal, ring); Prune's ring layer does the same, and the
+red itself is `layers/graph.ts`'s own `doomed()`, widened to union in the free piece so the two can
+never disagree about what a click takes. A free target can never coincide with a ringed one — the
+hover only computes one while the ring test itself found nothing — so nothing here can double-draw.
+
+**Decided while building:**
+
+- **The hover key is not the boolean the cursor already had.** The old `hoveredMend`/`hoveredCollapse`/
+  `hoveredPrune` booleans only ever asked "inside a ring, yes or no" — sufficient for the cursor, but a
+  free target's own *identity* can change (a different free end, a different wall) while that boolean
+  stays `true` the whole time, and the boolean alone would never trigger the repaint the new preview
+  needs. Each tool now also tracks a small key (`"ring"`, an end id, an edge index, or `null`) and
+  reads its own free-click function fresh whenever that key moves.
+- **Mend's per-call cost was measured, not assumed, before shipping it on the hover path.**
+  `mendForFreeEnd` rebuilds `nodeDegrees` and an adjacency list from scratch every call, where
+  `collapseAtPoint` and `pieceAtFreeClick` both reuse a cache keyed on graph identity. Timed over a
+  graph of 2,500 random disjoint segments — every one of 5,000 nodes a free end, a harder case than
+  any real map's mend search meets — median 1.5ms, worst 4.8ms. Accepted without adding a cache: cheap
+  enough for a hover poll, and nothing here runs more often than the pointer actually moves.
+
+**Mutation-tested as it was built**: `collapseAt` — three mutations run by hand, two caught outright
+and one exposed a redundant guard (`detail` already refuses a face with no simple outline, so
+`collapseAt` need not check it twice) which was deleted rather than kept for show. `mendForFreeEnd` —
+five mutations run by hand, three caught outright and two exposed real gaps in the first pass of
+tests (the reach ceiling and the "declines a free end that is itself already spent" case), both
+closed with a fixture rather than waved past.
+
+**Confirmed in a room, 2026-09-24** (user: *"Those work well"*) — the free click on all three tools and
+the hover preview alike. Which of the two open questions above that settles most directly — the
+preview reading clearly against the ringed one, or "trust the best match machinery" feeling right in
+a hand — was not itemised; taken as covering both until something specific is reported otherwise.
+
 ### The second ink tool was dropped — 2026-09-22
 
 Two were proposed on 2026-09-17: *small patches of ink*, and *thin lines* by analogy. The first is tool 9
@@ -5613,11 +5690,11 @@ closed outright.
 | `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
-| `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first |
+| `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first; `mendForFreeEnd` answers the same question for one end alone, reach ignored |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, raster pixels per unit, and holding a dragged position on the map |
 | `trace/probePoint.ts` | the one surviving diagnostic |
-| `trace/prunePieces.ts` | **what Prune rings**: the doomed runs grouped into pieces through the vertices that go — each a tree hanging off at most one vertex that stays — and taking them |
-| `trace/collapse.ts` | **collapsing small regions**: which regions a size qualifies — area inside the outline, holes included — the two checks that decide whether one is offered, the star, a grid of the walls, and *Collapse all* in rounds, taking only what was ringed |
+| `trace/prunePieces.ts` | **what Prune rings**: the doomed runs grouped into pieces through the vertices that go — each a tree hanging off at most one vertex that stays — and taking them. A free click reuses `findPrunePieces` at the graph's own longest run, ceiling opened rather than a second function |
+| `trace/collapse.ts` | **collapsing small regions**: which regions a size qualifies — area inside the outline, holes included — the two checks that decide whether one is offered, the star, a grid of the walls, and *Collapse all* in rounds, taking only what was ringed; `collapseAt` answers the same per-region check for one point, size ignored |
 | `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph |
 | `trace/suppression.ts` | **suppression**: which regions the marks suppress, the traversal as emitted without them, the mark hit test, and the marks' stored codec |
 | `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses; `randomInk`, straight runs of ink crossing and ending in the open, which the prune and dissolve sweeps derive from; and `randomWallGraph`, the generator whose shapes nest and touch — what the region tools' sweeps need |

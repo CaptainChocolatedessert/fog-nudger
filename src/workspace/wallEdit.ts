@@ -46,7 +46,7 @@ import { describeError } from "../describeError";
 import { compactNodes, documentPoint, type WallGraph } from "../trace/wallGraph";
 import { markAt } from "../trace/suppression";
 import { applySpan, findSpan, type Span } from "../trace/span";
-import { nearestEdge, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
+import { nearestEdge, nearestNode, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { connectedEdges } from "../trace/connected";
 import { chainClick, chainRun, chainRunOntoSegment } from "./chainGesture";
 import { insertEdge } from "../trace/planarOps";
@@ -71,17 +71,28 @@ import {
 } from "./dragGesture";
 import { describeMends, mendAt } from "./mendGesture";
 import { describeCollapses, describePrunes, ringAt } from "./ringGesture";
-import { currentPrunePieces, pruneLength, startPruneSearch, stopPruneSearch } from "./pruneSearch";
 import {
+  currentPrunePieces,
+  pieceAtFreeClick,
+  pruneLength,
+  setHoveredFreePiece,
+  startPruneSearch,
+  stopPruneSearch,
+} from "./pruneSearch";
+import {
+  collapseAtPoint,
   collapseSize,
   currentCollapses,
+  setHoveredFreeCollapse,
   startCollapseSearch,
   stopCollapseSearch,
 } from "./collapseSearch";
 import {
   currentMends,
+  mendForFreeClick,
   mendSearchActive,
   refreshMendSearch,
+  setHoveredFreeMend,
   startMendSearch,
   stopMendSearch,
 } from "./mendSearch";
@@ -221,14 +232,24 @@ let busy = false;
 let pressedMend: { readonly mend: Mend; readonly graph: WallGraph } | null = null;
 /** Whether the pointer is inside a mend's ring, so the cursor changes only when that does. */
 let hoveredMend = false;
+/**
+ * The free end a free-click preview is currently keyed on, or `"ring"` inside an ordinary ring — so a
+ * hover moving between two un-rung ends, or into and out of a ring, is told from "nothing changed"
+ * and repaints the preview it owns in `mendSearch.ts`.
+ */
+let hoveredMendFreeKey: number | "ring" | null = null;
 /** The small region a press landed on, and the walls it was found on. Collapsed on release. */
 let pressedCollapse: { readonly collapse: Collapse; readonly graph: WallGraph } | null = null;
 /** Whether the pointer is inside a small region's ring. */
 let hoveredCollapse = false;
+/** The same key as Mend's, by the region's own face index. */
+let hoveredCollapseFreeKey: number | "ring" | null = null;
 /** The dead-end piece a press landed on, and the walls it was found on. Taken on release. */
 let pressedPrune: { readonly piece: PrunePiece; readonly graph: WallGraph } | null = null;
 /** Whether the pointer is inside a dead end's ring. */
 let hoveredPrune = false;
+/** The same key as Mend's, by the wall under the pointer. */
+let hoveredPruneFreeKey: number | "ring" | null = null;
 /**
  * Dissolving: the region under the pointer, the walls a click would remove, and the graph they were
  * found on. Removed on release, as an erase is, so the highlight is exactly what goes.
@@ -463,6 +484,9 @@ export function setTool(next: WallTool): void {
     show and no reason to make the GM ask for it. Putting the tool down drops the rings, so none is
     ever on screen while something else is in hand and cannot act on it.
   */
+  hoveredMendFreeKey = null;
+  hoveredCollapseFreeKey = null;
+  hoveredPruneFreeKey = null;
   if (next === "mend") {
     const found = startMendSearch();
     say(found === null ? "there are no walls on screen to search" : describeMends(found));
@@ -699,16 +723,30 @@ function start(point: MapPoint): boolean {
   }
 
   /*
-    Mend takes a press only inside a ring, and the accept happens on release, as an erase does — so a
-    press that turns into a drag is still a click on the ring rather than the start of something.
-    Anywhere else declines, and the press pans.
+    Mend, Prune and Collapse take a press only inside a ring or on a free target, and the accept
+    happens on release, as an erase does — so a press that turns into a drag is still a click on the
+    target rather than the start of something. Anywhere else declines, and the press pans.
+
+    **A ring is a suggestion, not the whole of what a click may take** (2026-09-24). Below the
+    threshold's own rings, each of these three falls back to the same live question a ring answers
+    for a smaller stretch: is there a genuine target *here*, the current setting aside. Declining
+    that too is declining altogether, exactly as Erase does off a wall.
   */
+
   // Prune's rings, the same way: a press inside one is taken, and the piece goes on release.
   if (tool === "prune") {
     const pieces = currentPrunePieces();
     const index = ringAt(pieces.map((piece) => piece.points), point.x, point.y, point.perPixel);
-    if (index === null) return false;
-    pressedPrune = { piece: pieces[index]!, graph };
+    if (index !== null) {
+      pressedPrune = { piece: pieces[index]!, graph };
+      return true;
+    }
+    // A wall too long a dead end to be rung at the current length — the length ignored entirely.
+    const edge = nearestEdge(graph, { x: point.x, y: point.y }, ERASE_RADIUS_PX * point.perPixel);
+    if (edge === null) return false;
+    const piece = pieceAtFreeClick(edge);
+    if (piece === null) return false;
+    pressedPrune = { piece, graph };
     return true;
   }
 
@@ -716,16 +754,31 @@ function start(point: MapPoint): boolean {
   if (tool === "collapse") {
     const collapses = currentCollapses();
     const index = ringAt(collapses.map((c) => c.outline), point.x, point.y, point.perPixel);
-    if (index === null) return false;
-    pressedCollapse = { collapse: collapses[index]!, graph };
+    if (index !== null) {
+      pressedCollapse = { collapse: collapses[index]!, graph };
+      return true;
+    }
+    // A region bigger than the drawer's current size — the size ignored entirely.
+    const collapse = collapseAtPoint({ x: point.x, y: point.y });
+    if (collapse === null) return false;
+    pressedCollapse = { collapse, graph };
     return true;
   }
 
   if (tool === "mend") {
     const mends = currentMends();
     const index = mendAt(mends, point.x, point.y, point.perPixel);
-    if (index === null) return false;
-    pressedMend = { mend: mends[index]!, graph };
+    if (index !== null) {
+      pressedMend = { mend: mends[index]!, graph };
+      return true;
+    }
+    // A free end whose true best match is farther than the current reach — the reach ignored, the
+    // same-wall distance kept exactly as set.
+    const end = nearestNode(graph, { x: point.x, y: point.y }, SNAP_RADIUS_PX * point.perPixel);
+    if (end === null) return false;
+    const mend = mendForFreeClick(end);
+    if (mend === null) return false;
+    pressedMend = { mend, graph };
     return true;
   }
 
@@ -1270,28 +1323,59 @@ function hover(point: MapPoint | null): void {
   }
 
   if (tool === "prune") {
-    const over = ringAt(currentPrunePieces().map((piece) => piece.points), point.x, point.y, point.perPixel) !== null;
-    if (over === hoveredPrune) return;
-    hoveredPrune = over;
-    setGrabTarget(over);
+    const ringed = ringAt(currentPrunePieces().map((piece) => piece.points), point.x, point.y, point.perPixel);
+    const edge =
+      ringed === null ? nearestEdge(graph, { x: point.x, y: point.y }, ERASE_RADIUS_PX * point.perPixel) : null;
+    const free = edge === null ? null : pieceAtFreeClick(edge);
+    const key: number | "ring" | null = ringed !== null ? "ring" : edge !== null && free !== null ? edge : null;
+    if (key !== hoveredPruneFreeKey) {
+      hoveredPruneFreeKey = key;
+      setHoveredFreePiece(ringed === null ? free : null);
+      invalidate();
+    }
+    const over = key !== null;
+    if (over !== hoveredPrune) {
+      hoveredPrune = over;
+      setGrabTarget(over);
+    }
     return;
   }
 
   if (tool === "collapse") {
     // A crosshair inside a ring, where a press will act; the hand everywhere else, where it will pan.
-    const over = ringAt(currentCollapses().map((c) => c.outline), point.x, point.y, point.perPixel) !== null;
-    if (over === hoveredCollapse) return;
-    hoveredCollapse = over;
-    setGrabTarget(over);
+    const ringed = ringAt(currentCollapses().map((c) => c.outline), point.x, point.y, point.perPixel);
+    const free = ringed === null ? collapseAtPoint({ x: point.x, y: point.y }) : null;
+    const key: number | "ring" | null = ringed !== null ? "ring" : free !== null ? free.face : null;
+    if (key !== hoveredCollapseFreeKey) {
+      hoveredCollapseFreeKey = key;
+      setHoveredFreeCollapse(free);
+      invalidate();
+    }
+    const over = key !== null;
+    if (over !== hoveredCollapse) {
+      hoveredCollapse = over;
+      setGrabTarget(over);
+    }
     return;
   }
 
   if (tool === "mend") {
     // A crosshair inside a ring, where a press will act; the hand everywhere else, where it will pan.
-    const over = mendAt(currentMends(), point.x, point.y, point.perPixel) !== null;
-    if (over === hoveredMend) return;
-    hoveredMend = over;
-    setGrabTarget(over);
+    const ringed = mendAt(currentMends(), point.x, point.y, point.perPixel);
+    const end =
+      ringed === null ? nearestNode(graph, { x: point.x, y: point.y }, SNAP_RADIUS_PX * point.perPixel) : null;
+    const free = end === null ? null : mendForFreeClick(end);
+    const key: number | "ring" | null = ringed !== null ? "ring" : end !== null && free !== null ? end : null;
+    if (key !== hoveredMendFreeKey) {
+      hoveredMendFreeKey = key;
+      setHoveredFreeMend(ringed === null ? free : null);
+      invalidate();
+    }
+    const over = key !== null;
+    if (over !== hoveredMend) {
+      hoveredMend = over;
+      setGrabTarget(over);
+    }
     return;
   }
 
@@ -1445,11 +1529,14 @@ export function putDownSearches(): void {
   if (mendSearchActive()) {
     stopMendSearch();
     hoveredMend = false;
+    hoveredMendFreeKey = null;
   }
   stopCollapseSearch();
   hoveredCollapse = false;
+  hoveredCollapseFreeKey = null;
   stopPruneSearch();
   hoveredPrune = false;
+  hoveredPruneFreeKey = null;
   invalidate();
 }
 

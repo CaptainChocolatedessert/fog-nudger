@@ -20,9 +20,11 @@
  * No SDK of its own; the starting size reads the last reading's ink width from the pipeline.
  */
 
+import type { Vector2 } from "@owlbear-rodeo/sdk";
+
 import { devLog } from "../devlog";
 import { lastInkWidth, lastRasterPerGraphUnit } from "../pipeline";
-import { findCollapses, type Collapse } from "../trace/collapse";
+import { collapseAt, findCollapses, type Collapse } from "../trace/collapse";
 import { buildWallFaces, type WallFaces } from "../trace/wallFaces";
 import type { WallGraph } from "../trace/wallGraph";
 import { startingSize } from "./collapseScale";
@@ -89,9 +91,41 @@ export function stopCollapseSearch(): void {
   limit = null;
   searched = null;
   walked = null;
+  hoveredFree = null;
 }
 
 /** Whether the search is running, which is whether the tool is in hand. */
 export function collapseSearchActive(): boolean {
   return limit !== null;
+}
+
+/**
+ * The region at a point, its own size ignored entirely — for a direct click on a region bigger than
+ * the drawer's current setting, and for the hover that previews it.
+ *
+ * Shares `walked` with `currentCollapses`, so a free click never rebuilds a traversal the ringed
+ * search has already paid for this graph.
+ */
+export function collapseAtPoint(point: Vector2): Collapse | null {
+  const graph = editableGraph();
+  if (!graph) return null;
+  if (walked?.graph !== graph) walked = { graph, faces: buildWallFaces(graph) };
+  return collapseAt(graph, walked.faces, point);
+}
+
+/**
+ * The free-click target the pointer is currently over, for the layer to preview — `null` when it is
+ * over a ringed one instead, or nothing at all.
+ *
+ * A cursor's own decision, kept here rather than computed by the layer, for the reason `currentCollapses`
+ * already is: the layer must draw exactly what a click would take, and there is one place that decides it.
+ */
+let hoveredFree: Collapse | null = null;
+
+export function setHoveredFreeCollapse(collapse: Collapse | null): void {
+  hoveredFree = collapse;
+}
+
+export function hoveredFreeCollapse(): Collapse | null {
+  return hoveredFree;
 }

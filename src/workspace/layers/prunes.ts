@@ -18,14 +18,20 @@
  */
 
 import { colourFor } from "../palette";
-import { currentPrunePieces } from "../pruneSearch";
+import { currentPrunePieces, hoveredFreePiece } from "../pruneSearch";
 import { ringCentre, ringRadius } from "../ringGesture";
 import { addPainter, type Painter } from "../shell";
 
 const additive = () => colourFor("additive");
 
 const paint: Painter = ({ context, view, width, height, drawWidth, drawHeight }) => {
-  const pieces = currentPrunePieces();
+  /*
+    **A free-click target joins the same list** (2026-09-24): a dead end too long to be rung at the
+    current length gets the same ring a rung one does. The red beside it is `layers/graph.ts`'s own —
+    `doomed()` there reads the same free target, so the two never disagree about what a click takes.
+  */
+  const free = hoveredFreePiece();
+  const pieces = free ? [...currentPrunePieces(), free] : currentPrunePieces();
   if (pieces.length === 0) return;
   const long = Math.max(drawWidth, drawHeight);
   if (!(long > 0)) return;

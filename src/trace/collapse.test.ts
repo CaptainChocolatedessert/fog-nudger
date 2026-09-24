@@ -23,7 +23,7 @@
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { describe, expect, it } from "vitest";
 
-import { applyCollapses, collapseAll, findCollapses, type Collapse } from "./collapse";
+import { applyCollapses, collapseAll, collapseAt, findCollapses, type Collapse } from "./collapse";
 import { deriveWalls } from "./deriveWalls";
 import { regionAt } from "./dissolve";
 import { randomInk, randomWallGraph, seededRandom } from "./fixtures";
@@ -477,6 +477,110 @@ function* derivedGraphs(count: number): Iterable<WallGraph> {
     }).walls.graph;
   }
 }
+
+describe("collapseAt — a direct click, ignoring any size limit", () => {
+  /*
+    Free click support (2026-09-24): a size limit only ever decided which regions a ringed search
+    *offers*; whether a region can collapse at all has never depended on its area. `collapseAt` is
+    that same per-region check, found by a point instead of filtered from every region by a limit —
+    so a click on a region far bigger than the drawer's current setting still takes it.
+  */
+  it("finds the same collapse a size-gated search would, however small the limit", () => {
+    const graph = build(ROOM, [
+      [3, 0],
+      [4, 1],
+      [6, 1],
+      [7, 0],
+    ]);
+    const faces = buildWallFaces(graph);
+    const point = at(5, 0.5);
+    const gated = findCollapses(graph, faces, 3 * S * S).find((c) => containsPoint(c.outline, point));
+    expect(gated).toBeDefined();
+
+    const free = collapseAt(graph, faces, point);
+    expect(free).toEqual(gated);
+
+    // And a limit too small to have offered it at all — the point of the free click.
+    expect(findCollapses(graph, faces, 0.5 * S * S).some((c) => containsPoint(c.outline, point))).toBe(
+      false,
+    );
+    expect(collapseAt(graph, faces, point)).not.toBeNull();
+  });
+
+  it("is null outside every region", () => {
+    // A standalone loop touching nothing, so the one bounded face is offered (connections: none, it
+    // just goes) — a point outside it has to answer null on its own terms, not by coincidentally
+    // landing on a face that was refused for an unrelated reason.
+    const graph = build([
+      [0, 0],
+      [10, 0],
+      [10, 6],
+      [0, 6],
+      [0, 0],
+    ]);
+    const faces = buildWallFaces(graph);
+    expect(findCollapses(graph, faces, Infinity)).toHaveLength(1);
+    expect(collapseAt(graph, faces, at(-5, -5))).toBeNull();
+  });
+
+  it("still refuses a region whose spokes would leave it — the same U-shaped fixture as above", () => {
+    const graph = build(
+      [
+        [0, 0],
+        [6, 0],
+        [6, 6],
+        [4, 6],
+        [4, 2],
+        [2, 2],
+        [2, 6],
+        [0, 6],
+        [0, 0],
+      ],
+      [
+        [0, 6],
+        [0, 9],
+      ],
+      [
+        [6, 6],
+        [6, 9],
+      ],
+    );
+    const faces = buildWallFaces(graph);
+    expect(findCollapses(graph, faces, Infinity).some((c) => containsPoint(c.outline, at(1, 1)))).toBe(
+      false,
+    );
+    expect(collapseAt(graph, faces, at(1, 1))).toBeNull();
+  });
+
+  it("agrees with a limitless search over every region of every random graph, refusals included", () => {
+    /*
+      `collapseAt` and `findCollapses(..., Infinity)` share one `detailFor` cache, so this is partly a
+      check that the sharing is wired correctly rather than a second proof of `detail`'s own geometry
+      — that proof is the 21-mutation oracle below. What it does add: a region `detail` refuses (a
+      C-shaped sliver whose spokes would leave it, among the shapes these generators produce) has to
+      read as refused through *this* entry point too, found by a point rather than filtered from a
+      list, and none of the fixtures above happens to construct one by hand.
+    */
+    const next = seededRandom(7);
+    const samples: Vector2[] = Array.from({ length: 60 }, () => ({ x: next() * 1.1, y: next() * 1.1 }));
+    let checkedRefusal = false;
+    for (const graph of [...wallGraphs(150), ...derivedGraphs(60)]) {
+      const faces = buildWallFaces(graph);
+      if (!faces.eulerHolds || findCrossings(graph).length > 0) continue;
+      const offered = findCollapses(graph, faces, Infinity);
+      for (const point of samples) {
+        const face = regionAt(faces, point);
+        if (face === null) continue;
+        const gated = offered.find((c) => c.face === face) ?? null;
+        if (!gated) checkedRefusal = true;
+        expect(collapseAt(graph, faces, point)).toEqual(gated);
+      }
+    }
+    // The sweep has to actually meet a refused-but-present region at least once, or it never
+    // exercised the case this test is named for.
+    expect(checkedRefusal).toBe(true);
+  });
+});
 
 describe("over random graphs, against an oracle that shares none of the reasoning", () => {
   it("moves nothing outside the region, merges and splits nothing, and stays planar", () => {
