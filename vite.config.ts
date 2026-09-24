@@ -1,6 +1,9 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
-import { PAGES_BASE } from "./src/pagesBase";
+// With its extension, which `allowImportingTsExtensions` in tsconfig permits. Building the derive's
+// worker loads this config a second time, through a loader that warns on an extensionless import —
+// harmless today and planned to become Vite's default, so the extension stays.
+import { PAGES_BASE } from "./src/pagesBase.ts";
 
 /**
  * `base` must match the GitHub Pages project subpath, and it is declared in `src/pagesBase.ts`

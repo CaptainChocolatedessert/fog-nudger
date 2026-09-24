@@ -66,7 +66,7 @@ import { invalidate, setDrag } from "./shell";
 import { proposeLayers } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
 import { onReading } from "./reading";
-import { editableGraph, onDerived } from "./regions";
+import { editableGraph, onDeriveChange } from "./regions";
 import { onStageChange } from "./stage";
 import { deltaShowing, onDeltaChange } from "./layers/delta";
 
@@ -704,8 +704,8 @@ export function registerToolPalette(): void {
     does nothing.
   */
   onStageChange(render);
-  // A derivation arriving is what makes the wall tools usable, and nothing else announces it.
-  onDerived(render);
+  // A derive starting locks the wall tools and one ending frees them, and nothing else announces either.
+  onDeriveChange(render);
   /*
     A reading landing is what says there is a picture to draw over, and the proposal is gated on
     having one — so the strip re-proposes then as well as on every other thing it redraws for.

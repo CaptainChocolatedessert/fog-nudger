@@ -60,7 +60,11 @@ import {
 } from "./wallGraph";
 import { COMMAND_CAP, simplifyPolyline } from "./simplify";
 import { thin } from "./thinning";
-import { buildSkeletonGraph, type SkeletonGraph } from "./skeletonGraph";
+import {
+  buildSkeletonGraph,
+  type SkeletonGraph,
+  type SkeletonGraphStats,
+} from "./skeletonGraph";
 
 export interface DeriveWallsOptions {
   /** Douglas–Peucker tolerance in raster pixels. */
@@ -268,11 +272,74 @@ export function deriveWalls(
   };
 }
 
+/**
+ * What the trace keeps of a derivation — and so what crosses from the worker to the page.
+ *
+ * **Everything the trace reads and nothing it does not.** The skeleton raster, the skeleton graph's
+ * pixel chains and the fitted edges are the derive's working material: nothing downstream of
+ * `runTrace` has read them since the wall graph became the document, and they are the bulk of a
+ * derivation on a real map. The skeleton graph survives as its three counts, which is all the log
+ * ever said about it.
+ *
+ * Plain data throughout — numbers, arrays and points — because a worker's reply is copied by the
+ * browser's structured clone, which cannot carry a function or a class's methods.
+ */
+export interface DerivedWalls {
+  /** The wall graph as the push would store it: after the automatic prune. */
+  readonly walls: WallGraphBuild;
+  readonly faces: WallFaces;
+  readonly pruning: {
+    readonly removed: number;
+    readonly segments: number;
+    readonly rounds: number;
+  };
+  /** The cleaned skeleton graph, by its counts. */
+  readonly skeleton: {
+    readonly nodes: number;
+    readonly edges: number;
+    readonly stats: SkeletonGraphStats;
+  };
+  readonly thinning: WallDerivation["thinning"];
+  readonly sliversRemoved: number;
+  readonly sliverRounds: number;
+  readonly sliversLeft: number;
+  readonly overCap: number;
+  readonly tolerance: number;
+  readonly escalations: number;
+  readonly timings: WallDerivation["timings"];
+}
+
+/** A derivation, reduced to what the trace keeps. */
+export function summariseDerivation(derived: WallDerivation): DerivedWalls {
+  return {
+    walls: derived.walls,
+    faces: derived.faces,
+    pruning: {
+      removed: derived.pruning.removed,
+      segments: derived.pruning.segments,
+      rounds: derived.pruning.rounds,
+    },
+    skeleton: {
+      nodes: derived.graph.nodes.length,
+      edges: derived.graph.edges.length,
+      stats: derived.graph.stats,
+    },
+    thinning: derived.thinning,
+    sliversRemoved: derived.sliversRemoved,
+    sliverRounds: derived.sliverRounds,
+    sliversLeft: derived.sliversLeft,
+    overCap: derived.overCap,
+    tolerance: derived.tolerance,
+    escalations: derived.escalations,
+    timings: derived.timings,
+  };
+}
+
 /** One line for the log. */
-export function describeWallDerivation(result: WallDerivation): string {
-  const { graph, faces, timings } = result;
+export function describeWallDerivation(result: DerivedWalls): string {
+  const { skeleton, faces, timings } = result;
   return (
-    `${faces.faces.length} faces from ${graph.nodes.length} nodes and ${graph.edges.length} ` +
+    `${faces.faces.length} faces from ${skeleton.nodes} nodes and ${skeleton.edges} ` +
     `edges (${faces.bridges} bridges, ${result.sliversRemoved} slivers removed in ` +
     `${result.sliverRounds} rounds, ${result.sliversLeft} left); ` +
     `${faces.eulerHolds ? "Euler holds" : "EULER FAILED"}; ` +

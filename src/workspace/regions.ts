@@ -30,8 +30,8 @@
  * grouping — so the ink mode previewed one answer and emitted another. Nothing inside the code said
  * the two were meant to agree, which is why it took an outside eye to spot.
  *
- * **Do not reintroduce a second source for the partition here**; what the trace is for is the graph,
- * the fitted edges and the checks over them.
+ * **Do not reintroduce a second source for the partition here**; what the trace is for is the wall
+ * graph, its faces and the checks over them.
  *
  * The mode still decides which graph, and getting *that* wrong is not cosmetic either: reading the
  * stored graph in the ink mode would show the GM the rooms as **edited** while they moved sliders
@@ -63,7 +63,7 @@ import { currentPaint } from "./paintState";
 import { onReading } from "./reading";
 import { currentMarks, onMarksChange } from "./regionMarks";
 import { currentSettings } from "./settingsState";
-import { invalidate, isClosing, say, whileWorking } from "./shell";
+import { invalidate, say, whileWorking } from "./shell";
 import { wallGraph, wallsEdited } from "./stage";
 
 /**
@@ -84,7 +84,15 @@ export interface PreviewWall {
 }
 
 const requests = new MaskRequests();
-let inFlight = false;
+/**
+ * The derive running now, as the way to abandon it — or `null` when none is.
+ *
+ * **Abandoning is new with the worker (2026-09-24).** On the page a derive held the thread, so one a
+ * newer reading had made pointless still ran to its end and was thrown away; `deriveClient.ts` has
+ * the measurement. Now a newer request aborts it, which terminates the worker, and the loop below
+ * starts the one that is wanted.
+ */
+let inFlight: AbortController | null = null;
 let regions: readonly PreviewRegion[] = [];
 /**
  * The walls that emit as lines rather than as part of a ring, suppressed regions' walls included.
@@ -118,18 +126,48 @@ let preview: WallGraph | null = null;
 let previewDropped = 0;
 
 /**
- * Told whenever a derivation lands, so whoever depends on there *being* one can catch up.
+ * Told whenever a derive starts or ends, so whoever depends on what the wall tools may touch can
+ * catch up.
  *
  * **The tool strip is the caller and the reason.** Its wall tools are offered only when there is a
  * graph to edit, and with the derive running continuously the first one arrives seconds after the
  * map — so without this the strip would draw them locked, learn nothing when the graph appeared, and
  * stay locked until something unrelated happened to redraw it. That is the defect shape this surface
  * keeps producing: a state changes and nothing is told.
+ *
+ * **The start is told too since 2026-09-24**, because the tools lock while a derive runs —
+ * `editableGraph` says why — and a strip told only of the end would lock nothing.
  */
-const derivedListeners: (() => void)[] = [];
+const deriveListeners: (() => void)[] = [];
 
-export function onDerived(listener: () => void): void {
-  derivedListeners.push(listener);
+export function onDeriveChange(listener: () => void): void {
+  deriveListeners.push(listener);
+}
+
+function tellDeriveChange(): void {
+  for (const listener of deriveListeners) listener();
+}
+
+/** Resolvers waiting for the derive to settle — see `derivationSettled`. */
+const settledWaiters: (() => void)[] = [];
+
+/**
+ * Resolves once no derive is running or owed, so the walls on screen are the ones the current ink
+ * makes.
+ *
+ * **For the push, and new with the worker** (user, 2026-09-24). Both pushes commit the last derivation
+ * that *landed*, and while the derive blocked the page nothing could press one between a reading and
+ * its walls. Off the page, *Put on the map* or closing can arrive mid-derive, and without this the
+ * table would get the walls of the settings the GM had just moved away from.
+ */
+export function derivationSettled(): Promise<void> {
+  if (!inFlight && !requests.waiting()) return Promise.resolve();
+  return new Promise((resolve) => settledWaiters.push(resolve));
+}
+
+function settleIfIdle(): void {
+  if (inFlight || requests.waiting()) return;
+  for (const resolve of settledWaiters.splice(0)) resolve();
 }
 
 /** The graph the last derive arrived at, or `null` when none has run. */
@@ -193,8 +231,16 @@ export function substituteGraph(graph: WallGraph | null): void {
  * It reads `showingSaved` for the same reason everything else does — the tools acting on a graph
  * other than the drawn one is the defect this project has already paid for once, when the ink
  * mode previewed one face derivation and emitted another.
+ *
+ * **Nothing while a derive runs** (user, 2026-09-24: *"Lock the wall tools during a derive."*). What
+ * is drawn then is the walls of the *previous* ink, about to be replaced — and an edit adopts what it
+ * is applied to as the document, so a press in those seconds would make walls from settings the GM
+ * has already left. While the derive blocked the page no press could land there; with it in a worker
+ * one can. Nothing is lost against before, when the tools were frozen for the same time. The strip
+ * reads this to grey them, and puts down one in hand by its own rule for a tool that cannot act.
  */
 export function editableGraph(): WallGraph | null {
+  if (inFlight) return null;
   return showingSaved() ? wallGraph() : preview;
 }
 
@@ -348,6 +394,8 @@ export function invalidateRegions(): void {
   // The trace is out of date, so the derivation's output is too and there is nothing left to re-prune.
   derivation = null;
   requests.request();
+  // A derive still running is for the ink before this; abandoning it is what lets this one start now.
+  inFlight?.abort();
   invalidate();
   void derive();
 }
@@ -443,7 +491,6 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
       `collinear, which costs nothing; ${describeWallFaces(faces)}`,
   );
   invalidate();
-  for (const listener of derivedListeners) listener();
 }
 
 /*
@@ -459,8 +506,16 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   control that cannot affect what is drawn has the same trap waiting for it.
 */
 
+/*
+  **The loop runs while the workspace is closing, since 2026-09-24.** It used to stop starting derives
+  and drop any that landed once the close began — harmless while a derive blocked the page, since the
+  close could not begin mid-derive. Off the page it can, and the close's push waits on
+  `derivationSettled` for the walls it will commit; dropping them would leave it committing the old
+  ones. Nothing new is asked for during a close — the reading cycle stops — so this only ever finishes
+  what was already owed.
+*/
 async function derive(): Promise<void> {
-  if (inFlight || isClosing()) return;
+  if (inFlight) return;
 
   /*
     The **mode** decides where the rooms come from, not the presence of a stored graph.
@@ -477,14 +532,17 @@ async function derive(): Promise<void> {
     const graph = wallGraph();
     if (graph) derivePartition(graph);
     else clearPartition();
+    settleIfIdle();
     return;
   }
 
   // Whatever is outstanding rather than a new stamp, for the reason the reading gives: the caller
   // registered the change, and asking again here would blank a second time for the same edit.
   const generation = requests.latest();
-  inFlight = true;
+  const controller = new AbortController();
+  inFlight = controller;
   invalidate();
+  tellDeriveChange();
   say("deriving the regions…", "working");
 
   /*
@@ -500,8 +558,7 @@ async function derive(): Promise<void> {
   */
   const wanted = { settings: currentSettings(), paint: currentPaint() };
   try {
-    const outcome = await whileWorking(() => runTrace(wanted));
-    if (isClosing()) return;
+    const outcome = await whileWorking(() => runTrace(wanted, controller.signal));
 
     if (!outcome.ok) {
       if (requests.fail(generation)) say(outcome.message, "bad");
@@ -516,8 +573,8 @@ async function derive(): Promise<void> {
     /*
       The wall graph the run already built, so what is drawn and what would be stored cannot differ.
 
-      Taken off the run rather than rebuilt from `graph` and `fittedEdges`: the trace has to build it
-      anyway, because the escalation ladder measures the command cap against its faces. Rebuilding
+      Taken off the run rather than rebuilt: the trace has to build it anyway, because the escalation
+      ladder measures the command cap against its faces. Rebuilding
       here would be a second construction of a thing already in hand, and two constructions are two
       places to change.
     */
@@ -532,7 +589,7 @@ async function derive(): Promise<void> {
       code said the two were meant to agree.
 
       One derivation now, and the trace no longer carries a region list at all. What it produces is
-      the graph, the fitted edges, and the checks over them — a derivation, not a picture.
+      the wall graph, its faces and the checks over them — a derivation, not a picture.
     */
     derivation = {
       graph: stored.graph,
@@ -550,16 +607,21 @@ async function derive(): Promise<void> {
     publish(derivation, generation);
     devLog("info", `workspace: partition ${generation} — ${outcome.run.summary}`);
   } catch (error) {
-    if (requests.fail(generation)) {
+    if (controller.signal.aborted) {
+      // Asked for, not failed: a newer reading made this derive pointless and the loop starts that one.
+      devLog("info", `workspace: partition ${generation} abandoned mid-derive for a newer reading`);
+    } else if (requests.fail(generation)) {
       const detail = describeError(error);
       say(`deriving failed: ${detail}`, "bad");
       devLog("error", "workspace: deriving the regions failed", detail);
       console.error("Fog Nudger — workspace could not derive the regions", error);
     }
   } finally {
-    inFlight = false;
+    inFlight = null;
     invalidate();
-    if (!isClosing() && requests.waiting()) void derive();
+    tellDeriveChange();
+    if (requests.waiting()) void derive();
+    else settleIfIdle();
   }
 }
 
@@ -625,8 +687,9 @@ function derivePartition(graph: WallGraph): void {
  */
 export function registerRegionInvalidation(): void {
   onReading(() => {
-      derivation = null;
+    derivation = null;
     requests.request();
+    inFlight?.abort();
     void derive();
   });
   /*

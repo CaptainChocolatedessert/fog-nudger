@@ -90,19 +90,18 @@ import {
 } from "./trace/inkProfile";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
-import type { FittedEdge } from "./trace/faces";
 import { graphExtent, rasterPixelsPerGraphUnit, type GraphExtent } from "./trace/graphUnits";
 import type { WallGraphBuild } from "./trace/wallGraph";
 import type { WallFaces } from "./trace/wallFaces";
-import type { SkeletonGraph } from "./trace/skeletonGraph";
 import { describeWallFaces } from "./trace/wallFaces";
 import { commandCount } from "./geometry/ring";
 import {
   autoPruneLimitPx,
   AUTO_PRUNE_INK_WIDTHS,
-  deriveWalls,
   describeWallDerivation,
 } from "./trace/deriveWalls";
+import { answerDeriveRequest } from "./trace/deriveProtocol";
+import { DeriveClient, type DeriveWorker } from "./deriveClient";
 import { COMMAND_CAP } from "./trace/simplify";
 
 /**
@@ -315,6 +314,29 @@ interface MaskStage extends ReadingStage {
  */
 let cachedReading: ReadingStage | null = null;
 let cachedMask: MaskStage | null = null;
+
+/**
+ * The derive's worker: started by the first derive in this iframe and kept for the rest.
+ *
+ * One per iframe, like the caches above — the workspace and the panel each run their own trace, and
+ * each gets its own worker. Written as one `new Worker(new URL(…))` expression because that is the
+ * form Vite recognises and bundles; the worker's file is its own entry in the build.
+ */
+const deriveClient = new DeriveClient({
+  spawn: () =>
+    new Worker(new URL("./deriveWorker.ts", import.meta.url), {
+      type: "module",
+    }) as unknown as DeriveWorker,
+  onPage: answerDeriveRequest,
+  onGiveUp: (reason) => {
+    devLog(
+      "warn",
+      `trace: no worker for the derive this session — ${reason}. Deriving on the page instead: ` +
+        `the same walls, but the surface freezes while they derive, as it did before the worker.`,
+    );
+    console.error("Fog Nudger — the derive worker could not be used:", reason);
+  },
+});
 
 /**
  * What a cached mask is only valid for.
@@ -587,19 +609,12 @@ export interface TraceRun {
    */
   readonly walls: WallGraphBuild;
   readonly faces: WallFaces;
-  /**
-   * The cleaned graph and its fitted edges — what step G derives.
-   *
-   * The **cleaned** one, after sliver removal, because that is what the faces are made of and what
-   * the Walls step draws: a GM must edit what they can see. The raw graph has an order of magnitude
-   * more nodes, almost all of them artefacts of junction clusters.
-   *
-   * Carried on the run rather than rebuilt by the save, so what gets stored is provably the
-   * same geometry this run would have emitted. Fitting keeps both ends of every edge, so the fitted
-   * endpoints *are* these nodes, which is what lets the stored document share them by reference.
-   */
-  readonly graph: SkeletonGraph;
-  readonly fittedEdges: readonly FittedEdge[];
+  /*
+    `graph` and `fittedEdges` were here — the cleaned skeleton graph and its fitted edges — and went on
+    2026-09-24 when the derive moved to a worker. Nothing outside the trace had read either since the
+    wall graph became the document, and they were the bulk of what would have crossed back. `walls` is
+    what the save stores, built from them inside the derive.
+  */
   /** One line for the panel. Detail is already in the dev log by the time this is returned. */
   readonly summary: string;
 }
@@ -1300,6 +1315,12 @@ export async function runTrace(
     arrive rather than from where they came from.
   */
   override?: TraceInputs,
+  /*
+    Abandons the run: before the ink is resolved if it is already aborted, and during the derive by
+    terminating the worker. The promise then rejects with the signal's reason — a run nobody wants is
+    not a failure to report, and the caller knows which it asked for.
+  */
+  signal?: AbortSignal,
 ): Promise<TraceOutcome> {
   const started = performance.now();
 
@@ -1328,6 +1349,9 @@ export async function runTrace(
   const paint = override?.paint ?? (await readPaintFor(map.id));
   const dpi = await readGridDpi();
 
+  // After the awaits, since a newer reading can land during them, and before the ink is resolved,
+  // which may be a second of work on the page for a run that is no longer wanted.
+  signal?.throwIfAborted();
   const resolved = await resolveMask(map, dpi, settings, paint);
   if (!resolved) {
     return {
@@ -1391,20 +1415,37 @@ export async function runTrace(
   // on the wall graph. `autoPruneLimitPx` says why two ink widths, and why none when there is no width.
   const pruneLimitPx = autoPruneLimitPx(reading.inkWidth);
 
-  const derived = deriveWalls(inkMask, {
-    tolerance,
-    maxTolerance: MAX_SIMPLIFY_GRAPH_UNITS * rasterPerUnit,
-    pruneLimit: pruneLimitPx / rasterPerUnit,
-    extent,
-  });
+  /*
+    In the worker when there is one — `deriveClient.ts` says why, and what happens when there is not.
+    The same function either way, so the walls are the same walls; the line after says which ran.
+  */
+  const ran = await deriveClient.derive(
+    inkMask,
+    {
+      tolerance,
+      maxTolerance: MAX_SIMPLIFY_GRAPH_UNITS * rasterPerUnit,
+      pruneLimit: pruneLimitPx / rasterPerUnit,
+      extent,
+    },
+    signal,
+  );
+  const derived = ran.derived;
+  devLog(
+    "info",
+    ran.where === "worker"
+      ? `trace: derived in a worker — ${Math.round(ran.computeMs)}ms deriving, ` +
+          `${Math.round(ran.crossingMs)}ms getting the ink there and the walls back`
+      : `trace: derived on the page in ${Math.round(ran.computeMs)}ms, blocking it — no worker ` +
+          `this session, and the warning that gave up on one says why`,
+  );
 
   devLog(
     "info",
     `trace: graph — thinned ${derived.thinning.before} ink pixels to ${derived.thinning.after} in ` +
       `${derived.thinning.passes} passes; ` +
-      `${derived.graph.stats.chains} chains into ${derived.graph.nodes.length} nodes and ` +
-      `${derived.graph.edges.length} edges (${derived.graph.stats.merged} joins through path ` +
-      `nodes, ${derived.graph.stats.orphans} orphaned pixels); ${derived.sliversRemoved} sub-pixel ` +
+      `${derived.skeleton.stats.chains} chains into ${derived.skeleton.nodes} nodes and ` +
+      `${derived.skeleton.edges} edges (${derived.skeleton.stats.merged} joins through path ` +
+      `nodes, ${derived.skeleton.stats.orphans} orphaned pixels); ${derived.sliversRemoved} sub-pixel ` +
       `slivers deleted in ${derived.sliverRounds} rounds, ${derived.sliversLeft} left`,
   );
 
@@ -1421,10 +1462,10 @@ export async function runTrace(
     check uniquely covered was this conversion, and this is the direct measurement of it. What it was
     otherwise doing was serving as a test oracle at runtime, which is what `faces.test.ts` is for.
   */
-  if (derived.graph.stats.orphans > 0) {
+  if (derived.skeleton.stats.orphans > 0) {
     devLog(
       "warn",
-      `trace: ${derived.graph.stats.orphans} skeleton pixels were claimed by no chain. The walk ` +
+      `trace: ${derived.skeleton.stats.orphans} skeleton pixels were claimed by no chain. The walk ` +
         `stepped over them, which loses linework without saying which. Expected to be zero.`,
     );
   }
@@ -1609,8 +1650,6 @@ export async function runTrace(
       dpi,
       raster: { width: plan.width, height: plan.height },
       extent,
-      graph: derived.graph,
-      fittedEdges: derived.fittedEdges,
       walls: derived.walls,
       faces: derived.faces,
       summary,

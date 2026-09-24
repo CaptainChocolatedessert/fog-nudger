@@ -59,7 +59,7 @@ import { paintRevision } from "../trace/inkPaint";
 import { encodeMarks } from "../trace/suppression";
 import { confirmAction } from "../confirmDialog";
 import { currentMarks } from "./regionMarks";
-import { currentRegions, currentWalls, previewGraph } from "./regions";
+import { currentRegions, currentWalls, derivationSettled, previewGraph } from "./regions";
 import { saveDerivedWalls, wallGraph, wallsEdited } from "./stage";
 import { controlsLive } from "./settingsState";
 import { currentPaint } from "./paintState";
@@ -112,6 +112,13 @@ async function fingerprint(): Promise<string> {
  * document the scene disagrees with is how a stale set of walls reaches a table.
  */
 async function commitDerivation(): Promise<boolean> {
+  /*
+    A derive still running is for the ink on screen, and the one that landed before it is for ink the
+    GM has since changed — so wait for it (2026-09-24). While the derive blocked the page nothing could
+    press a push between a reading and its walls; in a worker the close and *Put on the map* both can.
+    Hand edits stop derives altogether, so this costs a GM with work in the walls nothing.
+  */
+  await derivationSettled();
   if (wallsEdited()) return true;
 
   const derived = previewGraph();
