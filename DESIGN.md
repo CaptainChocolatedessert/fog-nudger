@@ -2960,7 +2960,7 @@ rule once.
 
 ## 8. Testing and diagnostic practice
 
-**1,107 tests across 77 files**, all pure — everything that needs a DOM or a scene is not tested, which
+**1,123 tests across 78 files** (measured 2026-09-24), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3503,10 +3503,11 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-24 built and
-committed two things in sequence — first the region border removal together with the stroke filter's
-measured step and its tick marks, then the free click ported to the three ringed wall tools with its
-hover preview — and only the second of those two has actually been looked at in a room so far.
+**Nothing is half-built. The worker for the derive is designed and is the next build** — its section
+below has the decisions. The session of 2026-09-24 built and committed the region border removal with
+the stroke filter's measured step and tick marks, then the free click ported to the three ringed wall
+tools with its hover preview, then the deletion of the probe's space labelling — and only the free
+click has been looked at in a room so far.
 
 **Do this first: a room pass on everything built since the last one, oldest first.**
 
@@ -3527,6 +3528,10 @@ hover preview — and only the second of those two has actually been looked at i
    **Confirmed 2026-09-24** (user: *"Those work well"*) — see *The free click, ported to the ringed wall
    tools*, below the tool list. Not itemised further than that; if something specific needs a second
    look, it will be reported as such.
+4. **The point probe's new answers** (2026-09-24, committed). A click on the map now says only the
+   luminance, ink or not, and which of the GM's layers decided it — no region, and nothing about being
+   covered. The derive's log line has lost its `label` timing, so a derive should read about 40%
+   quicker there. Worth one click on the outside of the dungeon, which used to be told it was emitted.
 
 **Then, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
 the one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3537,10 +3542,6 @@ the one question, a picture if it is geometric, name and glyph, a numbered plan)
   on writing into their namespace are what the reading has to reconcile with. **The first question is
   what this project would add** over a GM using Dynamic Fog's own door tool afterwards, which already
   cuts our walls.
-- **The derive still costs 1502ms on a busy map**, and §8's measurement of one click is where the
-  numbers are. The recompose now waits for a tool to be put down, so it is paid once per visit rather
-  than once per press — but the surface still freezes while it runs, and the record has named a worker
-  as the real answer since the continuous derive went in.
 
 **Held, with the reason:**
 
@@ -3560,9 +3561,62 @@ drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge 
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click above.
 
-**6 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 5
-before the commit that writes this line, which is this session's second and makes it 6). **A push
+**7 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 6
+before the commit that writes this line, which makes it 7). **A push
 deploys**, so it waits for the user to want the public build to have them.
+
+#### The worker for the derive — designed 2026-09-24, next to build
+
+**The derive moves off the page; the ink half stays on it.** `deriveWalls` — thin, chain, remove the
+slivers, fit, the automatic prune — is one pure function called from the middle of `runTrace`, and it
+is what goes. The reading and the recompose stay, so a slider release still freezes for the ink half
+(~1–2s on *The Incandescent Grottoes*) and the walls then arrive without freezing. **Roughly halves the
+freeze; does not end it.** Moving the ink half too is a bigger step, since the map's pixels would have
+to be decoded in the worker, and it is held.
+
+**The best evidence for it is in the log** (2026-09-24, opening the Grottoes): the first derive was
+superseded by a request that arrived during its asynchronous start, and since a blocking derive cannot
+be stopped it ran its whole 2.4s and was thrown away before the second ran another 2.4s. A worker can
+be killed, so a superseded derive costs almost nothing — §7's *"cancel-and-retry can never fire
+because the work it would cancel holds the thread"*, answered.
+
+**The labelling went first**, as its own commit: over 40% of every derive, and the probe was its only
+reader — `probePoint.ts`'s header has why it was wrong as well as slow. So the worker has no 38MB
+raster to send back.
+
+**Decided (user, 2026-09-24):**
+
+- **The wall tools are locked while a derive is in flight.** With the page no longer frozen a click
+  can land in those seconds, and what is on screen then is the *old* walls — the tools are gated only
+  on there being a graph to edit, and the old one counts. Nothing is lost against today, when they are
+  frozen for the same time. Pan, zoom, the sliders and the brushes stay live.
+- **A push waits for a derive in flight** — *Put on the map* and closing both. Each commits the last
+  derivation that *landed* (`commitDerivation` reads `previewGraph()`), so without the wait a close
+  mid-derive would put the previous settings' walls on the table. Decided in the design rather than
+  asked, as the only answer that does not push stale walls.
+
+**The plan, in order:**
+
+1. **A worker file that only runs the derive**: the composed ink and the derive's options in, and back
+   what the trace uses — the wall graph, its faces, the pruning, the counts and the timings. The
+   skeleton and the pixel chains stay behind; nothing outside the trace reads them.
+2. **A small client on the page side**: one derive at a time, a newer request kills the one in flight
+   and starts a fresh worker, and a worker that dies rejects rather than leaving the derive hanging.
+   Pure, tested against a fake worker.
+3. **`runTrace` calls the client where it calls `deriveWalls` now.** Logging and placement stay where
+   they are, and the push and the dry run go through the same path, so it is still one implementation.
+4. **`regions.ts`' derive loop cancels** on a new reading instead of waiting the old derive out.
+5. **Tests**: the worker's reply passed through `structuredClone` must equal a direct call, over the
+   random-ink generator — what catches anything that does not survive the crossing — and **the worker's
+   module must load in node**, which has no `window`, so the SDK (which reads `window` the moment it
+   loads, §9) cannot creep into its imports unnoticed. Then mutations on the client.
+6. **One log line per derive** with compute time and the crossing's cost apart.
+
+**Costs, stated:** one more copy of the ink in memory while a derive runs — about 9MB on the Grottoes,
+reasoned rather than measured, against §4's reminder that the raster cap is a *memory* limit in a
+third-party iframe. **Only a room can say** whether Owlbear's iframe lets a worker start at all (storage
+works there, which suggests it will — inference) and whether the built site finds the worker file
+under the Pages path.
 
 #### The slow saves, measured
 
@@ -5678,8 +5732,8 @@ closed outright.
 | `trace/faces.ts` | the half-edge walk and sliver detection, and nothing else |
 | `trace/spurs.ts` | **which** dead-end wall runs a limit removes — the decision alone, no geometry and no raster |
 | `trace/simplify.ts` | Douglas–Peucker (`simplifyIndices` is the decision, `simplifyPolyline` that plus a lookup), `dropCollinear`, and `COMMAND_CAP` |
-| `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, **the automatic prune** (`autoPruneLimitPx`, two ink widths), and the escalation ladder that meets the command cap, pruning on every rung. It also keeps a space labelling, for the point probe and nothing else |
-| `trace/label.ts` | region labelling |
+| `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, **the automatic prune** (`autoPruneLimitPx`, two ink widths), and the escalation ladder that meets the command cap, pruning on every rung |
+| `trace/label.ts` | connected-component labelling of a mask — the ink shape check's alone since the derive stopped labelling for the probe (2026-09-24) |
 | `trace/wallGraph.ts` | the document: build, encode, decode, compact, prune, and the two track measurements |
 | `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
 | `trace/wallGraphDiff.ts` | what the GM changed: two graphs compared by **segment endpoints**, never by node id, so compaction and renumbering cannot affect the answer. A move falls out as a removal plus an addition |
@@ -5692,7 +5746,7 @@ closed outright.
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first; `mendForFreeEnd` answers the same question for one end alone, reach ignored |
 | `trace/graphUnits.ts` | the graph's unit — the map image's longer side is 1 — the extent, raster pixels per unit, and holding a dragged position on the map |
-| `trace/probePoint.ts` | the one surviving diagnostic |
+| `trace/probePoint.ts` | the one surviving diagnostic: luminance, ink or not, and which of the GM's layers decided it — **and deliberately not which region**; its header says why |
 | `trace/prunePieces.ts` | **what Prune rings**: the doomed runs grouped into pieces through the vertices that go — each a tree hanging off at most one vertex that stays — and taking them. A free click reuses `findPrunePieces` at the graph's own longest run, ceiling opened rather than a second function |
 | `trace/collapse.ts` | **collapsing small regions**: which regions a size qualifies — area inside the outline, holes included — the two checks that decide whether one is offered, the star, a grid of the walls, and *Collapse all* in rounds, taking only what was ringed; `collapseAt` answers the same per-region check for one point, size ignored |
 | `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph |

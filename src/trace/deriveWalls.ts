@@ -58,7 +58,6 @@ import {
   type WallGraphBuild,
   type WallPruning,
 } from "./wallGraph";
-import { labelSpace, type LabelledSpace } from "./label";
 import { COMMAND_CAP, simplifyPolyline } from "./simplify";
 import { thin } from "./thinning";
 import { buildSkeletonGraph, type SkeletonGraph } from "./skeletonGraph";
@@ -159,13 +158,6 @@ export interface WallDerivation {
   readonly pruning: WallPruning;
   /** The faces of that document: what a push writes, and what the preview draws. */
   readonly faces: WallFaces;
-  /**
-   * The labelling of the skeleton, kept for the point probe alone.
-   *
-   * **Nothing about faces reads this any more.** It answers "which region is this point in" for the
-   * probe, which is the one question that still wants a flood fill of the raster.
-   */
-  readonly labelled: LabelledSpace;
   /** The skeleton the graph came from. */
   readonly skeleton: BinaryMask;
   /** Sub-pixel slivers deleted from the graph, and how many rounds it took. */
@@ -180,7 +172,6 @@ export interface WallDerivation {
   readonly timings: {
     readonly thinMs: number;
     readonly graphMs: number;
-    readonly labelMs: number;
     readonly sliverMs: number;
     readonly fitMs: number;
   };
@@ -232,17 +223,12 @@ export function deriveWalls(
   const sliverMs = performance.now() - sliverStarted;
 
   /*
-    The labelling, for the point probe and nothing else.
-
-    It used to be the source of face identity and the right-hand side of the area check, which is why
-    it ran before the faces did. Now it answers one question for one diagnostic, and it is kept
-    because that question — *which region is this point in* — is the one thing looking at the picture
-    cannot answer.
+    A space labelling was made here until 2026-09-24, for the point probe and nothing else, on the
+    ground that *which region is this point in* is the one thing looking at the picture cannot answer.
+    The workspace draws every room in its own fill, so it can — and the labelling was a partition of
+    the raster rather than of the wall graph, which told a click on the outside that it was emitted.
+    It was over 40% of a derive on a real map. `probePoint.ts` says what the probe answers instead.
   */
-  const labelStarted = performance.now();
-  const labelled = labelSpace(graph.skeleton, { minArea: 0 });
-  const labelMs = performance.now() - labelStarted;
-
   const fitStarted = performance.now();
   const ceiling = Math.max(options.tolerance, options.maxTolerance);
   const cap = options.maxCommands ?? COMMAND_CAP;
@@ -270,7 +256,6 @@ export function deriveWalls(
     walls,
     pruning,
     faces,
-    labelled,
     skeleton: thinned.mask,
     sliversRemoved: resolved.sliversRemoved,
     sliverRounds: resolved.rounds,
@@ -278,7 +263,7 @@ export function deriveWalls(
     overCap: overCapCount(faces, cap),
     tolerance,
     escalations,
-    timings: { thinMs, graphMs, labelMs, sliverMs, fitMs },
+    timings: { thinMs, graphMs, sliverMs, fitMs },
     thinning: { before: thinned.before, after: thinned.after, passes: thinned.passes },
   };
 }
@@ -293,7 +278,7 @@ export function describeWallDerivation(result: WallDerivation): string {
     `${faces.eulerHolds ? "Euler holds" : "EULER FAILED"}; ` +
     `tolerance ${result.tolerance.toFixed(2)}px after ${result.escalations} escalations; ` +
     `thin ${Math.round(timings.thinMs)}ms, graph ${Math.round(timings.graphMs)}ms, ` +
-    `slivers ${Math.round(timings.sliverMs)}ms, label ${Math.round(timings.labelMs)}ms, ` +
+    `slivers ${Math.round(timings.sliverMs)}ms, ` +
     `fit ${Math.round(timings.fitMs)}ms`
   );
 }

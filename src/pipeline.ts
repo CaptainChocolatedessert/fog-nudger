@@ -71,7 +71,6 @@ import {
 } from "./trace/luminance";
 import { blur, luminanceField, type ScalarField } from "./trace/field";
 import type { BinaryMask } from "./trace/binarize";
-import type { LabelledSpace } from "./trace/label";
 import type { RasterPlacement, WorldBounds } from "./map/placement";
 import { describePoint, readPoint } from "./trace/probePoint";
 import { detectPolarity, type PolarityReading } from "./trace/polarity";
@@ -385,38 +384,15 @@ function readingIdentity(map: ImageItem, dpi: number, settings: Settings): strin
   return `${mapIdentity(map, dpi)}|${readingFingerprint(settings)}`;
 }
 
-/**
- * The last run's intermediates, so a point can be asked about without tracing again.
- *
- * A deliberate cache of things the pipeline otherwise discards. It goes stale the moment the map or
- * the parameters change, which is survivable because the probe says which run it is answering from
- * and the remedy is to trace again.
- */
-let lastRun: {
-  rawField: ScalarField;
-  mask: BinaryMask;
-  paint: PaintLayers;
-  labelled: LabelledSpace;
-  placement: RasterPlacement;
-  pxPerSquare: number;
-  name: string;
-} | null = null;
+/*
+  `lastRun` and `lastReading` were here, and went on 2026-09-24 with the space labelling.
 
-/**
- * The last mask the overlay path produced, for the probe.
- *
- * The full run holds a labelling and this does not, which is the whole difference between what the
- * probe can say once a partition has been derived and what it can say before one has. Kept
- * folded into `lastRun`, because a half-filled `lastRun` would let anything reading it believe a
- * partition existed.
- */
-let lastReading: {
-  rawField: ScalarField;
-  mask: BinaryMask;
-  paint: PaintLayers;
-  pxPerSquare: number;
-  name: string;
-} | null = null;
+  They were the probe's own copies of a run's intermediates, and the only thing either held that the
+  mask cache does not was that labelling — which is why there were two: one for "a partition has been
+  derived" and one for "only the ink has". With the labelling gone they were the same fields twice,
+  and a second copy of state is a second thing to clear. The probe reads the mask cache now, which
+  is always the mask on screen because both callers resolve through it.
+*/
 
 /**
  * What the pipeline computed at one point of the map, given as a fraction of it.
@@ -426,35 +402,23 @@ let lastReading: {
  * side means the surface never has to know the trace's resolution, and cannot be half a raster out
  * when the cap bites on a large map.
  *
- * Answers from the partition when one has been derived and from the reading when one has not, which
- * is why it says something useful in the steps where the question "what is here?" is usually asked.
+ * **From the composed mask, not the base the ink layer draws**, since the composite is what the walls
+ * are derived from — a probe reporting the drawn version would disagree with the walls on exactly the
+ * pixels the GM painted.
  */
 export function probeMapFraction(u: number, v: number): string {
-  if (lastRun) {
-    const { rawField, mask, labelled, paint, name } = lastRun;
-    const line = describePoint(
-      readPoint(rawField, mask, labelled, u * mask.width, v * mask.height, paint),
-    );
-    devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
-    return line;
-  }
+  if (!cachedMask) return "Nothing read yet in this session — wait for the ink, then click again.";
 
-  if (lastReading) {
-    const { rawField, mask, paint, name } = lastReading;
-    const line = describePoint(
-      readPoint(rawField, mask, null, u * mask.width, v * mask.height, paint),
-    );
-    devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
-    return line;
-  }
-
-  return "Nothing read yet in this session — wait for the ink, then click again.";
+  const { rawField, mask, paint, name } = cachedMask;
+  const line = describePoint(readPoint(rawField, mask, u * mask.width, v * mask.height, paint));
+  devLog("info", `probe: map (${u.toFixed(3)}, ${v.toFixed(3)}) on "${name}" — ${line}`);
+  return line;
 }
 
 /**
  * The masks the two ink filters were handed, kept for the profiles drawn on their sliders.
  *
- * Module state beside `lastRun`, and stale in the same way: it describes the last run, and a run
+ * Module state beside the mask cache, and stale in the same way: it describes the last run, and a run
  * that has not happened yet has none. Nothing here reports a *total*, so a stale profile cannot make
  * a wrong claim about the map — the worst it does is draw the previous reading's shape until the
  * next one lands, which is the same contract the mask on screen already has.
@@ -533,15 +497,15 @@ export function inkProfiles(maxInkWidths: number, maxSpanPx: number, spanBins: n
  * patches were argued from aggregates before this existed.
  */
 export function probeWorldPoint(x: number, y: number): string {
-  if (!lastRun) return "Nothing traced yet in this session — run a trace first, then probe.";
+  if (!cachedMask) return "Nothing read yet in this session — read a map first, then probe.";
 
-  const { rawField, mask, labelled, paint, placement, name } = lastRun;
+  const { rawField, mask, paint, placement, name } = cachedMask;
   const rasterX =
     placement.unitsPerPixelX === 0 ? 0 : (x - placement.origin.x) / placement.unitsPerPixelX;
   const rasterY =
     placement.unitsPerPixelY === 0 ? 0 : (y - placement.origin.y) / placement.unitsPerPixelY;
 
-  const line = describePoint(readPoint(rawField, mask, labelled, rasterX, rasterY, paint));
+  const line = describePoint(readPoint(rawField, mask, rasterX, rasterY, paint));
   devLog("info", `probe: world (${x.toFixed(0)}, ${y.toFixed(0)}) on "${name}" — ${line}`);
   return line;
 }
@@ -1160,32 +1124,12 @@ async function resolveMask(
 
   if (!source) {
     cachedReading = null;
+    // Which is also what stops the previous map's reading answering probes for a map that failed to load.
     cachedMask = null;
-    // The previous map's reading must not go on answering probes for a map that failed to load.
-    lastReading = null;
-    lastRun = null;
     return null;
   }
 
   cachedReading = source;
-  /*
-    A new mask means the partition that went with the old one is no longer what is on screen.
-
-    `lastRun` holds a whole trace — raw field, composed mask, labelling, placement — and the point
-    probe prefers it unconditionally, falling back to `lastReading` only when it is null. It was
-    assigned at the end of `runTrace` and never cleared, so after the first trace of a session it
-    never was null: a GM who opened Regions, went back to Ink, moved the threshold and then clicked
-    the map got an answer computed from the superseded mask and the superseded partition, while the
-    screen showed the new ink. Nothing said so, because `describePoint` returns whole sentences that
-    name no run and no settings.
-
-    Clearing it here is enough because `runTrace` calls this function and assigns `lastRun`
-    afterwards, so a full trace re-establishes it in the same call. One case does not reach here at
-    all: changing `spurPrunePx` alters the graph and therefore the labelling without recomposing the
-    ink, so this short-circuits on the mask cache above. That case always goes through `runTrace` —
-    it is a Regions-step recompute — which overwrites `lastRun` anyway.
-  */
-  lastRun = null;
   cachedMask = composeInk(source, settings, paint, maskPrint);
   return { stage: cachedMask, readingReused, maskReused: false };
 }
@@ -1311,18 +1255,6 @@ export async function maskForOverlay(
   // failed is reading its pixels. `loadMapRaster` has already put the detail on the console.
   if (!resolved) return { ok: false, reason: "unreadable", mapName: map.name || "map" };
 
-  // Kept for the point probe, which the workspace answers from wherever the GM clicks. The mask here
-  // is the *composed* one, since that is what a region would be derived from — the base is what gets
-  // drawn, and a probe reporting the drawn version would disagree with the partition on exactly the
-  // pixels the repair invented.
-  lastReading = {
-    rawField: resolved.stage.rawField,
-    mask: resolved.stage.mask,
-    paint: resolved.stage.paint,
-    pxPerSquare: resolved.stage.pxPerSquare,
-    name: resolved.stage.name,
-  };
-
   return {
     ok: true,
     reading: {
@@ -1425,9 +1357,7 @@ export async function runTrace(
   const {
     plan,
     bounds,
-    placement,
     pxPerSquare,
-    rawField,
     reading,
     mask: inkMask,
     chosenCoverage,
@@ -1467,19 +1397,6 @@ export async function runTrace(
     pruneLimit: pruneLimitPx / rasterPerUnit,
     extent,
   });
-  const labelled = derived.labelled;
-
-  // Held for the point probe, which needs the labelling as well as the mask. The mask is the **ink**,
-  // so "is this ink?" still answers about the linework; the labelling answers "which region?".
-  lastRun = {
-    rawField,
-    mask: inkMask,
-    paint: mask.paint,
-    labelled,
-    placement,
-    pxPerSquare,
-    name: mapName,
-  };
 
   devLog(
     "info",
