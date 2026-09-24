@@ -975,10 +975,18 @@ profile depends on the reading alone; the island profile also moves with the str
 real rather than an oversight — the islands the second filter sees are whatever the first left,
 after the severance repair between them.
 
-**Computed off the critical path.** The stroke profile is one opening per radius, the same order of
-work as the reading itself, so folding it in would roughly double what a slider release costs to draw
-a hint. A frame is yielded first — §7a's trap, where a synchronous computation holds the thread and
-nothing set before it ever paints — and the map goes up before the shape follows it.
+**Computed off the critical path, and since 2026-09-24 off the page.** The stroke profile is one
+opening per radius, the same order of work as the reading itself, so folding it in would roughly double
+what a slider release costs to draw a hint. It runs in a worker of its own beside the derive's — §10's
+*The trace worker* — and a whole frame passes before it is asked for, so the map goes up before the
+shape follows it.
+
+**This said a frame was yielded first, and none was.** The request sat in a single animation-frame
+callback, and a browser presents a frame only once every callback in it has returned — so the canvas
+drew the new ink and the profiles then held that frame back for their second and a half, on every
+reading while the drawer was open, with the derive waiting behind them too. A room saw it as the ink
+and the walls arriving together (2026-09-24), and `dev.log` put the 1.4 seconds between the two. Two
+callbacks deep is one frame presented in between, which is `whileWorking`'s rule in `shell.ts`.
 
 **The resolution is the control's, not ours.** The filter halves its pixel threshold and rounds to a
 radius, so the curve has one point per *distinct outcome*: six on a map whose ink measures 3.4px,
@@ -2742,8 +2750,8 @@ the map; it has to be made *not block*.
 
 **So: a worker is the real answer, and a debounce is what ships first.** Derive when the ink settles
 rather than when a step opened. Same behaviour on a slow drag through a range; it freezes at the end
-instead of never until you look. **The worker is built** (2026-09-24) — §10's *The worker for the
-derive* — and the freeze that is left is the ink half's.
+instead of never until you look. **The worker is built** (2026-09-24) — §10's *The trace
+worker* — and the freeze that is left is the ink half's.
 
 #### Two indicators, and they are different states
 
@@ -2961,7 +2969,7 @@ rule once.
 
 ## 8. Testing and diagnostic practice
 
-**1,141 tests across 81 files** (measured 2026-09-24), all pure — everything that needs a DOM or a scene is not tested, which
+**1,151 tests across 81 files** (measured 2026-09-24), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3532,10 +3540,12 @@ derive** — and only the free click has been looked at in a room so far.
    luminance, ink or not, and which of the GM's layers decided it — no region, and nothing about being
    covered. The derive's log line has lost its `label` timing, so a derive should read about 40%
    quicker there. Worth one click on the outside of the dungeon, which used to be told it was emitted.
-5. **The derive in a worker** (2026-09-24, committed) — its section below has the whole of it. **Read
-   `dev.log` first**: every derive says *"derived in a worker"* or *"derived on the page"*, and the
-   second comes with a warning saying why no worker could be had — which answers whether Owlbear's iframe
-   allows one at all. Then, by hand: the map and the working strip stay live while the walls derive; the
+5. **The derive in a worker — confirmed working in a room, 2026-09-24** (user: *"It seems to be working
+   in a room"*), with the dev log reporting *"derived in a worker"* throughout; the two findings that
+   room produced are in *The trace worker* below. **Then the ink profiles joined it, not yet in a
+   room**: after a release the ink should now show a frame later rather than together with the walls,
+   and the profile lines in `dev.log` should say *"in a worker"*. Still to check by hand from the first
+   round: the map and the working strip stay live while the walls derive; the
    wall tools grey out for those seconds and come back; opening a busy map shows the first derive
    *abandoned* rather than run to its end; and closing, or *Put on the map*, straight after moving an ink
    slider pushes the walls of the new setting, not the old.
@@ -3579,14 +3589,15 @@ drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge 
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click above.
 
-**8 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 7
-before the commit that writes this line, which makes it 8). **A push
+**9 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 8
+before the commit that writes this line, which makes it 9). **A push
 deploys**, so it waits for the user to want the public build to have them.
 
-#### The worker for the derive — built 2026-09-24, not yet in a room
+#### The trace worker — the derive and the ink profiles, built 2026-09-24
 
-**The derive runs off the page; the ink half stays on it.** `deriveWalls` — thin, chain, remove the
-slivers, fit, the automatic prune — runs in a dedicated worker. The reading and the recompose stay on
+**Two heavy jobs run off the page; the ink half stays on it.** `deriveWalls` — thin, chain, remove the
+slivers, fit, the automatic prune — runs in a dedicated worker, and so, since the first room, do the
+ink profiles drawn on the two ink filters' rails, **each in a worker of its own**. The reading and the recompose stay on
 the page, so a slider release still freezes for the ink half (~1–2s on *The Incandescent Grottoes*) and
 the walls then arrive without freezing. **Roughly halves the freeze; does not end it.** Moving the ink
 half too is a bigger step, since the map's pixels would have to be decoded in the worker, and it is
@@ -3615,17 +3626,25 @@ raster to send back.
 
 **As built:**
 
-- **`trace/deriveProtocol.ts` is the whole of the worker's job** — `answerDeriveRequest`, pure and run
-  in node by the tests — and `deriveWorker.ts` is its wiring alone. The page runs the same function when
-  there is no worker, so the two paths are one implementation.
+- **`trace/workerProtocol.ts` is the whole of the worker's job** — `answerWorkerMessage`, which does
+  whichever job a message names, pure and run in node by the tests — and `traceWorker.ts` is its wiring
+  alone. The page runs the same answers when there is no worker, so the two paths are one
+  implementation. Both files were the derive's alone (`deriveProtocol.ts`, `deriveWorker.ts`) for the
+  first day.
 - **`summariseDerivation` decides what crosses**: the wall graph, its faces, the prune's counts, the
   skeleton graph's three counts, and the timings. The skeleton raster, its pixel chains and the fitted
   edges stay behind, and `TraceRun` lost `graph` and `fittedEdges` with them — nothing outside the
   trace had read either since the wall graph became the document.
-- **`deriveClient.ts` is the page's side**: one derive at a time, latest wins, a newer derive or an
-  aborted signal terminates the worker, and one worker is otherwise kept and reused. It posts a **copy**
-  of the ink and hands the copy's buffer over, since a transferred buffer is left empty behind it —
-  confirmed in a browser — and the original is the pipeline's cached mask.
+- **`workerJobs.ts` is the page's side**, generic over the job: one job at a time, latest wins, a
+  newer job or an aborted signal terminates the worker, and one worker is otherwise kept and reused.
+  `pipeline.ts` makes **two**, one per job, so the walls never queue behind the profiles and either can
+  be abandoned without costing the other. It was `deriveClient.ts` for the first day; one class rather
+  than a copy, because abandoning is the part that is easy to get wrong and it is the same for both.
+- **What is posted is a copy**, made by the protocol's `postDerive` and `postProfiles`, whose buffers
+  are handed over — a transferred buffer is left empty behind it, confirmed in a browser, and the
+  originals are the pipeline's caches. **The profiles copy each mask separately even when they are one
+  object**, which they are with the stroke filter off, its default: a buffer listed twice in a transfer
+  is refused outright.
 - **`runTrace` takes an `AbortSignal`**, checked before the ink is resolved and passed to the derive.
   `regions.ts` holds the controller: a new reading or `invalidateRegions` aborts the derive in flight,
   and the log says *"partition N abandoned mid-derive for a newer reading"* rather than a failure.
@@ -3635,8 +3654,11 @@ raster to send back.
   strip would lock nothing.
 - **The wait is `derivationSettled()`, awaited inside `commitDerivation`**, which both pushes call first
   — so it is in one place.
-- **Every derive logs where it ran**: *"derived in a worker — N ms deriving, M ms getting the ink there
-  and the walls back"*, or *"derived on the page … blocking it"*.
+- **Every job logs where it ran**: *"in a worker, N ms of work and M ms from asking to answer"*, or
+  *"on the page … blocking it"*. **The second figure is the whole round trip, not a "crossing"**: the
+  first version subtracted the work and called the rest *"getting the ink there and the walls back"*,
+  and a room's log then reported 2,096ms of it for a derive whose copying costs a few — because the
+  rest was a fresh worker starting and the page too busy to read the reply.
 
 **Decided while building, for checking:**
 
@@ -3656,6 +3678,27 @@ raster to send back.
   that warns on an extensionless import, and a new warning in every build is noise that hides the next
   one.
 
+**What the first room found (2026-09-24), and what was decided** (user: *"Sounds fine to let the ink
+show before the profiles, and put the profiles in the worker. Let's leave the ghost walls as is."*):
+
+- **The ink and the walls arrived together.** The log put 1.4 seconds of ink profiles between the ink
+  landing and the derive starting, on the page, holding back the frame that showed the ink — §4's
+  *Each filter draws the distribution it acts on* has the mechanism. **Answered by moving the profiles
+  into a worker of their own and waiting a real frame before asking for them.** `measureInkProfiles` in
+  `trace/inkProfile.ts` is the work, moved out of `pipeline.ts` so the worker can run it and a test can
+  reach it; three tests now pin which mask feeds which profile and the radius the stroke bands run to,
+  which nothing checked while it lived in the pipeline.
+- **The walls are left standing while they rederive — the ghost — by decision.** The room fills blank
+  during a derive, by `maskRequest.ts`' rule that nothing computed from settings the GM has left is
+  shown; the walls do not, so the previous ink's walls stay drawn, dimmed with the ink as the subject,
+  until the new ones land. Before the worker the page froze on that same picture and it read as a pause.
+  Blanking them would flicker the walls off on every release, and drawing them visibly out of date was
+  the other offer. **Two costs, stated:** the walls on screen claim to be current for those moments when
+  they are not, which is the rule broken knowingly; and where the map has a saved set of walls with no
+  hand edits, the code shows *that* set during a derive — `showingSaved` is true once the derivation is
+  cleared — which may be the walls of the last push rather than the ones on screen a moment before.
+  The second is reasoned from the code, not seen.
+
 **Measured from a desk:** in node, the reply for a grid of 1,957 rooms and 4,383 walls clones in a
 median of 8ms (worst 11ms), and copying and handing over a Grottoes-sized ink costs a median of 2ms
 (worst 5ms) — a hundredth of the derive or less. In the browser pane (Chromium, outside Owlbear) the
@@ -3669,7 +3712,7 @@ third-party iframe. **A worker that dies without an `error` event leaves its der
 push waiting on it; the close has its escape hatch, *Put on the map* does not. Neither has been seen.
 **Only a room can say** whether Owlbear's iframe lets a worker start at all (storage works there, which
 suggests it will — inference), whether Firefox behaves as Chromium did, and whether the built site
-finds the worker under the Pages path — the built reference reads `/fog-nudger/assets/deriveWorker-….js`
+finds the worker under the Pages path — the built reference reads `/fog-nudger/assets/traceWorker-….js`
 against the page's own URL, which is right by reading, not by loading.
 
 #### The slow saves, measured
@@ -5756,9 +5799,10 @@ under `trace/` is pure and headless-testable.
 `background.ts` (an inert logger) · `panel.ts` + `panel.html` (the popover) · `workspace.ts` +
 `workspace.html` (the full-screen surface, both modes) · `overlayProbe.ts` and `workspaceProbe.ts`
 (retired probes, kept as the record of how the platform facts were got). **Each must call
-`setDevLogLabel`** — except `deriveWorker.ts`, the derive's worker, which never logs: the page logs each
-derive from the timings the reply carries. `deriveClient.ts` is the page's side of it: one derive at a
-time, abandoned for a newer one, and the page itself when no worker can be had.
+`setDevLogLabel`** — except `traceWorker.ts`, the worker for the derive and the ink profiles, which never
+logs: the page logs each job from the timings the reply carries. `workerJobs.ts` is the page's side of
+it: one job at a time per worker, abandoned for a newer one, and the page itself when no worker can be
+had.
 
 **Both probes are unwired now**, the workspace one since 2026-09-09 with the rest of the diagnostics
 band. Neither is deleted, and the workspace probe is the one with a live reason to come back: **its
@@ -5789,7 +5833,7 @@ closed outright.
 | `trace/spurs.ts` | **which** dead-end wall runs a limit removes — the decision alone, no geometry and no raster |
 | `trace/simplify.ts` | Douglas–Peucker (`simplifyIndices` is the decision, `simplifyPolyline` that plus a lookup), `dropCollinear`, and `COMMAND_CAP` |
 | `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, **the automatic prune** (`autoPruneLimitPx`, two ink widths), and the escalation ladder that meets the command cap, pruning on every rung — and `summariseDerivation`, what of a derivation crosses back to the page |
-| `trace/deriveProtocol.ts` | **the whole of the derive worker's job**: `answerDeriveRequest`, which never throws — a failed derive is a reply, so the page can tell a bug from a missing worker. Pure, so the tests run it in node, and so it cannot reach the SDK |
+| `trace/workerProtocol.ts` | **the whole of the trace worker's job**: the derive and the ink profiles, each answered as a reply that never throws — a failed job is a reply, so the page can tell a bug from a missing worker — and the copies each posts. Pure, so the tests run it in node, and so it cannot reach the SDK |
 | `trace/label.ts` | connected-component labelling of a mask — the ink shape check's alone since the derive stopped labelling for the probe (2026-09-24) |
 | `trace/wallGraph.ts` | the document: build, encode, decode, compact, prune, and the two track measurements |
 | `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
@@ -5854,7 +5898,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   pickers) · `graphScale.ts` (the two graph-derived track tops — `bendTop` for Straighten, `spurTop` for pruning) ·
   `seedDefaults.ts` (**the per-map defaults** — straightening from the ink width, the mend tool's two
   distances from the raster) · `inkProfiles.ts` (**the two distributions drawn on the ink filters'
-  rails**, asked for a frame after a reading lands rather than inside it)
+  rails**, asked for a whole frame after a reading lands so the ink shows first, measured in a worker,
+  and an answer for ink since replaced dropped)
 - **What a press means** — `toolPalette.ts` (the strip: owns the verb, maps a tool to a drag, and
   **anchors the drawer**, because it is the module that knows where its own buttons are. **`armTool` is
   a press and `setTool` is not**: `setTool` leaves the drawer where it was, so anything meaning "put this

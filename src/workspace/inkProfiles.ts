@@ -7,9 +7,18 @@
  * work as the reading itself. Folding it into the run would roughly double what a slider release
  * costs, to draw a hint — so the map goes up first and the shape arrives after it.
  *
- * **A frame is yielded before the work starts**, which is §7a's implementation trap: a synchronous
- * computation holds the main thread, so anything set immediately before it never paints. Here the
- * consequence would be the map appearing to hang after every reading change rather than after none.
+ * **The work is in a worker since 2026-09-24**, beside the derive's own, so the page stays live while
+ * it runs and a newer reading abandons it. It was about 1.4 seconds on the page after every reading
+ * while this drawer was open, and the walls waited behind it.
+ *
+ * **And a whole frame passes before it is even asked for**, so the new ink is on screen first. This
+ * said a frame was yielded when it was not: the request sat in a single animation-frame callback, and
+ * the browser presents a frame only once every callback in it has returned — so the canvas had drawn
+ * the new ink and the profiles then held that frame back for their whole second and a half (room,
+ * 2026-09-24: the ink and the walls arriving together). Two callbacks deep is one frame presented in
+ * between, which is `whileWorking`'s rule in `shell.ts`. It still matters with the worker, since
+ * copying the two masks to post them is work on the page, and on the page is where this runs if no
+ * worker can be had.
  *
  * ## What invalidates it
  *
@@ -20,6 +29,8 @@
  * islands the second filter sees are whatever the first one left standing.
  */
 
+import { describeError } from "../describeError";
+import { devLog } from "../devlog";
 import { inkProfiles, type InkProfiles } from "../pipeline";
 import { SETTING_LIMITS, type SettingName } from "../settings";
 import type { ProfilePoint } from "../trace/inkProfile";
@@ -35,6 +46,12 @@ const ISLAND_BANDS = 24;
 
 let current: InkProfiles | null = null;
 let booked = false;
+/**
+ * Counts every change to what the shape must describe — a reading, or another map — so an answer for
+ * one that has since been replaced is dropped rather than drawn. The worker abandons a running request
+ * for a newer one, but a request that finished just before the change would otherwise still land.
+ */
+let wanted = 0;
 const listeners: (() => void)[] = [];
 
 /** The shape for one control, or an empty list where there is nothing to draw. */
@@ -84,6 +101,7 @@ export function unwatchInkProfiles(): void {
 
 /** A reading landed, so whatever shape is in hand describes ink that has been replaced. */
 export function markInkProfilesStale(): void {
+  wanted += 1;
   stale = true;
   if (watched) refreshInkProfiles();
 }
@@ -91,22 +109,41 @@ export function markInkProfilesStale(): void {
 function refreshInkProfiles(): void {
   if (booked) return;
   booked = true;
-  requestAnimationFrame(() => {
-    booked = false;
-    const maxInkWidths = SETTING_LIMITS.minStrokeInkWidths.max;
-    const maxSpanPx = SETTING_LIMITS.minIslandPx.max;
-    const next = inkProfiles(maxInkWidths, maxSpanPx, ISLAND_BANDS);
-    stale = false;
-    // Kept rather than cleared when there is nothing: before the first reading there is no shape to
-    // draw, and after one there always is.
-    if (!next) return;
-    current = next;
-    for (const listener of listeners) listener();
-  });
+  // Two callbacks deep, so the frame showing the new ink is presented before any of this runs.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      booked = false;
+      void measure(wanted);
+    }),
+  );
+}
+
+async function measure(asked: number): Promise<void> {
+  const maxInkWidths = SETTING_LIMITS.minStrokeInkWidths.max;
+  const maxSpanPx = SETTING_LIMITS.minIslandPx.max;
+  let next: InkProfiles | null;
+  try {
+    next = await inkProfiles(maxInkWidths, maxSpanPx, ISLAND_BANDS);
+  } catch (error) {
+    // Abandoned for a newer reading, whose own request is already on its way — not a failure.
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    // A hint beside two sliders: the shape in hand stays, and the detail goes where it can be read.
+    devLog("error", "workspace: the ink profiles could not be measured", describeError(error));
+    console.error("Fog Nudger — the ink profiles could not be measured", error);
+    return;
+  }
+  if (asked !== wanted) return;
+  stale = false;
+  // Kept rather than cleared when there is nothing: before the first reading there is no shape to
+  // draw, and after one there always is.
+  if (!next) return;
+  current = next;
+  for (const listener of listeners) listener();
 }
 
 /** Forget the shape, which is what loading another map does. */
 export function clearInkProfiles(): void {
+  wanted += 1;
   current = null;
   for (const listener of listeners) listener();
 }

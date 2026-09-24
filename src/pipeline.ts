@@ -81,13 +81,7 @@ import {
   radiusForWidth,
   removedInk,
 } from "./trace/morphology";
-import {
-  islandPoints,
-  islandProfile,
-  strokePoints,
-  strokeProfile,
-  type ProfilePoint,
-} from "./trace/inkProfile";
+import type { InkProfileShapes, ProfilePoint } from "./trace/inkProfile";
 import { removeSmallInkIslands } from "./trace/inkIslands";
 import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { graphExtent, rasterPixelsPerGraphUnit, type GraphExtent } from "./trace/graphUnits";
@@ -99,9 +93,18 @@ import {
   autoPruneLimitPx,
   AUTO_PRUNE_INK_WIDTHS,
   describeWallDerivation,
+  type DerivedWalls,
 } from "./trace/deriveWalls";
-import { answerDeriveRequest } from "./trace/deriveProtocol";
-import { DeriveClient, type DeriveWorker } from "./deriveClient";
+import {
+  answerDeriveRequest,
+  answerProfilesRequest,
+  postDerive,
+  postProfiles,
+  type DeriveRequest,
+  type ProfilesRequest,
+  type WorkerMessage,
+} from "./trace/workerProtocol";
+import { WorkerJobs, type JobWorker, type Ran } from "./workerJobs";
 import { COMMAND_CAP } from "./trace/simplify";
 
 /**
@@ -316,27 +319,55 @@ let cachedReading: ReadingStage | null = null;
 let cachedMask: MaskStage | null = null;
 
 /**
- * The derive's worker: started by the first derive in this iframe and kept for the rest.
- *
- * One per iframe, like the caches above — the workspace and the panel each run their own trace, and
- * each gets its own worker. Written as one `new Worker(new URL(…))` expression because that is the
- * form Vite recognises and bundles; the worker's file is its own entry in the build.
+ * A trace worker. Written as one `new Worker(new URL(…))` expression because that is the form Vite
+ * recognises and bundles; the worker's file is its own entry in the build.
  */
-const deriveClient = new DeriveClient({
-  spawn: () =>
-    new Worker(new URL("./deriveWorker.ts", import.meta.url), {
-      type: "module",
-    }) as unknown as DeriveWorker,
-  onPage: answerDeriveRequest,
-  onGiveUp: (reason) => {
+function spawnTraceWorker<Value>(): JobWorker<WorkerMessage, Value> {
+  return new Worker(new URL("./traceWorker.ts", import.meta.url), {
+    type: "module",
+  }) as unknown as JobWorker<WorkerMessage, Value>;
+}
+
+/** Said once per job if its worker cannot be had, and on the console where the detail goes. */
+function givingUp(job: string, what: string): (reason: string) => void {
+  return (reason) => {
     devLog(
       "warn",
-      `trace: no worker for the derive this session — ${reason}. Deriving on the page instead: ` +
-        `the same walls, but the surface freezes while they derive, as it did before the worker.`,
+      `trace: no worker for ${job} this session — ${reason}. Doing it on the page instead: ` +
+        `${what}, but the surface freezes while it runs, as it did before the worker.`,
     );
-    console.error("Fog Nudger — the derive worker could not be used:", reason);
-  },
+    console.error(`Fog Nudger — the worker for ${job} could not be used:`, reason);
+  };
+}
+
+/**
+ * The two jobs that run off the page, **one worker each** — started by the first job in this iframe
+ * and kept for the rest. Separate so the walls never wait behind the profiles, and so either can be
+ * abandoned for a newer one without costing the other. One pair per iframe, like the caches above.
+ * `workerJobs.ts` says what happens when a worker cannot be had.
+ */
+const deriveJobs = new WorkerJobs<DeriveRequest, WorkerMessage, DerivedWalls>({
+  spawn: spawnTraceWorker,
+  post: postDerive,
+  onPage: answerDeriveRequest,
+  onGiveUp: givingUp("the derive", "the same walls"),
 });
+
+const profileJobs = new WorkerJobs<ProfilesRequest, WorkerMessage, InkProfileShapes>({
+  spawn: spawnTraceWorker,
+  post: postProfiles,
+  onPage: answerProfilesRequest,
+  onGiveUp: givingUp("the ink profiles", "the same shapes"),
+});
+
+/** How a job ran, for the line that reports it: where, and how long the work and the wait took. */
+function describeRan(ran: Ran<unknown>): string {
+  return ran.where === "worker"
+    ? `in a worker, ${Math.round(ran.computeMs)}ms of work and ${Math.round(ran.roundTripMs)}ms ` +
+        `from asking to answer`
+    : `on the page in ${Math.round(ran.computeMs)}ms, blocking it — no worker this session, and ` +
+        `the warning that gave up on one says why`;
+}
 
 /**
  * What a cached mask is only valid for.
@@ -455,33 +486,37 @@ let lastFilterInputs: {
 export interface InkProfiles {
   readonly stroke: readonly ProfilePoint[];
   readonly island: readonly ProfilePoint[];
-  /** How long both took, for the log — this is the expensive half of drawing them. */
-  readonly millis: number;
 }
 
 /**
- * Measure what each ink filter would take, band by band.
+ * Measure what each ink filter would take, band by band — in a worker when there is one.
  *
  * **Deliberately not part of a run.** The stroke profile opens the mask once per radius the slider
  * can reach, which is the same order of work as the rest of the reading — so it is computed when a
  * caller asks, after the map is already on screen, rather than inside the path that puts it there.
+ * `trace/inkProfile.ts`' `measureInkProfiles` is the work.
  *
- * Returns `null` before any reading, which is a caller's cue to draw nothing rather than to draw an
- * empty shape.
+ * Resolves `null` before any reading, which is a caller's cue to draw nothing rather than to draw an
+ * empty shape. **Rejects with an `AbortError` when a newer request abandons it** — a new reading
+ * makes the shape in progress describe ink that has been replaced.
  */
-export function inkProfiles(maxInkWidths: number, maxSpanPx: number, spanBins: number): InkProfiles | null {
+export async function inkProfiles(
+  maxInkWidths: number,
+  maxSpanPx: number,
+  spanBins: number,
+): Promise<InkProfiles | null> {
   if (!lastFilterInputs) return null;
   const { beforeStroke, beforeIsland, inkWidthPx } = lastFilterInputs;
 
-  const started = performance.now();
-  // The track's own top, converted to the radius it reaches: past this the slider cannot go, so a
-  // band beyond it describes nothing the GM can choose.
-  const maxRadius = radiusForWidth(maxInkWidths * inkWidthPx);
-  const strokeBands = strokeProfile(beforeStroke, maxRadius);
-  const islandBands = islandProfile(beforeIsland, maxSpanPx, spanBins);
-  const stroke = strokePoints(strokeBands, inkWidthPx, maxInkWidths);
-  const island = islandPoints(islandBands);
-  const millis = performance.now() - started;
+  const ran = await profileJobs.run({
+    beforeStroke,
+    beforeIsland,
+    inkWidthPx,
+    maxInkWidths,
+    maxSpanPx,
+    spanBins,
+  });
+  const { stroke, island, strokeBands, islandBands, maxRadius } = ran.value;
 
   /*
     **The share each profile does not account for is the line to read**, and it is why it is logged
@@ -505,10 +540,9 @@ export function inkProfiles(maxInkWidths: number, maxSpanPx: number, spanBins: n
     `profiles: ${stroke.length} stroke bands to radius ${maxRadius}, ` +
       `${untouched(strokeBands)} of the ink in strokes the track never reaches; ` +
       `${island.length} island bands over ${maxSpanPx}px, ` +
-      `${untouched(islandBands)} of the ink in islands longer than that; ` +
-      `in ${Math.round(millis)}ms`,
+      `${untouched(islandBands)} of the ink in islands longer than that; ${describeRan(ran)}`,
   );
-  return { stroke, island, millis };
+  return { stroke, island };
 }
 
 /**
@@ -1416,28 +1450,23 @@ export async function runTrace(
   const pruneLimitPx = autoPruneLimitPx(reading.inkWidth);
 
   /*
-    In the worker when there is one — `deriveClient.ts` says why, and what happens when there is not.
+    In the worker when there is one — `workerJobs.ts` says why, and what happens when there is not.
     The same function either way, so the walls are the same walls; the line after says which ran.
   */
-  const ran = await deriveClient.derive(
-    inkMask,
+  const ran = await deriveJobs.run(
     {
-      tolerance,
-      maxTolerance: MAX_SIMPLIFY_GRAPH_UNITS * rasterPerUnit,
-      pruneLimit: pruneLimitPx / rasterPerUnit,
-      extent,
+      ink: inkMask,
+      options: {
+        tolerance,
+        maxTolerance: MAX_SIMPLIFY_GRAPH_UNITS * rasterPerUnit,
+        pruneLimit: pruneLimitPx / rasterPerUnit,
+        extent,
+      },
     },
     signal,
   );
-  const derived = ran.derived;
-  devLog(
-    "info",
-    ran.where === "worker"
-      ? `trace: derived in a worker — ${Math.round(ran.computeMs)}ms deriving, ` +
-          `${Math.round(ran.crossingMs)}ms getting the ink there and the walls back`
-      : `trace: derived on the page in ${Math.round(ran.computeMs)}ms, blocking it — no worker ` +
-          `this session, and the warning that gave up on one says why`,
-  );
+  const derived = ran.value;
+  devLog("info", `trace: derived ${describeRan(ran)}`);
 
   devLog(
     "info",

@@ -36,7 +36,7 @@
 
 import type { BinaryMask } from "./binarize";
 import { walkIslands } from "./inkIslands";
-import { openMask } from "./morphology";
+import { openMask, radiusForWidth } from "./morphology";
 
 /** A distribution over a slider's own track: one value per band, left to right. */
 export interface Profile {
@@ -220,4 +220,50 @@ export function islandPoints(profile: Profile): ProfilePoint[] {
   const count = profile.bands.length;
   if (count < 1) return [];
   return placed(profile.bands, (i) => (i + 1) / count);
+}
+
+/** What both profiles are measured from, and the tops of the two tracks they are placed on. */
+export interface InkProfileInputs {
+  /** What the stroke filter is handed: the reading's own mask. */
+  readonly beforeStroke: BinaryMask;
+  /** What the island filter is handed: the stroke filter's output, healed. */
+  readonly beforeIsland: BinaryMask;
+  readonly inkWidthPx: number;
+  readonly maxInkWidths: number;
+  readonly maxSpanPx: number;
+  readonly spanBins: number;
+}
+
+/** Both distributions, placed on their own tracks — and the bands behind them, for the log. */
+export interface InkProfileShapes {
+  readonly stroke: readonly ProfilePoint[];
+  readonly island: readonly ProfilePoint[];
+  readonly strokeBands: Profile;
+  readonly islandBands: Profile;
+  /** The widest radius the stroke slider can reach on this reading, which its bands run to. */
+  readonly maxRadius: number;
+}
+
+/**
+ * Measure what each ink filter would take, band by band, and place both on their tracks.
+ *
+ * **Each from its own filter's input**: the stroke profile from the reading, the island profile from
+ * what the stroke filter left — so neither depends on its own handle. It lived in `pipeline.ts` until
+ * 2026-09-24, when it moved here so the worker could run it and a test could reach it.
+ *
+ * Pure: no DOM, no SDK.
+ */
+export function measureInkProfiles(input: InkProfileInputs): InkProfileShapes {
+  // The track's own top, converted to the radius it reaches: past this the slider cannot go, so a
+  // band beyond it describes nothing the GM can choose.
+  const maxRadius = radiusForWidth(input.maxInkWidths * input.inkWidthPx);
+  const strokeBands = strokeProfile(input.beforeStroke, maxRadius);
+  const islandBands = islandProfile(input.beforeIsland, input.maxSpanPx, input.spanBins);
+  return {
+    stroke: strokePoints(strokeBands, input.inkWidthPx, input.maxInkWidths),
+    island: islandPoints(islandBands),
+    strokeBands,
+    islandBands,
+    maxRadius,
+  };
 }

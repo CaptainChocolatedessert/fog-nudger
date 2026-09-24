@@ -35,7 +35,13 @@
 import { describe, expect, it } from "vitest";
 
 import { maskFromRows, seededRandom } from "./fixtures";
-import { islandPoints, islandProfile, strokePoints, strokeProfile } from "./inkProfile";
+import {
+  islandPoints,
+  islandProfile,
+  measureInkProfiles,
+  strokePoints,
+  strokeProfile,
+} from "./inkProfile";
 import type { BinaryMask } from "./binarize";
 
 /**
@@ -438,5 +444,55 @@ describe("the floor under a band that has any ink", () => {
   it("leaves a band above the floor at its true share", () => {
     const points = islandPoints({ bands: [100, 50, 20], total: 170 });
     expect(points.map((point) => point.ink)).toEqual([1, 0.5, 0.2]);
+  });
+});
+
+/*
+  The composition, which lived untested in the pipeline until 2026-09-24. Its pieces are tested above;
+  what can go wrong here is the wiring — a profile measured from the other filter's input, or bands
+  that stop short of or run past the slider's top — and the worker's own tests compare against this
+  very function, so they cannot see it. Three mutations, three caught (2026-09-24): the inputs
+  swapped, the radius taken from the ink width alone, and the island points placed from the stroke
+  bands.
+*/
+describe("measureInkProfiles", () => {
+  const strokes = maskFromRows([
+    "..........................",
+    ".####......########.......",
+    ".####......########.......",
+    ".####......########.......",
+    ".####.....................",
+    "..........................",
+    "......##########..........",
+    "......##########..........",
+    "..........................",
+  ]);
+  const nothing = maskFromRows(Array<string>(9).fill(".........................."));
+  const tops = { inkWidthPx: 3.4, maxInkWidths: 3, maxSpanPx: 20, spanBins: 5 };
+
+  it("measures the stroke profile from the stroke filter's input, and the islands from theirs", () => {
+    const strokeOnly = measureInkProfiles({ ...tops, beforeStroke: strokes, beforeIsland: nothing });
+    expect(strokeOnly.strokeBands.total).toBeGreaterThan(0);
+    expect(strokeOnly.islandBands.total).toBe(0);
+
+    const islandsOnly = measureInkProfiles({ ...tops, beforeStroke: nothing, beforeIsland: strokes });
+    expect(islandsOnly.strokeBands.total).toBe(0);
+    expect(islandsOnly.islandBands.total).toBeGreaterThan(0);
+  });
+
+  it("runs the stroke bands to the radius the slider's top reaches, and no further", () => {
+    // Three ink widths of 3.4px is a 10.2px threshold: a radius of 5, the top of the track.
+    const shapes = measureInkProfiles({ ...tops, beforeStroke: strokes, beforeIsland: strokes });
+    expect(shapes.maxRadius).toBe(5);
+    expect(shapes.strokeBands.bands).toHaveLength(5);
+    expect(shapes.islandBands.bands).toHaveLength(5);
+  });
+
+  it("places each profile on its own track", () => {
+    const shapes = measureInkProfiles({ ...tops, beforeStroke: strokes, beforeIsland: strokes });
+    expect(shapes.stroke).toEqual(strokePoints(shapes.strokeBands, 3.4, 3));
+    expect(shapes.island).toEqual(islandPoints(shapes.islandBands));
+    expect(shapes.stroke.length).toBeGreaterThan(0);
+    expect(shapes.island.length).toBeGreaterThan(0);
   });
 });
