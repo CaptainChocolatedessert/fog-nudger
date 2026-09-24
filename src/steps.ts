@@ -857,7 +857,6 @@ export const PARAMETER_STEP: Readonly<Record<SettingName, StepId | readonly Step
     and filing them under one would mean leaving the other to reach them.
   */
   fillOpacity: "view",
-  strokeSquares: "view",
 };
 
 /**

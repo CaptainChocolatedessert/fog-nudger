@@ -1032,12 +1032,67 @@ continuing to compose that way.
 
 **Thirteen mutations, thirteen caught**, plus four more over the track placement.
 
-*Open, and noticed only because this plot makes it visible: the stroke slider has about ten stops per
-distinct outcome.* This project has already treated that as a defect once — the gap width is stepped
-in twos *"because the value is halved and rounded to a closing radius, so consecutive odd and even
-settings produce the identical repair"* — and the stroke filter has a worse version that nobody has
-seen, because the map redraws identically either way. With the curve drawn, the handle slides a third
-of the way across a flat stretch while nothing moves.
+**Fixed 2026-09-24, the same way the gap width already was — a step, measured per map.** The gap
+width is stepped in twos *"because the value is halved and rounded to a closing radius, so
+consecutive odd and even settings produce the identical repair"*, but that step is a fixed count of
+raw pixels and needs no measurement: the stroke filter's radius is `round(setting × inkWidth / 2)`,
+so a fixed step in *ink widths* means a different pixel step on every map, and no single number could
+ever make every map's consecutive settings land on consecutive radii.
+
+**So the step is computed, not declared**: `2 / inkWidth` in the control's own unit, which is exactly
+the pixel change `radiusForWidth` can never treat as a no-op — every grid point this produces sits at
+the *centre* of one radius's band (`round` maps the whole range `[2r−1, 2r+1)` onto `r`, and `2r` is
+its midpoint), so consecutive settings are consecutive radii with nothing skipped and nothing
+repeated. `controls.ts`'s `Control.stepFor` carries it — the one control that needs one — taking the
+measured ink width as an argument rather than fetching it, for the same layering reason `derive`
+does. Falls back to the declared 0.05 before a first reading, when there is nothing to measure yet.
+
+**Not the `round`-versus-`floor` question, which is separate and untaken.** `Math.round` still gives
+slightly more filtering than the setting nominally asks for at the very top of each band; this only
+fixes how far apart two *different* outcomes sit, not which pixel width a given setting means.
+
+Three mutations run by hand while building, three caught: the numerator (moving the effective pixel
+step off 2 broke the "one step, every time" sweep), the rounding (removing `toPrecision(3)` left a
+value visibly off from the hand-checked figure, though not enough to break the sweep — a
+precision-only defect the exact-value test catches and the property sweep does not), and the
+fallback guard (weakening it past a bad measurement produces `Infinity`). Held from **§10's** "ten
+stops per distinct outcome" note, which described the fault; this is the fix.
+
+**And the fix left a new mismatch, closed the same day** (user): the *number* now jumps between real
+stops, but the *handle* still glides across all thousand drag positions underneath it — a true
+discontinuity in one and a false continuity in the other, side by side. Asked which to give up —
+force the handle itself to rest only on real stops, or accept the glide and make the number agree
+with what it shows — the answer was the second: a handle that snapped under the finger would fight
+the thousand-position drag every slider here relies on for feel, and would feel worst on exactly the
+maps this exists for, where a thick wall leaves only three or four real stops on the whole track.
+
+**So the rail gets tick marks at every real stop, and the readout is which one the handle is on**,
+not the raw setting. `workspace/tickMarks.ts` is the decision, pure and tested — `tickPositions` walks
+whole steps from the floor by `floor`, never `round` (an equivalent mutant, checked by hand twice —
+`toSlider`'s own clamp absorbs an overshoot onto exactly the position an explicit top tick would use,
+whichever way `wholeSteps` rounds); `tickIndex` answers the companion question, which stop a value is
+nearest, which is what the readout now prints in place of the value **and is the same integer as the
+radius that will actually run** — the two were never a coincidence, since the step was built by asking
+what change in the radius the setting has to produce, one grid point at a time. Off is still off,
+since a radius of zero is where the filter is exactly a no-op regardless of which stop that is.
+
+**A room found the top tick doubled, the same day** (user, 2026-09-24). The declared range is rarely
+an exact multiple of a step measured off a map's own ink, so a remainder is normal — and the first
+version gave the top its own mark regardless of that remainder's size, on the reasoning that dragging
+all the way there is a real position. When the remainder is under half a step, `tickIndex` calls it
+the *same* stop as the last regular tick, so the two marks sat a quarter or a third of the usual
+spacing apart — close enough on screen to read as one tick, thickened, rather than two. **The top now
+earns its own mark only when `tickIndex` agrees it is a later one** than the last regular tick — the
+exact question the readout already answers, so the marks and the number can never disagree about how
+many stops there are. Reproduced as a fixture first (a range of 2.1 over a step of 0.4, the top a
+quarter-step past the last regular tick at 2.0) and confirmed it fails on the prior rule before fixing
+it. **Nine tests, five mutations run by hand and caught, one equivalent** (the `floor`/`round` case).
+
+**Colour and size followed a room's eye the same day**: white, matching the track's own unfilled half,
+rather than the muted blue-grey tried first — a tick reads as part of the rail this way rather than a
+third overlay to tell apart from the profile and the ghost. Widened and heightened once for
+visibility, then narrowed back to a hairline once the doubled-top fault made a 3px mark look like two
+ticks fused into a block; 1px wide, 14px tall is where it settled.
 
 ### Healing what the stroke filter severs — 2026-09-21
 
@@ -3452,9 +3507,16 @@ every tool it built confirmed in a room, the public build pushed, and eight comm
 2. **The *Done* buttons** in the ink drawers and Straighten's, which are the same shared control now.
    Pressing Done is what recomposes the ink and derives the walls once, instead of once per press.
 
-**Then the first note waiting**: the region fills should have **no border** (user, 2026-09-22). They are
-bounded by walls already, and the two outlines conflict visually — the fill should be interior colour
-only, drawn under the walls. Small, decided, no conversation needed.
+**The first note waiting is built, 2026-09-24, not yet in a room**: the region fills have **no
+border** now. They are bounded by walls already, and the two outlines were competing visually — the
+fill is interior colour only, drawn under the walls (registration order was already fill-before-walls,
+so nothing moved there). Cost, decided while building: `review.strokeSquares` — the *Preview outline*
+control it leaves nothing for — is deleted rather than left as a dead slider, following the
+`inkOpacity` precedent.
+
+**Also built the same day, also not yet in a room**: the stroke filter's slider steps in units
+measured off the last reading's ink width, so consecutive settings are consecutive radii — §4's
+*Each filter draws the distribution it acts on* carries the mechanism and the mutation record.
 
 **Then, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
 the one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3476,9 +3538,6 @@ the one question, a picture if it is geometric, name and glyph, a numbered plan)
 
 **Held, with the reason:**
 
-- **The stroke slider's stepping and `round` versus `floor`** in `radiusForWidth` (§10's ink
-  investigation, with measurements). Real and not urgent: about ten slider stops per distinct radius, so
-  six nudges do nothing and the seventh severs corners. The fix is stops measured per map.
 - **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
   *the scene has not finished loading* look the same, since the map list is briefly empty on load.
 - **A second map in a different style** — hatched stonework, a printed grid, a scan. Everything so far

@@ -33,25 +33,11 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 
 import { PROPOSAL_COLOURS } from "../../emit/fogShapes";
 import { colourFor } from "../palette";
-import {
-  currentMarkStates,
-  currentRegions,
-  outlineUnitsPerSquare,
-  regionsShowing,
-} from "../regions";
+import { currentMarkStates, currentRegions, regionsShowing } from "../regions";
 import { currentSettings } from "../settingsState";
 import { addPainter, type Painter } from "../shell";
 import { currentTool } from "../toolPalette";
 import { pendingMark } from "../wallEdit";
-
-/**
- * The outline never gets thinner than this on screen.
- *
- * The width is a GM setting in grid squares and it is honoured — but a stroke in map space is
- * sub-pixel with a whole map in view, which is exactly when the partition most needs to read as a
- * partition. The setting decides the width; this decides the floor.
- */
-const MIN_STROKE_PX = 1;
 
 /*
   `WALL_COLOUR`, `WALL_CASING` and `WALL_WIDTH_PX` went with the lines they drew. The casing argument
@@ -134,21 +120,9 @@ function paintRegions(
   scale: number,
 ): void {
   const regions = currentRegions();
-
   const settings = currentSettings();
-  /*
-    The width is read live and the *unit* is asked for, which is the split that matters.
-
-    A grid square is a number of graph units that only a trace can measure, and only the
-    partition's own module knows whether one has. Reading the setting here keeps the outline
-    responding to the slider without a re-derive; asking for the conversion keeps that knowledge
-    out of the painter.
-  */
-  const strokeInRingUnits = settings.review.strokeSquares * outlineUnitsPerSquare();
 
   context.save();
-  context.lineJoin = "round";
-  context.lineWidth = Math.max(MIN_STROKE_PX, strokeInRingUnits * scale);
 
   regions.forEach((region, index) => {
     const colour = PROPOSAL_COLOURS[index % PROPOSAL_COLOURS.length]!;
@@ -170,10 +144,6 @@ function paintRegions(
     context.globalAlpha = settings.review.fillOpacity;
     context.fillStyle = colour;
     context.fill("evenodd");
-
-    context.globalAlpha = 1;
-    context.strokeStyle = colour;
-    context.stroke();
   });
 
   /*
@@ -192,6 +162,15 @@ function paintRegions(
     apparently changing colour: two layers drawing walls, one of them switched off. Red also stops
     doing a job it was not supposed to have — the palette reserves it for destruction, and this was
     one of the two uses §7a already wanted gone.
+  */
+
+  /*
+    **The region outline is gone too** (user, 2026-09-24): the fills are bounded by walls already —
+    the graph layer draws them, cased and readable on any background — so a second outline around
+    the same boundary was drawn in the region's own flat colour and competed with it rather than
+    adding anything. The fill is interior colour only now, and this layer draws under the graph
+    layer (`workspace.ts` registers them in that order), so the walls are what a GM reads the
+    boundary from.
   */
 
   context.restore();

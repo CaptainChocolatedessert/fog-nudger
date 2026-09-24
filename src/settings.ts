@@ -247,8 +247,14 @@ export interface ReviewSettings {
    * full opacity leaves a tint over ground the party has already revealed.
    */
   readonly fillOpacity: number;
-  /** Outline width of a staged proposal, in grid squares. Free — stroke width does not affect walls. */
-  readonly strokeSquares: number;
+  /*
+    `strokeSquares` was here, labelled *Preview outline* (2026-09-24: "the region fills should have no
+    border. They are bounded by walls already, and the two outlines conflict visually.").
+
+    **Removed rather than defaulted to zero**, for the reason `inkOpacity` was: a stored non-zero
+    value with no control left would sit in the settings for ever, reported in the log, meaning
+    nothing. With the key gone the normaliser drops it.
+  */
 }
 
 /**
@@ -367,20 +373,6 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   review: {
     fillOpacity: 0.22,
-    /*
-      0.08 rather than 1/12, so the default is a position the slider can actually select.
-
-      It was 1/12 (0.08333...), and `SETTING_LIMITS.strokeSquares` steps by 0.01 — the only default
-      in the whole set that did not land on its own step. Nudging that slider and putting it back
-      landed on 0.08, so `isDefault` was false from then on and every log line said "(edited)" for a
-      scene the GM considers untouched, with the per-step Defaults button the only way back.
-
-      Safe to change because this is a **display** parameter in the **adjust** stage: it draws the
-      preview's outline on the workspace canvas and reaches no emitted geometry, since an emitted
-      shape carries no stroke at all. The visible difference between 0.0833 and 0.08 squares of
-      preview outline is nothing.
-    */
-    strokeSquares: 0.08,
   },
   overlay: {
     /*
@@ -444,7 +436,6 @@ export const SETTING_LIMITS = {
   mendReachGraphUnits: { min: 0, max: 0.1, step: 0.0001, floor: 2e-4 },
   mendTravelGraphUnits: { min: 0, max: 0.4, step: 0.0001, floor: 2e-4 },
   fillOpacity: { min: 0, max: 1, step: 0.02 },
-  strokeSquares: { min: 0, max: 0.3, step: 0.01 },
   // Runs past a doorway on purpose, like the two filters above it: at the top end whole doorways
   // get sealed, which is what makes the middle of the track feel like a choice. No measurement can
   // separate a doorway from a severed wall — both are a gap of some width — so where that line
@@ -578,7 +569,6 @@ export const PARAMETER_STAGE: Readonly<Record<SettingName, Stage>> = {
   mendReachGraphUnits: "read",
   mendTravelGraphUnits: "read",
   fillOpacity: "adjust",
-  strokeSquares: "adjust",
 };
 
 /**
@@ -651,7 +641,6 @@ export const PARAMETER_KIND: Readonly<Record<SettingName, ParameterKind>> = {
   mendReachGraphUnits: "tool",
   mendTravelGraphUnits: "tool",
   fillOpacity: "display",
-  strokeSquares: "display",
 };
 
 /*
@@ -900,7 +889,6 @@ export function normaliseSettings(raw: unknown): Settings {
     },
     review: {
       fillOpacity: clamp(review.fillOpacity, "fillOpacity", r.fillOpacity),
-      strokeSquares: clamp(review.strokeSquares, "strokeSquares", r.strokeSquares),
     },
     overlay: {
       inkColour: normaliseColour(overlay.inkColour, o.inkColour),
@@ -950,7 +938,7 @@ export function describeSettings(settings: Settings): string {
     `blur ${trace.blurSigma}, k ${trace.sauvolaK}, window ${trace.sauvolaRadiusPx}px, ` +
     `min stroke ${trace.minStrokeInkWidths} ink widths, ` +
     `min island ${trace.minIslandPx}px, ` +
-    `review fill ${review.fillOpacity}, stroke ${review.strokeSquares.toFixed(3)} sq; ` +
+    `review fill ${review.fillOpacity}; ` +
     `gaps ${trace.gapFillPx === 0 ? "off" : `up to ${trace.gapFillPx}px, travel ${trace.gapTravelPx}px`}; ` +
     `mends ${
       trace.mendReachGraphUnits === 0

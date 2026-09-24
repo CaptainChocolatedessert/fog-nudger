@@ -438,6 +438,37 @@
         box-shadow: 0 0 0 1px rgba(201, 205, 234, 0.7);
         pointer-events: none;
       }
+      /*
+        Tick marks: the real stops on a control whose step is measured rather than declared
+        (`workspace/tickMarks.ts`, `settingRows.ts`'s `paintTicks`), so the thousand positions a drag
+        can land on and the handful that actually change anything stop disagreeing silently.
+
+        **The container is the same full-width box `.ghost` positions against**, and each tick uses
+        `.ghost`'s own inset arithmetic against `--thumb` — a range input's centre never reaches the
+        track's own edges, and a mark that ignored that would drift outward at both ends exactly as
+        the ghost once did.
+
+        A short hairline rather than a circle: it marks a position on the rail, not the handle's own
+        place, and several of them at once would be a row of ghosts if drawn the same way.
+
+        **White, the same as the track's own unfilled half** (user, 2026-09-24), rather than the muted
+        blue-grey tried first — a tick reads as part of the rail itself this way, not as a second
+        overlay competing with the profile above it and the ghost that shares its box.
+      */
+      .row .ticks {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .row .tick {
+        position: absolute;
+        top: 50%;
+        width: 1px;
+        height: 14px;
+        transform: translate(-50%, -50%);
+        background: #fff;
+        pointer-events: none;
+      }
 
       /* ----------------------------------------------------------------------------------------
          The tool strip: what a press means, chosen once for the whole surface.

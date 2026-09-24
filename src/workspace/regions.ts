@@ -47,8 +47,7 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import type { Ring } from "../geometry/ring";
-import { lastPixelsPerSquare, runTrace } from "../pipeline";
-import { rasterPixelsPerGraphUnit } from "../trace/graphUnits";
+import { runTrace } from "../pipeline";
 import { regionAt } from "../trace/dissolve";
 import { suppressedRegions, withoutSuppressed } from "../trace/suppression";
 import {
@@ -101,25 +100,6 @@ let walls: readonly PreviewWall[] = [];
   units scale by the longer drawn side on both axes. So the field went rather than being bent into
   meaning something else, and a third source that is not in graph units will have to say so then.
 */
-/**
- * Ring units in one grid square, or zero when there is no way to know.
- *
- * The *conversion* rather than the width: the outline setting is a display parameter and the painter
- * reads it live, so storing the product here would leave the outline stale until the next derive.
- * What changes with the stage is only the unit, and that is what this carries.
- *
- * **In the editor it is always zero, and that is a stated cost rather than an oversight.** The
- * setting is denominated in grid squares; converting it needs a pixels-per-square measurement that
- * only a trace produces, and a GM who opens the editor has not run one. Honouring it only when a
- * trace happens to have run this session would be an invisible divergence, which is worse than not
- * at all — so there the outline is drawn at its screen-pixel floor. The fills and the shapes, which
- * are what the step is for, are unaffected.
- *
- * **Where a trace has run it is not zero**: the trace measured pixels per square on its raster, and
- * knows how many raster pixels make a graph unit.
- */
-let unitsPerSquare = 0;
-
 /**
  * The graph the last derive arrived at, in the form saving would store it.
  *
@@ -334,11 +314,6 @@ export function currentRegions(): readonly PreviewRegion[] {
   return regions;
 }
 
-/** Ring units in one grid square; zero means the painter's screen-pixel floor decides. */
-export function outlineUnitsPerSquare(): number {
-  return unitsPerSquare;
-}
-
 /** Whether a partition current for the applied settings exists, which is what the painter checks. */
 export function regionsShowing(): boolean {
   return shouldPaint(requests.current());
@@ -405,9 +380,6 @@ let derivation: {
   readonly dropped: number;
   /** Points the derivation dropped for lying exactly on the line between their neighbours. Lossless. */
   readonly collinear: number;
-  /** Raster pixels per graph unit on the trace's raster, which turns a pixel figure into graph units. */
-  readonly rasterPerUnit: number;
-  readonly pxPerSquare: number;
 } | null = null;
 
 /**
@@ -440,7 +412,6 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
 
   const faces = buildWallFaces(from.graph);
   const emitted = showFaces(from.graph, faces);
-  unitsPerSquare = from.pxPerSquare > 0 ? from.pxPerSquare / from.rasterPerUnit : 0;
 
   /*
     The same figures the editor says, in the same order, because they now describe the same object.
@@ -563,25 +534,10 @@ async function derive(): Promise<void> {
       One derivation now, and the trace no longer carries a region list at all. What it produces is
       the graph, the fitted edges, and the checks over them — a derivation, not a picture.
     */
-    /*
-      A grid square in graph units, which a derivation can answer and a stored graph alone cannot.
-
-      The trace measured it in raster pixels and built the graph against that raster, so dividing by
-      raster pixels per unit converts it exactly. A saved graph with no trace behind it leaves this at
-      zero, which is the stated cost recorded above; here the measurement exists, so the outline
-      setting is honoured rather than drawn at its floor.
-    */
-    const pxPerSquare = lastPixelsPerSquare() ?? 0;
-    const rasterPerUnit = Math.max(
-      1e-9,
-      rasterPixelsPerGraphUnit(outcome.run.raster.width, outcome.run.extent),
-    );
     derivation = {
       graph: stored.graph,
       dropped: stored.duplicates + stored.zeroLength,
       collinear: stored.collinear,
-      rasterPerUnit,
-      pxPerSquare,
     };
     /*
       Nothing is marked applied here any more, and both halves went on 2026-09-18.
@@ -631,7 +587,6 @@ function clearPartition(): void {
   walls = [];
   walked = null;
   marks = currentMarks().map((point) => ({ point, active: false }));
-  unitsPerSquare = 0;
   preview = null;
   noteGraph(null);
   requests.fulfil(generation);
@@ -648,7 +603,6 @@ function derivePartition(graph: WallGraph): void {
 
   const emitted = showFaces(graph, result);
   noteGraph(graph);
-  unitsPerSquare = 0;
   preview = null;
 
   const rooms = describeRooms(emitted, result, "room");

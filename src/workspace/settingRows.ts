@@ -13,7 +13,7 @@
  */
 
 import { type Control, type Measured } from "../controls";
-import { lastPixelsPerSquare, lastRasterPerGraphUnit } from "../pipeline";
+import { lastInkWidth, lastPixelsPerSquare, lastRasterPerGraphUnit } from "../pipeline";
 import {
   PARAMETER_KIND,
   readParameter,
@@ -33,6 +33,7 @@ import {
 import { onInkProfiles, profileFor, unwatchInkProfiles, watchInkProfiles } from "./inkProfiles";
 import { ghostPosition } from "./ghostMark";
 import { recomputeFor } from "./recompute";
+import { tickIndex, tickPositions } from "./tickMarks";
 import { sideOfStep, workOn } from "./subject";
 import { stepsOf } from "../steps";
 import {
@@ -66,6 +67,12 @@ function trackFor(name: SettingName): ScaleLimits {
  * them store graph units and neither that nor any spelling of it is a number a GM can hold
  * on to. Everything else takes the shared formatter, which knows about steps and off positions and
  * should not be bypassed for taste.
+ *
+ * **A control with `stepFor` reports its tick instead of either.** The raw value is a guess in a unit
+ * (ink widths) nobody can feel, and the track position is not the count that matters — what changed
+ * as the handle moved is how many of the control's own, measured stops it crossed, and that is what
+ * the tick marks under it now count too. The two are meant to agree: the number says how many ticks
+ * back the handle sits, and the marks say where they are.
  */
 function format(
   control: Control,
@@ -78,6 +85,12 @@ function format(
   // decimal, because the step is half a percent and a whole number would make half the stops print
   // the same thing.
   if (control.readout === "percent") return `${(value * 100).toFixed(1)}%`;
+  if (control.stepFor) {
+    // Off is a state rather than a tick, on the same argument the position readout below makes —
+    // true here specifically because a radius of zero is where this filter is exactly a no-op.
+    if (value <= 0) return "off";
+    return String(tickIndex(value, limits));
+  }
   if (control.readout !== "position") return formatValue(value, limits, scale);
   // Off is a state rather than a place on the track, and it is the one thing about these controls
   // that a number would obscure rather than convey.
@@ -136,6 +149,28 @@ function paintProfile(
   const open = `M0 ${PROFILE_HEIGHT} ${steps.join(" ")} L${PROFILE_WIDTH} ${PROFILE_HEIGHT}`;
   svg.line.setAttribute("d", open);
   svg.fill.setAttribute("d", `${open} Z`);
+}
+
+/**
+ * Draw one control's tick marks, replacing whatever was there.
+ *
+ * **Only a control with `stepFor` gets any**, and for the same reason it has a `stepFor` at all: the
+ * marks exist to show that the track's real resolution is coarser than its thousand drag positions,
+ * which is not true of an ordinary control and would be one more decoration nobody needed.
+ *
+ * Positioned exactly as the ghost is, against `--thumb`, because both mark a place on the track a
+ * range input's own centre can actually reach — inset from both edges by half the thumb rather than
+ * a bare fraction of the box.
+ */
+function paintTicks(container: HTMLElement, limits: ScaleLimits, scale: Scale): void {
+  container.replaceChildren(
+    ...tickPositions(limits, scale).map((position) => {
+      const tick = document.createElement("div");
+      tick.className = "tick";
+      tick.style.left = `calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${position / SLIDER_STEPS})`;
+      return tick;
+    }),
+  );
 }
 
 /** Repainters for the rows on screen, cleared with them. */
@@ -222,14 +257,32 @@ export function settingRow(control: Control): HTMLElement {
   const scale = control.scale ?? "linear";
   const value = readParameter(currentSettings(), control.name);
   /*
-    The track, which for two controls is not the declared one.
+    The track, which for the stroke filter is not the declared one.
 
-    Their top end is measured off the graph — the longest spur, the largest bend — so `SETTING_LIMITS`
-    supplies only the storage bounds and the pinned floor. `graphScale.ts` carries the reasoning; what
-    matters here is that this is a `let`, because the measurement can arrive after the row is built
-    and the handlers below have to see the new track when it does.
+    `SETTING_LIMITS` supplies its storage bounds, but its real *step* — the smallest change that is
+    never a no-op — depends on the last reading's measured ink width, which is not known until one has
+    run and can change with every later one. `control.stepFor` carries the conversion; what matters
+    here is that this is a `let`, because the measurement can arrive, and change, after the row is
+    built, and the handlers below have to see the new step when it does.
   */
   let limits = trackFor(control.name);
+  /*
+    The tick marks, built here rather than where the track is because `refreshStep` below has to
+    reach both: a step that changes moves them exactly as it moves what the readout counts, and they
+    are one fact rather than two kept in step by hand.
+  */
+  const ticks = control.stepFor ? document.createElement("div") : null;
+  if (ticks) ticks.className = "ticks";
+  const refreshStep = control.stepFor
+    ? () => {
+        limits = { ...trackFor(control.name), step: control.stepFor!(lastInkWidth()) };
+        if (ticks) paintTicks(ticks, limits, scale);
+      }
+    : null;
+  refreshStep?.();
+  // Pushed before anything else this row registers, so a later reading's ink width is in `limits`
+  // before the readout and the ghost — both below — repaint against it.
+  if (refreshStep) hintPainters.push(refreshStep);
 
   const row = document.createElement("div");
   row.className = "row";
@@ -452,6 +505,7 @@ export function settingRow(control: Control): HTMLElement {
     // still the row on screen.
     profilePainters.push(() => paintProfile(profile, control.name));
   }
+  if (ticks) track.append(ticks);
   track.append(input, ghost);
 
   /**

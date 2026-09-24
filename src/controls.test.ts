@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import { CONTROLS, type Measured } from "./controls";
 import { readParameter, SETTING_LIMITS, DEFAULT_SETTINGS } from "./settings";
+import { radiusForWidth } from "./trace/morphology";
 
 /** Every value a slider can be at, plus the two ends and the default. */
 function sampleValues(name: (typeof CONTROLS)[number]["name"]): number[] {
@@ -242,5 +243,44 @@ describe("the control declaration", () => {
   it("names each parameter at most once", () => {
     const names = CONTROLS.map((control) => control.name);
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe("the stroke filter's own step", () => {
+  /*
+    **Why this control alone overrides its step.** `radiusForWidth` (`trace/morphology.ts`) turns a
+    pixel width into an integer radius by halving and rounding it, so the declared step of 0.05 ink
+    widths meant nothing on a real map: about ten consecutive slider stops shared one radius, then one
+    nudge jumped straight to the next, taking a corner off a wall with it (2026-09-21). The fix is a
+    step that always moves the effective pixel width by exactly 2 — the smallest change `radiusForWidth`
+    can never treat as a no-op — converted into this control's own unit by dividing by the measured ink
+    width, exactly as the granulometry profile beside it already does (`inkProfile.ts`'s `strokePoints`).
+  */
+  const stroke = CONTROLS.find((control) => control.name === "minStrokeInkWidths")!;
+
+  it("falls back to the declared step before a first reading, or on a bad measurement", () => {
+    for (const inkWidthPx of [null, 0, -1, Number.NaN]) {
+      expect(stroke.stepFor!(inkWidthPx)).toBe(SETTING_LIMITS.minStrokeInkWidths.step);
+    }
+  });
+
+  it("is 2 raster pixels of width, converted to ink widths, to three significant figures", () => {
+    expect(stroke.stepFor!(4)).toBeCloseTo(0.5, 5);
+    expect(stroke.stepFor!(5.7)).toBeCloseTo(0.351, 5);
+  });
+
+  it("moves radiusForWidth by exactly one step, never zero and never two", () => {
+    // The property the whole control exists to have: every multiple of the step, starting from 0,
+    // is a distinct radius, in order, with nothing skipped and nothing repeated. Swept rather than
+    // spot-checked, because "usually one step" is exactly the failure this replaces.
+    for (const inkWidthPx of [2.1, 3.2, 4.9, 5.7, 8.4, 12, 19.5]) {
+      const step = stroke.stepFor!(inkWidthPx);
+      let lastRadius = -1;
+      for (let n = 0; n <= 20; n++) {
+        const radius = radiusForWidth(n * step * inkWidthPx);
+        expect(radius, `inkWidth ${inkWidthPx}, n=${n}`).toBe(lastRadius + 1);
+        lastRadius = radius;
+      }
+    }
   });
 });

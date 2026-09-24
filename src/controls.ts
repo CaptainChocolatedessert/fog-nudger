@@ -21,7 +21,7 @@
  * No DOM, no SDK.
  */
 
-import type { SettingName } from "./settings";
+import { SETTING_LIMITS, type SettingName } from "./settings";
 import type { Scale } from "./sliderScale";
 
 /**
@@ -118,6 +118,19 @@ export interface Control {
    * stale when one of them moves.
    */
   readonly derive?: (value: number, measured: Measured) => string;
+  /**
+   * Override the slider's own step, given the last reading's measured ink width in raster pixels —
+   * or `null` before a first reading.
+   *
+   * **Only the stroke filter has one**, because its declared step is not its real resolution.
+   * `radiusForWidth` turns a pixel width into an integer radius by halving it, so the smallest change
+   * that is never a no-op is exactly 2 raster pixels of width — `2 / inkWidthPx` in this control's
+   * own unit, ink widths. A fixed step cannot do this because the conversion depends on the map.
+   *
+   * Takes the measurement as an argument rather than fetching it, for the same reason `derive` does:
+   * `lastInkWidth()` lives in the pipeline, which imports the SDK, and this module must not.
+   */
+  readonly stepFor?: (inkWidthPx: number | null) => number;
 }
 
 /**
@@ -175,6 +188,19 @@ function brushReadout(value: number, { pxPerSquare }: Measured): string {
   return `${px}, ${(value / pxPerSquare).toFixed(2)} of a square`;
 }
 
+/**
+ * The stroke filter's step, in ink widths — see `Control.stepFor`.
+ *
+ * Rounded to three significant figures, the same precision a log-scaled setting snaps to, so the
+ * step itself is a number a GM would not wince at if they ever saw it (they do not — only its
+ * effect, in how many stops apart two outcomes sit, is visible) and so its decimal count stays short
+ * enough for the readout beside the slider to print cleanly.
+ */
+function strokeFilterStep(inkWidthPx: number | null): number {
+  if (inkWidthPx === null || !(inkWidthPx > 0)) return SETTING_LIMITS.minStrokeInkWidths.step;
+  return Number((2 / inkWidthPx).toPrecision(3));
+}
+
 export const CONTROLS: readonly Control[] = [
   {
     name: "sauvolaK",
@@ -204,6 +230,7 @@ export const CONTROLS: readonly Control[] = [
     // No derived line. Every figure it could give is the setting times the measured ink width, which
     // is an estimate — so a pixel count here is the same guess in another unit. The number at the
     // right is the setting itself, which is what a GM needs to come back to one.
+    stepFor: strokeFilterStep,
   },
   {
     name: "minIslandPx",
@@ -262,12 +289,10 @@ export const CONTROLS: readonly Control[] = [
     // nowhere else. What an emitted shape looks like is stated once, under the View heading.
     hint: "",
   },
-  {
-    name: "strokeSquares",
-    label: "Preview outline",
-    hint: "",
-  },
   /*
+    `strokeSquares` was here, labelled *Preview outline*, and it went on 2026-09-24: the region fills
+    are bounded by walls already, and the two outlines conflict visually, so the fill lost its own.
+
     `simplifyGraphUnits` was here, labelled *Straightening*, and it went on 2026-09-18 with the
     setting behind it.
 
