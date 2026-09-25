@@ -2013,6 +2013,12 @@ is one a GM meets while leaving, and a write that will not finish already has th
 observations** — 274 items writes in a couple of seconds, 5,881 cannot be written at all — and nobody
 has bisected between them.
 
+**A third, on 2026-09-24**, on the far side: a close of the Grottoes at deliberately extreme ink
+settings asked for **2,627 shapes and 5,456 wall lines**, wrote 2,568 shapes in three minutes, and
+stopped on `OBR_SCENE_ITEMS_ADD_ITEMS took longer than 5000ms` — no wall lines written, the scene left
+holding a partial set until the next push replaces it. The warning did not stand in front of it, since
+it was a close.
+
 **It warns and does not refuse**, because it is a prediction about a scene rather than a measurement of
 one.
 
@@ -3629,8 +3635,8 @@ drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge 
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click below it.
 
-**4 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 3
-before the commit that writes this line, which makes it 4). **A push deploys**, so it waits for the
+**5 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 4
+before the commit that writes this line, which makes it 5). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
