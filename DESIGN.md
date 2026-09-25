@@ -3678,6 +3678,15 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
     therefore doors that open them — exist only through something running on every client. The user's
     thought, explicitly not a decision: prep-only use beside Dynamic Fog, with doors lost on a push, or
     optional play-time features of ours for a GM who wants doors kept through edits.
+  - **What taking over would cost — sized, then parked (user, 2026-09-25).** Dynamic Fog is about 3,300
+    lines of code (counted): ~220 for the runtime that keeps each client's walls and lights in step
+    with the scene, ~670 plus CanvasKit for walls from drawings, ~760 for doors, ~800 for lights,
+    mostly a React menu. **Reasoned:** the wall half mostly falls away here, since our walls are already
+    centrelines and an open door is a stretch left out — a new 1,500–2,500 lines in all, lights about a
+    third. **Replacing it means replacing all of it**: Dynamic Fog derives walls from every fog drawing,
+    our rooms must be fog drawings to be revealable, so with it installed its walls would block every
+    doorway ours opened. The standing cost is testing — all of it is SDK-bound, so every check is a
+    room with a GM and a player client.
   - **Cheap either way:** stop the needless first-close push, by keeping the last-push fingerprint
     somewhere that outlives the page.
 
