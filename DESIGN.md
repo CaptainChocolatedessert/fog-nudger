@@ -3263,8 +3263,8 @@ hand**, so what a press took shows as suppression paint over ink that is still d
 on the way out derives once instead of once per press.
 
 **So the rule is not "is this a brush" but *is the GM's paint the thing being edited*.** *Suppress blob*
-is deliberately still outside it: it recomposes per press to show the ink go, and the two are being
-compared in a room before either moves.
+stood outside it, recomposing per press to show the ink go, until it was deleted the same day in favour
+of *Suppress blobs*, which holds its presses like the brushes.
 
 **And every tool that finishes by being put down has a *Done*** (user, same day), which is the same
 button Straighten grew — `doneAction.ts`, a press on Pan through `armTool`. **Stated cost**: it closes
@@ -3538,38 +3538,34 @@ deleted; **the trace worker** — the derive and then the ink profiles off the p
 its own; the fix for closing with a brush in hand; the redundant derive after a save skipped; and
 `faces.ts` cleared of the labelling era. *The trace worker*, below, has the last five.
 
-**Seen in a room:** the free click, the derive in a worker, the ink showing before the profiles, and
-strokes saved on close reaching the map. **Assumed rather than seen** (user, 2026-09-24: *"Let's assume
-those worked"*): the skipped redundant derive, and the `faces.ts` clean-out — the second deleted only
-code nothing called, which `tsc` and the suite establish; the first is one line of `dev.log` on the next
-close that stores walls: one derive, not two.
+**All of it has been seen in a room, and nothing is waiting on one.** The free click, the derive in a
+worker, the ink showing before the profiles and strokes saved on close reaching the map were confirmed
+as they landed. The rest was confirmed in one pass (user, 2026-09-24: *"All of the room checks are
+good"*):
 
-**Do this first: a room pass on what has not been seen, oldest first.**
+- ***Suppress blobs*** under the name and glyph it took over, the ink band reading Suppress, Add ink,
+  Gaps, Suppress blobs with no gap, and the ink drawers' **Done** buttons — which recompose the ink and
+  derive the walls once on the way out of a drawer rather than once per press.
+- **The region fills with no border** — interior colour only, since the walls already bound them and
+  the two outlines competed — and **the stroke filter's measured step and tick marks** (§4's *Each
+  filter draws the distribution it acts on*).
+- **The point probe's new answers**: luminance, ink or not, and which of the GM's layers decided it —
+  no region, and nothing about being covered.
+- **The trace worker's two by-hand checks**: the wall tools grey out while the walls rederive and come
+  back when they land, and *Put on the map* pressed straight after an ink slider pushes the new
+  setting's walls.
 
-1. ***Suppress blobs*** and the ink drawers' **Done** buttons, carried since 2026-09-22. The tool was
-   confirmed under its old name (*"That all works"*) and then took over from *Suppress blob*, which is
-   deleted — what has not been seen is the renamed tool wearing the old glyph, and that the ink band
-   reads Suppress, Add ink, Gaps, Suppress blobs with no gap where the old one was. Done is what
-   recomposes the ink and derives the walls once on the way out of a drawer, instead of once per press.
-2. **The region fills losing their border**, and **the stroke filter's own step and tick marks**. The
-   fill is interior colour only now, bounded by the walls layer drawn under it. The stroke slider steps
-   in units measured off the last reading's ink width, so consecutive settings are consecutive radii;
-   the rail carries a white tick at each real stop, and the number beside it counts which one the
-   handle is on. §4's *Each filter draws the distribution it acts on* has both.
-3. **The point probe's new answers.** A click on the map says only the luminance, ink or not, and which
-   of the GM's layers decided it — no region, and nothing about being covered. Worth one click on the
-   outside of the dungeon, which used to be told it was emitted.
-4. **The trace worker's two by-hand checks**: the wall tools grey out while the walls rederive and come
-   back when they land; and *Put on the map* pressed straight after moving an ink slider pushes the walls
-   of the new setting, not the old. The log has already shown the rest — every derive in a worker, none
-   on the page, and derives abandoned for newer readings.
+**The skipped redundant derive is measured, from `dev.log`**, not seen: on a close that saved fresh
+strokes (20:46 local), one derive in the worker (942ms), the walls stored (4,113), then the push — where
+the close at 20:20, before the fix, derived a second time (762ms) straight after storing. The `faces.ts`
+clean-out deleted only code nothing called, which `tsc` and the suite establish.
 
 **When the public build is next pushed**, one thing only a deploy can show: that the published site
 finds the worker under the Pages path. Open a room on the published extension and check the browser
 console for *"the worker for … could not be used"*; its absence is the answer, since the published
 build does not write to `dev.log`.
 
-**Then, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
+**What is next, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
 the one question, a picture if it is geometric, name and glyph, a numbered plan):
 
 - **The ink half in a worker — the freeze that is left.** A slider release still blocks the page for
@@ -3609,8 +3605,8 @@ drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge 
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click below it.
 
-**14 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 13
-before the commit that writes this line, which makes it 14). **A push deploys**, so it waits for the
+**15 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 14
+before the commit that writes this line, which makes it 15). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
@@ -3731,7 +3727,8 @@ reasoned rather than measured, against §4's reminder that the raster cap is a *
 third-party iframe. **A worker that dies without an `error` event leaves its derive waiting**, and a
 push waiting on it; the close has its escape hatch, *Put on the map* does not. Neither has been seen.
 **Answered by the rooms of 2026-09-24:** Owlbear's iframe lets a worker start, in Firefox — every
-derive in the log ran in one, none on the page. **Still open until a deploy:** whether the published
+derive in the log ran in one, none on the page — and the lock and the wait behave as decided, checked by
+hand. **Still open until a deploy:** whether the published
 site finds the worker under the Pages path. The built reference reads
 `/fog-nudger/assets/traceWorker-….js` against the page's own URL, which is right by reading, not by
 loading; the resume point says how to check.
@@ -3768,13 +3765,12 @@ Three things, two found by rooms and one by reading. All three are done.
   because in the ink mode re-deriving *"would cost a full trace to arrive at the picture already on
   screen"* — the two-mode surface's reasoning, which the code no longer follows.
 
-  **Fixed the same evening — assumed working rather than seen** (user: *"Let's assume those
-  worked"*). `storedWallsChanged` in `regions.ts` does nothing
+  **Fixed the same evening, and measured in `dev.log` on the next close** — one derive, not two; the
+  resume point has the figures. `storedWallsChanged` in `regions.ts` does nothing
   when there are no hand edits and the stored walls match the derivation on screen — by
   `graphsDiffer`, the same comparison the push uses to decide whether to store at all — and passes
   every other change on as before: a hand edit, an undo, a clear, a load. The comment now says what
-  the code does. **What a room should see:** on a close that stores fresh walls, one derive and not
-  two.
+  the code does.
 - **`faces.ts` carried the labelling that went on 2026-09-08, and more than comments — cleared
   2026-09-24.** Its header described naming faces by a labelling sample and the area check, both gone,
   and said the walk leaves a node by the entry *after* the one it arrived along, where the code and its
@@ -5582,7 +5578,8 @@ last, and the run goes in as one act.
   0.02, where `0.3 + 0.02` is not 0.02 away from `0.3` in binary, so the fixture was testing its own
   arithmetic until it was rewritten in powers of two.
 
-**9. Suppress blobs — built 2026-09-22, not yet in a room.** A span rings every lump of ink under it;
+**9. Suppress blobs — built 2026-09-22, confirmed in a room under the name and glyph it took over
+2026-09-24.** A span rings every lump of ink under it;
 a press takes one, the button takes them all, and a press on any ink at all takes that lump whether or not
 it was offered.
 
