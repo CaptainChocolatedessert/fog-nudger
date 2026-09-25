@@ -3542,10 +3542,9 @@ derive** — and only the free click has been looked at in a room so far.
    quicker there. Worth one click on the outside of the dungeon, which used to be told it was emitted.
 5. **The derive in a worker — confirmed working in a room, 2026-09-24** (user: *"It seems to be working
    in a room"*), with the dev log reporting *"derived in a worker"* throughout; the two findings that
-   room produced are in *The trace worker* below. **Then the ink profiles joined it, not yet in a
-   room**: after a release the ink should now show a frame later rather than together with the walls,
-   and the profile lines in `dev.log` should say *"in a worker"*. Still to check by hand from the first
-   round: the map and the working strip stay live while the walls derive; the
+   room produced are in *The trace worker* below. **Then the ink profiles joined it — confirmed the
+   same evening** (user: *"Ink shows first now, and the walls follow quickly."*). Still to check by hand
+   from the first round: the map and the working strip stay live while the walls derive; the
    wall tools grey out for those seconds and come back; opening a busy map shows the first derive
    *abandoned* rather than run to its end; and closing, or *Put on the map*, straight after moving an ink
    slider pushes the walls of the new setting, not the old.
@@ -3575,10 +3574,16 @@ the one question, a picture if it is geometric, name and glyph, a numbered plan)
 
 **Found while building the worker, not yet looked into:**
 
-- **Closing with a brush in hand may push walls without its last strokes.** Reasoned from the code, not
-  seen: the close saves the brush's strokes and asks for a recompose, but the reading cycle does not run
-  while the workspace is closing — so no derive follows, and the push commits the walls derived before
-  those strokes. It predates the worker, which does not change it. A room can check it in one close.
+- **Closing with a brush in hand pushes walls without its last strokes — confirmed in a room,
+  2026-09-24** (user: *"it did not push the walls I drew to the Owlbear map"*). **The reasoned
+  mechanism was wrong in one step, and the log is what corrected it.** It said no derive would follow;
+  one did. Measured, in seconds past the close: the strokes saved at +0.10 (4,674 px of added ink); the
+  walls committed at +0.23 — **the set derived before the strokes**, 3,934 walls; a derive starting at
+  +0.51, *set off by that commit* through `onStageChange`, recomposing the ink with the strokes in it;
+  the push beginning at +1.39 from the committed walls; and the derive with the strokes landing at
+  +2.17, 4,008 walls, after the push was under way. `derivationSettled` found nothing to wait for at
+  +0.23, because the recompose the strokes need is never asked for during a close — the reading cycle
+  does not run then. It predates the worker. **Not fixed yet.**
 - **`faces.ts` still speaks of the labelling that went on 2026-09-08** — a doc block attached to no
   function, saying *"`labelled` must be the labelling of `graph.framed`"*, and fields named for label
   samples. Probably old comments on a path that no longer samples anything; not yet read closely enough
@@ -3731,6 +3736,10 @@ walls really are that many segments — the lever there would be one item per wa
 segment, which §6 decided against for nudging in Owlbear. **The per-edit graph write is fast, measured 2026-09-22**: over 28 writes of a ~57KB graph in a room,
 **2ms at the quickest, 4ms median, 63ms at the worst**. It had been carried as *not established* since the
 slow-save work, and it is now a log line on every write (`written in NNNms`).
+
+**Measured again on 2026-09-24**, a push on close of the same map at the same size: **70 regions and
+3,242 wall lines in 1 minute 56 seconds**, about 28 items a second — the same order as the 1 minute 46
+of two days before. The bridges are what cost it, one `LINE` each.
 
 **It also overturns an argument this record made the same day.** *Draw chain* commits its whole run as one
 act, and one of the reasons given was that a press is refused while a write is in flight, so per-wall
