@@ -3687,6 +3687,22 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
     our rooms must be fog drawings to be revealable, so with it installed its walls would block every
     doorway ours opened. The standing cost is testing — all of it is SDK-bound, so every check is a
     room with a GM and a player client.
+  - **An idea, not the plan (user, 2026-09-25): doors of our own, written through Dynamic Fog's
+    simplest record.** Keep each door in our document, **attached to a wall in the graph** so it follows
+    that wall through Straighten and edits — the user ruled out doors floating at a map position as
+    not good enough long term. Place them with a wall tool of ours. On every push write each door as
+    **its own short `LINE` on the fog layer** carrying a Dynamic Fog record over its whole length —
+    contour 0, from 0 to the line's length. Why a line of its own works, read from their source:
+    subtraction is global, the door's stretch stroked at the carrier's width plus 20 with square ends,
+    so it opens whatever wall lies under it — our room outlines and our wall lines alike — and closed,
+    the carrier's own wall only duplicates the doorway's. What it buys over writing onto a room shape:
+    no reproducing Dynamic Fog's contour order and path measure, no choosing between the two rooms that
+    share the wall, and no door split across the one-item-per-segment wall lines. Costs: one item per
+    door; still Dynamic Fog's private format, though its simplest form; and reading back a door a GM
+    made at the table *on a room shape* would still need that contour arithmetic — left for later, and
+    small if our tool is where doors are placed and Dynamic Fog's is used only to open and close them.
+    It is also a narrow exception to *nothing is ever read back out of the scene*: the carriers' open
+    state, and doors made with Dynamic Fog's tool, are read in when the workspace opens.
   - **Cheap either way:** stop the needless first-close push, by keeping the last-push fingerprint
     somewhere that outlives the page.
 
