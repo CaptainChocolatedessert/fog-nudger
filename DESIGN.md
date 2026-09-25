@@ -1059,6 +1059,8 @@ does. Falls back to the declared 0.05 before a first reading, when there is noth
 **Not the `round`-versus-`floor` question, which is separate and untaken.** `Math.round` still gives
 slightly more filtering than the setting nominally asks for at the very top of each band; this only
 fixes how far apart two *different* outcomes sit, not which pixel width a given setting means.
+**That question came back on 2026-09-25 attached to the ticks**, which sit at the centre of each band
+and so between the changes rather than on them — the resume point in §10 has it and the two fixes.
 
 Three mutations run by hand while building, three caught: the numerator (moving the effective pixel
 step off 2 broke the "one step, every time" sweep), the rounding (removing `toPrecision(3)` left a
@@ -3605,6 +3607,29 @@ section. The published site runs the derive's worker (checked from a desk after 
 **Next, needing a design conversation first** (the rhythm in the operating notes — *well defined?*, the
 one question, a picture if it is geometric, name and glyph, a numbered plan):
 
+- **The stroke slider's ticks must sit where the result changes, and they sit between the changes**
+  (user, 2026-09-25: *"the ticks in the thinnest line slider need to correspond to where the result will
+  change"*). **Checked the same day, and it is the design rather than a regression.** §4's *Each filter
+  draws the distribution it acts on* placed each tick at the **centre** of a radius's band: a tick at
+  `2r / inkWidth` is a width of `2r`, the midpoint of the `[2r − 1, 2r + 1)` that `Math.round` maps to
+  radius `r` — so the filter changes half a step either side of every tick, which is what a room sees.
+
+  **Not a switch from `floor` to `round`**, which the user suspected: `radiusForWidth` has been
+  `Math.round(width / 2)` since it was written (`5e0a589`, 2026-08-23), and `git log -S` finds no
+  `floor` there ever. The `floor` in §4's tick paragraph is `tickPositions` counting whole steps, a
+  different thing.
+
+  **Two fixes, and choosing is the one question:**
+
+  - **Move the ticks half a step down**, to `(2r − 1) / inkWidth`, and keep `round`. Every tick is then a
+    point where the result changes, and no stored setting filters differently. The readout, which
+    prints the nearest tick as the radius, would have to count the band the handle is in instead.
+  - **Switch `radiusForWidth` to `floor`**, and keep the ticks. The bands become `[2r, 2r + 2)`, so
+    today's ticks land exactly on the changes. This is the round-versus-floor question §4's ink
+    investigation held — `floor` never filters more than a setting asks for, where `round` gives up to a
+    pixel more — and it changes what every stored setting does by half a band. Whatever else on that
+    rail converts between a setting and a radius has to follow; the ink profile's band placement is the
+    one to check.
 - **Doors, the way Dynamic Fog makes them.** **Start by reading, not designing**: the local clone at
   `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts` and
   `DoorOverlayActor.ts`. §2's *door subtraction is global*, §3 on mimicking the private format and §12
@@ -3627,14 +3652,11 @@ for the reason *The trace worker* gives.
   question above).
 - **The code still says `speckles`** where the GM sees *Suppress blobs*, the way `dissolve` stayed when
   its tool became *Erase loop*. A rename would touch four modules and a layer id for no behaviour.
-- **The stroke slider's `round`-versus-`floor` question** — §4's ink investigation. `Math.round` still
-  gives slightly more filtering than a setting nominally asks for at the top of each band; separate
-  from — and not fixed by — the step sitting on real stops.
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**6 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 5
-before the commit that writes this line, which makes it 6). **A push deploys**, so it waits for the
+**7 commits are not pushed** (measured 2026-09-25 with `git rev-list --count origin/main..main`: 6
+before the commit that writes this line, which makes it 7). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
