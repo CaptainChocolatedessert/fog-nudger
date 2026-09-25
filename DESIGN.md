@@ -3107,6 +3107,19 @@ invisible. It costs almost nothing to keep.
   then reported 2,096ms of crossing for a derive whose copying costs a few milliseconds, because the rest
   was a fresh worker starting and the page too busy to read the reply. Report the whole beside the part,
   or measure each thing subtracted.
+- **When work leaves the page, list what the freeze was guaranteeing** (2026-09-24). A synchronous job
+  is also a lock nobody wrote: while it holds the thread, nothing can be pressed between its start and
+  whatever follows it. Moving the derive to a worker exposed one such guarantee — a push could land
+  between a reading and its walls. Moving the ink exposed five at once: a push between a slider and
+  its ink, a close while ink was owed, two callers resolving the same ink, an opening overtaken by a
+  slider, and the ink tools pressed on a base being replaced. None showed as a failing test; each was
+  found by asking, for every caller of the moved work, *what could not happen before that can now*.
+- **A room's "it worked" covers the routes the log shows it took** (2026-09-24). The close that
+  confirmed the ink worker came 1.6 seconds after its ink had landed, so it went through the derive
+  wait that already existed and never reached the new route for ink still owed — which read as
+  confirmed until the log said which way it went. The same session a push was reported as landed that
+  the log shows had stopped part-way on a timeout. **Read the log before recording a room result**, and
+  record the routes it did not reach as not yet seen.
 - **Change one variable at a time.** Questions have been called closed twice before they were, both
   times after changing two things at once.
 - **Treat a clean diagnostic as evidence about the diagnostic** until it has failed at least once. A
@@ -3553,60 +3566,44 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-24 built, in
-order: the region fills losing their border with the stroke filter's measured step and tick marks; the
-free click ported to Collapse, Prune and Mend with a hover preview; the point probe's space labelling
-deleted; **the trace worker** — the derive and then the ink profiles off the page, each in a worker of
-its own; the fix for closing with a brush in hand; the redundant derive after a save skipped;
-`faces.ts` cleared of the labelling era; and, last, **the ink in a worker** — the reading and the
-recompose — with the map decoded once per image. *The trace worker*, below, has the last six.
+**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-24 built the
+region fills without a border, the stroke filter's measured step and tick marks, the free click on
+Collapse, Prune and Mend, the point probe without its space labelling, and **the trace worker** — the
+derive, the ink profiles and, last, **the ink itself** (the reading and the recompose), each in a worker
+of its own, with the map decoded once per image. Around the worker: closing with a brush in hand fixed,
+the redundant derive after a save skipped, and `faces.ts` cleared of the labelling era. *The trace
+worker* and *The ink joins the trace worker*, below, have all of it.
 
-**All of it but the ink worker has been seen in a room.** The free click, the derive in a
-worker, the ink showing before the profiles and strokes saved on close reaching the map were confirmed
-as they landed. The rest was confirmed in one pass (user, 2026-09-24: *"All of the room checks are
-good"*):
+**All of it has been in a room but two routes**, and everything confirmed is recorded against its own
+section. The published site runs the derive's worker (checked from a desk after the deploy of
+2026-09-24); **the ink worker is not deployed**, being among the unpushed commits below.
 
-- ***Suppress blobs*** under the name and glyph it took over, the ink band reading Suppress, Add ink,
-  Gaps, Suppress blobs with no gap, and the ink drawers' **Done** buttons — which recompose the ink and
-  derive the walls once on the way out of a drawer rather than once per press.
-- **The region fills with no border** — interior colour only, since the walls already bound them and
-  the two outlines competed — and **the stroke filter's measured step and tick marks** (§4's *Each
-  filter draws the distribution it acts on*).
-- **The point probe's new answers**: luminance, ink or not, and which of the GM's layers decided it —
-  no region, and nothing about being covered.
-- **The trace worker's two by-hand checks**: the wall tools grey out while the walls rederive and come
-  back when they land, and *Put on the map* pressed straight after an ink slider pushes the new
-  setting's walls.
+**Do this first — a room on the Grottoes:**
 
-**The skipped redundant derive is measured, from `dev.log`**, not seen: on a close that saved fresh
-strokes (20:46 local), one derive in the worker (942ms), the walls stored (4,113), then the push — where
-the close at 20:20, before the fix, derived a second time (762ms) straight after storing. The `faces.ts`
-clean-out deleted only code nothing called, which `tsc` and the suite establish.
+1. **Put the scene right.** A close at deliberately extreme ink settings asked for 2,627 shapes and
+   5,456 wall lines and stopped part-way (§6's *The item budget* has the figures), so the scene holds
+   2,568 of our room shapes and none of our wall lines. Bring the ink settings back to where they were
+   and push: every push deletes ours before writing, so that replaces the lot.
+2. ***Put on the map* pressed straight after a reading release** — blur, strictness or the window, and
+   the press before the new ink lands. It must push the new setting's walls: it waits on `inkSettled`,
+   then the derive. Not yet in any log.
+3. **A close pressed within about a second of a reading release**, while the ink is still being read. It
+   must do the same by its own route — `workspace.ts` sees ink owed and asks for the derive itself. The
+   one close so far came 1.6 seconds after the last ink had landed and never reached it.
 
-**The published site finds the worker — checked from a desk after the push of 2026-09-24.** The
-deployed bundle builds its worker as `new URL("/fog-nudger/assets/traceWorker-….js", import.meta.url)`;
-that file is served (200, `application/javascript`, self-contained with no imports), and in the browser
-pane (Chromium, outside Owlbear) a worker started from it on the `github.io` origin derived a closed
-room correctly — one region, 5ms of work, 57ms round trip. **What that does not establish** is Firefox
-inside Owlbear's iframe on that origin; the dev build's rooms established the same pair on
-`localhost`, which is just as cross-origin to Owlbear, so the gap is reasoned small. The room check, if
-wanted: open a room on the published extension, move an ink slider, and look for *"the worker for …
-could not be used"* in the browser console — its absence is the answer, since the published build does
-not write to `dev.log`.
+**Three short questions for the user, raised at the end of the session and not yet answered:**
 
-**The ink worker is confirmed in a room, in part** (user, 2026-09-24: *"That all seemed to work"*), and
-`dev.log` carries the figures — *The ink joins the trace worker*, below. **Two routes are still unseen**,
-and they are the first thing for the next room, on the Grottoes:
+- **Should a close this large warn?** §6 decided against a warning on the way out — a dialog there is met
+  while leaving, and the escape hatch is the way out of a write that will not finish. The argument
+  stands; what is new is that a close has now actually hit the limit.
+- **Does the ink shape check still earn its place?** It is a report-only count of solid blobs in the log,
+  65 to 364ms of every recompose across `dev.log`, usually under 160. In the worker it delays the ink rather than freezing the page, so the
+  question is only whether anyone reads the line.
+- **Is *The Maps Of Arden Vul 015* a different drawing style from the Grottoes?** `dev.log` shows it
+  worked on the same day, before the Grottoes. If it is, it is the second map below, already in hand.
 
-- ***Put on the map* pressed straight after a reading release** — blur, strictness or the window — must
-  push the new setting's walls. It waits on `inkSettled`, then the derive. Not in the log at all.
-- **A close pressed while a reading is still in flight** — within about a second of the release — must
-  do the same, by its own route: `workspace.ts` sees ink owed and asks for the derive itself. The room's
-  close came 1.6 seconds after the last ink had landed, so it waited on the derive already running and
-  never reached this route.
-
-**What is next, needing a design conversation first** (the rhythm in the operating notes — *well
-defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
+**Next, needing a design conversation first** (the rhythm in the operating notes — *well defined?*, the
+one question, a picture if it is geometric, name and glyph, a numbered plan):
 
 - **Doors, the way Dynamic Fog makes them.** **Start by reading, not designing**: the local clone at
   `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts` and
@@ -3615,13 +3612,19 @@ defined?*, the one question, a picture if it is geometric, name and glyph, a num
   what this project would add** over a GM using Dynamic Fog's own door tool afterwards, which already
   cuts our walls.
 
+**When the public build is next pushed**, check the ink job the way the derive's was checked: take the
+worker's path out of the deployed bundle, fetch it, and run an ink job from it in the browser pane on
+the `github.io` origin. Firefox inside Owlbear's iframe on that origin stays reasoned rather than seen,
+for the reason *The trace worker* gives.
+
 **Held, with the reason:**
 
 - **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
   *the scene has not finished loading* look the same, since the map list is briefly empty on load.
 - **A second map in a different style** — hatched stonework, a printed grid, a scan. Everything so far
   was tuned on line-drawn maps, and the record has called this the most informative next step since
-  2026-09-13. **It needs no build**, only a map.
+  2026-09-13. **It needs no build**, only a map — and possibly one is already in hand (the Arden Vul
+  question above).
 - **The code still says `speckles`** where the GM sees *Suppress blobs*, the way `dissolve` stayed when
   its tool became *Erase loop*. A rename would touch four modules and a layer id for no behaviour.
 - **The stroke slider's `round`-versus-`floor` question** — §4's ink investigation. `Math.round` still
@@ -3630,13 +3633,8 @@ defined?*, the one question, a picture if it is geometric, name and glyph, a num
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**Everything the 2026-09-22 session built was confirmed in a room**: Straighten's *Done*, the review
-drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge clamp on Move and Draw,
-*Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
-*Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click below it.
-
-**5 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 4
-before the commit that writes this line, which makes it 5). **A push deploys**, so it waits for the
+**6 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 5
+before the commit that writes this line, which makes it 6). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
