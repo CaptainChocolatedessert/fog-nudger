@@ -80,6 +80,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten*, and only Straighten since *Prune the dead ends* became ringed on 2026-09-22. Not a setting: nothing is stored, and the handle reads as *how much more*. |
 | **the latch** | the graph pinned when a drawer opens, so an amount previews against a fixed base instead of against its own last result. Void the moment the document is replaced under it. |
 | **the fitting tolerance** | the number that turns pixel chains into fitted edges inside the derive, and escalates to meet the command cap. **Computed** — a quarter of the measured ink width — never chosen. |
+| **the trace worker** | where the two heavy jobs run off the page: **the derive** and **the ink profiles**, one worker each, so the walls never wait behind the shapes. A newer job abandons the running one by terminating its worker, and a worker that cannot be had means the job runs on the page, said once in the log. The reading and the recompose do **not** run there — that is the freeze left. |
 | **the automatic prune** | the dead ends every derive removes before handing the graph over: runs with a free end of up to **two measured ink widths**. Computed, never chosen, and nothing when no width was measured. Distinct from the **Prune** tool, which takes more on request. |
 | **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
 
@@ -2776,6 +2777,13 @@ the same thing in both worlds.
 > holds the main thread, so a spinner will not spin — and worse, a cursor change or a class applied
 > immediately before the computation **never paints at all**, because the browser needs a frame and the
 > computation took it. Any working indicator must set its state, **yield one frame**, then compute.
+>
+> **And one animation-frame callback yields nothing.** A browser presents a frame only once every
+> callback scheduled into it has returned, so work started inside a single `requestAnimationFrame`
+> holds back the very frame it was meant to follow. **Two callbacks deep is one frame presented in
+> between** — `whileWorking` in `shell.ts` does exactly that. The ink profiles did it with one and a
+> comment saying a frame was yielded, and the new ink waited behind them on every reading for a
+> week, until a room saw the ink and the walls arrive together (2026-09-24).
 
 ### The markup palette
 
@@ -3066,6 +3074,17 @@ invisible. It costs almost nothing to keep.
   fixture. One rewritten shared-wall test turned out to have a *straight* divider, so the shared wall
   simplified to two nodes that are pinned whichever way the fitting is done, and nothing was left to
   drift.
+- **A test that pins a sentence pins it true as of the day it was written** (2026-09-24). The point
+  probe's tests asserted that a click in the raster's corner — outside everything — landed in *"an
+  ordinary region"*, and checked the message there only for words it must not contain; the message it
+  actually gave said the point was emitted and covered, false since the outside stopped being emitted.
+  The suite was green throughout. Only reading what the tests *expected* found it, so when the
+  architecture moves under a user-facing sentence, read the assertions, not only the result.
+- **A timing reported as a difference is only as honest as everything it subtracts** (2026-09-24). The
+  worker's first log line took the work off the round trip and called the rest the *crossing*; a room
+  then reported 2,096ms of crossing for a derive whose copying costs a few milliseconds, because the rest
+  was a fresh worker starting and the page too busy to read the reply. Report the whole beside the part,
+  or measure each thing subtracted.
 - **Change one variable at a time.** Questions have been called closed twice before they were, both
   times after changing two things at once.
 - **Treat a clean diagnostic as evidence about the diagnostic** until it has failed at least once. A
@@ -3512,46 +3531,57 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is half-built.** The session of 2026-09-24 built and committed the region border removal
-with the stroke filter's measured step and tick marks, the free click ported to the three ringed wall
-tools with its hover preview, the deletion of the probe's space labelling, and **the worker for the
-derive** — and only the free click has been looked at in a room so far.
+**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-24 built, in
+order: the region fills losing their border with the stroke filter's measured step and tick marks; the
+free click ported to Collapse, Prune and Mend with a hover preview; the point probe's space labelling
+deleted; **the trace worker** — the derive and then the ink profiles off the page, each in a worker of
+its own; the fix for closing with a brush in hand; the redundant derive after a save skipped; and
+`faces.ts` cleared of the labelling era. *The trace worker*, below, has the last five.
 
-**Do this first: a room pass on everything built since the last one, oldest first.**
+**Seen in a room:** the free click, the derive in a worker, the ink showing before the profiles, and
+strokes saved on close reaching the map. **Assumed rather than seen** (user, 2026-09-24: *"Let's assume
+those worked"*): the skipped redundant derive, and the `faces.ts` clean-out — the second deleted only
+code nothing called, which `tsc` and the suite establish; the first is one line of `dev.log` on the next
+close that stores walls: one derive, not two.
 
-1. ***Suppress blobs*** and the ink drawers' **Done** buttons, carried since 2026-09-22 and still not
-   looked at. The tool was confirmed under its old name (*"That all works"*) and then took over from
-   *Suppress blob*, which is deleted — what has not been seen is the renamed tool wearing the old
-   glyph, and that the ink band reads Suppress, Add ink, Gaps, Suppress blobs with no gap where the old
-   one was. Done is what recomposes the ink and derives the walls once on the way out of a drawer,
-   instead of once per press.
-2. **The region fills losing their border**, and **the stroke filter's own step and tick marks**
-   (2026-09-24, both committed) — neither has been in a room. The fill is interior colour only now,
-   bounded by the walls layer already drawn under it. The stroke filter's slider steps in units measured
-   off the last reading's ink width rather than a fixed 0.05, so consecutive settings are consecutive
-   radii instead of one of a run of stops that do nothing; the rail carries a white tick at each real
-   stop, and the number beside it counts which one the handle is on. §4's *Each filter draws the
-   distribution it acts on* has the mechanism and the mutation record for both.
-3. ~~**The free click ported to Collapse, Prune and Mend, with a hover preview on all three**~~
-   **Confirmed 2026-09-24** (user: *"Those work well"*) — see *The free click, ported to the ringed wall
-   tools*, below the tool list. Not itemised further than that; if something specific needs a second
-   look, it will be reported as such.
-4. **The point probe's new answers** (2026-09-24, committed). A click on the map now says only the
-   luminance, ink or not, and which of the GM's layers decided it — no region, and nothing about being
-   covered. The derive's log line has lost its `label` timing, so a derive should read about 40%
-   quicker there. Worth one click on the outside of the dungeon, which used to be told it was emitted.
-5. **The derive in a worker — confirmed working in a room, 2026-09-24** (user: *"It seems to be working
-   in a room"*), with the dev log reporting *"derived in a worker"* throughout; the two findings that
-   room produced are in *The trace worker* below. **Then the ink profiles joined it — confirmed the
-   same evening** (user: *"Ink shows first now, and the walls follow quickly."*). Still to check by hand
-   from the first round: the map and the working strip stay live while the walls derive; the
-   wall tools grey out for those seconds and come back; opening a busy map shows the first derive
-   *abandoned* rather than run to its end; and closing, or *Put on the map*, straight after moving an ink
-   slider pushes the walls of the new setting, not the old.
+**Do this first: a room pass on what has not been seen, oldest first.**
+
+1. ***Suppress blobs*** and the ink drawers' **Done** buttons, carried since 2026-09-22. The tool was
+   confirmed under its old name (*"That all works"*) and then took over from *Suppress blob*, which is
+   deleted — what has not been seen is the renamed tool wearing the old glyph, and that the ink band
+   reads Suppress, Add ink, Gaps, Suppress blobs with no gap where the old one was. Done is what
+   recomposes the ink and derives the walls once on the way out of a drawer, instead of once per press.
+2. **The region fills losing their border**, and **the stroke filter's own step and tick marks**. The
+   fill is interior colour only now, bounded by the walls layer drawn under it. The stroke slider steps
+   in units measured off the last reading's ink width, so consecutive settings are consecutive radii;
+   the rail carries a white tick at each real stop, and the number beside it counts which one the
+   handle is on. §4's *Each filter draws the distribution it acts on* has both.
+3. **The point probe's new answers.** A click on the map says only the luminance, ink or not, and which
+   of the GM's layers decided it — no region, and nothing about being covered. Worth one click on the
+   outside of the dungeon, which used to be told it was emitted.
+4. **The trace worker's two by-hand checks**: the wall tools grey out while the walls rederive and come
+   back when they land; and *Put on the map* pressed straight after moving an ink slider pushes the walls
+   of the new setting, not the old. The log has already shown the rest — every derive in a worker, none
+   on the page, and derives abandoned for newer readings.
+
+**When the public build is next pushed**, one thing only a deploy can show: that the published site
+finds the worker under the Pages path. Open a room on the published extension and check the browser
+console for *"the worker for … could not be used"*; its absence is the answer, since the published
+build does not write to `dev.log`.
 
 **Then, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
 the one question, a picture if it is geometric, name and glyph, a numbered plan):
 
+- **The ink half in a worker — the freeze that is left.** A slider release still blocks the page for
+  the reading and the recompose, about 1 to 2 seconds on *The Incandescent Grottoes* (§8's *What a
+  single click costs* has the parts). **Where to start, reasoned rather than measured:** the map's
+  pixels are decoded on the page through an image and a canvas, and only the *reading* needs them — the
+  recompose needs only the reading's mask and the GM's paint. So the recompose is the easier half to
+  move and the reading the harder, and the first thing to establish is whether Owlbear's iframe in
+  Firefox can decode the map inside a worker (`createImageBitmap` and `OffscreenCanvas`) or whether the
+  pixels have to be handed over — about 38MB of RGBA on that map, per reading change. The two caches in
+  `pipeline.ts` live on the page, and the point probe and the next derive read them, which is the other
+  thing a design has to settle.
 - **Doors, the way Dynamic Fog makes them.** **Start by reading, not designing**: the local clone at
   `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts` and
   `DoorOverlayActor.ts`. §2's *door subtraction is global*, §3 on mimicking the private format and §12
@@ -3568,64 +3598,20 @@ the one question, a picture if it is geometric, name and glyph, a numbered plan)
   2026-09-13. **It needs no build**, only a map.
 - **The code still says `speckles`** where the GM sees *Suppress blobs*, the way `dissolve` stayed when
   its tool became *Erase loop*. A rename would touch four modules and a layer id for no behaviour.
-- **The stroke slider's `round`-versus-`floor` question** — §4's ink investigation, resurfaced by the
-  2026-09-24 step fix. `Math.round` still gives slightly more filtering than a setting nominally asks
-  for at the top of each band; separate from — and not fixed by — the step now sitting on real stops.
-
-**Found while building the worker, not yet looked into:**
-
-- **Closing with a brush in hand pushes walls without its last strokes — confirmed in a room,
-  2026-09-24** (user: *"it did not push the walls I drew to the Owlbear map"*). **The reasoned
-  mechanism was wrong in one step, and the log is what corrected it.** It said no derive would follow;
-  one did. Measured, in seconds past the close: the strokes saved at +0.10 (4,674 px of added ink); the
-  walls committed at +0.23 — **the set derived before the strokes**, 3,934 walls; a derive starting at
-  +0.51, *set off by that commit* through `onStageChange`, recomposing the ink with the strokes in it;
-  the push beginning at +1.39 from the committed walls; and the derive with the strokes landing at
-  +2.17, 4,008 walls, after the push was under way. `derivationSettled` found nothing to wait for at
-  +0.23, because the recompose the strokes need is never asked for during a close — the reading cycle
-  does not run then. It predates the worker.
-
-  **Fixed the same evening, and confirmed in a room** (user: *"Closing with pending brush strokes now
-  pushes those strokes."*). The close action's own reason for saving the brush
-  first was the old architecture: *"a push re-runs the trace from what scene metadata holds"* — true
-  before the wall graph became the document, and not since, when a push emits the stored walls. So
-  `finishPaint` now says whether it saved anything, and a close that saved strokes asks for a derive
-  before the push; the derive recomposes the ink itself, and the commit already waits for it. A close
-  with nothing painted asks for nothing. **The cost:** a close with fresh strokes waits one recompose
-  and one derive longer. **Measured on the confirming close:** the strokes saved at +0.12 seconds, the
-  derive with them landed at +1.82, the walls were stored at +1.87 — 3,974, up from 3,934 — and the
-  push began at +2.35.
-- **The save before a push sets off a second, redundant derive.** Seen on that same close: storing the
-  fresh walls fires `onStageChange`, whose handler in `workspace.ts` re-derives unconditionally — 762ms
-  in the worker, during the push, arriving at the identical 3,974 walls. Harmless, and wasted. Its
-  comment says the opposite of the code: that the partition is re-derived *"only in the editor"*,
-  because in the ink mode re-deriving *"would cost a full trace to arrive at the picture already on
-  screen"* — the two-mode surface's reasoning, which the code no longer follows.
-
-  **Fixed the same evening, not yet in a room.** `storedWallsChanged` in `regions.ts` does nothing
-  when there are no hand edits and the stored walls match the derivation on screen — by
-  `graphsDiffer`, the same comparison the push uses to decide whether to store at all — and passes
-  every other change on as before: a hand edit, an undo, a clear, a load. The comment now says what
-  the code does. **What a room should see:** on a close that stores fresh walls, one derive and not
-  two.
-- **`faces.ts` carried the labelling that went on 2026-09-08, and more than comments — cleared
-  2026-09-24.** Its header described naming faces by a labelling sample and the area check, both gone,
-  and said the walk leaves a node by the entry *after* the one it arrived along, where the code and its
-  own comment say **before** — §5's successor rule, stated backwards at the top of the module that
-  implements it. Beneath that, **`fitFaces` and four types (`GraphFace`, `GraphFaces`, `FittedRing`,
-  `FittedFaces`) had no caller anywhere**, tests included, since `902b5ad` removed every one on
-  2026-09-08; the job is done by building the wall graph and walking it, so it was superseded rather
-  than a missing call. Its bridge-splitting reasoning survives in `wallFaces.ts`. Deleted, and the module
-  is 297 lines where it was 549.
+- **The stroke slider's `round`-versus-`floor` question** — §4's ink investigation. `Math.round` still
+  gives slightly more filtering than a setting nominally asks for at the top of each band; separate
+  from — and not fixed by — the step sitting on real stops.
+- **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
+  only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
 **Everything the 2026-09-22 session built was confirmed in a room**: Straighten's *Done*, the review
 drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge clamp on Move and Draw,
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
-*Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click above.
+*Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click below it.
 
-**13 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 12
-before the commit that writes this line, which makes it 13). **A push
-deploys**, so it waits for the user to want the public build to have them.
+**14 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 13
+before the commit that writes this line, which makes it 14). **A push deploys**, so it waits for the
+user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
@@ -3744,10 +3730,60 @@ eighteen caught** — one only after a fixture written because it survived; the 
 reasoned rather than measured, against §4's reminder that the raster cap is a *memory* limit in a
 third-party iframe. **A worker that dies without an `error` event leaves its derive waiting**, and a
 push waiting on it; the close has its escape hatch, *Put on the map* does not. Neither has been seen.
-**Only a room can say** whether Owlbear's iframe lets a worker start at all (storage works there, which
-suggests it will — inference), whether Firefox behaves as Chromium did, and whether the built site
-finds the worker under the Pages path — the built reference reads `/fog-nudger/assets/traceWorker-….js`
-against the page's own URL, which is right by reading, not by loading.
+**Answered by the rooms of 2026-09-24:** Owlbear's iframe lets a worker start, in Firefox — every
+derive in the log ran in one, none on the page. **Still open until a deploy:** whether the published
+site finds the worker under the Pages path. The built reference reads
+`/fog-nudger/assets/traceWorker-….js` against the page's own URL, which is right by reading, not by
+loading; the resume point says how to check.
+
+##### What building it turned up, and what was done — 2026-09-24
+
+Three things, two found by rooms and one by reading. All three are done.
+
+- **Closing with a brush in hand pushes walls without its last strokes — confirmed in a room,
+  2026-09-24** (user: *"it did not push the walls I drew to the Owlbear map"*). **The reasoned
+  mechanism was wrong in one step, and the log is what corrected it.** It said no derive would follow;
+  one did. Measured, in seconds past the close: the strokes saved at +0.10 (4,674 px of added ink); the
+  walls committed at +0.23 — **the set derived before the strokes**, 3,934 walls; a derive starting at
+  +0.51, *set off by that commit* through `onStageChange`, recomposing the ink with the strokes in it;
+  the push beginning at +1.39 from the committed walls; and the derive with the strokes landing at
+  +2.17, 4,008 walls, after the push was under way. `derivationSettled` found nothing to wait for at
+  +0.23, because the recompose the strokes need is never asked for during a close — the reading cycle
+  does not run then. It predates the worker.
+
+  **Fixed the same evening, and confirmed in a room** (user: *"Closing with pending brush strokes now
+  pushes those strokes."*). The close action's own reason for saving the brush
+  first was the old architecture: *"a push re-runs the trace from what scene metadata holds"* — true
+  before the wall graph became the document, and not since, when a push emits the stored walls. So
+  `finishPaint` now says whether it saved anything, and a close that saved strokes asks for a derive
+  before the push; the derive recomposes the ink itself, and the commit already waits for it. A close
+  with nothing painted asks for nothing. **The cost:** a close with fresh strokes waits one recompose
+  and one derive longer. **Measured on the confirming close:** the strokes saved at +0.12 seconds, the
+  derive with them landed at +1.82, the walls were stored at +1.87 — 3,974, up from 3,934 — and the
+  push began at +2.35.
+- **The save before a push sets off a second, redundant derive.** Seen on that same close: storing the
+  fresh walls fires `onStageChange`, whose handler in `workspace.ts` re-derives unconditionally — 762ms
+  in the worker, during the push, arriving at the identical 3,974 walls. Harmless, and wasted. Its
+  comment says the opposite of the code: that the partition is re-derived *"only in the editor"*,
+  because in the ink mode re-deriving *"would cost a full trace to arrive at the picture already on
+  screen"* — the two-mode surface's reasoning, which the code no longer follows.
+
+  **Fixed the same evening — assumed working rather than seen** (user: *"Let's assume those
+  worked"*). `storedWallsChanged` in `regions.ts` does nothing
+  when there are no hand edits and the stored walls match the derivation on screen — by
+  `graphsDiffer`, the same comparison the push uses to decide whether to store at all — and passes
+  every other change on as before: a hand edit, an undo, a clear, a load. The comment now says what
+  the code does. **What a room should see:** on a close that stores fresh walls, one derive and not
+  two.
+- **`faces.ts` carried the labelling that went on 2026-09-08, and more than comments — cleared
+  2026-09-24.** Its header described naming faces by a labelling sample and the area check, both gone,
+  and said the walk leaves a node by the entry *after* the one it arrived along, where the code and its
+  own comment say **before** — §5's successor rule, stated backwards at the top of the module that
+  implements it. Beneath that, **`fitFaces` and four types (`GraphFace`, `GraphFaces`, `FittedRing`,
+  `FittedFaces`) had no caller anywhere**, tests included, since `902b5ad` removed every one on
+  2026-09-08; the job is done by building the wall graph and walking it, so it was superseded rather
+  than a missing call. Its bridge-splitting reasoning survives in `wallFaces.ts`. Deleted, and the module
+  is 297 lines where it was 549.
 
 #### The slow saves, measured
 
@@ -5861,7 +5897,7 @@ closed outright.
 | `trace/morphology.ts` | separable open/close, O(1) in the radius, and `healSeverances` — putting back the ink an opening severed, bridged by a dilation eroded one short (which is what heals a **diagonal** wall) and **intersected with the reading**, so it restores and never invents |
 | `trace/inkIslands.ts` | `walkIslands`, the one definition of an 8-connected lump of ink, and the island filter written in terms of it |
 | `trace/inkFlood.ts` | **Suppress blob's decision**: the connected set of map pixels within a tolerance of a clicked one's tone, 8-connected and measured against the seed |
-| `trace/inkProfile.ts` | **what each ink filter would take, band by band** — a granulometry over openings for stroke width, `walkIslands` binned by span for islands, and both placed on their own slider's track |
+| `trace/inkProfile.ts` | **what each ink filter would take, band by band** — a granulometry over openings for stroke width, `walkIslands` binned by span for islands, and both placed on their own slider's track; `measureInkProfiles` is the two together, which the trace worker runs |
 | `trace/inkBlobs.ts` | ink component labelling (reporting only) |
 | `trace/inkPaint.ts` | the GM's two raster layers: the brush, the run-length codec, and `composePaint` — the one statement of the stacking order |
 | `trace/gaps.ts` | gap **detection**; it proposes and never fills |
@@ -5924,7 +5960,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
 - **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`,
   `whileWorking`) · `drawer.ts` (**the drawer**: which group's settings *or* which tool's controls are
   showing — never both — and rendering that one thing) · `reading.ts` (the mask request cycle,
-  subscribed to by the layers) · `regions.ts` (the lazy derive cycle, and `showingSaved` — the one
+  subscribed to by the layers) · `regions.ts` (the derive cycle — abandoning a derive for a newer one,
+  locking the wall tools while one runs, and the wait a push asks for — and `showingSaved`, the one
   predicate deciding which graph is on screen) · `stage.ts` (the stored graph, the hand-edit count and
   undo)
 - **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` (the bar's commit, the close
