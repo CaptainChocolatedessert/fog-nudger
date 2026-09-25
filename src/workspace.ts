@@ -77,7 +77,11 @@ import { renderSpeckleControls } from "./workspace/speckleControls";
 import { renderMarkControls } from "./workspace/markControls";
 import { finishPaint, refreshSpeckleSearch, registerPaintTool } from "./workspace/paintTool";
 import { onReading } from "./workspace/reading";
-import { invalidateRegions, registerRegionInvalidation } from "./workspace/regions";
+import {
+  invalidateRegions,
+  registerRegionInvalidation,
+  storedWallsChanged,
+} from "./workspace/regions";
 import { pushOnClose, renderPushAction } from "./workspace/pushAction";
 import { onSettingCommitted } from "./workspace/recompute";
 import { refreshHints } from "./workspace/settingRows";
@@ -456,15 +460,17 @@ onMapClick((u, v) => {
   saved" notice for the tool picker, and the ink mode's save changes what its confirmation has to
   warn about.
 
-  **The partition only in the editor.** There the graph *is* the rooms, so an edit changes them and
-  leaving the old ones on screen marked current is the "shows the rooms before your edits" failure
-  the two sources exist to prevent. In the ink mode the rooms come from the reading whatever is
-  stored, so saving changes nothing about them — and re-deriving would cost a full trace to arrive
-  at the picture already on screen, wiping the push's own message on the way.
+  **And the partition, unless the store has only caught up with the picture.** An edit changes the
+  rooms, and leaving the old ones on screen marked current is the "shows the rooms before your edits"
+  failure the two sources exist to prevent. But committing a derivation before a push stores exactly
+  what is drawn, and re-deriving then is a full trace to arrive at the picture already on screen.
+  `storedWallsChanged` tells the two apart. **This comment described the two-mode surface until
+  2026-09-24** — *"the partition only in the editor"* — while the code beneath it re-derived on every
+  change; a room measured the cost on a close.
 */
 onStageChange(() => {
   renderPanel();
-  invalidateRegions();
+  storedWallsChanged();
 });
 
 // The measurements a readout reports against only exist once a reading has landed. Registered after

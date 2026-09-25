@@ -57,6 +57,7 @@ import {
   type WallFaces,
 } from "../trace/wallFaces";
 import { wallRuns, type WallGraph } from "../trace/wallGraph";
+import { graphsDiffer } from "../trace/wallGraphDiff";
 import { noteGraph } from "./graphScale";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
@@ -398,6 +399,23 @@ export function invalidateRegions(): void {
   inFlight?.abort();
   invalidate();
   void derive();
+}
+
+/**
+ * The stored walls changed: bring the partition up to them — unless the store has only caught up
+ * with the picture.
+ *
+ * **That exception is the whole of this function (2026-09-24).** Committing a derivation before every
+ * push stores exactly the walls already drawn, and re-deriving then costs a full trace to arrive at
+ * the same thing — measured on a close, 762ms in the worker for an identical 3,974 walls, while the
+ * push ran. So with no hand edits and the stored walls matching the derivation on screen, by the
+ * same comparison the push uses to decide whether to store at all, nothing is done. Every other change
+ * — a hand edit, an undo, a clear, a load, walls gone — goes on to `invalidateRegions`, which walks
+ * the stored graph when it carries edits and derives from the ink when it does not.
+ */
+export function storedWallsChanged(): void {
+  if (!wallsEdited() && derivation !== null && !graphsDiffer(derivation.graph, wallGraph())) return;
+  invalidateRegions();
 }
 
 /*

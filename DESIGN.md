@@ -3601,18 +3601,30 @@ the one question, a picture if it is geometric, name and glyph, a numbered plan)
   comment says the opposite of the code: that the partition is re-derived *"only in the editor"*,
   because in the ink mode re-deriving *"would cost a full trace to arrive at the picture already on
   screen"* — the two-mode surface's reasoning, which the code no longer follows.
-- **`faces.ts` still speaks of the labelling that went on 2026-09-08** — a doc block attached to no
-  function, saying *"`labelled` must be the labelling of `graph.framed`"*, and fields named for label
-  samples. Probably old comments on a path that no longer samples anything; not yet read closely enough
-  to say.
+
+  **Fixed the same evening, not yet in a room.** `storedWallsChanged` in `regions.ts` does nothing
+  when there are no hand edits and the stored walls match the derivation on screen — by
+  `graphsDiffer`, the same comparison the push uses to decide whether to store at all — and passes
+  every other change on as before: a hand edit, an undo, a clear, a load. The comment now says what
+  the code does. **What a room should see:** on a close that stores fresh walls, one derive and not
+  two.
+- **`faces.ts` carried the labelling that went on 2026-09-08, and more than comments — cleared
+  2026-09-24.** Its header described naming faces by a labelling sample and the area check, both gone,
+  and said the walk leaves a node by the entry *after* the one it arrived along, where the code and its
+  own comment say **before** — §5's successor rule, stated backwards at the top of the module that
+  implements it. Beneath that, **`fitFaces` and four types (`GraphFace`, `GraphFaces`, `FittedRing`,
+  `FittedFaces`) had no caller anywhere**, tests included, since `902b5ad` removed every one on
+  2026-09-08; the job is done by building the wall graph and walking it, so it was superseded rather
+  than a missing call. Its bridge-splitting reasoning survives in `wallFaces.ts`. Deleted, and the module
+  is 297 lines where it was 549.
 
 **Everything the 2026-09-22 session built was confirmed in a room**: Straighten's *Done*, the review
 drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge clamp on Move and Draw,
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click above.
 
-**9 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 8
-before the commit that writes this line, which makes it 9). **A push
+**13 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 12
+before the commit that writes this line, which makes it 13). **A push
 deploys**, so it waits for the user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
