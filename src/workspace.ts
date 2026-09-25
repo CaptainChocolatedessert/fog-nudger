@@ -409,15 +409,24 @@ renderPushAction();
 */
 setCloseAction(async () => {
   /*
-    The paint is written **before** the push, and the order is the whole of it.
+    The paint is written **before** the push, and then the walls are derived from it — the order is
+    the whole of it.
 
-    A push re-runs the trace from what scene metadata holds, so a layer still sitting in a paint
-    mode's working copy would simply not be in what goes on the map — the GM would have painted,
-    closed, and got fog derived from ink without their edits. Sequenced here rather than inside the
-    push, because the shell owns the way out and the push has no business knowing that a brush
-    exists.
+    **This used to stop at writing the paint**, on the ground that *"a push re-runs the trace from what
+    scene metadata holds"*. That was the architecture before the wall graph became the document: a push
+    now emits the stored walls, committed from whatever derivation last landed, so strokes saved here
+    reached the scene as paint and never as walls. Confirmed in a room (2026-09-24): the close
+    committed the walls derived before the strokes, and the derive that included them landed after the
+    push had begun.
+
+    So strokes saved on the way out ask for a derive **here**. The reading cycle that would normally
+    follow a recompose is shut during a close, and the derive recomposes the ink itself when it finds
+    the paint changed; `pushOnClose` commits only once `derivationSettled` says it has landed. A close
+    with nothing painted asks for nothing, so glancing and closing stays as quick as it was. Sequenced
+    here rather than inside the push, because the shell owns the way out and the push has no business
+    knowing that a brush exists.
   */
-  await finishPaint("leaving");
+  if ((await finishPaint("leaving")) === "saved") invalidateRegions();
   await pushOnClose();
 }, requestPushStop);
 

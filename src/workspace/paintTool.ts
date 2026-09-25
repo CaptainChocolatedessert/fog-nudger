@@ -658,16 +658,22 @@ async function closePaintMode(): Promise<void> {
  * something distinct from what is now stored. **Not re-taking was a real defect in the one-layer
  * version**: pressing Done closed the mode outright, and every press after it silently declined until
  * the GM left the step and came back.
+ *
+ * **Says what it did**, because closing the workspace has to know (2026-09-24): strokes saved on the
+ * way out change the ink the walls are derived from, and during a close nothing else will ask for the
+ * derive that brings them in. `workspace.ts`' close action has the whole of it.
  */
-export async function finishPaint(reason: "save" | "leaving"): Promise<boolean> {
-  if (!paintModeOpen() || busy) return true;
+export async function finishPaint(
+  reason: "save" | "leaving",
+): Promise<"saved" | "unchanged" | "failed"> {
+  if (!paintModeOpen() || busy) return "unchanged";
 
   if (!anyUnsavedPaint()) {
     // Nothing changed, so there is nothing to write and nothing to recompose. Entering the step to
     // look at a layer and leaving again must not cost a scene write.
     if (reason === "leaving") endPaint();
     invalidate();
-    return true;
+    return "unchanged";
   }
 
   const painted = describePainted();
@@ -675,7 +681,7 @@ export async function finishPaint(reason: "save" | "leaving"): Promise<boolean> 
   say("saving…", "working");
   try {
     const { saved, failed } = await commitPaint();
-    if (failed) return false;
+    if (failed) return "failed";
     // Only now, because until the layers are committed the composite would be recomputed from paint
     // that is not saved — and a trace whose result outlives a failed write is the mismatch this whole
     // ordering exists to avoid.
@@ -684,7 +690,7 @@ export async function finishPaint(reason: "save" | "leaving"): Promise<boolean> 
     devLog("info", `workspace: paint committed on ${reason}`);
     if (reason === "leaving") endPaint();
     else beginPaint();
-    return true;
+    return "saved";
   } finally {
     busy = false;
     invalidate();
