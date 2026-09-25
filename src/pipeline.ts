@@ -48,7 +48,7 @@ import {
   suppressInk,
   type PaintLayer,
 } from "./trace/inkPaint";
-import { loadMapRaster, readGridDpi, resolveTraceMap } from "./map/mapImage";
+import { loadMapRaster, readGridDpi, readMapBounds, resolveTraceMap } from "./map/mapImage";
 import type { Image as ImageItem } from "@owlbear-rodeo/sdk";
 import { megapixels, type RasterPlan } from "./map/rasterPlan";
 import {
@@ -665,6 +665,143 @@ export type TraceOutcome =
   | { readonly ok: true; readonly run: TraceRun };
 
 /**
+ * The map's pixels, reduced to the one thing the reading uses: an unblurred luminance field.
+ *
+ * **Kept per image, not per reading — since 2026-09-24.** The reading used to load and decode the
+ * whole image on every change to blur, strictness or the window, then throw the pixels away once it
+ * had this field — so each such release rebuilt, from a 37.7-megapixel decode on the largest map, a
+ * field identical to the one it had just discarded. None of the reading's settings reaches the
+ * pixels: they act on this field and after it. So the field is kept for as long as the image is the
+ * same, and the RGBA it came from is still let go the moment the field exists.
+ *
+ * **Keyed on the image alone** — its URL and its pixel size, both carried on the item without
+ * decoding anything — and deliberately not on the map's identity, which also moves when the GM drags
+ * or scales it. Where the map sits is `readMapBounds`' question, asked on every reading.
+ *
+ * The memory is what the reading cache already held: `rawField` has lived there for the whole session
+ * since the point probe needed it, and a reading now holds this same object rather than a copy.
+ */
+interface DecodedMap {
+  readonly key: string;
+  readonly mapId: string;
+  readonly name: string;
+  readonly plan: RasterPlan;
+  readonly rawField: ScalarField;
+  /** Taken while the pixels were in hand, for the reading's cross-check against the polarity verdict. */
+  readonly split: ReturnType<typeof otsuSplit>;
+}
+
+let cachedDecode: DecodedMap | null = null;
+/**
+ * A decode under way, so two callers asking for the same image in the same moment share it — which
+ * happens on every opening, when the reading and the first derive can both reach here before either
+ * has an answer.
+ */
+let decoding: { readonly key: string; readonly promise: Promise<DecodedMap | null> } | null = null;
+
+function decodeKey(map: ImageItem): string {
+  return `${map.image.url}|${map.image.width}x${map.image.height}`;
+}
+
+/** The decoded map, reused when the image is unchanged; `reused` says which, for the log. */
+async function decodeMap(
+  map: ImageItem,
+): Promise<{ readonly decoded: DecodedMap; readonly reused: boolean } | null> {
+  const key = decodeKey(map);
+  if (cachedDecode && cachedDecode.key === key) return { decoded: cachedDecode, reused: true };
+  if (decoding && decoding.key === key) {
+    const shared = await decoding.promise;
+    return shared ? { decoded: shared, reused: true } : null;
+  }
+
+  // Let the previous map's field go before allocating the next, rather than holding both at once.
+  cachedDecode = null;
+  const promise = decodeAfresh(map, key);
+  decoding = { key, promise };
+  try {
+    const decoded = await promise;
+    return decoded ? { decoded, reused: false } : null;
+  } finally {
+    if (decoding?.promise === promise) decoding = null;
+  }
+}
+
+async function decodeAfresh(map: ImageItem, key: string): Promise<DecodedMap | null> {
+  const started = performance.now();
+  const raster = await loadMapRaster(map);
+  if (!raster) return null;
+  const { pixels, plan } = raster;
+  const rawField = luminanceField(pixels);
+  const histogram = luminanceHistogram(pixels);
+  const split = otsuSplit(histogram);
+  const decodeMs = Math.round(performance.now() - started);
+
+  // ## Resolution
+  //
+  // Reported whether or not the budget bit. A run that quietly halved the resolution and a run at
+  // native size must not produce the same log, because the first is the one that can invent a leak
+  // between two rooms by thinning the ink.
+  //
+  // **With the time the decode took**, which nothing measured until it stopped being paid on every
+  // reading: it is the whole of what keeping this saves, so it is the number that says whether that
+  // was worth anything.
+  devLog(
+    "info",
+    `trace: "${raster.name}" source ${plan.sourceWidth}x${plan.sourceHeight} ` +
+      `(${megapixels(plan.sourceWidth, plan.sourceHeight).toFixed(1)} MP) -> raster ` +
+      `${plan.width}x${plan.height} (${megapixels(plan.width, plan.height).toFixed(1)} MP), ` +
+      (plan.capped
+        ? `REDUCED by ${plan.factor}x to fit the megapixel budget — thin ink may have been ` +
+          `averaged away, and a leak between rooms is the way that shows up`
+        : `native resolution, nothing resampled`) +
+      `; loaded, drawn and turned into luminance in ${decodeMs}ms, kept until the image changes`,
+  );
+
+  // ## Luminance
+  //
+  // A shape summary of the image, not a polarity verdict. The verdict is the thinness comparison
+  // in the reading; reading the ink off the minority class is the rule this project rejected, and
+  // printing both as though they were the same kind of statement is how a reader would come to trust
+  // the wrong one on the map where they disagree. Once per image, since nothing the reading's settings
+  // do can change it.
+  devLog(
+    "info",
+    `trace: luminance mean ${meanLuminance(histogram).toFixed(3)}, ` +
+      `profile dark->light ${describeHistogram(histogram)} (% per 1/16 band)`,
+  );
+
+  if (split) {
+    // Tone distribution only. This deliberately no longer names ink or ground: it used to print
+    // "LIGHT ink on dark ground — step 3 must invert polarity", which is a verdict from the
+    // minority-class rule, in the same log as the real verdict from the thinness comparison, and
+    // naming a step that no longer exists. On a map with a dark exterior the two disagree and this
+    // one is the wrong one.
+    const darkPercent = split.darkShare * 100;
+    const tone =
+      darkPercent < 35
+        ? "mostly light"
+        : darkPercent > 65
+          ? "mostly dark"
+          : "near an even split — this may not be line art";
+    devLog(
+      "info",
+      `trace: global split at ${(split.threshold / 255).toFixed(3)} — ` +
+        `${darkPercent.toFixed(1)}% dark (mean ${split.darkMean.toFixed(3)}) vs ` +
+        `${(100 - darkPercent).toFixed(1)}% light (mean ${split.lightMean.toFixed(3)}); ` +
+        `tone is ${tone} (the polarity verdict is the thinness line below, not this)`,
+    );
+  } else {
+    devLog(
+      "warn",
+      "trace: luminance has fewer than two distinct values — a blank or broken asset",
+    );
+  }
+
+  cachedDecode = { key, mapId: raster.mapId, name: raster.name, plan, rawField, split };
+  return cachedDecode;
+}
+
+/**
  * The expensive half: turn the map into a binary mask, and measure what it is made of.
  *
  * Ends deliberately at the last thing that reads the *image*. Everything after this point works on
@@ -680,26 +817,20 @@ async function computeReading(
   settings: Settings,
   fingerprint: string,
 ): Promise<ReadingStage | null> {
-  const raster = await loadMapRaster(map);
-  if (!raster) return null;
+  const found = await decodeMap(map);
+  if (!found) return null;
+  const { decoded } = found;
+  const bounds = await readMapBounds(map);
+  const { plan, rawField, split } = decoded;
 
-  const { pixels, plan, bounds } = raster;
-
-  // ## Resolution
-  //
-  // Reported whether or not the budget bit. A run that quietly halved the resolution and a run at
-  // native size must not produce the same log, because the first is the one that can invent a leak
-  // between two rooms by thinning the ink.
-  devLog(
-    "info",
-    `trace: "${raster.name}" source ${plan.sourceWidth}x${plan.sourceHeight} ` +
-      `(${megapixels(plan.sourceWidth, plan.sourceHeight).toFixed(1)} MP) -> raster ` +
-      `${plan.width}x${plan.height} (${megapixels(plan.width, plan.height).toFixed(1)} MP), ` +
-      (plan.capped
-        ? `REDUCED by ${plan.factor}x to fit the megapixel budget — thin ink may have been ` +
-          `averaged away, and a leak between rooms is the way that shows up`
-        : `native resolution, nothing resampled`),
-  );
+  if (found.reused) {
+    // Said, because a reading that decoded the map and one that did not must not log the same.
+    devLog(
+      "info",
+      `trace: reading "${decoded.name}" from the image already decoded — it is unchanged, so ` +
+        `nothing was reloaded`,
+    );
+  }
 
   // ## Placement
   //
@@ -745,48 +876,6 @@ async function computeReading(
       `so ${pxPerSquare.toFixed(1)} raster px per square`,
   );
 
-  // ## Luminance
-  //
-  // A shape summary of the image, not a polarity verdict. The verdict is the thinness comparison
-  // below; reading the ink off the minority class is the rule this project rejected, and printing
-  // both as though they were the same kind of statement is how a reader would come to trust the
-  // wrong one on the map where they disagree.
-  const histogram = luminanceHistogram(pixels);
-  const split = otsuSplit(histogram);
-
-  devLog(
-    "info",
-    `trace: luminance mean ${meanLuminance(histogram).toFixed(3)}, ` +
-      `profile dark->light ${describeHistogram(histogram)} (% per 1/16 band)`,
-  );
-
-  if (split) {
-    // Tone distribution only. This deliberately no longer names ink or ground: it used to print
-    // "LIGHT ink on dark ground — step 3 must invert polarity", which is a verdict from the
-    // minority-class rule, in the same log as the real verdict from the thinness comparison, and
-    // naming a step that no longer exists. On a map with a dark exterior the two disagree and this
-    // one is the wrong one.
-    const darkPercent = split.darkShare * 100;
-    const reading =
-      darkPercent < 35
-        ? "mostly light"
-        : darkPercent > 65
-          ? "mostly dark"
-          : "near an even split — this may not be line art";
-    devLog(
-      "info",
-      `trace: global split at ${(split.threshold / 255).toFixed(3)} — ` +
-        `${darkPercent.toFixed(1)}% dark (mean ${split.darkMean.toFixed(3)}) vs ` +
-        `${(100 - darkPercent).toFixed(1)}% light (mean ${split.lightMean.toFixed(3)}); ` +
-        `tone is ${reading} (the polarity verdict is the thinness line below, not this)`,
-    );
-  } else {
-    devLog(
-      "warn",
-      "trace: luminance has fewer than two distinct values — a blank or broken asset",
-    );
-  }
-
   // ## Binarisation
   //
   // Both polarities are computed and compared. The decision is made on how *thin* each reading's ink
@@ -794,10 +883,9 @@ async function computeReading(
   // rule.
   const binarizeStarted = performance.now();
   const radius = Math.max(1, Math.round(settings.trace.sauvolaRadiusPx));
-  // Kept unblurred as well, purely so the point probe can report the tone the *map* has rather than
-  // the tone the binariser read. When the question is "is this actually white", a value softened by
-  // a one-pixel Gaussian is the wrong number to answer it with.
-  const rawField = luminanceField(pixels);
+  // `rawField` is kept unblurred as well, so the point probe can report the tone the *map* has rather
+  // than the tone the binariser read. When the question is "is this actually white", a value softened
+  // by a one-pixel Gaussian is the wrong number to answer it with. `blur` returns a new field.
   const field = blur(rawField, settings.trace.blurSigma);
   const reading = detectPolarity(field, { radius, k: settings.trace.sauvolaK });
   const binarizeMs = Math.round(performance.now() - binarizeStarted);
@@ -891,8 +979,8 @@ async function computeReading(
 
   return {
     fingerprint,
-    mapId: raster.mapId,
-    name: raster.name,
+    mapId: decoded.mapId,
+    name: decoded.name,
     plan,
     bounds,
     dpi,

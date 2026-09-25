@@ -42,13 +42,20 @@ import type { WorldBounds } from "./placement";
  */
 const MAP_CHOICE_KEY = key("map-choice");
 
+/**
+ * A map's pixels at the trace's raster, and nothing about where the map sits.
+ *
+ * **No bounds, since 2026-09-24.** They were fetched here on the way to the pixels, which tied a
+ * fact that changes whenever the GM moves the map to one that changes only when the image does — so
+ * the pipeline could not keep the decoded image across a reading change without also keeping bounds
+ * that might be stale. `readMapBounds` asks for them on their own.
+ */
 export interface MapRaster {
   readonly mapId: string;
   readonly name: string;
   /** Identifies what was traced, so a later cache can tell a re-trace from a redraw. */
   readonly url: string;
   readonly pixels: PixelImage;
-  readonly bounds: WorldBounds;
   readonly plan: RasterPlan;
 }
 
@@ -310,11 +317,10 @@ export async function readGridDpi(): Promise<number> {
 /**
  * The map's world box, without decoding a pixel of it.
  *
- * `loadMapRaster` asks for the same thing on its way to the raster, and stage two needs only this
- * half: a wall graph is in graph units, so the box and the image's pixel size — which the item
- * carries without anything being decoded — are the whole of the transform. Split out
- * rather than duplicated, because two places asking Owlbear where the map is would be two chances to
- * ask about slightly different things.
+ * The one place anything asks Owlbear where the map is — the reading for its placement, and stage two,
+ * which needs only this: a wall graph is in graph units, so the box and the image's pixel size, which
+ * the item carries without anything being decoded, are the whole of the transform. Two places asking
+ * would be two chances to ask about slightly different things.
  */
 export async function readMapBounds(map: ImageItem): Promise<WorldBounds> {
   const bounds = await OBR.scene.items.getItemBounds([map.id]);
@@ -322,12 +328,6 @@ export async function readMapBounds(map: ImageItem): Promise<WorldBounds> {
 }
 
 export async function loadMapRaster(map: ImageItem): Promise<MapRaster | null> {
-  // Bounds only. This used to fetch the grid dpi alongside and carry it on the result, and nothing
-  // ever read it: the one caller destructures pixels, plan and bounds, and the dpi it needs it has
-  // already got from `readGridDpi` before deciding whether to load anything at all. A populated
-  // field with no consumer is one the next reader assumes something consumes.
-  const bounds = await OBR.scene.items.getItemBounds([map.id]);
-
   let source: HTMLImageElement;
   try {
     source = await loadImage(map.image.url);
@@ -359,7 +359,6 @@ export async function loadMapRaster(map: ImageItem): Promise<MapRaster | null> {
     name: map.name || "map",
     url: map.image.url,
     pixels,
-    bounds: { min: bounds.min, max: bounds.max },
     plan,
   };
 }
