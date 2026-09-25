@@ -3560,10 +3560,16 @@ strokes (20:46 local), one derive in the worker (942ms), the walls stored (4,113
 the close at 20:20, before the fix, derived a second time (762ms) straight after storing. The `faces.ts`
 clean-out deleted only code nothing called, which `tsc` and the suite establish.
 
-**When the public build is next pushed**, one thing only a deploy can show: that the published site
-finds the worker under the Pages path. Open a room on the published extension and check the browser
-console for *"the worker for … could not be used"*; its absence is the answer, since the published
-build does not write to `dev.log`.
+**The published site finds the worker — checked from a desk after the push of 2026-09-24.** The
+deployed bundle builds its worker as `new URL("/fog-nudger/assets/traceWorker-….js", import.meta.url)`;
+that file is served (200, `application/javascript`, self-contained with no imports), and in the browser
+pane (Chromium, outside Owlbear) a worker started from it on the `github.io` origin derived a closed
+room correctly — one region, 5ms of work, 57ms round trip. **What that does not establish** is Firefox
+inside Owlbear's iframe on that origin; the dev build's rooms established the same pair on
+`localhost`, which is just as cross-origin to Owlbear, so the gap is reasoned small. The room check, if
+wanted: open a room on the published extension, move an ink slider, and look for *"the worker for …
+could not be used"* in the browser console — its absence is the answer, since the published build does
+not write to `dev.log`.
 
 **What is next, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
 the one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3605,8 +3611,8 @@ drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge 
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click below it.
 
-**15 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 14
-before the commit that writes this line, which makes it 15). **A push deploys**, so it waits for the
+**1 commit is not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 0 after
+the push that deployed the session, and the commit that writes this line makes it 1). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
@@ -3728,10 +3734,9 @@ third-party iframe. **A worker that dies without an `error` event leaves its der
 push waiting on it; the close has its escape hatch, *Put on the map* does not. Neither has been seen.
 **Answered by the rooms of 2026-09-24:** Owlbear's iframe lets a worker start, in Firefox — every
 derive in the log ran in one, none on the page — and the lock and the wait behave as decided, checked by
-hand. **Still open until a deploy:** whether the published
-site finds the worker under the Pages path. The built reference reads
-`/fog-nudger/assets/traceWorker-….js` against the page's own URL, which is right by reading, not by
-loading; the resume point says how to check.
+hand. **Answered by the deploy of the same
+day:** the published site serves the worker at the path its bundle names, and a worker started from it
+there derives — from a desk, in Chromium; the resume point has the figures and the one room check left.
 
 ##### What building it turned up, and what was done — 2026-09-24
 
