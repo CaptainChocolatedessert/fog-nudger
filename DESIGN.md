@@ -3585,19 +3585,22 @@ the one question, a picture if it is geometric, name and glyph, a numbered plan)
   +0.23, because the recompose the strokes need is never asked for during a close — the reading cycle
   does not run then. It predates the worker.
 
-  **Fixed the same evening, not yet in a room.** The close action's own reason for saving the brush
+  **Fixed the same evening, and confirmed in a room** (user: *"Closing with pending brush strokes now
+  pushes those strokes."*). The close action's own reason for saving the brush
   first was the old architecture: *"a push re-runs the trace from what scene metadata holds"* — true
   before the wall graph became the document, and not since, when a push emits the stored walls. So
   `finishPaint` now says whether it saved anything, and a close that saved strokes asks for a derive
   before the push; the derive recomposes the ink itself, and the commit already waits for it. A close
   with nothing painted asks for nothing. **The cost:** a close with fresh strokes waits one recompose
-  and one derive longer — about 1.6 seconds on *The Incandescent Grottoes*, going by that close's own
-  log. **What a room should see:** after *"paint committed on leaving"*, a derive, then *"stored a
-  derived …"* with the new wall count, then the push.
-- **The time inside a push is not broken down in the log.** That close ran ten seconds longer than the
-  same-sized one of 2026-09-22, and a second of it was the recompose, measured; the other nine were
-  inside the push, where delete, rooms and lines are one span. Timing each phase is a one-line change,
-  held until a push is worth diagnosing.
+  and one derive longer. **Measured on the confirming close:** the strokes saved at +0.12 seconds, the
+  derive with them landed at +1.82, the walls were stored at +1.87 — 3,974, up from 3,934 — and the
+  push began at +2.35.
+- **The save before a push sets off a second, redundant derive.** Seen on that same close: storing the
+  fresh walls fires `onStageChange`, whose handler in `workspace.ts` re-derives unconditionally — 762ms
+  in the worker, during the push, arriving at the identical 3,974 walls. Harmless, and wasted. Its
+  comment says the opposite of the code: that the partition is re-derived *"only in the editor"*,
+  because in the ink mode re-deriving *"would cost a full trace to arrive at the picture already on
+  screen"* — the two-mode surface's reasoning, which the code no longer follows.
 - **`faces.ts` still speaks of the labelling that went on 2026-09-08** — a doc block attached to no
   function, saying *"`labelled` must be the labelling of `graph.framed`"*, and fields named for label
   samples. Probably old comments on a path that no longer samples anything; not yet read closely enough
