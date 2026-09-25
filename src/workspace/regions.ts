@@ -61,7 +61,7 @@ import { graphsDiffer } from "../trace/wallGraphDiff";
 import { noteGraph } from "./graphScale";
 import { MaskRequests, shouldPaint } from "./maskRequest";
 import { currentPaint } from "./paintState";
-import { onReading } from "./reading";
+import { isAbandoned, onReading } from "./reading";
 import { currentMarks, onMarksChange } from "./regionMarks";
 import { currentSettings } from "./settingsState";
 import { invalidate, say, whileWorking } from "./shell";
@@ -628,6 +628,13 @@ async function derive(): Promise<void> {
     if (controller.signal.aborted) {
       // Asked for, not failed: a newer reading made this derive pointless and the loop starts that one.
       devLog("info", `workspace: partition ${generation} abandoned mid-derive for a newer reading`);
+    } else if (isAbandoned(error)) {
+      /*
+        The ink this derive was resolving was abandoned for newer ink — the reading cycle's, since the
+        ink moved to a worker (2026-09-24). Superseded rather than failed, and still owed: the
+        generation stays waiting, so the loop below runs again for the ink as it now is.
+      */
+      devLog("info", `workspace: partition ${generation} waited on ink that newer ink replaced`);
     } else if (requests.fail(generation)) {
       const detail = describeError(error);
       say(`deriving failed: ${detail}`, "bad");

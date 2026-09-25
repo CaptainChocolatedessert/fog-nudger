@@ -287,8 +287,8 @@ export interface PaintPair {
  * **One statement of the order, and that is the point of the function existing.** The order is not
  * free — suppression before anything else so a later stage works on ink the GM already corrected,
  * added ink last so no filter can second-guess a line drawn deliberately — and until 2026-09-05 it
- * lived inline in `composeInk`, which sits behind the SDK boundary where no headless test can reach
- * it. The pieces were each tested and their *order* was checked by reading.
+ * lived inline in `composeInk`, which then sat behind the SDK boundary where no headless test could
+ * reach it. The pieces were each tested and their *order* was checked by reading.
  *
  * It could be pulled out because the gap repair stopped being a term in the middle. While it was
  * derived it had to run between the two, so the composition was not one expression; as a tool that

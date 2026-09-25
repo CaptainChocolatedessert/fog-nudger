@@ -40,14 +40,7 @@ import { devLog } from "./devlog";
 import { describeSettings, maskFingerprint, readingFingerprint, type Settings } from "./settings";
 import { readSettings } from "./settingsStore";
 import { readPaintLayer } from "./inkPaintStore";
-import {
-  composePaint,
-  paintForRaster,
-  paintRevision,
-  paintedCount,
-  suppressInk,
-  type PaintLayer,
-} from "./trace/inkPaint";
+import { paintForRaster, paintRevision, type PaintLayer } from "./trace/inkPaint";
 import { loadMapRaster, readGridDpi, readMapBounds, resolveTraceMap } from "./map/mapImage";
 import type { Image as ImageItem } from "@owlbear-rodeo/sdk";
 import { megapixels, type RasterPlan } from "./map/rasterPlan";
@@ -69,21 +62,12 @@ import {
   meanLuminance,
   otsuSplit,
 } from "./trace/luminance";
-import { blur, luminanceField, type ScalarField } from "./trace/field";
+import { luminanceField, type ScalarField } from "./trace/field";
 import type { BinaryMask } from "./trace/binarize";
 import type { RasterPlacement, WorldBounds } from "./map/placement";
 import { describePoint, readPoint } from "./trace/probePoint";
-import { detectPolarity, type PolarityReading } from "./trace/polarity";
-import { countInk } from "./trace/binarize";
-import {
-  healSeverances,
-  openMask,
-  radiusForWidth,
-  removedInk,
-} from "./trace/morphology";
+import type { PolarityReading } from "./trace/polarity";
 import type { InkProfileShapes, ProfilePoint } from "./trace/inkProfile";
-import { removeSmallInkIslands } from "./trace/inkIslands";
-import { describeInkBlobs, findInkBlobs } from "./trace/inkBlobs";
 import { graphExtent, rasterPixelsPerGraphUnit, type GraphExtent } from "./trace/graphUnits";
 import type { WallGraphBuild } from "./trace/wallGraph";
 import type { WallFaces } from "./trace/wallFaces";
@@ -97,13 +81,18 @@ import {
 } from "./trace/deriveWalls";
 import {
   answerDeriveRequest,
+  answerInkRequest,
   answerProfilesRequest,
   postDerive,
+  postInk,
   postProfiles,
   type DeriveRequest,
+  type InkAnswer,
+  type InkRequest,
   type ProfilesRequest,
   type WorkerMessage,
 } from "./trace/workerProtocol";
+import type { InkReading } from "./trace/inkCompose";
 import { WorkerJobs, type JobWorker, type Ran } from "./workerJobs";
 import { COMMAND_CAP } from "./trace/simplify";
 
@@ -122,24 +111,6 @@ const MAX_ASPECT_MISMATCH = 0.01;
  * this project's test map at about four and a half.
  */
 const MIN_WINDOW_RATIO = 3;
-
-/**
- * Smallest solid ink shape worth naming in the log, in grid squares.
- *
- * A diagnostic threshold rather than a pipeline one — nothing behaves differently because of it, and
- * its only job is to keep a list a human reads down to things a human could find on a map.
- */
-const MIN_BLOB_SQUARES = 0.05;
-
-/**
- * How many measured ink widths across its narrow side a shape must be before it stops being
- * plausible as linework.
- *
- * Three, which is comfortably past any stroke and well below anything drawn as a filled feature.
- * The unit is the point: a stroke is one ink width across by definition, so this needs no tuning
- * per map (DESIGN.md §5).
- */
-const BLOB_INK_WIDTHS = 3;
 
 /**
  * Ceiling on the tolerance a region may be escalated to in order to fit the 8192-command cap, in
@@ -253,8 +224,8 @@ interface MaskStage extends ReadingStage {
    * `fingerprint` field carries. Left as it is deliberately rather than renamed across both: the two
    * are consistent with each other, the cache compares them for equality and nothing else, and a
    * rename touching both stages buys a better word for a field no caller outside this file reads.
-   * `composeInk`'s parameter *was* renamed, because it shadowed the imported `maskFingerprint`
-   * function.
+   * The resolver's parameter is `maskPrint` for the one reason that forced a rename: a
+   * `maskFingerprint` there would shadow the imported function of that name.
    */
   readonly maskFingerprint: string;
   /**
@@ -358,6 +329,18 @@ const profileJobs = new WorkerJobs<ProfilesRequest, WorkerMessage, InkProfileSha
   post: postProfiles,
   onPage: answerProfilesRequest,
   onGiveUp: givingUp("the ink profiles", "the same shapes"),
+});
+
+/**
+ * The third, since 2026-09-24: the reading and the recompose, which were the freeze left once the
+ * other two had moved. Its own worker, so the ink never waits behind a derive of the ink before it —
+ * a newer reading abandons that derive anyway, but only once the reading lands.
+ */
+const inkJobs = new WorkerJobs<InkRequest, WorkerMessage, InkAnswer>({
+  spawn: spawnTraceWorker,
+  post: postInk,
+  onPage: answerInkRequest,
+  onGiveUp: givingUp("the ink", "the same ink"),
 });
 
 /** How a job ran, for the line that reports it: where, and how long the work and the wait took. */
@@ -801,22 +784,26 @@ async function decodeAfresh(map: ImageItem, key: string): Promise<DecodedMap | n
   return cachedDecode;
 }
 
+/** A reading's map and where it sits — everything a reading stage holds but the reading itself. */
+type PlacedMap = Omit<ReadingStage, "reading" | "chosenCoverage">;
+
 /**
- * The expensive half: turn the map into a binary mask, and measure what it is made of.
+ * The page's half of the expensive half: the decoded map, and where it sits in the world.
  *
- * Ends deliberately at the last thing that reads the *image*. Everything after this point works on
- * the mask alone — filters, repairs, and eventually the GM's own suppression and ink — which is what
- * makes this the right place to cache. It is not a separate mode: `resolveMask` is its only caller,
- * so the chain stays one implementation.
+ * **Everything in a reading that needs Owlbear or the DOM**, and nothing that does not. The
+ * thresholds themselves are `inkCompose.ts`' `readInk`, run in the ink worker; `finishReading` below
+ * reports what it found. The split is where the reading stops needing the page, which is the same
+ * reason the reading and the composition are cached apart: past this point it is arithmetic on
+ * arrays. It is not a separate mode: `resolveMask` is its only caller, so the chain stays one
+ * implementation.
  *
  * Returns `null` on exactly one condition — `loadMapRaster` finding nothing to read.
  */
-async function computeReading(
+async function placeReading(
   map: ImageItem,
   dpi: number,
-  settings: Settings,
   fingerprint: string,
-): Promise<ReadingStage | null> {
+): Promise<{ readonly placed: PlacedMap; readonly split: DecodedMap["split"] } | null> {
   const found = await decodeMap(map);
   if (!found) return null;
   const { decoded } = found;
@@ -876,19 +863,47 @@ async function computeReading(
       `so ${pxPerSquare.toFixed(1)} raster px per square`,
   );
 
-  // ## Binarisation
-  //
-  // Both polarities are computed and compared. The decision is made on how *thin* each reading's ink
-  // is, not on which class is smaller — see `polarity.ts` for the map style that breaks the obvious
-  // rule.
-  const binarizeStarted = performance.now();
-  const radius = Math.max(1, Math.round(settings.trace.sauvolaRadiusPx));
-  // `rawField` is kept unblurred as well, so the point probe can report the tone the *map* has rather
-  // than the tone the binariser read. When the question is "is this actually white", a value softened
-  // by a one-pixel Gaussian is the wrong number to answer it with. `blur` returns a new field.
-  const field = blur(rawField, settings.trace.blurSigma);
-  const reading = detectPolarity(field, { radius, k: settings.trace.sauvolaK });
-  const binarizeMs = Math.round(performance.now() - binarizeStarted);
+  return {
+    placed: {
+      fingerprint,
+      mapId: decoded.mapId,
+      name: decoded.name,
+      plan,
+      bounds,
+      dpi,
+      placement,
+      pxPerSquare,
+      // Kept unblurred, so the point probe can report the tone the *map* has rather than the tone the
+      // binariser read. When the question is "is this actually white", a value softened by a one-pixel
+      // Gaussian is the wrong number to answer it with.
+      rawField,
+    },
+    split,
+  };
+}
+
+/** Sauvola's window radius as the reading uses it: whole pixels, and never less than one. */
+function sauvolaRadius(settings: Settings): number {
+  return Math.max(1, Math.round(settings.trace.sauvolaRadiusPx));
+}
+
+/**
+ * Report a reading the ink job took, and make it a stage.
+ *
+ * Every line here was written by the reading itself while it ran on the page, and says the same
+ * thing in the same order now that the thresholds run in a worker: the page has everything these
+ * lines need — the placement, the histogram's split, the settings — and the reply brings the rest.
+ */
+function finishReading(
+  placed: PlacedMap,
+  split: DecodedMap["split"],
+  read: InkReading,
+  settings: Settings,
+): ReadingStage {
+  const { reading } = read;
+  const { pxPerSquare } = placed;
+  const radius = sauvolaRadius(settings);
+  const binarizeMs = Math.round(read.binarizeMs);
 
   const chosenCoverage =
     reading.polarity === "dark-ink" ? reading.darkCoverage : reading.lightCoverage;
@@ -977,28 +992,9 @@ async function computeReading(
     }
   }
 
-  return {
-    fingerprint,
-    mapId: decoded.mapId,
-    name: decoded.name,
-    plan,
-    bounds,
-    dpi,
-    placement,
-    pxPerSquare,
-    rawField,
-    reading,
-    chosenCoverage,
-  };
+  return { ...placed, reading, chosenCoverage };
 }
 
-/**
- * The cheap half: compose the ink the regions come from, out of the reading and everything the GM
- * has said about it.
- *
- * Synchronous, because everything here works on arrays already in hand. That is the same property
- * that lets it be re-run without re-reading the map.
- */
 /**
  * A paint layer at this run's raster, saying so when it was not already.
  *
@@ -1026,213 +1022,24 @@ function fitPaint(
   return paintForRaster(layer, plan.width, plan.height);
 }
 
-function composeInk(
-  source: ReadingStage,
-  settings: Settings,
-  paint: PaintLayers,
-  identity: string,
-): MaskStage {
-  const { plan, pxPerSquare, reading } = source;
-
-  // ## Ink that is not linework
-  //
-  // Runs before labelling because it explains a class of result labelling cannot: a filled area
-  // whose tone fell on the ink side of the threshold is *ink*, so it never becomes a region, is
-  // never covered, and shows through as bare map inside a revealed room. No aggregate can see it:
-  // from a count of regions' point of view nothing is missing, because the area never existed. Only
-  // the point probe answers it, which is why that one survived the diagnostics being cut back.
-  //
-  // Denominated in measured ink width, since a stroke is one ink width across its narrow side by
-  // definition and a filled shape is several.
-  // ## Minimum stroke width
-  //
-  // An opening — erode then dilate — so marks narrower than the threshold vanish and everything
-  // else keeps its width. Deliberately placed **after** the ink-width measurement above and not
-  // before: the threshold is denominated in ink widths, and measuring a mask this has already
-  // thinned out would raise the mean width, which would move the threshold, which would change what
-  // it removes. Measure the raw reading, then filter it.
-  //
-  // Polarity is decided on the raw reading for the same reason: this only ever removes thin marks,
-  // so it can only make a reading look less like linework than it is.
-  const rawInk = countInk(reading.mask);
-  const openStarted = performance.now();
-  const strokeFloor = settings.trace.minStrokeInkWidths * (reading.inkWidth ?? 0);
-  const openRadius = radiusForWidth(strokeFloor);
-  const opened = openMask(reading.mask, openRadius);
-  /*
-    **Put back what the opening severed, before anything downstream amplifies it.**
-
-    An opening retracts a stroke's end, so a radius one notch high nicks a corner — and thinning then
-    pulls each free end back by `(w + 1) / 2`, so `g` pixels of ink arrive as `g + w + 1` pixels of
-    graph. Two pixels became about nine on 5.7px linework, measured in a room. The penalty is
-    additive, so there is no such thing as a small break once it reaches the graph, and this is the
-    last place it is cheap to undo.
-
-    **It restores and never invents**: `healSeverances` intersects the closing with the reading, so
-    every pixel it puts back was ink the trace found. That is what lets it run with nothing to set
-    and nothing to confirm, where the automatic gap repair could not — that one re-invented ink on
-    every recompose, and this cannot invent any.
-
-    **Before the island filter**, so a restored bridge rejoins its fragment to the network rather
-    than leaving it to be deleted as debris.
-  */
-  const healed = healSeverances(opened, reading.mask, openRadius);
-  const effectiveMask = healed.mask;
-  /*
-    Kept so the two sliders can be drawn with the distribution they act on, computed later and only
-    if something asks.
-
-    **Each filter's input, not its output.** The stroke filter acts on the raw reading and the island
-    filter on what the stroke filter left — so neither profile depends on its own control, and moving
-    a handle redraws the same curve with the marker somewhere new. Held as references to masks this
-    run already built, so the cost of keeping them is nothing beyond not collecting them.
-  */
-  lastFilterInputs = {
-    beforeStroke: reading.mask,
-    // What the island filter actually sees, which is the healed mask rather than the opening's
-    // output. The profile's rule is that each filter's plot is drawn from its own input, and the
-    // heal sits between the two.
-    beforeIsland: effectiveMask,
-    inkWidthPx: reading.inkWidth ?? 0,
-  };
-
-  if (openRadius > 0) {
-    const removed = removedInk(reading.mask, effectiveMask);
-    if (healed.restored > 0) {
-      devLog(
-        "info",
-        `trace: put back ${healed.restored} px the stroke filter severed — ink the reading found, ` +
-          `in channels narrower than ${openRadius * 2}px. Nothing invented: every pixel restored ` +
-          `was ink before the filter ran.`,
-      );
-    }
-    devLog(
-      "info",
-      `trace: minimum stroke width in ${Math.round(performance.now() - openStarted)}ms — ` +
-        `${settings.trace.minStrokeInkWidths} of a ${(reading.inkWidth ?? 0).toFixed(1)}px ink ` +
-        `width is ${strokeFloor.toFixed(1)}px, radius ${openRadius}px, so marks under about ` +
-        `${openRadius * 2}px are gone. Removed ${removed} of ${rawInk} ink px ` +
-        `(${rawInk > 0 ? ((removed / rawInk) * 100).toFixed(1) : "0.0"}%).`,
-    );
-    // Named as a risk rather than reported as a number, because the number cannot distinguish a
-    // floor grid from a wall. Only looking at the mask can, which is the entire reason this control
-    // exists at all rather than remaining rejected.
-    devLog(
-      "warn",
-      "trace: the minimum stroke width can sever a thin wall, which merges two rooms. Check the " +
-        "Ink step in the workspace for gaps in the linework, and watch the second-largest region " +
-        "below.",
-    );
-  } else if (settings.trace.minStrokeInkWidths > 0) {
-    // The setting is on but rounds to nothing. Silence here would look identical to it working.
-    devLog(
-      "info",
-      `trace: minimum stroke width ${settings.trace.minStrokeInkWidths} of a ` +
-        `${(reading.inkWidth ?? 0).toFixed(1)}px ink width rounds to a radius of 0, so nothing ` +
-        `was removed. Raise it past ${(1 / Math.max(0.01, reading.inkWidth ?? 1)).toFixed(2)} to bite.`,
-    );
-  }
-
-  // ## Smallest ink island
-  //
-  // The second stage-1b filter, and it catches what the first leaves: decoration that is
-  // high-contrast, thick enough to survive an opening, and stubby. It separates those from walls by
-  // *connectivity* first — walls join into one enormous network, a decoration is an island — so the
-  // size threshold only has to be large enough to catch islands.
-  //
-  // Eight-connected, per the pairing rule, and that is the conservative direction here: a decoration
-  // touching a wall even diagonally counts as part of the network and is never removed.
-  const islandStarted = performance.now();
-  const minIslandPx = settings.trace.minIslandPx;
-  const islands = removeSmallInkIslands(effectiveMask, minIslandPx);
-  const filteredMask = islands.mask;
-
-  if (minIslandPx > 0) {
-    const beforeIslands = countInk(effectiveMask);
-    devLog(
-      "info",
-      `trace: smallest ink island in ${Math.round(performance.now() - islandStarted)}ms — ` +
-        `any isolated mark shorter than ${minIslandPx}px on both sides is gone. ` +
-        `Removed ${islands.removed} ` +
-        `islands holding ${islands.removedArea} px ` +
-        `(${beforeIslands > 0 ? ((islands.removedArea / beforeIslands) * 100).toFixed(1) : "0.0"}% ` +
-        `of the ink); largest surviving island spans ${islands.largestKeptSpan}px ` +
-        `(${pxPerSquare > 0 ? (islands.largestKeptSpan / pxPerSquare).toFixed(1) : "?"} squares).`,
-    );
-    // The number that says whether this went too far. The wall network should be one island running
-    // most of the map; if the largest survivor is room-sized instead, the linework has been cut up.
-    //
-    // **Not gated on `pxPerSquare`**, which it was until 2026-08-31. The comparison is a span in
-    // raster pixels against a raster width in raster pixels and never mentions the grid — the gate had
-    // drifted from the *info* line above, which does use it for an "of a square" clause. A scene whose
-    // grid reports zero was therefore suppressing a warning that the linework had been cut into
-    // pieces: a clean diagnostic that was evidence about the diagnostic.
-    if (islands.largestKeptSpan < plan.width * 0.25) {
-      devLog(
-        "warn",
-        `trace: the largest surviving ink island spans only ${islands.largestKeptSpan}px of a ` +
-          `${plan.width}px raster. The linework of a map is normally one connected network running ` +
-          `most of its width, so this suggests the walls have been broken into pieces — by this ` +
-          `filter, or by the minimum stroke width before it.`,
-      );
-    }
-  }
-
-  /*
-    ## The GM's two layers, composed
-
-    Where the global filters are blunt, these are local: the GM can tell meaningless crosshatching
-    from linework by looking, and no measurement can. Both go in **after** the 1b filters, so what
-    they act on is exactly the ink the parameters above produced — which is also what the Ink step
-    draws, so the two questions stay separable.
-
-    **The order lives in `composePaint` rather than here**, which is what lets a headless test pin
-    it. That became possible on 2026-09-05 when the gap repair stopped being a term between the
-    two: while it was derived it had to run in the middle, so the composition could not be one
-    expression. As a tool writing into the added-ink layer it is not part of this at all, and what
-    is left is three independent layers and one function that says how they stack.
-  */
-  const suppressLayer = fitPaint(paint.suppress, plan, "suppression");
-  const inkLayer = fitPaint(paint.ink, plan, "added ink");
-  const fitted = { suppress: suppressLayer, ink: inkLayer };
-  const inkedMask = composePaint(filteredMask, fitted);
-
-  if (suppressLayer) {
-    const removed = countInk(filteredMask) - countInk(suppressInk(filteredMask, suppressLayer));
-    devLog(
-      "info",
-      `trace: suppression — ${paintedCount(suppressLayer)} px painted, of which ${removed} were ` +
-        `ink and are now ground.`,
-    );
-  }
-  if (inkLayer) {
-    devLog(
-      "info",
-      `trace: added ink — ${paintedCount(inkLayer)} px painted, including anything accepted from ` +
-        `the gap search, which writes into this layer like a brush stroke.`,
-    );
-  }
-
-  const blobStarted = performance.now();
-  const blobs = findInkBlobs(inkedMask, {
-    pxPerSquare,
-    minSquares: MIN_BLOB_SQUARES,
-    minThickness: (reading.inkWidth ?? pxPerSquare * 0.1) * BLOB_INK_WIDTHS,
-  });
-  devLog(
-    "info",
-    `trace: ink shape check in ${Math.round(performance.now() - blobStarted)}ms — ` +
-      `${describeInkBlobs(blobs, plan.width, plan.height)}`,
-  );
-
-  return {
-    ...source,
-    maskFingerprint: identity,
-    base: filteredMask,
-    mask: inkedMask,
-    paint: fitted,
-  };
+/** What `resolveMask` hands back: the stage, and which halves of it were reused, for the log. */
+interface Resolved {
+  readonly stage: MaskStage;
+  readonly readingReused: boolean;
+  readonly maskReused: boolean;
 }
+
+/**
+ * A resolution under way, so two callers asking for the same ink share one job.
+ *
+ * **New with the ink worker (2026-09-24).** While this ran on the page it could not be asked twice at
+ * once: the first caller held the thread until it had its answer and had filled the cache, so the
+ * second found the cache. Off the page both can arrive while one job runs — the reading cycle and the
+ * derive on an opening, and on a close that saved strokes — and the worker's rule that a newer job
+ * abandons the running one would have the second caller throw away the first's work to do the same
+ * work again.
+ */
+let resolving: { readonly print: string; readonly promise: Promise<Resolved | null> } | null = null;
 
 /**
  * Get a mask for these settings, reusing whichever halves are still valid.
@@ -1241,34 +1048,126 @@ function composeInk(
  * rather than one per caller. Which halves ran is reported by the caller, every time: a run that
  * reused a reading and a run that took one are not the same run, and only the second can be wrong
  * about the map.
+ *
+ * **Rejects with an `AbortError` when a newer request abandons its ink job**, or when `signal`
+ * does — the worker's rule, as for the derive and the profiles. Neither cache is touched then, so
+ * what they hold is always a finished answer, and the callers treat the rejection as superseded
+ * rather than as a failure. A caller that joins a job already running shares its fate, since the job
+ * is the starter's to abandon.
  */
 async function resolveMask(
   map: ImageItem,
   dpi: number,
   settings: Settings,
   paint: PaintLayers,
-): Promise<{ stage: MaskStage; readingReused: boolean; maskReused: boolean } | null> {
+  signal?: AbortSignal,
+): Promise<Resolved | null> {
   const maskPrint = maskIdentity(map, dpi, settings, paint);
   if (cachedMask && cachedMask.maskFingerprint === maskPrint) {
     return { stage: cachedMask, readingReused: true, maskReused: true };
   }
+  if (resolving && resolving.print === maskPrint) return resolving.promise;
 
+  const promise = resolveAfresh(map, dpi, settings, paint, maskPrint, signal);
+  resolving = { print: maskPrint, promise };
+  try {
+    return await promise;
+  } finally {
+    if (resolving?.promise === promise) resolving = null;
+  }
+}
+
+async function resolveAfresh(
+  map: ImageItem,
+  dpi: number,
+  settings: Settings,
+  paint: PaintLayers,
+  maskPrint: string,
+  signal: AbortSignal | undefined,
+): Promise<Resolved | null> {
   const readingPrint = readingIdentity(map, dpi, settings);
-  const readingReused = cachedReading !== null && cachedReading.fingerprint === readingPrint;
-  const source = readingReused
-    ? cachedReading!
-    : await computeReading(map, dpi, settings, readingPrint);
+  const reused =
+    cachedReading !== null && cachedReading.fingerprint === readingPrint ? cachedReading : null;
+  const fresh = reused ? null : await placeReading(map, dpi, readingPrint);
+  // After the decode and the bounds, which a newer request can overtake, and before the ink job.
+  signal?.throwIfAborted();
+  const placed: PlacedMap | null = reused ?? fresh?.placed ?? null;
 
-  if (!source) {
+  if (!placed) {
     cachedReading = null;
     // Which is also what stops the previous map's reading answering probes for a map that failed to load.
     cachedMask = null;
     return null;
   }
 
+  // Here, where a layer painted at another raster is resampled and said to be: the worker is handed
+  // layers already at the reading's raster, and the stage keeps these same ones for the probe.
+  const fitted: PaintLayers = {
+    suppress: fitPaint(paint.suppress, placed.plan, "suppression"),
+    ink: fitPaint(paint.ink, placed.plan, "added ink"),
+  };
+
+  /*
+    In the ink worker when there is one — `workerJobs.ts` says why, and what happens when there is
+    not. The same functions either way, so the ink is the same ink; the line after says which ran.
+  */
+  const ran = await inkJobs.run({
+    source: reused
+      ? { kind: "reading", mask: reused.reading.mask, inkWidth: reused.reading.inkWidth }
+      : {
+          kind: "field",
+          field: placed.rawField,
+          read: {
+            blurSigma: settings.trace.blurSigma,
+            radius: sauvolaRadius(settings),
+            k: settings.trace.sauvolaK,
+          },
+        },
+    paint: fitted,
+    compose: {
+      minStrokeInkWidths: settings.trace.minStrokeInkWidths,
+      minIslandPx: settings.trace.minIslandPx,
+      pxPerSquare: placed.pxPerSquare,
+    },
+  }, signal);
+  const { read, composed } = ran.value;
+
+  let source: ReadingStage;
+  if (reused) {
+    source = reused;
+  } else {
+    // Asked for by sending the field, so a reply without one is a protocol fault and said as one.
+    if (!read || !fresh) throw new Error("the ink job was asked for a reading and returned none");
+    source = finishReading(placed, fresh.split, read, settings);
+  }
+
+  for (const line of composed.lines) devLog(line.level, line.text);
+  devLog("info", `trace: ink ${reused ? "recomposed" : "read and composed"} ${describeRan(ran)}`);
+
+  /*
+    Kept so the two sliders can be drawn with the distribution they act on, computed later and only
+    if something asks.
+
+    **Each filter's input, not its output.** The stroke filter acts on the raw reading and the island
+    filter on what the stroke filter left — after the severance repair between them — so neither
+    profile depends on its own control, and moving a handle redraws the same curve with the marker
+    somewhere new.
+  */
+  lastFilterInputs = {
+    beforeStroke: source.reading.mask,
+    beforeIsland: composed.beforeIsland,
+    inkWidthPx: source.reading.inkWidth ?? 0,
+  };
+
   cachedReading = source;
-  cachedMask = composeInk(source, settings, paint, maskPrint);
-  return { stage: cachedMask, readingReused, maskReused: false };
+  cachedMask = {
+    ...source,
+    maskFingerprint: maskPrint,
+    base: composed.base,
+    mask: composed.mask,
+    paint: fitted,
+  };
+  return { stage: cachedMask, readingReused: reused !== null, maskReused: false };
 }
 
 /**
@@ -1378,6 +1277,12 @@ export async function maskForOverlay(
     from whatever settings arrive rather than from where they came from.
   */
   override?: TraceInputs,
+  /*
+    Abandons the reading: the ink job in the worker is terminated and the promise rejects with an
+    `AbortError`. The reading cycle's, so a slider released while the last one's ink is still being
+    read starts the new one now rather than after it.
+  */
+  signal?: AbortSignal,
 ): Promise<MaskOutcome> {
   const settings = override?.settings ?? (await readSettings());
   const map = await resolveTraceMap();
@@ -1387,7 +1292,8 @@ export async function maskForOverlay(
   // another image is not paint for this one.
   const paint = override?.paint ?? (await readPaintFor(map.id));
   const dpi = await readGridDpi();
-  const resolved = await resolveMask(map, dpi, settings, paint);
+  signal?.throwIfAborted();
+  const resolved = await resolveMask(map, dpi, settings, paint, signal);
   // Named rather than collapsed into the case above: the map is chosen and on screen, and what
   // failed is reading its pixels. `loadMapRaster` has already put the detail on the console.
   if (!resolved) return { ok: false, reason: "unreadable", mapName: map.name || "map" };
@@ -1474,7 +1380,7 @@ export async function runTrace(
   // After the awaits, since a newer reading can land during them, and before the ink is resolved,
   // which may be a second of work on the page for a run that is no longer wanted.
   signal?.throwIfAborted();
-  const resolved = await resolveMask(map, dpi, settings, paint);
+  const resolved = await resolveMask(map, dpi, settings, paint, signal);
   if (!resolved) {
     return {
       ok: false,

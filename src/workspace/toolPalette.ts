@@ -65,7 +65,7 @@ import { putDownSearches, setTool as setWallTool, type WallTool } from "./wallEd
 import { invalidate, setDrag } from "./shell";
 import { proposeLayers } from "./layerToggles";
 import { toolIcon } from "./toolIcons";
-import { onReading } from "./reading";
+import { inkBeingReread, onInkChange, onReading } from "./reading";
 import { editableGraph, onDeriveChange } from "./regions";
 import { onStageChange } from "./stage";
 import { deltaShowing, onDeltaChange } from "./layers/delta";
@@ -215,6 +215,14 @@ function usable(choice: ToolChoice): boolean {
   // walls on screen and every one of them is editable; asking for a stored graph greyed all three
   // tools out in exactly that state.
   if (choice.band === "walls") return editableGraph() !== null;
+  /*
+    **The two tools that search the ink lock while it is re-read** (user, 2026-09-24), as the wall
+    tools lock during a derive. Their rings come from the reading's base, and a reading or filter
+    change replaces the base — off the page, a press can now land while that is under way. The brushes
+    stay live, since they only write paint, and so do these two through a paint-only recompose, which
+    cannot change the base they search.
+  */
+  if ((choice.id === "gaps" || choice.id === "speckles") && inkBeingReread()) return false;
   return mapChosen();
 }
 
@@ -706,6 +714,8 @@ export function registerToolPalette(): void {
   onStageChange(render);
   // A derive starting locks the wall tools and one ending frees them, and nothing else announces either.
   onDeriveChange(render);
+  // The same for a re-read and the two ink tools that search the ink.
+  onInkChange(render);
   /*
     A reading landing is what says there is a picture to draw over, and the proposal is gated on
     having one — so the strip re-proposes then as well as on every other thing it redraws for.

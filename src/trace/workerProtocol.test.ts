@@ -2,15 +2,22 @@ import { describe, expect, it } from "vitest";
 
 import type { BinaryMask } from "./binarize";
 import { deriveWalls, summariseDerivation, type DerivedWalls } from "./deriveWalls";
-import { randomInk, seededRandom } from "./fixtures";
+import { field, randomInk, seededRandom } from "./fixtures";
 import { graphExtent } from "./graphUnits";
+import { composeInk, readInk, type ComposedInk, type InkLine } from "./inkCompose";
+import type { PaintLayer } from "./inkPaint";
 import { measureInkProfiles } from "./inkProfile";
 import {
   answerDeriveRequest,
+  answerInkRequest,
   answerProfilesRequest,
   answerWorkerMessage,
   postDerive,
+  postInk,
   postProfiles,
+  replyTransfer,
+  type InkRequest,
+  type WorkerMessage,
 } from "./workerProtocol";
 
 /*
@@ -20,6 +27,14 @@ import {
   nodes. The last two are why the field-by-field summary test exists: the sweep compares against the
   same summary, so run alone it passed the miscounted edges, and caught the dropped count only because
   its reach check wants an over-cap face.
+
+  Nine more for the ink job, nine caught (2026-09-24, run before this was written): the handed ink width
+  dropped, the reading taken and not returned, the reading's mask left out of the reply's transfer, a
+  failed reply searched for buffers, the reply's buffers listed as found rather than once each, the
+  page's own field posted, the page's own paint posted, the paint's copies not handed over, and the ink
+  job dispatched as a derive. Eleven over the composition itself are in `inkCompose.test.ts`. What no
+  test here can reach is `traceWorker.ts` posting the reply with its transfer list: that runs only in a
+  worker, and a list it forgot would copy the masks rather than fail.
 */
 
 /** Everything but the timings, which differ between any two runs of the same derive. */
@@ -41,6 +56,54 @@ function deriveCase(seed: number) {
       maxCommands: seed % 3 === 0 ? 4 : undefined,
     },
   };
+}
+
+/** A luminance field of dark runs on a pale ground, noisy enough that the blur changes the reading. */
+function luminanceCase(seed: number, width = 50, height = 36) {
+  const ink = randomInk(width, height, seededRandom(seed), 24);
+  const random = seededRandom(seed * 31 + 7);
+  return field(width, height, (x, y) => {
+    const tone = ink.data[y * width + x] ? 0.12 : 0.88;
+    return Math.min(1, Math.max(0, tone + (random() - 0.5) * 0.4));
+  });
+}
+
+function paintLayer(width: number, height: number, random: () => number): PaintLayer {
+  const data = new Uint8Array(width * height);
+  for (let i = 0; i < data.length; i++) data[i] = random() < 0.04 ? 1 : 0;
+  return { width, height, data };
+}
+
+/**
+ * An ink request of either kind. The stroke setting is high enough to bite at the widths random runs
+ * measure, and the island floor low enough to leave some ink standing.
+ */
+function inkCase(seed: number, kind: "field" | "reading"): InkRequest {
+  const luminance = luminanceCase(seed);
+  const random = seededRandom(seed * 17 + 3);
+  const paint = {
+    suppress: seed % 3 === 0 ? null : paintLayer(luminance.width, luminance.height, random),
+    ink: seed % 4 === 0 ? null : paintLayer(luminance.width, luminance.height, random),
+  };
+  const compose = { minStrokeInkWidths: 1 + (seed % 3) * 0.5, minIslandPx: seed % 5, pxPerSquare: 20 };
+  const read = { blurSigma: seed % 2, radius: 5, k: 0.3 };
+  if (kind === "field") return { source: { kind: "field", field: luminance, read }, paint, compose };
+  const { reading } = readInk(luminance, read);
+  // A width that is not the reading's own, so the test can tell the handed one was used.
+  return {
+    source: { kind: "reading", mask: reading.mask, inkWidth: (reading.inkWidth ?? 2) + 1.5 },
+    paint,
+    compose,
+  };
+}
+
+/** The log lines with their timings taken out, which differ between any two runs. */
+function untimedLines(lines: readonly InkLine[]): InkLine[] {
+  return lines.map((line) => ({ ...line, text: line.text.replace(/\d+ms/g, "#ms") }));
+}
+
+function untimedComposed(composed: ComposedInk) {
+  return { ...composed, lines: untimedLines(composed.lines) };
 }
 
 function profilesCase(seed: number) {
@@ -173,17 +236,136 @@ describe("answerProfilesRequest", () => {
   });
 });
 
+describe("answerInkRequest", () => {
+  it("reads the field and composes from what it read, as the two functions do on the page", () => {
+    let filtered = 0;
+    for (let seed = 1; seed <= 24; seed++) {
+      const request = inkCase(seed, "field");
+      if (request.source.kind !== "field") throw new Error("wrong case");
+      const reply = answerInkRequest(request);
+      if (!reply.ok) throw new Error(`seed ${seed} failed: ${reply.error}`);
+
+      const read = readInk(request.source.field, request.source.read);
+      const composed = composeInk(read.reading.mask, read.reading.inkWidth, request.paint, request.compose);
+
+      expect(reply.value.read?.reading).toStrictEqual(read.reading);
+      expect(untimedComposed(reply.value.composed)).toStrictEqual(untimedComposed(composed));
+      if (reply.value.composed.base.data.some((v, i) => v !== read.reading.mask.data[i])) filtered += 1;
+    }
+    // A composition that did nothing to the reading would match a job that forgot to compose.
+    expect(filtered).toBeGreaterThan(0);
+  });
+
+  it("composes from the reading and the ink width it is handed, and takes no reading of its own", () => {
+    let widthMattered = 0;
+    for (let seed = 1; seed <= 24; seed++) {
+      const request = inkCase(seed, "reading");
+      if (request.source.kind !== "reading") throw new Error("wrong case");
+      const reply = answerInkRequest(request);
+      if (!reply.ok) throw new Error(`seed ${seed} failed: ${reply.error}`);
+
+      const { mask, inkWidth } = request.source;
+      expect(reply.value.read).toBeNull();
+      expect(untimedComposed(reply.value.composed)).toStrictEqual(
+        untimedComposed(composeInk(mask, inkWidth, request.paint, request.compose)),
+      );
+
+      // The handed width is 1.5 off the reading's own, so a job using any other width differs somewhere.
+      const other = composeInk(mask, (inkWidth ?? 0) - 1.5, request.paint, request.compose);
+      if (other.base.data.some((v, i) => v !== reply.value.composed.base.data[i])) widthMattered += 1;
+    }
+    expect(widthMattered).toBeGreaterThan(0);
+  });
+
+  it("answers a malformed request with what went wrong, rather than throwing", () => {
+    const request = inkCase(1, "reading");
+    const reply = answerInkRequest({
+      ...request,
+      source: { kind: "neither" } as unknown as InkRequest["source"],
+    });
+    expect(reply.ok).toBe(false);
+  });
+});
+
+describe("replyTransfer", () => {
+  it("hands back every mask of an ink reply, each buffer once, and the reply survives it", () => {
+    for (const seed of [1, 2, 3, 6]) {
+      for (const kind of ["field", "reading"] as const) {
+        const message: WorkerMessage = { kind: "ink", request: inkCase(seed, kind) };
+        const reply = answerWorkerMessage(message);
+        if (!reply.ok || !("composed" in reply.value)) throw new Error("the ink job failed");
+        const { read, composed } = reply.value;
+
+        const transfer = replyTransfer(message, reply);
+        const expected = new Set<ArrayBufferLike>([
+          composed.base.data.buffer,
+          composed.mask.data.buffer,
+          composed.beforeIsland.data.buffer,
+          ...(read ? [read.reading.mask.data.buffer] : []),
+        ]);
+        expect(new Set(transfer)).toEqual(expected);
+        expect(transfer).toHaveLength(expected.size);
+
+        const base = new Uint8Array(composed.base.data);
+        const mask = new Uint8Array(composed.mask.data);
+        const copy = structuredClone(reply, { transfer });
+        if (!copy.ok || !("composed" in copy.value)) throw new Error("the reply did not survive");
+        // Arrived whole, and given away rather than copied: the worker's side is left empty.
+        expect(copy.value.composed.base.data).toEqual(base);
+        expect(copy.value.composed.mask.data).toEqual(mask);
+        expect(composed.mask.data.length).toBe(0);
+      }
+    }
+  });
+
+  it("lists a buffer the masks share only once, which is what an unfiltered map sends", () => {
+    // With no filter set and nothing painted, the base, the composite, the island filter's input and
+    // the reading are one array — and a transfer listing it twice is refused outright.
+    const luminance = luminanceCase(4);
+    const message: WorkerMessage = {
+      kind: "ink",
+      request: {
+        source: { kind: "field", field: luminance, read: { blurSigma: 1, radius: 5, k: 0.3 } },
+        paint: { suppress: null, ink: null },
+        compose: { minStrokeInkWidths: 0, minIslandPx: 0, pxPerSquare: 20 },
+      },
+    };
+    const reply = answerWorkerMessage(message);
+    const transfer = replyTransfer(message, reply);
+    expect(transfer).toHaveLength(1);
+    expect(() => structuredClone(reply, { transfer })).not.toThrow();
+  });
+
+  it("hands nothing back from the other jobs, or from a failure", () => {
+    const derive: WorkerMessage = { kind: "derive", request: deriveCase(1) };
+    expect(replyTransfer(derive, answerWorkerMessage(derive))).toEqual([]);
+    const profiles: WorkerMessage = { kind: "profiles", request: profilesCase(1) };
+    expect(replyTransfer(profiles, answerWorkerMessage(profiles))).toEqual([]);
+    const broken: WorkerMessage = {
+      kind: "ink",
+      request: { ...inkCase(1, "reading"), source: null as unknown as InkRequest["source"] },
+    };
+    expect(replyTransfer(broken, answerWorkerMessage(broken))).toEqual([]);
+  });
+});
+
 describe("answerWorkerMessage", () => {
   it("does the job the message names", () => {
-    // Each answer has a field the other lacks, so a dispatch the wrong way round cannot pass.
+    // Each answer has a field the others lack, so a dispatch the wrong way round cannot pass.
     const derive = answerWorkerMessage({ kind: "derive", request: deriveCase(1) });
     const profiles = answerWorkerMessage({ kind: "profiles", request: profilesCase(1) });
+    const ink = answerWorkerMessage({ kind: "ink", request: inkCase(1, "field") });
 
-    if (!derive.ok || !profiles.ok) throw new Error("a job failed");
+    if (!derive.ok || !profiles.ok || !ink.ok) throw new Error("a job failed");
     expect(derive.value).toHaveProperty("walls");
     expect(derive.value).not.toHaveProperty("stroke");
+    expect(derive.value).not.toHaveProperty("composed");
     expect(profiles.value).toHaveProperty("stroke");
     expect(profiles.value).not.toHaveProperty("walls");
+    expect(profiles.value).not.toHaveProperty("composed");
+    expect(ink.value).toHaveProperty("composed");
+    expect(ink.value).not.toHaveProperty("walls");
+    expect(ink.value).not.toHaveProperty("stroke");
   });
 });
 
@@ -216,6 +398,50 @@ describe("posting", () => {
     expect(posted.beforeIsland).toEqual(request.beforeIsland);
     expect(posted).toMatchObject({ inkWidthPx: 3.4, maxInkWidths: 3, maxSpanPx: 40, spanBins: 8 });
     expect(transfer).toEqual([posted.beforeStroke.data.buffer, posted.beforeIsland.data.buffer]);
+  });
+
+  it("gives the worker copies of the field, the reading and both paint layers, each buffer once", () => {
+    for (const kind of ["field", "reading"] as const) {
+      const request = inkCase(2, kind);
+      const { message, transfer } = postInk(request);
+      if (message.kind !== "ink") throw new Error("posted the wrong job");
+      const posted = message.request;
+
+      const pageArrays: ArrayBufferView[] = [];
+      const postedArrays: ArrayBufferView[] = [];
+      if (request.source.kind === "field" && posted.source.kind === "field") {
+        pageArrays.push(request.source.field.data);
+        postedArrays.push(posted.source.field.data);
+        expect(posted.source.field).toEqual(request.source.field);
+        expect(posted.source.read).toBe(request.source.read);
+      } else if (request.source.kind === "reading" && posted.source.kind === "reading") {
+        pageArrays.push(request.source.mask.data);
+        postedArrays.push(posted.source.mask.data);
+        expect(posted.source.mask).toEqual(request.source.mask);
+        expect(posted.source.inkWidth).toBe(request.source.inkWidth);
+      } else {
+        throw new Error("posted the other kind of source");
+      }
+      for (const layer of ["suppress", "ink"] as const) {
+        const own = request.paint[layer];
+        const sent = posted.paint[layer];
+        expect(sent).toEqual(own);
+        if (own && sent) {
+          pageArrays.push(own.data);
+          postedArrays.push(sent.data);
+        }
+      }
+      expect(posted.compose).toBe(request.compose);
+
+      // Never the page's own arrays — they are the pipeline's caches — and every copy handed over.
+      for (let i = 0; i < pageArrays.length; i++) expect(postedArrays[i]).not.toBe(pageArrays[i]);
+      expect(new Set(transfer)).toEqual(new Set(postedArrays.map((array) => array.buffer)));
+      expect(transfer).toHaveLength(postedArrays.length);
+
+      const lengths = pageArrays.map((array) => array.byteLength);
+      structuredClone(message, { transfer });
+      expect(pageArrays.map((array) => array.byteLength)).toEqual(lengths);
+    }
   });
 
   it("copies a mask that is both inputs twice, so each buffer is given away once", () => {

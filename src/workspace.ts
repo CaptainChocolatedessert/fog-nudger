@@ -76,7 +76,7 @@ import { renderPruneControls } from "./workspace/pruneControls";
 import { renderSpeckleControls } from "./workspace/speckleControls";
 import { renderMarkControls } from "./workspace/markControls";
 import { finishPaint, refreshSpeckleSearch, registerPaintTool } from "./workspace/paintTool";
-import { onReading } from "./workspace/reading";
+import { inkOwed, onReading } from "./workspace/reading";
 import {
   invalidateRegions,
   registerRegionInvalidation,
@@ -429,8 +429,14 @@ setCloseAction(async () => {
     with nothing painted asks for nothing, so glancing and closing stays as quick as it was. Sequenced
     here rather than inside the push, because the shell owns the way out and the push has no business
     knowing that a brush exists.
+
+    **The same for ink still on its way when the close begins** (2026-09-24). With the reading off the
+    page, a close can start while a slider's new ink is being read, and the cycle that would have
+    derived from it drops what lands once the close has begun — so ink owed asks for the derive here
+    too, which resolves that ink itself and shares the job already running when it is the same ink.
   */
-  if ((await finishPaint("leaving")) === "saved") invalidateRegions();
+  const saved = (await finishPaint("leaving")) === "saved";
+  if (saved || inkOwed()) invalidateRegions();
   await pushOnClose();
 }, requestPushStop);
 

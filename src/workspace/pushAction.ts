@@ -60,6 +60,7 @@ import { encodeMarks } from "../trace/suppression";
 import { confirmAction } from "../confirmDialog";
 import { currentMarks } from "./regionMarks";
 import { currentRegions, currentWalls, derivationSettled, previewGraph } from "./regions";
+import { inkSettled } from "./reading";
 import { saveDerivedWalls, wallGraph, wallsEdited } from "./stage";
 import { controlsLive } from "./settingsState";
 import { currentPaint } from "./paintState";
@@ -117,7 +118,13 @@ async function commitDerivation(): Promise<boolean> {
     GM has since changed — so wait for it (2026-09-24). While the derive blocked the page nothing could
     press a push between a reading and its walls; in a worker the close and *Put on the map* both can.
     Hand edits stop derives altogether, so this costs a GM with work in the walls nothing.
+
+    **And the ink first, since the ink moved to a worker as well** (2026-09-24). A derive starts only
+    once the ink it is made from has landed, so straight after an ink slider there is no derive yet to
+    wait for — and this would commit the walls of the settings just left. Waiting for the ink is what
+    makes the derive it sets off visible to the wait below.
   */
+  await inkSettled();
   await derivationSettled();
   if (wallsEdited()) return true;
 

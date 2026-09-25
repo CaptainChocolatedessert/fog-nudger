@@ -16,15 +16,18 @@
  * under the surface that asked for them.
  */
 
-import { answerWorkerMessage, type WorkerMessage } from "./trace/workerProtocol";
+import { answerWorkerMessage, replyTransfer, type WorkerMessage } from "./trace/workerProtocol";
 
 // The worker's global scope, typed by hand: the project compiles against the DOM library, where
 // `self` is a window.
 const scope = self as unknown as {
   onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
-  postMessage(message: unknown): void;
+  postMessage(message: unknown, transfer: Transferable[]): void;
 };
 
 scope.onmessage = (event) => {
-  scope.postMessage(answerWorkerMessage(event.data));
+  const reply = answerWorkerMessage(event.data);
+  // Handed back rather than copied: the ink's masks are the size of the raster, and the worker has
+  // no further use for them.
+  scope.postMessage(reply, replyTransfer(event.data, reply));
 };

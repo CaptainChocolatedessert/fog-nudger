@@ -46,6 +46,89 @@ export function onReading(listener: ReadingListener): void {
 
 const requests = new MaskRequests();
 let inFlight = false;
+/**
+ * How to abandon the reading in flight, which a newer request does — since 2026-09-24, when the ink
+ * moved to a worker and the job in flight became something that can be stopped rather than only
+ * disowned when it lands. `maskRequest.ts`' rule is unchanged: an answer for settings the GM has left
+ * is not worth waiting for; what is new is that it is no longer waited for at all.
+ */
+let inFlightControl: AbortController | null = null;
+
+/** Abandon the reading in flight, if there is one, so the request just made starts at once. */
+function abandonInFlight(): void {
+  inFlightControl?.abort();
+}
+
+/**
+ * Whether a failure is a job the ink worker abandoned for a newer one — superseded, not failed.
+ *
+ * **New with the ink worker (2026-09-24).** While the reading ran on the page nothing could ask for
+ * another until it finished; off the page a newer request abandons the running job, which rejects with
+ * an `AbortError`, and that is an answer to stop waiting for rather than a fault to report.
+ */
+export function isAbandoned(error: unknown): boolean {
+  return (error as { readonly name?: unknown } | null)?.name === "AbortError";
+}
+
+/*
+  **What a re-read locks, and what waits on the ink** — both new with the ink worker (2026-09-24).
+
+  While the reading and the recompose blocked the page, nothing could be pressed until the new ink had
+  landed and its derive had started. Off the page two things can arrive in between, and each needs
+  telling apart from what the page used to guarantee:
+
+  - **Gaps and Suppress blobs** search the reading's base ink with the current paint composed onto it,
+    so a *re-read* — a reading or filter slider released, which blanks the ink until the new base lands
+    — would leave them searching the base being replaced. They lock for that long (user, 2026-09-24:
+    *"lock them"*), as the wall tools do during a derive. A paint-only recompose does not lock them:
+    it cannot change the base, and they already compose the paint in hand themselves.
+  - **A push** commits the walls of the last derive that landed, and a derive starts only once the ink
+    it is made from has landed — so *Put on the map* pressed straight after an ink slider would find no
+    derive to wait for and push the walls of the settings just left. `inkSettled` is what it waits on
+    first.
+*/
+const inkListeners: (() => void)[] = [];
+const settledWaiters: (() => void)[] = [];
+
+/** Told when a re-read starts or ends. */
+export function onInkChange(listener: () => void): void {
+  inkListeners.push(listener);
+}
+
+function tellInkChange(): void {
+  for (const listener of inkListeners) listener();
+}
+
+/** The ink is blank and new ink is on its way — a reading or filter change not yet landed. */
+export function inkBeingReread(): boolean {
+  return requests.waiting();
+}
+
+/** Anything asked of the ink and not yet on screen: running, or owed a run. */
+export function inkOwed(): boolean {
+  return inFlight || requests.waiting() || recomposeWanted;
+}
+
+/**
+ * Resolves once no reading is running or owed, so the ink on screen is the ink the settings and the
+ * paint now make — and any derive that ink sets off has been asked for.
+ *
+ * **During a close only what is running is waited for**: the cycle starts nothing new then, so an owed
+ * run would never come, and the close routes owed ink into its derive instead (`workspace.ts`).
+ */
+export function inkSettled(): Promise<void> {
+  if (inkIdle()) return Promise.resolve();
+  return new Promise((resolve) => settledWaiters.push(resolve));
+}
+
+function inkIdle(): boolean {
+  return !inFlight && (isClosing() || (!requests.waiting() && !recomposeWanted));
+}
+
+function settleIfIdle(): void {
+  if (!inkIdle()) return;
+  for (const resolve of settledWaiters.splice(0)) resolve();
+}
 
 /** The last reading's headline figures, so the two paths that report them cannot word it differently. */
 let lastInkShare: number | null = null;
@@ -75,6 +158,8 @@ export function maskShowing(): boolean {
 export function requestReread(): void {
   requests.request();
   invalidate();
+  tellInkChange();
+  abandonInFlight();
   void refreshMask();
 }
 
@@ -110,6 +195,7 @@ export function requestRecompose(): void {
   */
   recomposeWanted = true;
   invalidate();
+  abandonInFlight();
   void refreshMask();
 }
 
@@ -159,13 +245,16 @@ function describeReuse(result: MaskForOverlay): string {
 /**
  * Ask for a mask for the settings as they now are, and paint it if it is still wanted when it lands.
  *
- * **Nothing queues.** A request made while one is in flight only bumps the generation; the reply
- * that eventually arrives is checked against the latest stamp and dropped if it has been
- * superseded, and then this runs again for whatever is current. A queue would work through every
- * intermediate position of a drag to reach somewhere the GM left seconds ago.
+ * **Nothing queues.** A request made while one is in flight bumps the generation and abandons the
+ * one in flight, which lands here as an `AbortError`; this then runs again for whatever is current.
+ * A reply that lands anyway is checked against the latest stamp and dropped if it has been
+ * superseded. A queue would work through every intermediate position of a drag to reach somewhere
+ * the GM left seconds ago.
  */
 async function refreshMask(): Promise<void> {
   if (inFlight || isClosing()) return;
+  const control = new AbortController();
+  inFlightControl = control;
 
   // Whatever is outstanding, not a new stamp: the caller already registered the change, and asking
   // again here would blank the sheet a second time for the same edit.
@@ -184,7 +273,7 @@ async function refreshMask(): Promise<void> {
   // `overlay` would have stayed shared references.
   const wanted = { settings: currentSettings(), paint: currentPaint() };
   try {
-    const outcome = await whileWorking(() => maskForOverlay(wanted));
+    const outcome = await whileWorking(() => maskForOverlay(wanted, control.signal));
     if (isClosing()) return;
 
     if (!outcome.ok) {
@@ -211,7 +300,16 @@ async function refreshMask(): Promise<void> {
         `${describeReuse(result)}`,
     );
   } catch (error) {
-    if (requests.fail(generation)) {
+    if (isAbandoned(error)) {
+      /*
+        A newer job took the worker — this cycle's next run, or a derive resolving newer ink. Run again
+        for whatever is current: a re-read's generation is still owed and would retry anyway, but a
+        recompose was fulfilled when it was asked for, so without this the composite on screen would
+        stay the one from before the paint changed.
+      */
+      devLog("info", `workspace: mask ${generation} abandoned mid-read for a newer one`);
+      recomposeWanted = true;
+    } else if (requests.fail(generation)) {
       const detail = describeError(error);
       say(`reading failed: ${detail}`, "bad");
       devLog("error", "workspace: reading the map failed", detail);
@@ -219,11 +317,14 @@ async function refreshMask(): Promise<void> {
     }
   } finally {
     inFlight = false;
+    if (inFlightControl === control) inFlightControl = null;
     invalidate();
     // Anything that arrived while this was running is now the current generation, and nothing has
     // been computed for it. Run again rather than leaving the sheet blank with no work in flight —
     // or, for a recompose, showing ink composed from paint that has since been replaced.
     if (!isClosing() && (requests.waiting() || recomposeWanted)) void refreshMask();
+    else settleIfIdle();
+    tellInkChange();
   }
 }
 
@@ -242,9 +343,22 @@ export function describeMaskFailure(outcome: MaskOutcome & { ok: false }): strin
       `could not read pixels from "${outcome.mapName}" — see the console`;
 }
 
-/** Read the nominated map now. Returns the outcome, because the map name and bounds come with it. */
+/**
+ * Read the nominated map now. Returns the outcome, because the map name and bounds come with it.
+ *
+ * **Asked again if a newer request abandons it**, with whatever is current then. Opening takes a
+ * second or two off the page, and a slider moved in that time starts a reading of its own; the open
+ * must not fail for having been overtaken, and the retry resolves the same ink as the newer request,
+ * so the two share one job.
+ */
 export async function takeReading(): Promise<MaskOutcome> {
-  return maskForOverlay({ settings: currentSettings(), paint: currentPaint() });
+  for (;;) {
+    try {
+      return await maskForOverlay({ settings: currentSettings(), paint: currentPaint() });
+    } catch (error) {
+      if (!isAbandoned(error)) throw error;
+    }
+  }
 }
 
 /**

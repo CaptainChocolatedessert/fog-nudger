@@ -80,7 +80,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten*, and only Straighten since *Prune the dead ends* became ringed on 2026-09-22. Not a setting: nothing is stored, and the handle reads as *how much more*. |
 | **the latch** | the graph pinned when a drawer opens, so an amount previews against a fixed base instead of against its own last result. Void the moment the document is replaced under it. |
 | **the fitting tolerance** | the number that turns pixel chains into fitted edges inside the derive, and escalates to meet the command cap. **Computed** — a quarter of the measured ink width — never chosen. |
-| **the trace worker** | where the two heavy jobs run off the page: **the derive** and **the ink profiles**, one worker each, so the walls never wait behind the shapes. A newer job abandons the running one by terminating its worker, and a worker that cannot be had means the job runs on the page, said once in the log. The reading and the recompose do **not** run there — that is the freeze left. |
+| **the trace worker** | where the three heavy jobs run off the page: **the derive**, **the ink profiles** and, since 2026-09-24, **the ink** — the reading and the recompose — one worker each, so none waits behind another. A newer job abandons the running one by terminating its worker, and a worker that cannot be had means the job runs on the page, said once in the log. What stays on the page is decoding the map, once per image. |
 | **the automatic prune** | the dead ends every derive removes before handing the graph over: runs with a free end of up to **two measured ink widths**. Computed, never chosen, and nothing when no width was measured. Distinct from the **Prune** tool, which takes more on request. |
 | **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
 
@@ -1373,6 +1373,13 @@ tidy it into an opt-in list.**
 
 Both fingerprints are deliberately over-broad on the map side — identity, geometry, scene grid — since
 a wrong reuse would report stale regions as current. Which halves ran is logged every time.
+
+**Below both sits the decoded map, since 2026-09-24**: the image's luminance field, kept for as long as
+the image is the same and keyed on its URL and pixel size alone. None of the reading's settings reaches
+the pixels, so a reading change no longer reloads the image — it used to, on every blur, strictness or
+window release. It is deliberately **not** keyed on the map's identity, which moves when the GM drags
+the map; where the map sits is asked of Owlbear on every reading. §10's *The ink joins the trace
+worker* has why this turned up there.
 ---
 
 ## 5. The wall graph — stored, walked and edited
@@ -2203,8 +2210,11 @@ behaviour**: a `display` control stays live wherever it applies, and a `tool` co
 the tool it belongs to is.
 
 **`tool` controls apply live on drag**, in memory only — the scene write still waits for the release,
-and so does anything the tool must *recompute*. **`pipeline` must never join them**: its re-read is
-690ms and synchronous, which is 690ms the slider cannot move.
+and so does anything the tool must *recompute*. **`pipeline` must never join them**: its re-read was
+690ms and synchronous, which was 690ms the slider could not move. **The reason changed on 2026-09-24
+and the rule did not**: the re-read runs in a worker now, but every job still costs the page the copy
+it posts — 19 to 35ms at the busiest map's size, measured in node — so a job per drag frame would
+spend the frame on copying for readings the next frame abandons.
 
 **`PARAMETER_STEP` is a COVER, not a partition.** A parameter may name several steps, and one does:
 the spur limit, which both modes draw. What is asserted instead is that **nothing appears twice within
@@ -2285,10 +2295,15 @@ nothing.
 
 ### Sliders re-read on release, not live
 
-Tried live, reported unusable from a room, reverted. **The re-read is synchronous**, so its 690ms is
-690ms the slider cannot move, and cancel-and-retry can never fire because the work it would cancel
-holds the thread. Live needs a worker or a crop-to-viewport — **measure the real cost first, then
+Tried live, reported unusable from a room, reverted. **The re-read was synchronous**, so its 690ms was
+690ms the slider could not move, and cancel-and-retry could never fire because the work it would cancel
+held the thread. Live needs a worker or a crop-to-viewport — **measure the real cost first, then
 choose**.
+
+**The worker exists since 2026-09-24** (§10's *The ink joins the trace worker*), and cancel-and-retry
+fires now: a release abandons the reading in flight. Live is still not built, and the measurement it
+asked for now has a figure against it — each job costs the page 19 to 35ms of copying to post at the
+busiest map's size, which a job per drag frame would pay for every frame.
 
 The coalescing is not the problem and is still there: it blanks on change, keeps only the latest value,
 and drops a superseded answer.
@@ -2752,7 +2767,8 @@ the map; it has to be made *not block*.
 **So: a worker is the real answer, and a debounce is what ships first.** Derive when the ink settles
 rather than when a step opened. Same behaviour on a slow drag through a range; it freezes at the end
 instead of never until you look. **The worker is built** (2026-09-24) — §10's *The trace
-worker* — and the freeze that is left is the ink half's.
+worker* — and since the same evening the ink half runs in one too, so a slider release no longer
+freezes the page for either.
 
 #### Two indicators, and they are different states
 
@@ -2977,7 +2993,7 @@ rule once.
 
 ## 8. Testing and diagnostic practice
 
-**1,151 tests across 81 files** (measured 2026-09-24), all pure — everything that needs a DOM or a scene is not tested, which
+**1,165 tests across 82 files** (measured 2026-09-24), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3535,10 +3551,11 @@ next section.
 order: the region fills losing their border with the stroke filter's measured step and tick marks; the
 free click ported to Collapse, Prune and Mend with a hover preview; the point probe's space labelling
 deleted; **the trace worker** — the derive and then the ink profiles off the page, each in a worker of
-its own; the fix for closing with a brush in hand; the redundant derive after a save skipped; and
-`faces.ts` cleared of the labelling era. *The trace worker*, below, has the last five.
+its own; the fix for closing with a brush in hand; the redundant derive after a save skipped;
+`faces.ts` cleared of the labelling era; and, last, **the ink in a worker** — the reading and the
+recompose — with the map decoded once per image. *The trace worker*, below, has the last six.
 
-**All of it has been seen in a room, and nothing is waiting on one.** The free click, the derive in a
+**All of it but the ink worker has been seen in a room.** The free click, the derive in a
 worker, the ink showing before the profiles and strokes saved on close reaching the map were confirmed
 as they landed. The rest was confirmed in one pass (user, 2026-09-24: *"All of the room checks are
 good"*):
@@ -3571,19 +3588,27 @@ wanted: open a room on the published extension, move an ink slider, and look for
 could not be used"* in the browser console — its absence is the answer, since the published build does
 not write to `dev.log`.
 
-**What is next, each needing a design conversation first** (the rhythm in the operating notes — *well defined?*,
-the one question, a picture if it is geometric, name and glyph, a numbered plan):
+**Do this first: a room on the ink worker** (built 2026-09-24; *The ink joins the trace worker*, below,
+has the whole of it). Reopen the workspace first — its modules changed under any room left open. On the
+Grottoes, in order:
 
-- **The ink half in a worker — the freeze that is left.** A slider release still blocks the page for
-  the reading and the recompose, about 1 to 2 seconds on *The Incandescent Grottoes* (§8's *What a
-  single click costs* has the parts). **Where to start, reasoned rather than measured:** the map's
-  pixels are decoded on the page through an image and a canvas, and only the *reading* needs them — the
-  recompose needs only the reading's mask and the GM's paint. So the recompose is the easier half to
-  move and the reading the harder, and the first thing to establish is whether Owlbear's iframe in
-  Firefox can decode the map inside a worker (`createImageBitmap` and `OffscreenCanvas`) or whether the
-  pixels have to be handed over — about 38MB of RGBA on that map, per reading change. The two caches in
-  `pipeline.ts` live on the page, and the point probe and the next derive read them, which is the other
-  thing a design has to settle.
+1. **A reading slider released** — blur, strictness or the window. The page stays live while the ink is
+   blank; the log says `trace: ink read and composed in a worker, …` and **`reading "…" from the image
+   already decoded — … nothing was reloaded`**. The first decode of each opening is timed now
+   (`loaded, drawn and turned into luminance in …ms`), which is the figure that says what keeping it
+   saves.
+2. **A filter slider released** — thinnest stroke or smallest mark: `trace: ink recomposed in a worker`.
+3. **Two releases in quick succession**: `workspace: mask N abandoned mid-read for a newer one`, and the
+   second's ink landing without waiting out the first.
+4. **Gaps and Suppress blobs greyed** in the strip while the ink is blank after a reading release, and
+   back when it lands. A brush's *Done* — a paint-only recompose — does **not** grey them.
+5. ***Put on the map* straight after a reading release, and a close straight after one**: both push the
+   new setting's walls. The close is the one most worth a look, since it takes its own route — it asks
+   for the derive itself.
+
+**What is next, needing a design conversation first** (the rhythm in the operating notes — *well
+defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
+
 - **Doors, the way Dynamic Fog makes them.** **Start by reading, not designing**: the local clone at
   `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts` and
   `DoorOverlayActor.ts`. §2's *door subtraction is global*, §3 on mimicking the private format and §12
@@ -3611,19 +3636,20 @@ drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge 
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click below it.
 
-**1 commit is not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 0 after
-the push that deployed the session, and the commit that writes this line makes it 1). **A push deploys**, so it waits for the
+**3 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 2
+before the commit that writes this line, which makes it 3). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
-**Two heavy jobs run off the page; the ink half stays on it.** `deriveWalls` — thin, chain, remove the
-slivers, fit, the automatic prune — runs in a dedicated worker, and so, since the first room, do the
-ink profiles drawn on the two ink filters' rails, **each in a worker of its own**. The reading and the recompose stay on
-the page, so a slider release still freezes for the ink half (~1–2s on *The Incandescent Grottoes*) and
-the walls then arrive without freezing. **Roughly halves the freeze; does not end it.** Moving the ink
-half too is a bigger step, since the map's pixels would have to be decoded in the worker, and it is
-held.
+**Two heavy jobs ran off the page first; the ink joined them the same night** (*The ink joins the trace
+worker*, below). `deriveWalls` — thin, chain, remove the slivers, fit, the automatic prune — runs in a
+dedicated worker, and so, since the first room, do the ink profiles drawn on the two ink filters'
+rails, **each in a worker of its own**. With the reading and the recompose still on the page, a slider
+release froze for the ink half (~1–2s on *The Incandescent Grottoes*) and the walls then arrived
+without freezing — roughly half the freeze. What this section said held it back — that the map's
+pixels would have to be decoded in the worker — turned out not to be so, and the next section says
+why.
 
 **The best evidence for it was in the log** (2026-09-24, opening the Grottoes): the first derive was
 superseded by a request that arrived during its asynchronous start, and since a blocking derive cannot
@@ -3785,6 +3811,91 @@ Three things, two found by rooms and one by reading. All three are done.
   2026-09-08; the job is done by building the wall graph and walking it, so it was superseded rather
   than a missing call. Its bridge-splitting reasoning survives in `wallFaces.ts`. Deleted, and the module
   is 297 lines where it was 549.
+
+#### The ink joins the trace worker — built 2026-09-24, not yet in a room
+
+**The reading and the recompose run in a third worker**, so a slider release no longer freezes the
+page for the ink either. What stays on the page is decoding the map — once per image — and the parts of
+a reading that need Owlbear: fetching the image, the map's bounds and its placement.
+
+**The record's starting point was wrong, and reading the code is what said so.** It said the first
+thing to establish was whether a worker in Owlbear's iframe could decode the map, or else about 38MB of
+RGBA would have to cross on every reading change. Neither: the reading uses the map's pixels for one
+thing, a **luminance field** — one brightness value per pixel — and the page already kept one for the
+point probe. A reading slider cannot change the pixels, so the worker is handed the field and decodes
+nothing.
+
+**It also turned up a waste with no worker in it**: every reading change reloaded and re-decoded the
+whole image — 37.7 megapixels on the Grottoes — to rebuild the field it had just thrown away. The
+decoded field is kept per image now, keyed on its URL and pixel size rather than on where the map sits,
+in its own commit; the decode is timed in the log for the first time, since that time is the whole of
+what keeping it saves. **How much that is has not been seen**: every reading in the log was a workspace
+opening, and the decode was never timed on its own.
+
+**Decided (user, 2026-09-24):** *Gaps* and *Suppress blobs* lock while the ink is re-read (*"lock
+them"*), as the wall tools do during a derive — the one question the design asked.
+
+**As built:**
+
+- **`trace/inkCompose.ts`** is the work, moved out of `pipeline.ts` and pure: `readInk` — the blur,
+  both thresholds, polarity and ink width — and `composeInk` — the stroke filter, the heal, the island
+  filter, the paint and the shape check. **It returns its log lines** for the page to write, the same
+  sentences in the same order.
+- **One ink job, not two.** A reading is never wanted without the composition after it, and two jobs on
+  one worker would have the second abandon the first. The page sends the luminance field when the
+  reading's settings moved, and the reading it holds when only a filter or the paint did.
+- **Both caches stay on the page**, filled from the reply, so the point probe, the gap and blob
+  searches, the profiles, the per-map defaults and the derive read exactly what they read before.
+- **Replies hand their masks back** rather than having them copied: the worker posts with a transfer
+  list now, **each buffer once**, since with nothing filtered and nothing painted the base, the
+  composite and the reading are one array — and a buffer listed twice is refused.
+- **A resolution under way is shared** by a second caller asking for the same ink. On the page the first
+  caller always finished before a second could ask; off it, the reading cycle and the derive meet on
+  every opening, and the worker's latest-wins rule would have the second throw away the first's work.
+- **A newer request abandons the reading in flight** — an `AbortController` in the reading cycle,
+  threaded through `maskForOverlay`. A superseded answer used to be computed in full and dropped on
+  landing; now it stops.
+- **A push waits for the ink, then the derive.** `inkSettled` in `reading.ts`, awaited in
+  `commitDerivation` before `derivationSettled`: a derive starts only once its ink lands, so straight
+  after a slider there was no derive yet to wait for, and the push would have committed the walls of the
+  settings just left.
+- **A close with ink owed asks for the derive itself**, as a close with fresh strokes already did: the
+  reading cycle drops what lands once a close has begun, so `workspace.ts` asks `inkOwed()` and
+  invalidates the regions, whose derive resolves that ink — sharing the job when it is the same ink.
+- **Superseded is not failed**, in the three places that could not meet it before: the reading cycle
+  runs again, the derive stays owed and runs again, and opening — `takeReading` — asks again with
+  whatever is current rather than failing an opening a slider overtook.
+
+**Decided while building, for checking:**
+
+- **The lock is narrower than "while the ink recomputes".** Both tools search the reading's *base* with
+  the current paint composed onto it by themselves, so a paint-only recompose — a brush's *Done*, an undo
+  of a stroke — cannot make them stale. They grey only for a **re-read**, which is also exactly the time
+  the ink is blank. The narrowing is load-bearing, not tidy: leaving *Suppress blobs* recomposes, so
+  under the wider rule, pressing *Gaps* with *Suppress blobs* in hand would have armed Gaps and put it
+  straight down again.
+- **The ink has a worker of its own**, a third, so it never waits behind the derive of the ink before it.
+- **An abandoned recompose is run again.** A recompose's generation is fulfilled the moment it is asked
+  for, so without that it would not retry, and the composite on screen would stay the one from before
+  the paint changed.
+
+**Checked from a desk:** twenty mutations across the composition and the protocol, twenty caught — the
+test files list them. In the browser pane (Chromium, outside Owlbear) the dev build's worker took an ink
+job — a field holding one ring — and answered in 128ms including its own start, with the field handed
+over, the log lines back, and a malformed request answered as a failed reply. **Measured in node at the
+Grottoes' raster**: posting a job costs the page 35ms median (38 worst) with the field and both paint
+layers present, 19ms with a held reading, and the reply's masks come back in 0.3ms.
+
+**Costs, stated:**
+
+- **Every job costs the page its copies** — 19 to 35ms, a frame or two, where it used to cost the whole
+  reading. That figure is also why sliders still read on release (§7).
+- **During a reading the worker holds a copy of the field** — 38MB on the Grottoes — and the blur and
+  the thresholds' tables, which the page used to hold for the same time. Memory moved, plus the one copy.
+  Reasoned, not measured.
+- **Everything on the page side is untested**: the lock, the two waits, the abandonment and the close's
+  route are in modules that import the SDK. A room is the only instrument; the resume point lists what
+  to look at.
 
 #### The slow saves, measured
 
@@ -5875,7 +5986,7 @@ under `trace/` is pure and headless-testable.
 `background.ts` (an inert logger) · `panel.ts` + `panel.html` (the popover) · `workspace.ts` +
 `workspace.html` (the full-screen surface, both modes) · `overlayProbe.ts` and `workspaceProbe.ts`
 (retired probes, kept as the record of how the platform facts were got). **Each must call
-`setDevLogLabel`** — except `traceWorker.ts`, the worker for the derive and the ink profiles, which never
+`setDevLogLabel`** — except `traceWorker.ts`, the worker for the derive, the ink profiles and the ink, which never
 logs: the page logs each job from the timings the reply carries. `workerJobs.ts` is the page's side of
 it: one job at a time per worker, abandoned for a newer one, and the page itself when no worker can be
 had.
@@ -5909,7 +6020,8 @@ closed outright.
 | `trace/spurs.ts` | **which** dead-end wall runs a limit removes — the decision alone, no geometry and no raster |
 | `trace/simplify.ts` | Douglas–Peucker (`simplifyIndices` is the decision, `simplifyPolyline` that plus a lookup), `dropCollinear`, and `COMMAND_CAP` |
 | `trace/deriveWalls.ts` | ink in, a **wall graph** out: thin, chain, de-sliver, fit, build, **the automatic prune** (`autoPruneLimitPx`, two ink widths), and the escalation ladder that meets the command cap, pruning on every rung — and `summariseDerivation`, what of a derivation crosses back to the page |
-| `trace/workerProtocol.ts` | **the whole of the trace worker's job**: the derive and the ink profiles, each answered as a reply that never throws — a failed job is a reply, so the page can tell a bug from a missing worker — and the copies each posts. Pure, so the tests run it in node, and so it cannot reach the SDK |
+| `trace/workerProtocol.ts` | **the whole of the trace worker's job**: the derive, the ink profiles and the ink, each answered as a reply that never throws — a failed job is a reply, so the page can tell a bug from a missing worker — the copies each posts, and the masks an ink reply hands back, each buffer once. Pure, so the tests run it in node, and so it cannot reach the SDK |
+| `trace/inkCompose.ts` | **the ink half, pure**: `readInk` — blur, both thresholds, polarity, ink width — and `composeInk` — the stroke filter, the heal, the island filter, the GM's paint and the shape check — returning their log lines for the page to write. What the ink job runs |
 | `trace/label.ts` | connected-component labelling of a mask — the ink shape check's alone since the derive stopped labelling for the probe (2026-09-24) |
 | `trace/wallGraph.ts` | the document: build, encode, decode, compact, prune, and the two track measurements |
 | `trace/wallFaces.ts` | faces of the wall graph with no raster: the walk, containment grouping, the bridges, Euler's check |
@@ -5962,7 +6074,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
 - **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`,
   `whileWorking`) · `drawer.ts` (**the drawer**: which group's settings *or* which tool's controls are
   showing — never both — and rendering that one thing) · `reading.ts` (the mask request cycle,
-  subscribed to by the layers) · `regions.ts` (the derive cycle — abandoning a derive for a newer one,
+  subscribed to by the layers — abandoning a reading for a newer one, locking *Gaps* and *Suppress
+  blobs* while the ink is re-read, and `inkSettled`, the first of the two waits a push makes) · `regions.ts` (the derive cycle — abandoning a derive for a newer one,
   locking the wall tools while one runs, and the wait a push asks for — and `showingSaved`, the one
   predicate deciding which graph is on screen) · `stage.ts` (the stored graph, the hand-edit count and
   undo)
