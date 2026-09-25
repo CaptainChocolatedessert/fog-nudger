@@ -3588,23 +3588,16 @@ wanted: open a room on the published extension, move an ink slider, and look for
 could not be used"* in the browser console — its absence is the answer, since the published build does
 not write to `dev.log`.
 
-**Do this first: a room on the ink worker** (built 2026-09-24; *The ink joins the trace worker*, below,
-has the whole of it). Reopen the workspace first — its modules changed under any room left open. On the
-Grottoes, in order:
+**The ink worker is confirmed in a room, in part** (user, 2026-09-24: *"That all seemed to work"*), and
+`dev.log` carries the figures — *The ink joins the trace worker*, below. **Two routes are still unseen**,
+and they are the first thing for the next room, on the Grottoes:
 
-1. **A reading slider released** — blur, strictness or the window. The page stays live while the ink is
-   blank; the log says `trace: ink read and composed in a worker, …` and **`reading "…" from the image
-   already decoded — … nothing was reloaded`**. The first decode of each opening is timed now
-   (`loaded, drawn and turned into luminance in …ms`), which is the figure that says what keeping it
-   saves.
-2. **A filter slider released** — thinnest stroke or smallest mark: `trace: ink recomposed in a worker`.
-3. **Two releases in quick succession**: `workspace: mask N abandoned mid-read for a newer one`, and the
-   second's ink landing without waiting out the first.
-4. **Gaps and Suppress blobs greyed** in the strip while the ink is blank after a reading release, and
-   back when it lands. A brush's *Done* — a paint-only recompose — does **not** grey them.
-5. ***Put on the map* straight after a reading release, and a close straight after one**: both push the
-   new setting's walls. The close is the one most worth a look, since it takes its own route — it asks
-   for the derive itself.
+- ***Put on the map* pressed straight after a reading release** — blur, strictness or the window — must
+  push the new setting's walls. It waits on `inkSettled`, then the derive. Not in the log at all.
+- **A close pressed while a reading is still in flight** — within about a second of the release — must
+  do the same, by its own route: `workspace.ts` sees ink owed and asks for the derive itself. The room's
+  close came 1.6 seconds after the last ink had landed, so it waited on the derive already running and
+  never reached this route.
 
 **What is next, needing a design conversation first** (the rhythm in the operating notes — *well
 defined?*, the one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3636,8 +3629,8 @@ drawing cyan over amber, the 320x560 panel, the map frame as a toggle, the edge 
 *Erase chain*, *Draw chain*, landing a point on a wall, every vertex drawn with no ceiling, and
 *Suppress blobs*. Each has its own section; §10's tool list runs to nine, plus the free click below it.
 
-**3 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 2
-before the commit that writes this line, which makes it 3). **A push deploys**, so it waits for the
+**4 commits are not pushed** (measured 2026-09-24 with `git rev-list --count origin/main..main`: 3
+before the commit that writes this line, which makes it 4). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
@@ -3812,11 +3805,27 @@ Three things, two found by rooms and one by reading. All three are done.
   than a missing call. Its bridge-splitting reasoning survives in `wallFaces.ts`. Deleted, and the module
   is 297 lines where it was 549.
 
-#### The ink joins the trace worker — built 2026-09-24, not yet in a room
+#### The ink joins the trace worker — built 2026-09-24, confirmed in a room in part
 
 **The reading and the recompose run in a third worker**, so a slider release no longer freezes the
 page for the ink either. What stays on the page is decoding the map — once per image — and the parts of
 a reading that need Owlbear: fetching the image, the map's bounds and its placement.
+
+**Confirmed in a room the same night** (user: *"That all seemed to work"*), with `dev.log` on the
+Grottoes saying what it did:
+
+- **The map decoded once, in 562ms**, at opening — the first time that figure has existed — and both
+  reading changes after it read *from the image already decoded*. That 562ms is what each reading change
+  used to spend before any reading began.
+- **Every reading and recompose ran in the worker**, none on the page: 953 to 1,003ms of work for a
+  reading change, 160 to 1,013ms for a filter change.
+- **A reading abandoned for a newer one** once (`mask 10 abandoned mid-read for a newer one`), and
+  thirteen derives abandoned for newer ink — the ink now landing soon enough to cut short a derive
+  already out of date.
+- **The lock** — *Gaps* and *Suppress blobs* greyed while the ink is re-read — was seen, not logged.
+- **A close waited on the derive in flight** and pushed its walls. **Not reached**: the close's own
+  route for ink still owed, since the last ink had landed 1.6 seconds before the close; and *Put on the
+  map* straight after a reading release, which the log does not contain. The resume point carries both.
 
 **The record's starting point was wrong, and reading the code is what said so.** It said the first
 thing to establish was whether a worker in Owlbear's iframe could decode the map, or else about 38MB of
