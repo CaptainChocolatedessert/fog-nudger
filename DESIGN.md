@@ -344,8 +344,11 @@ That module imports no SDK, which is why the constants can be tested headlessly.
 
 ### Walls, lights and doors
 
-- **`Wall` and `Light` are first-class SDK types and are local-only.** Reported, and consistent with
-  everything observed: the sibling's item census found Dynamic Fog's walls and lights only in the
+- **`Wall` and `Light` are first-class SDK types and are local-only.** For walls this is **measured**
+  (2026-09-25): `OBR.scene.items.addItems` refuses a `buildWall()` item outright — *ValidationError:
+  "items[0]" does not match any of the allowed types* — so a wall can only exist per client, and
+  whatever builds walls has to run on every client. Lights remain reported, not tried, and consistent
+  with everything observed: the sibling's item census found Dynamic Fog's walls and lights only in the
   local set, and Dynamic Fog writes only there.
 - **Walls are built with the `VISIBLE` and `COPY` attachment behaviours explicitly disabled**, which
   is why an invisible parent still produces a live wall — Dynamic Fog opts out of visibility
@@ -589,8 +592,8 @@ extension. There is no `localStorage` use at all.
 
 ### Rejected alternatives
 
-- **Emitting `WALL` items directly.** Three independent reasons, any one sufficient: reported to be
-  impossible on the networked scene at all; local walls are per-client and unpersisted, so **every
+- **Emitting `WALL` items directly.** Three independent reasons, any one sufficient: impossible on the
+  networked scene at all, measured on 2026-09-25 (§2); local walls are per-client and unpersisted, so **every
   participant would need this extension running**, absurd for an authoring tool used once per map;
   and Dynamic Fog's tools edit drawings and would ignore a `WALL` item entirely, so the output would
   be geometry nobody can nudge — which defeats the project.
@@ -2021,6 +2024,10 @@ stopped on `OBR_SCENE_ITEMS_ADD_ITEMS took longer than 5000ms` — no wall lines
 holding a partial set until the next push replaces it. The warning did not stand in front of it, since
 it was a close.
 
+**A fourth, on 2026-09-25**, the same map at a milder setting: a close asked for **520 shapes and 5,418
+wall lines**, wrote every shape and 3,816 of the lines in about five minutes, and stopped on the same
+timeout. So the lines alone can do it — 5,938 items is past what a close finishes.
+
 **It warns and does not refuse**, because it is a prediction about a scene rather than a measurement of
 one.
 
@@ -3435,6 +3442,8 @@ them expensively; where the cost is instructive it is named.
   scene items or metadata waits for the start-up sequence; only DOM that needs no answer is wired at
   load.
 - **Scene metadata has no limit below 512KB per key** — measured.
+- **The shared scene refuses a `WALL` item** (2026-09-25): *ValidationError: "items[0]" does not match
+  any of the allowed types*. Walls are local only; §2 has what that means.
 - **The grid covers only `MAP`-layer images.**
 - **An inline `<svg>` is a replaced element, so `left: 0; right: 0` does not stretch it.** With
   `width: auto` it takes its width from the viewBox's ratio against whatever height is given — a
@@ -3582,27 +3591,43 @@ section. The published site runs the derive's worker (checked from a desk after 
 
 **Do this first — a room on the Grottoes:**
 
-1. **Put the scene right.** A close at deliberately extreme ink settings asked for 2,627 shapes and
-   5,456 wall lines and stopped part-way (§6's *The item budget* has the figures), so the scene holds
-   2,568 of our room shapes and none of our wall lines. Bring the ink settings back to where they were
-   and push: every push deletes ours before writing, so that replaces the lot.
+1. **Put the scene right.** It holds a partial set, from a close on 2026-09-25 at 06:26 that pushed all
+   520 rooms and stopped after 3,816 of 5,418 wall lines on the five-second timeout (§6's *The item
+   budget* has this and the close before it). The settings were min stroke 0.594 and min island 31px.
+   Bring the ink settings to where they should be and push: every push deletes ours before writing, so
+   that replaces the lot.
 2. ***Put on the map* pressed straight after a reading release** — blur, strictness or the window, and
    the press before the new ink lands. It must push the new setting's walls: it waits on `inkSettled`,
    then the derive. Not yet in any log.
-3. **A close pressed within about a second of a reading release**, while the ink is still being read. It
-   must do the same by its own route — `workspace.ts` sees ink owed and asks for the derive itself. The
-   one close so far came 1.6 seconds after the last ink had landed and never reached it.
+3. ~~**A close pressed within about a second of a reading release**~~ **Reached, and correct — seen in
+   `dev.log`, not reported from the room.** The same 06:26 close: the recompose for the last release
+   (min stroke back to 0.594) began about 0.4 seconds before *closing*, inferred from its 814ms of work
+   ending at 06:26:39.09, so no ink had landed for it. The close's own derive started 30ms after
+   *closing* with min stroke 0.594, shared that recompose rather than starting another, and pushed 520
+   rooms — where the walls on screen were the previous setting's 81, at 1.188.
 
 **Three short questions for the user, raised at the end of the session and not yet answered:**
 
 - **Should a close this large warn?** §6 decided against a warning on the way out — a dialog there is met
   while leaving, and the escape hatch is the way out of a write that will not finish. The argument
-  stands; what is new is that a close has now actually hit the limit.
+  stands; what is new is that closes have now actually hit the limit — twice, on 2026-09-24 and -25.
 - **Does the ink shape check still earn its place?** It is a report-only count of solid blobs in the log,
   65 to 364ms of every recompose across `dev.log`, usually under 160. In the worker it delays the ink rather than freezing the page, so the
   question is only whether anyone reads the line.
 - **Is *The Maps Of Arden Vul 015* a different drawing style from the Grottoes?** `dev.log` shows it
   worked on the same day, before the Grottoes. If it is, it is the second map below, already in hand.
+
+**The user's own pass over the interface text is out with them (2026-09-25).** `text-pass/`
+(gitignored) holds `Text pass - Fog Nudger.docx` — every piece of text a GM can read, 244 items taken
+from commit `e1eb078`, opening with Track Changes on — and `text-pass-baseline.json`, which ties each
+item to the file and line it came from. When it comes back, `python text-pass/tools/read_edits.py
+"<the docx>" text-pass/text-pass-baseline.json` lists every tracked change and comment by item, and
+says whether anything was edited with tracking off. **Apply by the old wording, not the line
+numbers**, since the code will have moved in between, and change every copy an item cites — a tool's
+name, for one, is also stored in its group declaration. Word renames paragraph styles when it saves,
+which is why the reader goes by style name. `tools/` also holds the generator and its item list, to
+build the document again. The *Claude's note* lines inside it are observations for the user to act on
+or ignore, not decisions.
 
 **Next, needing a design conversation first** (the rhythm in the operating notes — *well defined?*, the
 one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3630,12 +3655,31 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
     pixel more — and it changes what every stored setting does by half a band. Whatever else on that
     rail converts between a setting and a radius has to follow; the ink profile's band placement is the
     one to check.
-- **Doors, the way Dynamic Fog makes them.** **Start by reading, not designing**: the local clone at
-  `reference/dynamic-fog/src/background/` has `createDoorMode.ts`, `reconcile/actors/DoorActor.ts` and
-  `DoorOverlayActor.ts`. §2's *door subtraction is global*, §3 on mimicking the private format and §12
-  on writing into their namespace are what the reading has to reconcile with. **The first question is
-  what this project would add** over a GM using Dynamic Fog's own door tool afterwards, which already
-  cuts our walls.
+- **Doors — read on 2026-09-25, not designed.** What Dynamic Fog's source says:
+  - **A door is not an item.** It is a record in the metadata of the fog drawing it was cut into,
+    `rodeo.owlbear.dynamic-fog/doors`: `{ open, start, end }`, each end a contour index and a distance
+    along that contour of the drawing's own path. One contour only. Made by dragging along a drawing's
+    edge in the fog tool's Door mode; a click toggles it, rewriting that metadata.
+  - **An open door touches nothing in the fog layer.** Dynamic Fog strokes that stretch of the path at
+    the drawing's stroke width plus 20 and subtracts it from the local walls it derives — every wall in
+    the scene, whichever drawing it came from. Closed, it cuts nothing. Any door change rebuilds every
+    wall. It works on an open `LINE` as well as a closed shape (user).
+  - **So our push destroys doors.** It deletes all our items and writes new ones, and a door lives on
+    the item. §2's *"doors can be left to Dynamic Fog entirely"* holds only until the next push.
+    **Reasoned, not seen:** the first close of every workspace session pushes whatever changed, since
+    `lastPushed` lives in the page's memory and starts empty — so opening and closing the workspace
+    alone would wipe them. Copying the records across would not help: contour indices and distances do
+    not survive a re-derive.
+  - **Paths discussed, none chosen.** Keep doors in our document and write Dynamic Fog's records on
+    each push (depends on a private format that may change); leave their metadata alone and stop
+    replacing items that did not change (keeps doors only where nothing moved — limited, the user
+    judged, since Straighten moves coordinates); or take over Dynamic Fog's job. **The last one was
+    tested at its root the same day: the shared scene refuses a `WALL` item** (§2), so walls — and
+    therefore doors that open them — exist only through something running on every client. The user's
+    thought, explicitly not a decision: prep-only use beside Dynamic Fog, with doors lost on a push, or
+    optional play-time features of ours for a GM who wants doors kept through edits.
+  - **Cheap either way:** stop the needless first-close push, by keeping the last-push fingerprint
+    somewhere that outlives the page.
 
 **When the public build is next pushed**, check the ink job the way the derive's was checked: take the
 worker's path out of the deployed bundle, fetch it, and run an ink job from it in the browser pane on

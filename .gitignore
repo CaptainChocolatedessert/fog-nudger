@@ -39,6 +39,10 @@ REVIEW.md
 # Scratch notes kept at the repository root. Anything belonging to the project goes in DESIGN.md.
 W - tools brainstorming.txt
 
+# The user's editing pass over the interface text: a Word document they edit outside chat, and the
+# baseline tying each item to the code it came from. Working files for one pass, not documentation.
+text-pass/
+
 # Logs
 *.log
 npm-debug.log*
