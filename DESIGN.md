@@ -3608,9 +3608,21 @@ section. The published site runs the derive's worker (checked from a desk after 
 
 **Three short questions for the user, raised at the end of the session and not yet answered:**
 
-- **Should a close this large warn?** §6 decided against a warning on the way out — a dialog there is met
-  while leaving, and the escape hatch is the way out of a write that will not finish. The argument
-  stands; what is new is that closes have now actually hit the limit — twice, on 2026-09-24 and -25.
+- **Should a close this large warn? — answered with a plan, not yet built (user, 2026-09-26).**
+  - **A persistent note while the walls are too detailed to write quickly**: a red dot and a short note
+    beside the status line, live, so Collapse, Prune and Straighten visibly clear it. **No item count
+    in it** — a count means nothing to a GM, who is already looking at the density of vertices; it
+    says the walls are too detailed. Threshold: the provisional 1,500 items.
+  - **A dialog only when the write is expected to fail**, on both routes — closing and *Put on the
+    map* — so §6's objection to a dialog on the way out gives way only where the exit would otherwise
+    leave a broken scene. Provisionally **4,000 items**, from the record: 3,312 written twice (1¾–2
+    minutes), stops after 4,336 and 2,568 written, and 5,881 never. Every failure is one batch passing
+    Owlbear's five-second limit; that batches slow as the scene fills is reasoned, not measured.
+  - **The 1,500-item dialog in front of *Put on the map* goes**, replaced by the note — one rule for
+    both routes. Stop writing and Exit anyway stay as the way out of a slow write.
+  - **Measure first: can smaller batches or longer pauses push a very detailed graph slowly but
+    completely?** If so the failure dialog shrinks to a rare case or goes, and the 4,000 figure is
+    re-set by the measurement.
 - **Does the ink shape check still earn its place?** It is a report-only count of solid blobs in the log,
   65 to 364ms of every recompose across `dev.log`, usually under 160. In the worker it delays the ink rather than freezing the page, so the
   question is only whether anyone reads the line.
