@@ -3787,8 +3787,15 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
       its map position and length, re-projected onto what survives of its wall.** That needs each edit
       to report which old segments became which new ones — Move and Erase keep them; splits and
       Straighten would have to report it. Whether they do yet is unchecked.
-    - **Open: can a door span a vertex?** Being answered 2026-09-26; see the next conversation turn's
-      record.
+    - **A door stays within one segment (agreed 2026-09-26).** From Dynamic Fog's source, a record can
+      span vertices along one contour but never across items — and we emit a free-standing wall one
+      `LINE` per segment, so a door over one of its vertices would be two doors toggled separately.
+      Whether a vertex could be crossed would then depend on whether the wall goes out as a ring edge
+      or a line, invisible to the GM and changing with any edit. So: **Move** an end of its segment and
+      the door is re-projected at its length, as near as it was; **if the segment is now shorter than
+      the door, the door shrinks to fit**; **Straighten** only merges segments, so a door stays inside
+      one; **a new vertex landing inside a door**, or a piece of it erased, **removes the door** — undo
+      brings it back.
     - *Not now:* door **areas** not tied to walls, applying to any wall passing through them at a push —
       steadier in a way, but they can span a vertex and give odd results.
   - **Cheap either way:** stop the needless first-close push, by keeping the last-push fingerprint
