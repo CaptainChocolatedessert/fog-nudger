@@ -6069,6 +6069,13 @@ before it may ask, and *settled* is not something the SDK reports.
 
 ### Carried open questions
 
+- **What happens when the map changes in a way we did not anticipate?** (user, 2026-09-26) Recorded
+  as confirmed: placement in all four corners, and rotation pivoting about the bounding box's centre.
+  Not established: a **flipped** map (negative scale); the **image swapped** on the same item; the map
+  **moved, scaled or rotated after a push**, where our fog stays put until the next push; and anything
+  else a GM can do to an image item in Owlbear. Worth a room pass through the item's own controls.
+- **In-scene tools for doors and lights, once doors exist** (user, 2026-09-26) — Dynamic Fog's
+  interface is clunky. Possibly a separate project rather than this one; not designed.
 - **OQ6. What partition granularity does a GM actually want?** One region per room, or per room plus
   its adjacent corridor stub? Only answerable by running a real map at a real table. **This is the
   blocking question above wearing its original name.**
