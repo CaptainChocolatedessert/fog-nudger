@@ -3766,6 +3766,31 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
     small if our tool is where doors are placed and Dynamic Fog's is used only to open and close them.
     It is also a narrow exception to *nothing is ever read back out of the scene*: the carriers' open
     state, and doors made with Dynamic Fog's tool, are read in when the workspace opens.
+  - **The doors plan so far (user, 2026-09-26) — being designed, replacing the idea above.**
+    - **We make doors**, with workspace tools; they are stored with the rest of our data and survive
+      pushes. **A push writes each as a Dynamic Fog record attached to our emitted shapes and lines**,
+      exactly as Dynamic Fog would, so a GM editing it in the scene meets an ordinary door; no carrier
+      lines. We match their storage from their source: contour = ring order in our path, distance along
+      it from the ring's first point in item units (ours are at scale 1); a line is contour 0. One record
+      suffices for a wall two rooms share (subtraction is global). **We choose each ring's start point,
+      so none falls inside a door** — Dynamic Fog cuts from the smaller distance to the larger.
+    - **Dynamic Fog handles doors at the table.** A push resets every door to our stored state, closed
+      by default — acceptable, or a door-state setting in the workspace later. **Nothing is read back**:
+      a door made or toggled in the scene is lost at the next push, as every in-scene edit to our items
+      is.
+    - **A door belongs to one specific wall and never jumps to another.** Erasing its wall kills it. A
+      rebuild from the ink kills it, as it kills every hand edit — preserving edits across a rebuild is a
+      possible future feature set, for doors and more.
+    - **A door is a span along its wall, not vertices of its own** — door ends as vertices were ruled
+      out because they nail the door to the map: moving the far end of a long wall would kink it at the
+      door, and Straighten could not straighten through it. **One rule after every edit: the door keeps
+      its map position and length, re-projected onto what survives of its wall.** That needs each edit
+      to report which old segments became which new ones — Move and Erase keep them; splits and
+      Straighten would have to report it. Whether they do yet is unchecked.
+    - **Open: can a door span a vertex?** Being answered 2026-09-26; see the next conversation turn's
+      record.
+    - *Not now:* door **areas** not tied to walls, applying to any wall passing through them at a push —
+      steadier in a way, but they can span a vertex and give odd results.
   - **Cheap either way:** stop the needless first-close push, by keeping the last-push fingerprint
     somewhere that outlives the page.
 
