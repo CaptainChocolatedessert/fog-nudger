@@ -3558,7 +3558,7 @@ does not exist cannot be read. The interesting part is not that hand insertion w
 it sat on opposite sides of the save. (That seam was answered on 2026-09-14 by deleting the save:
 decision 1 below.)
 
-**The most informative thing that can happen to this project is now a second map**, one whose style
+**The most informative thing that can happen to this project is now a second map** (*happened 2026-09-26: Arden Vul, a hard one, worked well*), one whose style
 differs from the first.
 
 ### The surface redesign is built, and has been used
@@ -5242,7 +5242,7 @@ the handle has passed; then, only if both come back clean, a mutation run over `
    The measurement is kept because it is the trap: a glyph sized by a rule scoped to its container
    is not the size its own attributes claim.
 
-**And the thing that is not a decision at all: a second map.** The reading is least proven on styles
+**And the thing that is not a decision at all: a second map** — *answered 2026-09-26 by Arden Vul, which worked well (§10's resume point).* The reading is least proven on styles
 unlike the one that has been tried — hatched stonework, a printed floor grid, a scan, walls drawn as
 texture rather than line. Everything above is refinement; that is where the next real finding is.
 
