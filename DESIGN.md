@@ -3623,9 +3623,22 @@ section. The published site runs the derive's worker (checked from a desk after 
   - **Measure first: can smaller batches or longer pauses push a very detailed graph slowly but
     completely?** If so the failure dialog shrinks to a rare case or goes, and the 4,000 figure is
     re-set by the measurement.
+- **Answered (user, 2026-09-26): remove the ink shape check — planned, not yet built.** It is log-only,
+  the workspace already draws its symptom (a room broken around a solid lump), *Suppress blobs* is the
+  fix, it cannot see a lump touching a wall, and the slider plan's stubby-lump test judges lumps after
+  the opening where it can. Remove `findInkBlobs` from the recompose and its log line; `label.ts` was
+  its last caller, so run the reachability sweep after. The original question, for the record:
 - **Does the ink shape check still earn its place?** It is a report-only count of solid blobs in the log,
   65 to 364ms of every recompose across `dev.log`, usually under 160. In the worker it delays the ink rather than freezing the page, so the
   question is only whether anyone reads the line.
+- **Answered (user, 2026-09-26): yes — *Arden Vul 015* is the second map, and a hard one.** No outer
+  walls drawn as lines: the whole exterior is filled. Blue ink. A great deal of fine detail. Very large
+  for its scale, with far more rooms than a typical map. Rectilinear architecture and sinuous caves and
+  tunnels together. Several features read as large dark areas inside regions. The user's judgement: a
+  reasonable worst case for old-school styles in most respects — not for scan artefacts or faded colour,
+  which it lacks; something painterly, like a 5e battle map, is probably out of reach entirely. **Next
+  with it: a room judging its partition room by room**, as the Grottoes' was on 2026-09-13. The original
+  question, for the record:
 - **Is *The Maps Of Arden Vul 015* a different drawing style from the Grottoes?** `dev.log` shows it
   worked on the same day, before the Grottoes. If it is, it is the second map below, already in hand.
 
