@@ -3678,8 +3678,15 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
     lump's span, so Smallest mark to keep, Suppress blobs and the island profile follow together. A
     diagonal mark reads up to √2 longer, so it survives settings that removed it — a behaviour change,
     not a unit change.
-  - **Open:** whether the opening itself should use a disc rather than a square (below the plan in
-    conversation, 2026-09-26).
+  - **A future task, wanted (user, 2026-09-26): open with a disc, not a square, so every line direction
+    is treated alike** — provided speed does not degrade the experience. The square's separable
+    running counts are why a diagonal wall of the same thickness is erased at about 0.71 of the
+    setting a horizontal one is (geometry; the heal step already met this). A disc via an exact
+    distance transform is also one pass at any radius (reasoned): perhaps 2–4× the work per opening
+    against today's 530–700ms on the Grottoes, but its erosion half is computed once and serves every
+    radius, which the ink profile could share. **Time it before designing.** Costs: a new filter, a
+    redesigned heal, a new profile, fresh oracles; every saved stroke setting behaves differently;
+    outcomes stop being whole radii, so the track gains many more real stops.
 - **Doors — read on 2026-09-25, not designed.** What Dynamic Fog's source says:
   - **A door is not an item.** It is a record in the metadata of the fog drawing it was cut into,
     `rodeo.owlbear.dynamic-fog/doors`: `{ open, start, end }`, each end a contour index and a distance
