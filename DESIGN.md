@@ -3636,8 +3636,14 @@ section. The published site runs the derive's worker (checked from a desk after 
   for its scale, with far more rooms than a typical map. Rectilinear architecture and sinuous caves and
   tunnels together. Several features read as large dark areas inside regions. The user's judgement: a
   reasonable worst case for old-school styles in most respects — not for scan artefacts or faded colour,
-  which it lacks; something painterly, like a 5e battle map, is probably out of reach entirely. **Next
-  with it: a room judging its partition room by room**, as the Grottoes' was on 2026-09-13. The original
+  which it lacks; something painterly, like a 5e battle map, is probably out of reach entirely.
+
+  **Judged in a room, and it worked well (user, 2026-09-26)** — most of the map prepared as a test,
+  and *"for how challenging it is, I was very impressed."* Capturing the walls needed the ink settings
+  fine-tuned so Sauvola made a **ring everywhere one was needed** — a filled exterior reads as an
+  outline — while keeping the excess down. What cannot be told apart: a lot of interior detail, and
+  **thin "door" boxes** drawn in the walls. Working on it is expected to suggest new tools; none named
+  yet. **This retires the second-map check** the record has carried since 2026-09-13. The original
   question, for the record:
 - **Is *The Maps Of Arden Vul 015* a different drawing style from the Grottoes?** `dev.log` shows it
   worked on the same day, before the Grottoes. If it is, it is the second map below, already in hand.
@@ -3772,7 +3778,9 @@ for the reason *The trace worker* gives.
 
 - **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
   *the scene has not finished loading* look the same, since the map list is briefly empty on load.
-- **A second map in a different style** — hatched stonework, a printed grid, a scan. Everything so far
+- ~~**A second map in a different style**~~ **Retired 2026-09-26 on *Arden Vul 015*** (above), which
+  worked well. Still untried: scan artefacts, faded colour, printed grids. The original entry:
+  hatched stonework, a printed grid, a scan. Everything so far
   was tuned on line-drawn maps, and the record has called this the most informative next step since
   2026-09-13. **It needs no build**, only a map — and possibly one is already in hand (the Arden Vul
   question above).
