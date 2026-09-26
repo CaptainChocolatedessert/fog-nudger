@@ -3655,6 +3655,31 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
     pixel more — and it changes what every stored setting does by half a band. Whatever else on that
     rail converts between a setting and a radius has to follow; the ink profile's band placement is the
     one to check.
+
+  **Superseded by a plan, not yet built (user, 2026-09-26)** — neither fix above; the user asked what
+  the slider is really for, and the answer is *one of a handful of integer radii* engineered through a
+  continuous ink-width unit:
+  - **A rule for every slider: the handle glides; the value it stores and the yellow number it shows
+    are already the value the code will use** — rounded, floored or stepped at the control, once. Where
+    a track has **20 or fewer** distinct outcomes it gets tick marks at the points where the result
+    changes. Also moves Gaps (snaps in twos today; would glide and store even numbers), Detail window,
+    Smallest mark to keep and both brush widths.
+  - **Thinnest stroke to keep becomes pixels**: 0 is off, stored values even — the stroke width 2r a
+    radius removes. A unit change, so a renamed key: this one control resets to off on existing scenes.
+  - **Its top is measured: the smallest setting at which only stubby lumps survive.** A lump is stubby
+    when its **greatest width in any direction** (the farthest pair of its edge points, from each row's
+    leftmost and rightmost pixel) is **at most 2.5×** its thickness, the thickness being the largest
+    square that fits inside it — one pass over the map. A ratio, not a difference, so a blob's size
+    does not decide. Blobs cannot run away: Sauvola makes anything much wider than its window a ring.
+    Survivors are judged after the opening, which is what separates a blob from the wall it touched —
+    the ink shape check's blind spot. The profile's openings per radius can carry the test. 2.5 is
+    reasoned, not measured.
+  - **Greatest width replaces the bounding box's longest side** in the one shared definition of a
+    lump's span, so Smallest mark to keep, Suppress blobs and the island profile follow together. A
+    diagonal mark reads up to √2 longer, so it survives settings that removed it — a behaviour change,
+    not a unit change.
+  - **Open:** whether the opening itself should use a disc rather than a square (below the plan in
+    conversation, 2026-09-26).
 - **Doors — read on 2026-09-25, not designed.** What Dynamic Fog's source says:
   - **A door is not an item.** It is a record in the metadata of the fog drawing it was cut into,
     `rodeo.owlbear.dynamic-fog/doors`: `{ open, start, end }`, each end a contour index and a distance
