@@ -29,19 +29,24 @@
   <body>
     <main>
       <h1>Fog Nudger</h1>
-      <p class="sub">The map already shows where the rooms are. Stop drawing them again.</p>
+      <!--
+        Wall creation for Owlbear Rodeo's fog, with Dynamic Fog as compatible rather than the point
+        (user, text pass 2026-09-29), and the text rules' voice: no "you", no dashes. Whether this
+        page is for strangers at all is still DESIGN.md §10's open question, which is why the last
+        line says what it said.
+      -->
+      <p class="sub">The map already shows where the walls are. Stop drawing them again.</p>
       <p>
-        An Owlbear Rodeo extension that traces a map image into the fog regions you reveal room
-        by room &mdash; then lets you correct what it got wrong. A proposal, not a result:
-        automatic extraction cannot tell a doorway from a gap in the linework, and a merged room
-        is a bug nobody sees until mid-session.
+        An Owlbear Rodeo extension that creates walls and fog regions from the walls drawn on a
+        map image. What it finds is a proposal to check and correct, since a doorway and a gap in
+        the linework look alike.
       </p>
       <p>
-        Works on its own. With
-        <a href="https://extensions.owlbear.rodeo/dynamic-fog">Dynamic Fog</a> installed, the same
-        shapes become line-of-sight walls at no extra cost.
+        Works with Owlbear Rodeo's own fog. Compatible with
+        <a href="https://extensions.owlbear.rodeo/dynamic-fog">Dynamic Fog</a>, which uses the same
+        walls for line of sight.
       </p>
-      <p><code>Pre-release &mdash; nothing to install yet.</code></p>
+      <p><code>Pre-release. Nothing to install yet.</code></p>
       <p>
         <a href="https://github.com/CaptainChocolatedessert/fog-nudger">Source on GitHub</a>
       </p>
