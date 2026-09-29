@@ -3860,6 +3860,12 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
   a write that requires skipping, if it can be predicted."*). *Skipped N over the cap* reports rooms
   still over Owlbear's 8,192-command cap after the escalation ladder, which the derive knows before any
   write begins.
+- **Are all four of Collapse's refusals necessary?** (user, 2026-09-29, a note to revisit.) A region
+  is not offered when its outline is not one simple loop, when the centre lands on a connection, when
+  a spoke would leave the region, or when a spoke would meet a wall that stays (`detail` in
+  `trace/collapse.ts`). A room on the Grottoes met the third on a large irregular region round a solid
+  dark patch, and the user confirmed it by moving vertices. Nothing logs which one refused; a log line
+  was offered and declined.
 - **What the grid-square figures do on a grid that is not square** (user, 2026-09-29, a note for
   later). Owlbear's grid types are square, hex vertical, hex horizontal, isometric and dimetric
   (`GridType` in the SDK), and nothing here has been checked on the last four. It matters most to the
