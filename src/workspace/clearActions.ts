@@ -107,24 +107,23 @@ export async function clearInkEdits(): Promise<void> {
     right now, which is what walking the raster on every redraw would cost to know.
   */
   if (!anyPaintToClear()) {
-    say("there is no painted ink on this map to clear");
+    say("No ink edits to clear.");
     return;
   }
 
+  // The title and the verb, and nothing else (text rules, 2026-09-29): the three dialogs here said
+  // what goes, what stays and that undo reaches it. The title says the first; the rest was
+  // reassurance.
   const yes = await confirmAction({
-    title: "Clear your ink edits?",
-    body: [
-      "Removes everything you've painted or accepted here — suppression, added ink, gaps and blobs.",
-      "Your walls and marks stay. Undo brings it back.",
-    ],
-    confirmLabel: "Clear ink edits",
+    title: "Clear ink edits?",
+    confirmLabel: "Clear",
     destructive: true,
   });
   if (!yes) return;
 
   const before = snapshotBothLayers();
   busy = true;
-  say("clearing your ink edits…", "working");
+  say("Clearing ink edits…", "working");
   try {
     await replaceBothLayers({ suppress: null, ink: null });
   } catch (error) {
@@ -132,7 +131,7 @@ export async function clearInkEdits(): Promise<void> {
     // it as never reached the scene. Nothing goes on the stack, because there is no single state to
     // return to.
     const detail = describeError(error);
-    say(`could not clear your ink edits: ${detail}`, "bad");
+    say(`Clear failed: ${detail}.`, "bad");
     devLog("error", "workspace: clearing the ink edits failed", detail);
     console.error("Fog Nudger — clearing the ink edits failed", error);
     return;
@@ -140,11 +139,11 @@ export async function clearInkEdits(): Promise<void> {
     busy = false;
   }
 
-  pushUndo("clearing the ink edits", paintStateBack(before), "ink");
+  pushUndo("clearing ink edits", paintStateBack(before), "ink");
 
   requestRecompose();
   invalidate();
-  say("cleared your ink edits — one step of undo brings them back");
+  say("Cleared ink edits.");
 }
 
 /**
@@ -175,30 +174,25 @@ export async function clearWallEdits(): Promise<void> {
   if (busy) return;
 
   if (!wallsEdited()) {
-    say("these walls haven't been touched, so there is nothing of yours to clear");
+    say("No wall edits to clear.");
     return;
   }
 
   const yes = await confirmAction({
-    title: "Clear your wall changes?",
-    body: [
-      "Every wall you moved, drew, erased, mended or spanned goes. The walls become a fresh reading " +
-        "of the ink again.",
-      "Painted ink and marks stay. Undo brings the walls back.",
-    ],
-    confirmLabel: "Clear wall edits",
+    title: "Clear wall edits?",
+    confirmLabel: "Clear",
     destructive: true,
   });
   if (!yes) return;
 
   busy = true;
-  say("clearing your wall changes…", "working");
+  say("Clearing wall edits…", "working");
   try {
     await clearStoredWalls();
-    say("cleared your wall changes — one step of undo brings them back");
+    say("Cleared wall edits.");
   } catch (error) {
     const detail = describeError(error);
-    say(`could not clear your wall changes: ${detail}`, "bad");
+    say(`Clear failed: ${detail}.`, "bad");
     devLog("error", "workspace: clearing the wall edits failed", detail);
     console.error("Fog Nudger — clearing the wall edits failed", error);
   } finally {
@@ -222,29 +216,28 @@ export async function clearAllMarks(): Promise<void> {
 
   const marks = currentMarks();
   if (marks.length === 0) {
-    say("there are no marks on this map to clear");
+    say("No crosses to clear.");
     return;
   }
 
+  // A *cross* to the GM (text rules, 2026-09-29), which gave *mark* to the map's own drawing. The
+  // one line of body is the consequence the title does not say.
   const yes = await confirmAction({
-    title: `Clear ${marks.length === 1 ? "the mark" : `all ${marks.length} marks`}?`,
-    body: [
-      "Every region you marked becomes an ordinary room again — fog the party can reveal.",
-      "Walls stay. Undo brings the marks back.",
-    ],
-    confirmLabel: "Clear marks",
+    title: `Clear ${marks.length === 1 ? "the cross" : `all ${marks.length} crosses`}?`,
+    body: ["Suppressed regions become revealable again."],
+    confirmLabel: "Clear",
     destructive: true,
   });
   if (!yes) return;
 
   busy = true;
-  say("clearing the marks…", "working");
+  say("Clearing crosses…", "working");
   try {
-    await saveMarks([], "clearing every mark");
-    say(`cleared ${marks.length === 1 ? "the mark" : `${marks.length} marks`} — undo brings them back`);
+    await saveMarks([], "clearing all crosses");
+    say(`Cleared ${marks.length === 1 ? "1 cross" : `${marks.length} crosses`}.`);
   } catch (error) {
     const detail = describeError(error);
-    say(`could not clear the marks: ${detail}`, "bad");
+    say(`Clear failed: ${detail}.`, "bad");
     devLog("error", "workspace: clearing the marks failed", detail);
     console.error("Fog Nudger — clearing the marks failed", error);
   } finally {

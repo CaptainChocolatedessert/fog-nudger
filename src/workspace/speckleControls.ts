@@ -17,10 +17,9 @@
 
 import { SLIDER_STEPS, fromSlider, toSlider, type ScaleLimits } from "../sliderScale";
 import { currentToolDrawer } from "./drawer";
-import { doneRow } from "./doneAction";
 import { suppressEverySpeckleShown } from "./paintTool";
-import { invalidate, say } from "./shell";
-import { setSpeckleSpan, speckleMarks, speckleRaster, speckleSpan } from "./speckleSearch";
+import { invalidate } from "./shell";
+import { setSpeckleSpan, speckleRaster, speckleSpan } from "./speckleSearch";
 import { workOn } from "./subject";
 
 let frameAsked = false;
@@ -40,8 +39,14 @@ function limits(): ScaleLimits | null {
   return { min: 0, max: Math.max(4, Math.max(raster.width, raster.height)), step: 1, floor: 1 };
 }
 
-function readoutFor(position: number): string {
-  return position > 0 ? String(Math.max(1, Math.round((position / SLIDER_STEPS) * 100))) : "off";
+/**
+ * The span in raster pixels, as the other ink sliders print theirs (text rules, 2026-09-29: one
+ * unit, with a space). It was a place from 1 to 100, which is the Walls tools' answer for a unit that
+ * means nothing — and a size in pixels means something here, as it does for *Smallest mark to keep*.
+ */
+function readoutFor(position: number, scale: ScaleLimits | null): string {
+  if (position <= 0 || !scale) return "off";
+  return `${Math.round(fromSlider(position, scale, "log"))} px`;
 }
 
 export function renderSpeckleControls(rows: HTMLElement): void {
@@ -53,7 +58,7 @@ export function renderSpeckleControls(rows: HTMLElement): void {
   const top = document.createElement("div");
   top.className = "top";
   const label = document.createElement("label");
-  label.textContent = "Size";
+  label.textContent = "Largest mark to highlight";
   const readout = document.createElement("span");
   readout.className = "value";
   top.append(label, readout);
@@ -67,24 +72,19 @@ export function renderSpeckleControls(rows: HTMLElement): void {
   slider.value = String(position);
   slider.disabled = scale === null;
   label.htmlFor = slider.id = "speckle-span";
-  readout.textContent = readoutFor(position);
+  readout.textContent = readoutFor(position, scale);
 
   slider.addEventListener("input", () => {
     if (!scale) return;
     workOn("ink");
     pending = Number(slider.value);
-    readout.textContent = readoutFor(pending);
+    readout.textContent = readoutFor(pending, scale);
     if (frameAsked) return;
     frameAsked = true;
     requestAnimationFrame(() => {
       frameAsked = false;
       setSpeckleSpan(pending > 0 ? fromSlider(pending, scale, "log") : 0);
-      const found = speckleMarks().length;
-      say(
-        pending > 0
-          ? `${found} lump${found === 1 ? "" : "s"} ringed at ${speckleSpan()} px`
-          : "off — nothing is ringed",
-      );
+      // No count on the state line (text pass, 2026-09-29): the highlights are the answer.
       invalidate();
     });
   });
@@ -96,12 +96,15 @@ export function renderSpeckleControls(rows: HTMLElement): void {
   const all = document.createElement("button");
   all.type = "button";
   all.className = "chip";
-  all.textContent = "Suppress every lump shown";
+  all.textContent = "Suppress every highlighted mark";
   all.addEventListener("click", () => {
     suppressEverySpeckleShown();
   });
   actions.append(all);
   rows.append(actions);
-  // Putting the tool down is what recomposes the ink and derives the walls once, rather than per press.
-  rows.append(doneRow());
+  /*
+    No *Done* here. It was added here and again by the ink tools' own head, which gives every ink tool
+    one — so this drawer had two (user, text pass 2026-09-29). Putting the tool down is still what
+    recomposes the ink and derives the walls once rather than per press; the head's button does it.
+  */
 }

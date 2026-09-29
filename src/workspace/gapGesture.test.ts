@@ -161,35 +161,22 @@ describe("which ring a click lands in", () => {
 describe("what the state line says", () => {
   it("says there are none rather than saying nothing", () => {
     // "Found nothing" and "did not run" look identical from a blank line, which is the failure §8 is
-    // about. This one also names the control that would change the answer.
-    expect(describeSearch(0, 0)).toContain("no gaps found");
+    // about.
+    expect(describeSearch(0)).toBe("No gaps found.");
   });
 
-  it("names the acceptable count, and the guesses separately when there are any", () => {
+  it("counts the gaps a click can fill, and agrees in number", () => {
     /*
-      The correction the reading's own gap line needed once: stating a total as though it were the
-      acceptable count implies a larger total still. Five found of which two are guesses is "3 gaps
-      found, 2 not examined", never "5 gaps found, 2 not examined".
+      The fillable count alone since the text rules of 2026-09-29. It named the guesses the search
+      could not finish separately — five found with two guesses was "3 gaps found, 2 not examined" —
+      and the highlight draws those dashed, never offered.
     */
-    expect(describeSearch(3, 3)).toBe("3 gaps found · click a ring to accept one");
-    expect(describeSearch(5, 3)).toContain("3 gaps found, 2 not examined");
+    expect(describeSearch(3)).toBe("3 gaps found.");
+    expect(describeSearch(1)).toBe("1 gap found.");
   });
 
-  it("says one gap rather than 1 gaps", () => {
-    expect(describeSearch(1, 1)).toContain("1 gap ");
-  });
-
-  it("says what an accept did and what is left, including that it is not saved", () => {
-    const line = describeAccepted(4, 120, 7);
-
-    expect(line).toContain("4 gaps");
-    expect(line).toContain("120 px");
-    expect(line).toContain("7 left");
-    // The whole of what makes Done meaningful: an accept is in hand, not in the scene.
-    expect(line).toContain("not saved");
-  });
-
-  it("says none are left rather than leaving a zero to read", () => {
-    expect(describeAccepted(1, 30, 0)).toContain("none left");
+  it("says what filling did and stops", () => {
+    expect(describeAccepted(4)).toBe("Filled 4 gaps.");
+    expect(describeAccepted(1)).toBe("Filled 1 gap.");
   });
 });

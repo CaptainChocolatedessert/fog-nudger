@@ -470,5 +470,5 @@ export function reportPaintFailure(kind: PaintKind, error: unknown): void {
   const detail = describeError(error);
   devLog("error", `workspace: could not save ${PAINT_NAMES[kind]}`, detail);
   console.error(`Fog Nudger — could not save ${PAINT_NAMES[kind]}`, error);
-  reportFailure?.(`could not save your ${PAINT_NAMES[kind]}: ${detail}`);
+  reportFailure?.(`Saving ${PAINT_NAMES[kind]} failed: ${detail}.`);
 }

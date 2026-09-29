@@ -288,7 +288,7 @@ export async function clearWallEdits(): Promise<void> {
   if (!before) return;
   await clearWallGraph();
   // After the write, so a failed one leaves nothing to undo back to — `saveEditedWalls`' own rule.
-  pushUndo("clearing the wall edits", restoreTo(before), "walls");
+  pushUndo("clearing wall edits", restoreTo(before), "walls");
   saved = null;
   base = null;
   announce();

@@ -251,9 +251,13 @@ export const TOOLS: readonly ToolChoice[] = [
     // deliberate exception (user, 2026-09-29): a GM who notices it in the status line can use it.
     hint: "Drag to pan.",
   },
-  { id: "suppress", label: "Suppress", band: "ink", drag: "brush", hint: "" },
+  /*
+    Tools name the action and its object (text rules, 2026-09-29): *Suppress* became *Suppress ink*
+    beside *Suppress marks* and *Suppress region*, and *Gaps*, a noun, became *Fill gaps*.
+  */
+  { id: "suppress", label: "Suppress ink", band: "ink", drag: "brush", hint: "" },
   { id: "ink", label: "Add ink", band: "ink", drag: "brush", hint: "" },
-  { id: "gaps", label: "Gaps", band: "ink", drag: "brush", hint: "" },
+  { id: "gaps", label: "Fill gaps", band: "ink", drag: "brush", hint: "" },
   /*
     **Suppress speckles — 2026-09-22.** The island filter as a tool: it rings every lump of ink under a
     span and a press takes one, or the button takes them all. A press on ink the span never offered
@@ -264,9 +268,14 @@ export const TOOLS: readonly ToolChoice[] = [
     derives as a **ring** — measured, in `trace/inkPatches.ts` — and taking a ring takes what it
     encloses.
   */
+  /*
+    **Suppress marks since 2026-09-29**, the text rules giving *mark* to something drawn on the map
+    image (user: *"blob"* is a computer-vision word a GM may not know). It was *Suppress blobs*; the
+    code keeps `speckles`.
+  */
   {
     id: "speckles",
-    label: "Suppress blobs",
+    label: "Suppress marks",
     band: "ink",
     drag: "brush",
     // Empty, like the other three ink tools: its group has a blurb of its own, and this had drifted
@@ -564,10 +573,10 @@ export const STEPS: readonly Step[] = [
     */
     groups: [
       {
-        // Called "Walls" until the skeleton arrived and took the name back: these two decide which
-        // marks are *linework*, which is a question about ink. A wall is what the step below makes
-        // of the linework.
-        title: "Linework",
+        // Called "Walls" until the skeleton arrived and took the name back, then *Linework* until
+        // the text pass (user, 2026-09-29): these two are filters over the ink, and the image
+        // editor's word for what they are is the plainer name.
+        title: "Filters",
         blurb: "",
         parameters: ["minStrokeInkWidths", "minIslandPx"],
       },
@@ -581,28 +590,22 @@ export const STEPS: readonly Step[] = [
       */
       {
         tool: "suppress",
-        title: "Suppress",
-        // "Uncovers" became "erases" with the buttons (2026-09-09). The blurb has to name the same
-        // verb the modifier actually performs, or Shift is documented as doing something the tool
-        // no longer calls by that name.
-        blurb:
-          "Drag over anything that isn't a wall — hatching, a printed floor grid, a compass rose. " +
-          "Shown in <b class='suppress-key'>this colour</b>; nothing is lost from the map. " +
-          "<b>Shift</b> erases, <b>Ctrl</b> pans.",
+        title: "Suppress ink",
+        // One sentence, the gesture and what it does (text rules, 2026-09-29). The keys are said
+        // once, under the paint and erase pair, which is where they apply; the examples and the
+        // colour went, the strokes on the map saying both.
+        blurb: "Paint areas that should not be ink.",
         parameters: ["suppressBrushPx"],
       },
       {
         tool: "ink",
         title: "Add ink",
-        blurb:
-          "Drag to add linework the map is missing — applied <b>last of everything</b>, so no " +
-          "filter above removes it. Shown in <b class='addink-key'>this colour</b>. <b>Shift</b> " +
-          "erases, <b>Ctrl</b> pans.",
+        blurb: "Paint to add ink to the map.",
         parameters: ["inkBrushPx"],
       },
       {
         tool: "gaps",
-        title: "Gaps",
+        title: "Fill gaps",
         /*
           Mechanics only (user, 2026-09-09), and the teaching is the stated cost.
 
@@ -611,24 +614,18 @@ export const STEPS: readonly Step[] = [
           wrong. That is the best argument in the product and a first-time GM no longer meets it.
           What is left says what a press does, which is what the slot is for.
         */
-        blurb:
-          "Rings every place a wall stops short, in <b class='gap-key'>this colour</b>. " +
-          "<b>Click inside a ring</b> to close it, or the button below for all. A <b>dashed</b> " +
-          "ring isn't offered. Dragging pans.",
+        blurb: "Click a gap to fill it in.",
         parameters: ["gapFillPx", "gapTravelPx"],
       },
       {
         tool: "speckles",
-        title: "Suppress blobs",
+        title: "Suppress marks",
         /*
-          **Says what the press takes, including the part a GM could not guess**: a ring is round a
-          lump of ink, and taking it takes what the lump encloses. That is what makes it reach a pit,
-          which derives as a ring with nothing inside it.
+          It said what a press takes, including the part a GM could not guess — a mark takes what it
+          encloses, so a pit drawn solid goes whole — and that any ink can be clicked, highlighted or
+          not. One sentence now (text rules, 2026-09-29): the highlight shows what a click takes.
         */
-        blurb:
-          "Rings every lump of ink under the span. <b>Click one</b> to suppress it, or the button " +
-          "below for all. A lump takes <b>whatever it encloses</b>, so a pit drawn solid goes " +
-          "whole. <b>Click any ink</b> to take its lump, ringed or not. Dragging pans.",
+        blurb: "Click a mark to suppress it.",
         parameters: [],
       },
     ],

@@ -43,7 +43,9 @@ const KEYS: Readonly<Record<PaintKind, string>> = {
 
 /** How each layer is described on a state line and in the log, in one place rather than at each. */
 export const PAINT_NAMES: Readonly<Record<PaintKind, string>> = {
-  suppress: "suppression",
+  // *Ink suppression* rather than *suppression* (user, text pass 2026-09-29), since the name also
+  // stands alone on buttons now: *Paint ink suppression*, *Clear ink suppression*.
+  suppress: "ink suppression",
   ink: "added ink",
 };
 
@@ -145,11 +147,15 @@ export async function writePaintLayer(
 ): Promise<void> {
   const encoded = encodePaint(layer);
   if (encoded.length > MAX_ENCODED) {
-    throw new Error(
-      `this ${PAINT_NAMES[kind]} layer needs ${Math.round(encoded.length / 1024)}KB of scene ` +
-        `storage, over the ${Math.round(MAX_ENCODED / 1024)}KB this will write. Very many small ` +
-        `separate marks cost far more to store than the same area covered with a wide brush.`,
+    // The sizes and the advice go to the log; the GM reads *too large to store* inside the save's
+    // failure line (text rules, 2026-09-29), which the surface shows as a warning.
+    devLog(
+      "error",
+      `paint: ${PAINT_NAMES[kind]} needs ${Math.round(encoded.length / 1024)} KB of scene storage, ` +
+        `over the ${Math.round(MAX_ENCODED / 1024)} KB limit — many small separate marks cost far ` +
+        `more to store than the same area covered with a wide brush`,
     );
+    throw new Error("too large to store");
   }
   await OBR.scene.setMetadata({ [KEYS[kind]]: { map: mapId, paint: encoded } });
   devLog(

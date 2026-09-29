@@ -34,7 +34,7 @@
 
 import { devLog } from "../devlog";
 import { PAINT_NAMES, type PaintKind } from "../inkPaintStore";
-import { paintStroke, paintedCount } from "../trace/inkPaint";
+import { paintStroke } from "../trace/inkPaint";
 import { refreshPaintRegion, setBrushPosition } from "./layers/paint";
 import { describeAccepted, describeSearch, markAt } from "./gapGesture";
 import {
@@ -156,21 +156,16 @@ export function setPaintTool(next: PaintTool): void {
   const was = tool;
   tool = next;
   if (next === "gaps") {
-    if (runGapSearch()) {
-      say(describeSearch(gapMarks().length, fillableCount()));
-    } else {
-      say("nothing has been read from the map yet, so there is nothing to search");
-    }
+    // Before a first reading there is nothing to search, and the tool says nothing (text pass,
+    // 2026-09-29) — the ink arriving is what a GM is waiting for, and it is on the map.
+    if (runGapSearch()) say(describeSearch(fillableCount()));
   } else {
     clearGapSearch();
   }
   if (next === "speckles") {
-    if (startSpeckleSearch()) {
-      const found = speckleMarks().length;
-      say(`${found} lump${found === 1 ? "" : "s"} ringed · click one, or click any ink at all`);
-    } else {
-      say("nothing has been read from the map yet, so there is nothing to search");
-    }
+    // No count, unlike the gaps (user, text pass 2026-09-29): a map can offer thousands of marks, and
+    // the highlight is the answer.
+    startSpeckleSearch();
   } else {
     if (was === "speckles") {
       /*
@@ -194,7 +189,7 @@ export function setPaintTool(next: PaintTool): void {
 /** Search again, because a gap setting moved. Silent when the gap tool is not the one in hand. */
 export function refreshGapSearch(): void {
   if (tool !== "gaps") return;
-  if (runGapSearch()) say(describeSearch(gapMarks().length, fillableCount()));
+  if (runGapSearch()) say(describeSearch(fillableCount()));
   gapsChanged();
 }
 
@@ -328,10 +323,10 @@ function acceptAt(point: MapPoint): boolean {
   // strokes. Snapshotted before, because after it the layer is already changed.
   const before = snapshotPaint("ink");
   const result = acceptGap(index);
-  if (before !== null && result.accepted > 0) rememberPaint("ink", before, "closing a gap");
+  if (before !== null && result.accepted > 0) rememberPaint("ink", before, "filling a gap");
   if (result.bounds) refreshPaintRegion(result.bounds);
   gapsChanged();
-  say(describeAccepted(result.accepted, result.pixels, fillableCount()));
+  say(describeAccepted(result.accepted));
   return true;
 }
 
@@ -371,11 +366,9 @@ function takeSpeckleAt(point: MapPoint): boolean {
 
   const before = snapshotPaint("suppress");
   const result = acceptSpeckle(patch);
-  if (result.pixels === 0) {
-    say("that is already suppressed");
-    return true;
-  }
-  if (before !== null) rememberPaint("suppress", before, "suppressing a speckle");
+  // A mark already suppressed takes nothing and says nothing: the map already shows it gone.
+  if (result.pixels === 0) return true;
+  if (before !== null) rememberPaint("suppress", before, "suppressing a mark");
   if (result.bounds) refreshPaintRegion(result.bounds);
   /*
     **No recompose here**, which is what the brushes do and why they are cheap. The ink layer draws the
@@ -384,10 +377,7 @@ function takeSpeckleAt(point: MapPoint): boolean {
     down. A room measured one press at about 4.1 seconds before this.
   */
   specklesChanged();
-  say(
-    `suppressed a lump of ${result.pixels} px, span ${patch.span} px · ` +
-      `${speckleMarks().length} still ringed · not saved until you leave Ink`,
-  );
+  say("Suppressed a mark.");
   return true;
 }
 
@@ -395,20 +385,14 @@ function takeSpeckleAt(point: MapPoint): boolean {
 export function suppressEverySpeckleShown(): void {
   if (tool !== "speckles") return;
   const layer = workingLayer("suppress");
-  if (!layer || speckleMarks().length === 0) {
-    say("nothing is ringed, so there is nothing to take");
-    return;
-  }
+  if (!layer || speckleMarks().length === 0) return;
   const before = snapshotPaint("suppress");
   const result = acceptAllSpeckles();
-  if (result.pixels === 0) {
-    say("those are already suppressed");
-    return;
-  }
-  if (before !== null) rememberPaint("suppress", before, "suppressing the speckles");
+  if (result.pixels === 0) return;
+  if (before !== null) rememberPaint("suppress", before, "suppressing multiple marks");
   if (result.bounds) refreshPaintRegion(result.bounds);
   specklesChanged();
-  say(`suppressed ${result.accepted} lumps, ${result.pixels} px · not saved until you leave Ink`);
+  say(result.accepted === 1 ? "Suppressed 1 mark." : `Suppressed ${result.accepted} marks.`);
 }
 
 /**
@@ -452,14 +436,11 @@ export function acceptAllShownGaps(): void {
   if (tool !== "gaps") return;
   const before = snapshotPaint("ink");
   const result = acceptAllGaps();
-  if (result.accepted === 0) {
-    say("nothing here can be accepted — the rings left are guesses the search could not finish");
-    return;
-  }
-  if (before !== null) rememberPaint("ink", before, "closing every gap shown");
+  if (result.accepted === 0) return;
+  if (before !== null) rememberPaint("ink", before, "filling multiple gaps");
   if (result.bounds) refreshPaintRegion(result.bounds);
   gapsChanged();
-  say(describeAccepted(result.accepted, result.pixels, fillableCount()));
+  say(describeAccepted(result.accepted));
 }
 
 
@@ -485,11 +466,10 @@ function end(): void {
   if (!kind || strokePixels === 0) return;
 
   if (began && began.kind === kind) {
-    rememberPaint(kind, began.snapshot, `${verb === "paint" ? "drawing" : "erasing"} ${PAINT_NAMES[kind]}`);
+    rememberPaint(kind, began.snapshot, `${verb === "paint" ? "painting" : "erasing"} ${PAINT_NAMES[kind]}`);
   }
-
-  const verbWord = verb === "paint" ? "painted" : "erased";
-  say(`${verbWord} ${strokePixels} px of ${PAINT_NAMES[kind]} · not saved until you leave Ink`);
+  // No line per stroke (text rules, 2026-09-29): the stroke is on the map, and how many pixels it
+  // took and that it is stored when the brush goes down were figures nobody acts on.
   strokePixels = 0;
 }
 
@@ -676,9 +656,7 @@ export async function finishPaint(
     return "unchanged";
   }
 
-  const painted = describePainted();
   busy = true;
-  say("saving…", "working");
   try {
     const { saved, failed } = await commitPaint();
     if (failed) return "failed";
@@ -686,8 +664,12 @@ export async function finishPaint(
     // that is not saved — and a trace whose result outlives a failed write is the mismatch this whole
     // ordering exists to avoid.
     requestRecompose();
-    say(`saved ${saved.map((kind) => PAINT_NAMES[kind]).join(" and ")} — ${painted}`);
-    devLog("info", `workspace: paint committed on ${reason}`);
+    // Said in the log and not on the state line (text rules, 2026-09-29): a save is not something a
+    // GM does, and its failure is what reaches them, through `reportPaintFailure`.
+    devLog(
+      "info",
+      `workspace: paint committed on ${reason} — ${saved.map((kind) => PAINT_NAMES[kind]).join(" and ")}`,
+    );
     if (reason === "leaving") endPaint();
     else beginPaint();
     return "saved";
@@ -697,15 +679,6 @@ export async function finishPaint(
   }
 }
 
-/** How much is on each layer, for the line that says what was saved. */
-function describePainted(): string {
-  return (["suppress", "ink"] as const)
-    .map((kind) => {
-      const layer = workingLayer(kind);
-      return `${layer ? paintedCount(layer) : 0} px ${PAINT_NAMES[kind]}`;
-    })
-    .join(", ");
-}
 
 /*
   `abandonPaint` was here and went on 2026-09-18 with the *Discard changes* button, its only caller.

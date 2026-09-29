@@ -142,7 +142,7 @@ function verbRow(kind: PaintKind): HTMLElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "chip";
-    button.textContent = verb === "paint" ? PAINT_VERB : ERASE_VERB;
+    button.textContent = `${verb === "paint" ? PAINT_VERB : ERASE_VERB} ${PAINT_NAMES[kind]}`;
     button.setAttribute("aria-pressed", String(verb === current));
     button.addEventListener("click", () => {
       setVerb(kind, verb);
@@ -153,9 +153,9 @@ function verbRow(kind: PaintKind): HTMLElement {
 
   const note = document.createElement("p");
   note.className = "hint";
-  // Kept, short. The tool's own blurb names what Shift does *from the default verb*; this is the
-  // general statement, and it stays true when the GM flips the row.
-  note.innerHTML = "<b>Shift</b> swaps these for one stroke.";
+  // The brushes' keys, said once, where they apply (text rules, 2026-09-29): nothing on screen says
+  // either, and a plain drag paints rather than pans with a brush in hand.
+  note.innerHTML = "<b>Shift</b> to toggle. <b>Ctrl</b> to pan.";
 
   wrapper.append(row, note);
   return wrapper;
@@ -177,8 +177,11 @@ function verbRow(kind: PaintKind): HTMLElement {
   map rather than deleting from it, and nothing of the map is lost. That hint is gone from the verb.
   What carries it now is the tool's own name, its blurb, and the subtractive colour the strokes are
   drawn in.
+
+  **Paint, and each names its layer, since 2026-09-29** (text rules). *Draw* is the wall tools' verb,
+  and a button names its object: *Paint ink suppression*, *Erase added ink*.
 */
-const PAINT_VERB = "Draw";
+const PAINT_VERB = "Paint";
 const ERASE_VERB = "Erase";
 
 /**
@@ -217,7 +220,7 @@ function brushActions(kind: PaintKind): HTMLElement {
   const clear = document.createElement("button");
   clear.type = "button";
   clear.className = "chip quiet";
-  clear.textContent = "Clear layer";
+  clear.textContent = `Clear ${PAINT_NAMES[kind]}`;
   clear.addEventListener("click", () => {
     void clearWholeLayer(kind);
   });
@@ -235,7 +238,7 @@ function gapActions(): HTMLElement {
   const acceptAll = document.createElement("button");
   acceptAll.type = "button";
   acceptAll.className = "chip";
-  acceptAll.textContent = "Close every gap shown";
+  acceptAll.textContent = "Fill every highlighted gap";
   acceptAll.addEventListener("click", () => {
     acceptAllShownGaps();
   });
@@ -272,13 +275,11 @@ async function clearWholeLayer(kind: PaintKind): Promise<void> {
   if (!layer) return;
 
   const raster = paintRaster();
+  // The title and the verb (text rules, 2026-09-29): what goes is in the title, and what stays and
+  // that undo reaches it were reassurance.
   const yes = await confirmAction({
-    title: `Clear the ${PAINT_NAMES[kind]} layer?`,
-    body: [
-      `Every mark on it goes, including ones already saved.`,
-      "The other layer and the map stay. Undo brings it back.",
-    ],
-    confirmLabel: "Clear layer",
+    title: `Clear ${PAINT_NAMES[kind]}?`,
+    confirmLabel: "Clear",
     destructive: true,
   });
   if (!yes) return;
@@ -298,8 +299,8 @@ async function clearWholeLayer(kind: PaintKind): Promise<void> {
   );
   if (result.bounds) refreshPaintRegion(result.bounds);
   if (before !== null && result.changed > 0) {
-    rememberPaint(kind, before, `clearing the ${PAINT_NAMES[kind]}`);
+    rememberPaint(kind, before, `clearing ${PAINT_NAMES[kind]}`);
   }
-  say(`cleared ${result.changed} px · not saved until you save or leave Ink`);
+  say(`Cleared ${PAINT_NAMES[kind]}.`);
   invalidate();
 }

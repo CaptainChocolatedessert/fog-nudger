@@ -113,21 +113,22 @@ export function markAt(
   return best;
 }
 
-/** What the state line says about a search, in one place so the two callers cannot word it apart. */
-export function describeSearch(found: number, fillable: number): string {
-  if (found === 0) return "no gaps found — widen the largest gap to repair, or there are none";
-  const gaps = fillable === 1 ? "1 gap" : `${fillable} gaps`;
-  const unproven = found - fillable;
-  if (unproven === 0) return `${gaps} found · click a ring to accept one`;
-  // The two states have to be named separately when they differ, which is the correction the
-  // reading's own line needed once: a total stated as if it were the acceptable count implies a
-  // larger total still.
-  return `${gaps} found, ${unproven} not examined · click a ring to accept one`;
+/**
+ * What the state line says about a search, in one place so the two callers cannot word it apart.
+ *
+ * **The gaps a click can fill, and nothing else** (text rules, 2026-09-29). It also counted the
+ * guesses the search could not finish — drawn, and never offered — and said to click a ring; the
+ * highlight says both. A search that found only guesses has found nothing a GM can fill.
+ */
+export function describeSearch(fillable: number): string {
+  if (fillable === 0) return "No gaps found.";
+  return fillable === 1 ? "1 gap found." : `${fillable} gaps found.`;
 }
 
-/** What accepting says afterwards, given what it added and what it left. */
-export function describeAccepted(marks: number, pixels: number, remaining: number): string {
-  const what = marks === 1 ? "1 gap" : `${marks} gaps`;
-  const left = remaining === 0 ? "none left" : `${remaining} left`;
-  return `closed ${what}, ${pixels} px of added ink · ${left} · not saved until you press Done`;
+/**
+ * What filling says afterwards: how many, and that is all. What it added in pixels, what is left and
+ * that none of it is stored until the tool is put down went with the text rules of 2026-09-29.
+ */
+export function describeAccepted(filled: number): string {
+  return filled === 1 ? "Filled 1 gap." : `Filled ${filled} gaps.`;
 }
