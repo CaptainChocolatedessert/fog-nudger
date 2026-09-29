@@ -268,10 +268,6 @@ OBR.onReady(async () => {
     // A popover's connection going ready is NOT the scene being ready — the sibling lost two days
     // to treating them as the same event. Ask separately, and say which of the two is true.
     const ready = await OBR.scene.isReady();
-    report(
-      ready ? "Connected. Scene open." : "Connected. No scene open.",
-      "ok",
-    );
 
     // Subscribe as well as check, for the usual reason: a scene opened while the popover is already
     // up would otherwise leave the buttons dead with no explanation.
@@ -282,10 +278,22 @@ OBR.onReady(async () => {
       for (const button of buttons) {
         if (button && !running.has(button)) button.disabled = !open;
       }
-      // Only on the way *down*. This used to write on every change, so a readiness event wiped
-      // whatever the GM last clicked — including a failure message. Losing a stale "Ready." is
-      // cheaper than losing an error.
-      if (!open) reportResult("Waiting for a scene.", "ok");
+      /*
+        **One line says whether a scene is open, and it follows every change** (user, 2026-09-29).
+
+        Two lines said it, each by its own rule, and they disagreed on the ordinary case. The line at
+        the top was written once, at start-up, and never again. The result line at the foot opened on
+        the page's own *Waiting for a scene.* and was rewritten only on the way down — since
+        2026-09-01, when writing *Ready.* on the way up was found wiping whatever the GM had last
+        clicked, failures included. That change priced losing a stale *Ready.*, and missed that the
+        page's opening text is then never replaced: a panel opened over an open scene said *Scene
+        open.* above and *Waiting for a scene.* below.
+
+        So the top line owns the scene's state, and the foot is only ever the result of a press —
+        cleared when the scene goes, since a result is about the scene it was pressed in.
+      */
+      report(open ? "Connected. Scene open." : "Connected. No scene open.", "ok");
+      if (!open) reportResult("", "ok");
     };
     OBR.scene.onReadyChange(setEnabled);
     setEnabled(ready);

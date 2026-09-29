@@ -3119,7 +3119,7 @@ pieces by the rules alone. **Nothing of it has been in a room**; the user review
 
 | was | is |
 |---|---|
-| *Open the workspace* · *Remove ours* · *Clear everything* | *Workspace* · *Remove all Fog Nudger items from this scene* · *Clear all Fog Nudger data from this scene* |
+| *Open the workspace* · *Remove ours* · *Clear everything* | *Open workspace* · *Remove all Fog Nudger items from this scene* · *Clear all Fog Nudger data from this scene* |
 | *Put on the map* · *Stop writing* · *Exit anyway* · *Controls* | *Update scene* · *Stop* · *Cancel update and exit* · *Hide controls* / *Show controls* |
 | *Suppress* · *Gaps* · *Suppress blobs* · *Prune the dead ends* | *Suppress ink* · *Fill gaps* · *Suppress marks* · *Prune dead ends* |
 | *Ink strictness* · *Texture blur* · *Detail window* · *Linework* | *Ink contrast threshold* · *Despeckle* · *Contrast window* · *Filters* |
@@ -3165,6 +3165,19 @@ pieces by the rules alone. **Nothing of it has been in a room**; the user review
 **Checked from a desk:** `tsc`, 1,167 tests in 83 files, a build; the panel at its 320px width and the
 bar at 1280px in the browser pane (Chromium, outside Owlbear, where nothing past the start-up line
 runs). Everything else — whether each message reads right where it appears — is the live review's.
+
+**The live review, as it arrives** (user, 2026-09-29):
+
+- **The panel**: *Open workspace* rather than *Workspace*, and its three buttons full width with their
+  labels centred, one to a row.
+- **The panel said a scene was open at the top and *Waiting for a scene.* at the foot** — a defect
+  four weeks old, not today's. Two lines reported the scene's state by two rules: the top once, at
+  start-up; the foot from the page's own opening text, rewritten only on the way down since 2026-09-01,
+  when writing *Ready.* on the way up had been wiping the GM's last result. That change priced losing
+  a stale *Ready.* and missed that the opening text is then never replaced. **The top line owns the
+  scene's state now and follows every change; the foot is only the result of a press**, hidden until
+  there is one and cleared when the scene goes. The mirror case went with it: after a scene closed,
+  the top went on saying *Scene open.*
 ---
 
 ## 8. Testing and diagnostic practice
