@@ -3327,6 +3327,16 @@ invisible. It costs almost nothing to keep.
   confirmed until the log said which way it went. The same session a push was reported as landed that
   the log shows had stopped part-way on a timeout. **Read the log before recording a room result**, and
   record the routes it did not reach as not yet seen.
+- **A page's opening text is a message, and it has to be true in every state the page can open in**
+  (2026-09-29). The panel's result line opened on *Waiting for a scene.* and was rewritten only when a
+  scene closed, so a panel opened over an open scene said so under a top line saying the opposite — for
+  four weeks, since a change that stopped writing on the way up priced losing a stale *Ready.* and not
+  the opening text it had been replacing. **When a handler writes on some transitions only, read what
+  the markup says before the first one.**
+- **Two gates on the same kind of control should ask the same question** (2026-09-29). The map-edge
+  toggle was enabled on the *stored* walls while every wall tool is enabled on the walls *on screen*,
+  so after an unlock — stored walls gone, derived walls drawn — it alone was dead. Nothing failed; a
+  button was simply grey.
 - **Change one variable at a time.** Questions have been called closed twice before they were, both
   times after changing two things at once.
 - **Treat a clean diagnostic as evidence about the diagnostic** until it has failed at least once. A
@@ -3775,89 +3785,89 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is half-built and nothing is waiting on a decision.** The session of 2026-09-24 built the
-region fills without a border, the stroke filter's measured step and tick marks, the free click on
-Collapse, Prune and Mend, the point probe without its space labelling, and **the trace worker** — the
-derive, the ink profiles and, last, **the ink itself** (the reading and the recompose), each in a worker
-of its own, with the map decoded once per image. Around the worker: closing with a brush in hand fixed,
-the redundant derive after a save skipped, and `faces.ts` cleared of the labelling era. *The trace
-worker* and *The ink joins the trace worker*, below, have all of it.
+**Nothing is half-built.** The session of 2026-09-29 turned the user's Word pass over the interface
+text into rules — §7a's *The text rules* — applied them to the whole surface, and then took a live
+review in a room: the panel, the tool drawers' purple band, highlights drawn on top, the Walls tools as
+a verb and a noun with their lengths in pixels, and the map-edge toggle's gate. §7a's *Applied the same
+day* has the renames, what was decided while building, and every review finding so far. **The live
+review is not finished** — the user was still working through the surface when the session ended.
 
-**All of it has been in a room but two routes**, and everything confirmed is recorded against its own
-section. The published site runs the derive's worker (checked from a desk after the deploy of
-2026-09-24); **the ink worker is not deployed**, being among the unpushed commits below.
+**Do this first:**
 
-**Do this first — a room on the Grottoes:**
+1. **Carry on the live review.** Each finding goes into §7a's review list at once, and into the rules
+   if it changes one. Not yet seen by anyone: the extension description (only after a push, and only
+   on a fresh add, since Owlbear keeps the first), the web page (the dev server's front page), and most
+   of the confirmations and failure messages.
+2. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
+   stopped by the user after 312 of 479 shapes (`dev.log`). Every update deletes ours before writing,
+   so one complete update replaces it.
+3. ***Update scene* pressed straight after a reading release** — blur, threshold or window, pressed
+   before the new ink lands — must write the new setting's walls: it waits on `inkSettled`, then the
+   derive. Still not in any log.
+4. **A cleanup the text rules left** (found by grep on 2026-09-29, not yet swept). No control has a
+   `derive` line any more, so `Control.derive`, the derived half of the hint painter in
+   `settingRows.ts`, `Measured.pxPerSquare` and `lastPixelsPerSquare` have no reader, and
+   `probeWorldPoint` in `pipeline.ts` has no caller. Run the export sweep before deleting — the
+   pipeline's own `pxPerSquare` still feeds log lines.
 
-1. **Put the scene right.** It holds a partial set, from a close on 2026-09-25 at 06:26 that pushed all
-   520 rooms and stopped after 3,816 of 5,418 wall lines on the five-second timeout (§6's *The item
-   budget* has this and the close before it). The settings were min stroke 0.594 and min island 31px.
-   Bring the ink settings to where they should be and push: every push deletes ours before writing, so
-   that replaces the lot.
-2. ***Put on the map* pressed straight after a reading release** — blur, strictness or the window, and
-   the press before the new ink lands. It must push the new setting's walls: it waits on `inkSettled`,
-   then the derive. Not yet in any log.
-3. ~~**A close pressed within about a second of a reading release**~~ **Reached, and correct — seen in
-   `dev.log`, not reported from the room.** The same 06:26 close: the recompose for the last release
-   (min stroke back to 0.594) began about 0.4 seconds before *closing*, inferred from its 814ms of work
-   ending at 06:26:39.09, so no ink had landed for it. The close's own derive started 30ms after
-   *closing* with min stroke 0.594, shared that recompose rather than starting another, and pushed 520
-   rooms — where the walls on screen were the previous setting's 81, at 1.188.
+**Found while building, offered and not answered:** an update with nothing to emit leaves the previous
+fog in the scene — `pushToFog` returns before deleting ours — so a GM who erases every wall and updates
+keeps the old fog.
 
-**Three short questions for the user, raised at the end of the session and not yet answered:**
+**Planned with the user, not built:**
 
-- **Should a close this large warn? — answered with a plan, not yet built (user, 2026-09-26).**
+- **A warning for a close this large** (user, 2026-09-26):
   - **A persistent note while the walls are too detailed to write quickly**: a red dot and a short note
     beside the status line, live, so Collapse, Prune and Straighten visibly clear it. **No item count
     in it** — a count means nothing to a GM, who is already looking at the density of vertices; it
     says the walls are too detailed. Threshold: the provisional 1,500 items.
-  - **A dialog only when the write is expected to fail**, on both routes — closing and *Put on the
-    map* — so §6's objection to a dialog on the way out gives way only where the exit would otherwise
+  - **A dialog only when the write is expected to fail**, on both routes — closing and *Update
+    scene* — so §6's objection to a dialog on the way out gives way only where the exit would otherwise
     leave a broken scene. Provisionally **4,000 items**, from the record: 3,312 written twice (1¾–2
     minutes), stops after 4,336 and 2,568 written, and 5,881 never. Every failure is one batch passing
     Owlbear's five-second limit; that batches slow as the scene fills is reasoned, not measured.
-  - **The 1,500-item dialog in front of *Put on the map* goes**, replaced by the note — one rule for
-    both routes. Stop writing and Exit anyway stay as the way out of a slow write.
+  - **The 1,500-item dialog in front of *Update scene* goes**, replaced by the note — one rule for
+    both routes. *Stop* and *Cancel update and exit* stay as the way out of a slow write.
   - **Measure first: can smaller batches or longer pauses push a very detailed graph slowly but
     completely?** If so the failure dialog shrinks to a rare case or goes, and the 4,000 figure is
     re-set by the measurement.
-- **Answered (user, 2026-09-26): remove the ink shape check — planned, not yet built.** It is log-only,
-  the workspace already draws its symptom (a room broken around a solid lump), *Suppress blobs* is the
-  fix, it cannot see a lump touching a wall, and the slider plan's stubby-lump test judges lumps after
-  the opening where it can. Remove `findInkBlobs` from the recompose and its log line; `label.ts` was
-  its last caller, so run the reachability sweep after. The original question, for the record:
-- **Does the ink shape check still earn its place?** It is a report-only count of solid blobs in the log,
-  65 to 364ms of every recompose across `dev.log`, usually under 160. In the worker it delays the ink rather than freezing the page, so the
-  question is only whether anyone reads the line.
-- **Answered (user, 2026-09-26): yes — *Arden Vul 015* is the second map, and a hard one.** No outer
-  walls drawn as lines: the whole exterior is filled. Blue ink. A great deal of fine detail. Very large
-  for its scale, with far more rooms than a typical map. Rectilinear architecture and sinuous caves and
-  tunnels together. Several features read as large dark areas inside regions. The user's judgement: a
-  reasonable worst case for old-school styles in most respects — not for scan artefacts or faded colour,
-  which it lacks; something painterly, like a 5e battle map, is probably out of reach entirely.
-
-  **Judged in a room, and it worked well (user, 2026-09-26)** — most of the map prepared as a test,
-  and *"for how challenging it is, I was very impressed."* Capturing the walls needed the ink settings
-  fine-tuned so Sauvola made a **ring everywhere one was needed** — a filled exterior reads as an
-  outline — while keeping the excess down. What cannot be told apart: a lot of interior detail, and
-  **thin "door" boxes** drawn in the walls. Working on it is expected to suggest new tools; none named
-  yet. **This retires the second-map check** the record has carried since 2026-09-13. The original
-  question, for the record:
-- **Is *The Maps Of Arden Vul 015* a different drawing style from the Grottoes?** `dev.log` shows it
-  worked on the same day, before the Grottoes. If it is, it is the second map below, already in hand.
-
-**First, waiting on the user: a live look at the new text (2026-09-29).** Their pass over the
-interface text came back half done, and that was enough: the style was read off their edits and
-agreed as **§7a's *The text rules***, and the whole surface was brought to them the same day — their
-edits as written, adjusted by the rules, and everything else by the rules alone (user: *"I don't need
-an exhaustive review before you do it"*). §7a's *Applied the same day* has the renames and what was
-decided while building; feedback arrives in chat, and a rule it changes goes into §7a with it. `text-pass/` (gitignored) holds `Text pass - Fog Nudger.docx` —
-244 items taken from commit `e1eb078` — and `text-pass-baseline.json`, which ties each item to the file
-and line it came from. `python text-pass/tools/read_edits.py "<the docx>"
-text-pass/text-pass-baseline.json` lists every tracked change and comment by item. **Apply by the old
-wording, not the line numbers**, and change every copy an item cites — a tool's name, for one, is also
-stored in its group declaration. Word renames paragraph styles when it saves, which is why the reader
-goes by style name.
+- **Remove the ink shape check** (user, 2026-09-26). It is log-only, the workspace already draws its
+  symptom (a room broken around a solid lump), *Suppress marks* is the fix, it cannot see a lump
+  touching a wall, and the slider plan's stubby-lump test judges lumps after the opening where it can.
+  Remove `findInkBlobs` from the recompose and its log line; `label.ts` was its last caller, so run the
+  reachability sweep after.
+- **The stroke slider, and a rule for every slider** (user, 2026-09-26). It began as the ticks sitting
+  between the changes rather than on them — by design: each sits at the centre of a radius's band — and
+  the two fixes offered were superseded by this, the answer to what the slider is really for, *one of a
+  handful of integer radii* engineered through a continuous ink-width unit:
+  - **A rule for every slider: the handle glides; the value it stores and the yellow number it shows
+    are already the value the code will use** — rounded, floored or stepped at the control, once. Where
+    a track has **20 or fewer** distinct outcomes it gets tick marks at the points where the result
+    changes. Also moves *Fill gaps* (snaps in twos today; would glide and store even numbers), *Contrast
+    window*, *Smallest mark to keep* and both brush widths.
+  - **Thinnest stroke to keep becomes pixels**: 0 is off, stored values even — the stroke width 2r a
+    radius removes. A unit change, so a renamed key: this one control resets to off on existing scenes.
+  - **Its top is measured: the smallest setting at which only stubby lumps survive.** A lump is stubby
+    when its **greatest width in any direction** (the farthest pair of its edge points, from each row's
+    leftmost and rightmost pixel) is **at most 2.5×** its thickness, the thickness being the largest
+    square that fits inside it — one pass over the map. A ratio, not a difference, so a blob's size
+    does not decide. Blobs cannot run away: Sauvola makes anything much wider than its window a ring.
+    Survivors are judged after the opening, which is what separates a blob from the wall it touched —
+    the ink shape check's blind spot. The profile's openings per radius can carry the test. 2.5 is
+    reasoned, not measured.
+  - **Greatest width replaces the bounding box's longest side** in the one shared definition of a
+    lump's span, so *Smallest mark to keep*, *Suppress marks* and the island profile follow together. A
+    diagonal mark reads up to √2 longer, so it survives settings that removed it — a behaviour change,
+    not a unit change.
+  - **A future task, wanted (user, 2026-09-26): open with a disc, not a square, so every line direction
+    is treated alike** — provided speed does not degrade the experience. The square's separable
+    running counts are why a diagonal wall of the same thickness is erased at about 0.71 of the
+    setting a horizontal one is (geometry; the heal step already met this). A disc via an exact
+    distance transform is also one pass at any radius (reasoned): perhaps 2–4× the work per opening
+    against today's 530–700ms on the Grottoes, but its erosion half is computed once and serves every
+    radius, which the ink profile could share. **Time it before designing.** Costs: a new filter, a
+    redesigned heal, a new profile, fresh oracles; every saved stroke setting behaves differently;
+    outcomes stop being whole radii, so the track gains many more real stops.
 
 **Next, needing a design conversation first** (the rhythm in the operating notes — *well defined?*, the
 one question, a picture if it is geometric, name and glyph, a numbered plan):
@@ -3865,7 +3875,7 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
 - **Superimposed walls must not happen** (user, 2026-09-29: *"If the check fails, fix it rather than
   warning."*). Euler's identity fails legitimately on two walls lying along each other, which §5 calls a
   legal intermediate state — *reported, never fixed* — and which this makes a thing to prevent. Where
-  they arise: Move and Draw report *N walls lie along another* when an edit leaves one, and the build
+  they arise: *Move point* and *Draw segment* warn *N walls overlap others* when an edit leaves one, and the build
   drops coincident segments from fitting. What *fix* means — merge the pair, refuse the edit, or
   something else — is the design question. Until then the check is a log line only, off the screen by
   the text rules.
@@ -3883,62 +3893,6 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
   later). Owlbear's grid types are square, hex vertical, hex horizontal, isometric and dimetric
   (`GridType` in the SDK), and nothing here has been checked on the last four. It matters most to the
   parked unit for the Walls tools (§7a), where grid squares are one candidate.
-
-- **The stroke slider's ticks must sit where the result changes, and they sit between the changes**
-  (user, 2026-09-25: *"the ticks in the thinnest line slider need to correspond to where the result will
-  change"*). **Checked the same day, and it is the design rather than a regression.** §4's *Each filter
-  draws the distribution it acts on* placed each tick at the **centre** of a radius's band: a tick at
-  `2r / inkWidth` is a width of `2r`, the midpoint of the `[2r − 1, 2r + 1)` that `Math.round` maps to
-  radius `r` — so the filter changes half a step either side of every tick, which is what a room sees.
-
-  **Not a switch from `floor` to `round`**, which the user suspected: `radiusForWidth` has been
-  `Math.round(width / 2)` since it was written (`5e0a589`, 2026-08-23), and `git log -S` finds no
-  `floor` there ever. The `floor` in §4's tick paragraph is `tickPositions` counting whole steps, a
-  different thing.
-
-  **Two fixes, and choosing is the one question:**
-
-  - **Move the ticks half a step down**, to `(2r − 1) / inkWidth`, and keep `round`. Every tick is then a
-    point where the result changes, and no stored setting filters differently. The readout, which
-    prints the nearest tick as the radius, would have to count the band the handle is in instead.
-  - **Switch `radiusForWidth` to `floor`**, and keep the ticks. The bands become `[2r, 2r + 2)`, so
-    today's ticks land exactly on the changes. This is the round-versus-floor question §4's ink
-    investigation held — `floor` never filters more than a setting asks for, where `round` gives up to a
-    pixel more — and it changes what every stored setting does by half a band. Whatever else on that
-    rail converts between a setting and a radius has to follow; the ink profile's band placement is the
-    one to check.
-
-  **Superseded by a plan, not yet built (user, 2026-09-26)** — neither fix above; the user asked what
-  the slider is really for, and the answer is *one of a handful of integer radii* engineered through a
-  continuous ink-width unit:
-  - **A rule for every slider: the handle glides; the value it stores and the yellow number it shows
-    are already the value the code will use** — rounded, floored or stepped at the control, once. Where
-    a track has **20 or fewer** distinct outcomes it gets tick marks at the points where the result
-    changes. Also moves Gaps (snaps in twos today; would glide and store even numbers), Detail window,
-    Smallest mark to keep and both brush widths.
-  - **Thinnest stroke to keep becomes pixels**: 0 is off, stored values even — the stroke width 2r a
-    radius removes. A unit change, so a renamed key: this one control resets to off on existing scenes.
-  - **Its top is measured: the smallest setting at which only stubby lumps survive.** A lump is stubby
-    when its **greatest width in any direction** (the farthest pair of its edge points, from each row's
-    leftmost and rightmost pixel) is **at most 2.5×** its thickness, the thickness being the largest
-    square that fits inside it — one pass over the map. A ratio, not a difference, so a blob's size
-    does not decide. Blobs cannot run away: Sauvola makes anything much wider than its window a ring.
-    Survivors are judged after the opening, which is what separates a blob from the wall it touched —
-    the ink shape check's blind spot. The profile's openings per radius can carry the test. 2.5 is
-    reasoned, not measured.
-  - **Greatest width replaces the bounding box's longest side** in the one shared definition of a
-    lump's span, so Smallest mark to keep, Suppress blobs and the island profile follow together. A
-    diagonal mark reads up to √2 longer, so it survives settings that removed it — a behaviour change,
-    not a unit change.
-  - **A future task, wanted (user, 2026-09-26): open with a disc, not a square, so every line direction
-    is treated alike** — provided speed does not degrade the experience. The square's separable
-    running counts are why a diagonal wall of the same thickness is erased at about 0.71 of the
-    setting a horizontal one is (geometry; the heal step already met this). A disc via an exact
-    distance transform is also one pass at any radius (reasoned): perhaps 2–4× the work per opening
-    against today's 530–700ms on the Grottoes, but its erosion half is computed once and serves every
-    radius, which the ink profile could share. **Time it before designing.** Costs: a new filter, a
-    redesigned heal, a new profile, fresh oracles; every saved stroke setting behaves differently;
-    outcomes stop being whole radii, so the track gains many more real stops.
 - **Doors — read on 2026-09-25, not designed.** What Dynamic Fog's source says:
   - **A door is not an item.** It is a record in the metadata of the fog drawing it was cut into,
     `rodeo.owlbear.dynamic-fog/doors`: `{ open, start, end }`, each end a contour index and a distance
@@ -4031,20 +3985,19 @@ for the reason *The trace worker* gives.
 
 - **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
   *the scene has not finished loading* look the same, since the map list is briefly empty on load.
-- ~~**A second map in a different style**~~ **Retired 2026-09-26 on *Arden Vul 015*** (above), which
-  worked well. Still untried: scan artefacts, faded colour, printed grids. The original entry:
-  hatched stonework, a printed grid, a scan. Everything so far
-  was tuned on line-drawn maps, and the record has called this the most informative next step since
-  2026-09-13. **It needs no build**, only a map — and possibly one is already in hand (the Arden Vul
-  question above).
-- **The code still says `speckles`** where the GM sees *Suppress marks*, the way `dissolve` stayed when
-  its tool became *Erase loop*. A rename would touch four modules and a layer id for no behaviour.
+- **Map styles still untried: scan artefacts, faded colour, a printed grid.** *Arden Vul 015* was the
+  second map (2026-09-26) and worked well — a filled exterior, blue ink, fine detail, rooms and caves
+  together — once the ink settings made Sauvola draw a ring wherever one was needed. What cannot be told
+  apart there: interior detail, and thin "door" boxes drawn in the walls. Working it is expected to
+  suggest new tools; none named yet.
+- **The code still says `speckles`** where the GM sees *Suppress marks*, and `mark` where the GM sees a
+  cross, the way `dissolve` stayed when its tool became *Erase loop*. Renames that change no behaviour.
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**27 commits are not pushed** (measured 2026-09-29 with `git rev-list --count origin/main..main`:
-26 before the commit that writes this line, which makes it 27). **A push deploys**, so it waits for the
-user to want the public build to have them.
+**35 commits are not pushed** (measured 2026-09-29 with `git rev-list --count origin/main..main`:
+34 before the commit that writes this line, which makes it 35). **A push deploys**, so it waits for
+the user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
