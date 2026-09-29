@@ -50,6 +50,7 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
+import { doorEnds } from "./doors";
 import type { WallGraph } from "./wallGraph";
 
 /** One segment, as geometry rather than as a pair of ids — which is the point (see above). */
@@ -63,6 +64,12 @@ export interface WallGraphDelta {
   readonly added: readonly WallSegment[];
   /** Segments the derived graph has and the one in hand does not. The GM took these away. */
   readonly removed: readonly WallSegment[];
+  /**
+   * Doors the graph in hand has and the derived one does not, as their two ends — what a rebuild would
+   * take, since a derivation never has a door (2026-09-29). Kept apart from the walls so a door on a
+   * wall the GM never touched does not light that wall up as changed.
+   */
+  readonly addedDoors: readonly WallSegment[];
 }
 
 /**
@@ -107,6 +114,32 @@ function segmentCounts(graph: WallGraph): Map<string, number> {
 }
 
 /**
+ * Every door of a graph, keyed and counted like the segments.
+ *
+ * By the door's two ends, in the fixed order `segmentKey` uses. **Exact only for a door on the same
+ * segment stored the same way round**: a wall stored reversed measures its doors from the other end, and
+ * the two computations of one point can differ in the last bit. That is the only case that matters —
+ * every comparison made is a document against a derivation, and a derivation has no doors — so no
+ * tolerance is bought to cover the other.
+ *
+ * Four mutations over the door comparison, four caught, one only after a fixture for a door taken away.
+ */
+function doorCounts(graph: WallGraph): Map<string, { count: number; ends: WallSegment }> {
+  const counts = new Map<string, { count: number; ends: WallSegment }>();
+  for (const edge of graph.edges) {
+    if (!edge.doors || !graph.nodes[edge.a] || !graph.nodes[edge.b]) continue;
+    for (const door of edge.doors) {
+      const [a, b] = doorEnds(graph, edge, door);
+      const key = segmentKey(a, b);
+      const entry = counts.get(key);
+      if (entry) entry.count += 1;
+      else counts.set(key, { count: 1, ends: { a, b } });
+    }
+  }
+  return counts;
+}
+
+/**
  * What the GM did to the derived graph to arrive at the one in hand.
  *
  * Both directions in one pass over each graph: walk the current one against a tally of the derived
@@ -145,7 +178,14 @@ export function diffWallGraphs(derived: WallGraph, current: WallGraph): WallGrap
     }
   }
 
-  return { added, removed };
+  const derivedDoors = doorCounts(derived);
+  const addedDoors: WallSegment[] = [];
+  for (const [key, { count, ends }] of doorCounts(current)) {
+    const had = derivedDoors.get(key)?.count ?? 0;
+    for (let i = had; i < count; i++) addedDoors.push(ends);
+  }
+
+  return { added, removed, addedDoors };
 }
 
 /**
@@ -175,5 +215,11 @@ export function graphsDiffer(derived: WallGraph | null, current: WallGraph | nul
     if (left === 0) return true;
     remaining.set(key, left - 1);
   }
+  // The same walls, so the doors decide. A derivation has none, so a door is always a difference from
+  // one — the case the cover exists for, since a rebuild takes every door.
+  const before = doorCounts(derived);
+  const after = doorCounts(current);
+  if (before.size !== after.size) return true;
+  for (const [key, { count }] of after) if (before.get(key)?.count !== count) return true;
   return false;
 }

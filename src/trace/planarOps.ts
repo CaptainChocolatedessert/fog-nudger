@@ -28,10 +28,20 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import {
   compactNodes,
   documentPoint,
+  wallRunEdges,
   wallRuns,
   type WallEdge,
   type WallGraph,
 } from "./wallGraph";
+import {
+  carryDoors,
+  cutDoors,
+  placeDoors,
+  segmentLength,
+  withDoors,
+  type CarriedDoor,
+  type Door,
+} from "./doors";
 import { simplifyIndices } from "./simplify";
 import { segmentMeeting } from "./planarGraph";
 
@@ -56,6 +66,54 @@ interface Pending {
   readonly b: number;
   readonly changed: boolean;
   readonly isNew: boolean;
+  /**
+   * The doors this segment carries through the edit, as points taken before it — `doors.ts` has why a
+   * door travels as points. Absent for a segment with none, which is almost every segment.
+   */
+  readonly doors?: readonly CarriedDoor[];
+  /**
+   * The same doors as they were stored, with the ends they were measured on. **Kept exactly when the
+   * ends have not moved**, so an edit that does not touch a wall cannot nudge its door by a rounding
+   * step through a projection there was no need for.
+   */
+  readonly exact?: { readonly from: Vector2; readonly to: Vector2; readonly doors: readonly Door[] };
+}
+
+/** The door fields for a segment taken from the graph before an edit: nothing when it has no doors. */
+function doorFields(
+  nodes: readonly Vector2[],
+  edge: WallEdge,
+): Pick<Pending, "doors" | "exact"> {
+  if (!edge.doors || edge.doors.length === 0) return {};
+  return {
+    doors: carryDoors(nodes, edge),
+    exact: { from: nodes[edge.a]!, to: nodes[edge.b]!, doors: edge.doors },
+  };
+}
+
+/**
+ * The doors a segment has once its ends are where the edit put them.
+ *
+ * The stored array itself — the same object — when neither end moved, which is what lets an uncut
+ * segment keep its identity by reference; otherwise re-placed by `placeDoors`' rule. `undefined` for a
+ * segment with none.
+ */
+function doorsNow(nodes: readonly Vector2[], segment: Pending): readonly Door[] | undefined {
+  if (!segment.doors || segment.doors.length === 0) return undefined;
+  const from = nodes[segment.a]!;
+  const to = nodes[segment.b]!;
+  const exact = segment.exact;
+  if (
+    exact &&
+    exact.from.x === from.x &&
+    exact.from.y === from.y &&
+    exact.to.x === to.x &&
+    exact.to.y === to.y
+  ) {
+    return exact.doors;
+  }
+  const placed = placeDoors(segment.doors, from, to);
+  return placed.length > 0 ? placed : undefined;
 }
 
 /**
@@ -137,6 +195,7 @@ function resolveCrossings(
   for (let i = 0; i < pending.length; i++) {
     const segment = pending[i]!;
     const list = cuts.get(i);
+    const doors = doorsNow(nodes, segment);
     if (!list || list.length === 0) {
       /*
         Uncut: an existing segment keeps its *identity*, by reference — but only if its **ids** are
@@ -147,21 +206,36 @@ function resolveCrossings(
         is right. A **merge renames one of the ids**, and the original then describes the segment as
         it was *before* the merge — returning it silently undoes the whole operation, which is
         precisely what it did until this comparison was added.
+
+        **And only if its doors are the ones it held** (2026-09-29): a move leaves the ids alone but
+        re-places the doors on a segment whose end moved, so the original would carry them where the
+        wall no longer runs. `doorsNow` hands back the stored array itself when nothing moved, so the
+        comparison is by reference and costs nothing on a segment without doors.
       */
       const original = originals[i];
-      const unchanged = original && original.a === segment.a && original.b === segment.b;
-      edges.push(!segment.isNew && unchanged ? original : { a: segment.a, b: segment.b });
+      const unchanged =
+        original &&
+        original.a === segment.a &&
+        original.b === segment.b &&
+        original.doors === doors;
+      edges.push(!segment.isNew && unchanged ? original : withDoors(segment.a, segment.b, doors));
       continue;
     }
     // Ordered along the segment, or the rebuilt wall threads through its own cuts backwards.
     list.sort((x, y) => x.at - y.at);
     if (!segment.isNew) splits += list.length;
-    let previous = segment.a;
-    for (const cut of list) {
-      edges.push({ a: previous, b: cut.id });
-      previous = cut.id;
+    const ids = [segment.a, ...list.map((cut) => cut.id), segment.b];
+    const whole = segmentLength(nodes[segment.a]!, nodes[segment.b]!);
+    const pieces = doors
+      ? cutDoors(
+          doors,
+          list.map((cut) => cut.at * whole),
+          ids.slice(1).map((id, k) => segmentLength(nodes[ids[k]!]!, nodes[id]!)),
+        )
+      : [];
+    for (let k = 0; k + 1 < ids.length; k++) {
+      edges.push(withDoors(ids[k]!, ids[k + 1]!, pieces[k]));
     }
-    edges.push({ a: previous, b: segment.b });
   }
 
   return { graph: { nodes, edges }, splits, overlaps };
@@ -207,6 +281,7 @@ export function insertEdge(graph: WallGraph, points: readonly Vector2[]): EditRe
     b: edge.b,
     changed: false,
     isNew: false,
+    ...doorFields(graph.nodes, edge),
   }));
   for (let i = 0; i + 1 < newIds.length; i++) {
     pending.push({ a: newIds[i]!, b: newIds[i + 1]!, changed: true, isNew: true });
@@ -242,6 +317,7 @@ export function moveNode(graph: WallGraph, id: number, to: Vector2): EditResult 
     b: edge.b,
     changed: edge.a === id || edge.b === id,
     isNew: false,
+    ...doorFields(graph.nodes, edge),
   }));
 
   return resolveCrossings(nodes, pending, graph.edges);
@@ -277,7 +353,13 @@ export function mergeNodes(graph: WallGraph, from: number, into: number): EditRe
     const b = rename(edge.b);
     // The wall that was being closed up. Dropped rather than kept as a zero-length segment.
     if (a === b) continue;
-    pending.push({ a, b, changed: edge.a === from || edge.b === from, isNew: false });
+    pending.push({
+      a,
+      b,
+      changed: edge.a === from || edge.b === from,
+      isNew: false,
+      ...doorFields(graph.nodes, edge),
+    });
     originals.push(edge);
   }
 
@@ -339,11 +421,12 @@ export function splitEdgesAt(
   }
 
   let splits = 0;
-  const edges: { a: number; b: number }[] = [];
+  const edges: WallEdge[] = [];
   graph.edges.forEach((edge, index) => {
     const points = byEdge.get(index);
     if (!points) {
-      edges.push({ a: edge.a, b: edge.b });
+      // Untouched, so kept as it stands — doors and all.
+      edges.push(edge);
       return;
     }
     const p = nodes[edge.a]!;
@@ -354,20 +437,28 @@ export function splitEdgesAt(
     const ordered = points
       .map((point) => ({ point, t: ((point.x - p.x) * sx + (point.y - p.y) * sy) / lengthSquared }))
       .sort((a, b) => a.t - b.t);
-    let previous = edge.a;
-    for (const { point } of ordered) {
+    const ids = [edge.a];
+    const cuts: number[] = [];
+    for (const { point, t } of ordered) {
       const quantised = documentPoint(point.x, point.y);
-      const last = nodes[previous]!;
+      const last = nodes[ids[ids.length - 1]!]!;
       // Two landings on one point, or a landing that quantised onto the vertex before it.
       if (last.x === quantised.x && last.y === quantised.y) continue;
       if (q.x === quantised.x && q.y === quantised.y) continue;
       nodes.push(quantised);
-      const id = nodes.length - 1;
-      edges.push({ a: previous, b: id });
-      previous = id;
+      ids.push(nodes.length - 1);
+      cuts.push(t * Math.sqrt(lengthSquared));
       splits += 1;
     }
-    edges.push({ a: previous, b: edge.b });
+    ids.push(edge.b);
+    const pieces = edge.doors
+      ? cutDoors(
+          edge.doors,
+          cuts,
+          ids.slice(1).map((id, k) => segmentLength(nodes[ids[k]!]!, nodes[id]!)),
+        )
+      : [];
+    for (let k = 0; k + 1 < ids.length; k++) edges.push(withDoors(ids[k]!, ids[k + 1]!, pieces[k]));
   });
 
   return { graph: { nodes, edges }, splits, overlaps: 0 };
@@ -562,11 +653,14 @@ export function simplifyWalls(graph: WallGraph, tolerance: number): WallSimplifi
   }
 
   const nodes = [...graph.nodes];
-  const kept: WallEdge[] = [];
+  const pending: Pending[] = [];
   let removed = 0;
   let preserved = 0;
 
-  for (const run of wallRuns(graph)) {
+  // The same walk twice, so the two line up run for run: a run's k-th segment joins its k-th and
+  // (k+1)-th vertices, which is what lets a chord gather the doors of the segments it replaces.
+  const runEdges = wallRunEdges(graph);
+  for (const [r, run] of wallRuns(graph).entries()) {
     const points = run.map((id) => nodes[id]!);
     const indices = simplifyIndices(points, tolerance);
 
@@ -605,19 +699,34 @@ export function simplifyWalls(graph: WallGraph, tolerance: number): WallSimplifi
       Safe even if that invariant ever moved: a zero-length segment is dropped, counted and reported
       when the wall graph is built, so the failure would be loud rather than silent.
     */
+    const edgesOfRun = runEdges[r]!;
     for (let i = 1; i < survivors.length; i++) {
-      kept.push({ a: run[survivors[i - 1]!]!, b: run[survivors[i]!]! });
+      const first = survivors[i - 1]!;
+      const last = survivors[i]!;
+      /*
+        **A chord carries the doors of every segment it replaces** (2026-09-29), re-placed on it by the
+        one rule — which is also why a door stays within a segment: Straighten only ever merges them.
+        Where the chord *is* a single old segment the right way round, its doors are kept exactly.
+      */
+      const replaced = edgesOfRun.slice(first, last).map((index) => graph.edges[index]!);
+      const a = run[first]!;
+      const b = run[last]!;
+      const carried = replaced.flatMap((edge) => carryDoors(graph.nodes, edge));
+      const only = replaced.length === 1 ? replaced[0]! : null;
+      pending.push({
+        a,
+        b,
+        // Everything, deliberately. See the note above: this operation touched every wall, so there
+        // is no untouched set whose planarity the previous state still vouches for.
+        changed: true,
+        isNew: false,
+        ...(carried.length > 0 ? { doors: carried } : {}),
+        ...(only?.doors && only.a === a && only.b === b
+          ? { exact: { from: graph.nodes[a]!, to: graph.nodes[b]!, doors: only.doors } }
+          : {}),
+      });
     }
   }
-
-  const pending: Pending[] = kept.map((edge) => ({
-    a: edge.a,
-    b: edge.b,
-    // Everything, deliberately. See the note above: this operation touched every wall, so there is
-    // no untouched set whose planarity the previous state still vouches for.
-    changed: true,
-    isNew: false,
-  }));
 
   const resolved = resolveCrossings(nodes, pending, graph.edges);
   return {

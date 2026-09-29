@@ -63,6 +63,7 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
+import type { Door } from "./doors";
 import type { FittedEdge } from "./faces";
 import type { GraphExtent } from "./graphUnits";
 import { dropCollinear } from "./simplify";
@@ -79,6 +80,11 @@ export interface WallGraph {
 export interface WallEdge {
   readonly a: number;
   readonly b: number;
+  /**
+   * The doors along this segment, if it has any: sorted, never overlapping, measured from `a`.
+   * `doors.ts` has why a door lives on its segment rather than beside the graph.
+   */
+  readonly doors?: readonly Door[];
 }
 
 /** What deriving produced, and what it had to throw away to produce it. */
@@ -131,8 +137,16 @@ export interface WallGraphBuild {
  * non-square map — which is exactly the case the bump exists for. It is refused rather than converted
  * (user, 2026-09-16): the only scenes holding one are the author's, and converting would need the
  * map's aspect, which a version 3 document does not record.
+ *
+ * **Version 5 adds doors** (2026-09-29): the same bytes as version 4, followed by the doors — a count,
+ * then each as the index of its segment and two float32 distances from that segment's `a` end. Only the
+ * segments that have one are listed, so a map with no doors grows by one byte. A version 4 graph
+ * **converts** rather than being refused: its bytes mean exactly what they meant, and it simply has no
+ * doors.
  */
-const FORMAT_VERSION = 4;
+const FORMAT_VERSION = 5;
+/** The last version with no doors, still read. */
+const DOORLESS_VERSION = 4;
 
 /**
  * A coordinate as the document holds it.
@@ -302,7 +316,8 @@ export function compactNodes(graph: WallGraph): WallGraph {
     // An edge naming a vertex outside the table is not one this can renumber, and dropping it
     // quietly would lose linework. It cannot arise from a decoded document, which range-checks.
     if (a < 0 || b < 0) continue;
-    edges.push({ a, b });
+    // The segment's geometry is untouched, so its doors are carried as they stand.
+    edges.push(edge.doors ? { a, b, doors: edge.doors } : { a, b });
   }
   return { nodes, edges };
 }
@@ -769,6 +784,16 @@ export function encodeWallGraph(graph: WallGraph): string {
     body.varint(edge.a);
     body.varint(edge.b);
   }
+  let doors = 0;
+  for (const edge of graph.edges) doors += edge.doors?.length ?? 0;
+  body.varint(doors);
+  graph.edges.forEach((edge, index) => {
+    for (const door of edge.doors ?? []) {
+      body.varint(index);
+      body.float32(door.start);
+      body.float32(door.end);
+    }
+  });
 
   const bytes = body.bytes();
   const out = new ByteWriter();
@@ -787,13 +812,15 @@ export function encodeWallGraph(graph: WallGraph): string {
 /**
  * Decode the document, or `null` if it is not one this version wrote and can vouch for.
  *
- * Six refusals: not base64, wrong version, a checksum that does not match, a truncated body, a node
- * id outside the table, and trailing bytes.
+ * Seven refusals: not base64, wrong version, a checksum that does not match, a truncated body, a node
+ * id outside the table, a door that is not one — on a segment that does not exist, or with ends out of
+ * order or not numbers — and trailing bytes. A version 4 document is read as one with no doors.
  */
 export function decodeWallGraph(text: string): WallGraph | null {
   const bytes = fromBase64(text);
   if (!bytes || bytes.length < 5) return null;
-  if (bytes[0] !== FORMAT_VERSION) return null;
+  const version = bytes[0];
+  if (version !== FORMAT_VERSION && version !== DOORLESS_VERSION) return null;
 
   const expected = (bytes[1]! | (bytes[2]! << 8) | (bytes[3]! << 16) | (bytes[4]! << 24)) >>> 0;
   const body = bytes.slice(5);
@@ -820,6 +847,27 @@ export function decodeWallGraph(text: string): WallGraph | null {
     const b = input.varint();
     if (a === null || b === null || a >= nodes.length || b >= nodes.length) return null;
     edges.push({ a, b });
+  }
+
+  if (version === FORMAT_VERSION) {
+    const doorCount = input.varint();
+    if (doorCount === null) return null;
+    const doors = new Map<number, Door[]>();
+    for (let i = 0; i < doorCount; i++) {
+      const edge = input.varint();
+      const start = input.float32();
+      const end = input.float32();
+      if (edge === null || start === null || end === null || edge >= edges.length) return null;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
+      (doors.get(edge) ?? doors.set(edge, []).get(edge)!).push({ start, end });
+    }
+    for (const [index, list] of doors) {
+      const edge = edges[index]!;
+      // Sorted as the document promises; the encoder writes them that way, so this orders nothing a
+      // healthy document holds.
+      list.sort((left, right) => left.start - right.start);
+      edges[index] = { a: edge.a, b: edge.b, doors: list };
+    }
   }
 
   // Trailing bytes mean this is not the payload it claims to be, whatever it decoded to.

@@ -179,7 +179,7 @@ describe("diffWallGraphs", () => {
       ],
     );
 
-    expect(diffWallGraphs(ROOM, renumbered)).toEqual({ added: [], removed: [] });
+    expect(diffWallGraphs(ROOM, renumbered)).toEqual({ added: [], removed: [], addedDoors: [] });
   });
 
   it("survives a node table with entries no wall uses", () => {
@@ -201,7 +201,7 @@ describe("diffWallGraphs", () => {
       ],
     );
 
-    expect(diffWallGraphs(ROOM, withOrphans)).toEqual({ added: [], removed: [] });
+    expect(diffWallGraphs(ROOM, withOrphans)).toEqual({ added: [], removed: [], addedDoors: [] });
   });
 
   it("counts copies, so doubling a wall reads as one addition", () => {
@@ -281,7 +281,7 @@ describe("graphsDiffer", () => {
     );
 
     expect(graphsDiffer(ROOM, renumbered)).toBe(false);
-    expect(diffWallGraphs(ROOM, renumbered)).toEqual({ added: [], removed: [] });
+    expect(diffWallGraphs(ROOM, renumbered)).toEqual({ added: [], removed: [], addedDoors: [] });
   });
 
   it("catches a graph with the same number of walls in different places", () => {
@@ -324,5 +324,47 @@ describe("graphsDiffer", () => {
 
   it("reports a difference when the graph is gone and a base remains", () => {
     expect(graphsDiffer(ROOM, null)).toBe(true);
+  });
+});
+
+describe("doors in the comparison", () => {
+  const WALL: WallGraph = {
+    nodes: [
+      { x: Math.fround(0.1), y: Math.fround(0.1) },
+      { x: Math.fround(0.9), y: Math.fround(0.1) },
+    ],
+    edges: [{ a: 0, b: 1 }],
+  };
+  const WITH_DOOR: WallGraph = {
+    nodes: WALL.nodes,
+    edges: [{ a: 0, b: 1, doors: [{ start: Math.fround(0.2), end: Math.fround(0.3) }] }],
+  };
+
+  it("calls a graph with a door different from the same walls without one", () => {
+    // A rebuild takes every door, so a door is work the cover has to protect.
+    expect(graphsDiffer(WALL, WITH_DOOR)).toBe(true);
+    expect(graphsDiffer(WITH_DOOR, WITH_DOOR)).toBe(false);
+    // And the other way: a door taken away is a difference too. Written because a mutation removing
+    // the door-count comparison survived the line above.
+    expect(graphsDiffer(WITH_DOOR, WALL)).toBe(true);
+  });
+
+  it("calls a door moved along its wall a difference", () => {
+    const moved: WallGraph = {
+      nodes: WALL.nodes,
+      edges: [{ a: 0, b: 1, doors: [{ start: Math.fround(0.25), end: Math.fround(0.35) }] }],
+    };
+    expect(graphsDiffer(WITH_DOOR, moved)).toBe(true);
+  });
+
+  it("lists the doors a rebuild would take, and leaves the wall they are on unchanged", () => {
+    const delta = diffWallGraphs(WALL, WITH_DOOR);
+    expect(delta.added).toEqual([]);
+    expect(delta.removed).toEqual([]);
+    expect(delta.addedDoors).toHaveLength(1);
+    expect(delta.addedDoors[0]!.a.x).toBeCloseTo(0.3, 6);
+    expect(delta.addedDoors[0]!.b.x).toBeCloseTo(0.4, 6);
+    // And none when both have it.
+    expect(diffWallGraphs(WITH_DOOR, WITH_DOOR).addedDoors).toEqual([]);
   });
 });
