@@ -343,7 +343,9 @@ export const TOOLS: readonly ToolChoice[] = [
   },
   {
     id: "draw",
-    label: "Draw wall",
+    // *Draw segment*, not *Draw wall* (user, 2026-09-29): it pairs with *Erase segment*, and keeps the
+    // segment-or-chain distinction when both tools might be called walls.
+    label: "Draw segment",
     band: "walls",
     drag: "edit",
     /*
@@ -352,7 +354,7 @@ export const TOOLS: readonly ToolChoice[] = [
       Escape cancelling a half-drawn wall is the key's ordinary meaning.
     */
     hint:
-      "Drag to draw a wall, or click both ends. Hold <b>Shift</b> to keep an end from joining, " +
+      "Drag to draw a wall segment, or click both ends. Hold <b>Shift</b> to keep an end from joining, " +
       "and <b>Ctrl</b> to pan.",
   },
   {

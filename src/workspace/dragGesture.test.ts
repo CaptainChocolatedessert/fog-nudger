@@ -260,7 +260,7 @@ describe("drawing a wall", () => {
     const result = applyDraw(crossed, from, to)!;
 
     expect(result.splits).toBe(1);
-    expect(describeDraw(result.overlaps)).toBe("Drew a wall.");
+    expect(describeDraw(result.overlaps)).toBe("Drew a wall segment.");
     // The crossing is a real vertex now, met by four walls rather than passed through by two.
     const meeting = result.graph.nodes.findIndex((n) => n.x === documentPoint(0.5, 0.5).x && n.y === documentPoint(0.5, 0.5).y);
     expect(nodeDegrees(result.graph)[meeting]).toBe(4);
@@ -299,9 +299,9 @@ describe("drawing a wall", () => {
   });
 
   it("says what it drew, and stays quiet when there is nothing to add", () => {
-    expect(describeDraw(0)).toBe("Drew a wall.");
-    expect(describeDraw(1)).toBe("Drew a wall. 1 wall overlaps another.");
-    expect(describeDraw(2)).toBe("Drew a wall. 2 walls overlap others.");
+    expect(describeDraw(0)).toBe("Drew a wall segment.");
+    expect(describeDraw(1)).toBe("Drew a wall segment. 1 wall overlaps another.");
+    expect(describeDraw(2)).toBe("Drew a wall segment. 2 walls overlap others.");
   });
 });
 

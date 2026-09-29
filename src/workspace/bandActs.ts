@@ -11,7 +11,7 @@
  *
  * ## Why the order is stated here rather than in the strip
  *
- * A band can hold more than one, and Walls now does: *Toggle walls around the map edge* and then
+ * A band can hold more than one, and Walls now does: *Toggle edge walls* and then
  * *Clear wall edits*. Which comes first is a fact about the band, not about the loop that draws it —
  * and the strip's own rule is that **what a button acts on is said by where it is**, which only
  * holds if "where" is written down once.

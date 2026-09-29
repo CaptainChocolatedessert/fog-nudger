@@ -271,7 +271,7 @@ export function applyDraw(
  * as one thing happening in four ways when it is four things.
  */
 export function describeDraw(overlaps: number): string {
-  return `Drew a wall.${describeOverlaps(overlaps)}`;
+  return `Drew a wall segment.${describeOverlaps(overlaps)}`;
 }
 
 /**

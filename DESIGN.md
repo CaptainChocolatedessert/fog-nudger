@@ -3098,8 +3098,8 @@ body, and a hint loses its keys and examples.
 23. The yellow number shows the slider's one unit and reads *off* at zero. Where the value means
     nothing to a GM it shows a place from 1 to 100 instead. Never a second unit beside it. **Walls
     lengths print in pixels** (user, 2026-09-29) — Mend's two, Straighten's and Prune's — converted from
-    graph units by the last reading's raster, with the place standing in before one; Collapse's area
-    is the open case (below).
+    graph units by the last reading's raster, with the place standing in before one. Collapse's size,
+    an area, keeps its place (user).
 24. A space between a number and its unit, except before `%`: `12 px`, `40%`.
 25. Counts agree in number: *1 gap*, *2 gaps*.
 
@@ -3117,7 +3117,7 @@ body, and a hint loses its keys and examples.
 **A unit for the Walls tools, settled the same day in part** (user): pixels, for the lengths, which
 Mend already printed on a line under each slider. Grid squares were considered, and so was *Thinnest
 stroke to keep* as the GM's own minimum wall width, judged fragile because some maps barely respond to
-that setting. **Still open: Collapse's size is an area**, and prints a place from 1 to 100.
+that setting. **Collapse's size keeps its place from 1 to 100** (user), being an area.
 
 #### Applied the same day
 
@@ -3136,7 +3136,8 @@ pieces by the rules alone. **Nothing of it has been in a room**; the user review
 | *Preview fill* · *Going* · the *Rooms* switch | *Region opacity* · *Deleted* · *Regions* |
 | *Largest gap to look for* · *Same-wall distance* | *Largest gap to highlight* · *Smallest ink distance for a gap* (Mend: *wall distance*) |
 | *Size* (marks, regions) · *Length* · Straighten's own slider | *Largest mark / region to highlight* · *Longest dead end to highlight* · *Amount* |
-| *Mend* · *Straighten* · *Move* · *Draw* · *Erase* · *Span* | *Mend gaps* · *Straighten walls* · *Move point* · *Draw wall* · *Erase segment* · *Span opening* |
+| *Mend* · *Straighten* · *Move* · *Draw* · *Erase* · *Span* | *Mend gaps* · *Straighten walls* · *Move point* · *Draw segment* · *Erase segment* · *Span opening* |
+| *Toggle walls around the map edge* | *Toggle edge walls* |
 | the brushes' *Draw* / *Erase* · a *Suppress region* mark | *Paint* / *Erase* with the layer's name · a *cross* |
 
 **Decided while building, for checking:**
@@ -3195,6 +3196,8 @@ runs). Everything else — whether each message reads right where it appears —
 - **The Fill gaps rings drew under the regions and the walls**; every highlight draws on top now,
   which is a rule of §7a's markup palette.
 - **The Walls tools became a verb and a noun**, and their lengths print in pixels (rules 14 and 23).
+  *Draw segment* rather than *Draw wall*, to pair with *Erase segment* and keep segment against chain
+  (user); the map-edge toggle is *Toggle edge walls*.
 - **The map-edge toggle was disabled on a map whose walls were a fresh derivation** — after an
   unlock, here. It was gated on the *stored* walls where every wall tool is gated on the walls on
   screen and adopts the derivation on its first edit; it does the same now.

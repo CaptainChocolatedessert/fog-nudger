@@ -69,7 +69,8 @@ export const FRAME_ACT: BandAct = {
     necessarily think of as a room. The lesson is narrower than "name the point": a point that is
     only one of several is a guess at intent.
   */
-  label: "Toggle walls around the map edge",
+  // *Toggle edge walls* since 2026-09-29 (user): a verb and a noun, and the words its messages use.
+  label: "Toggle edge walls",
   glyph: "frame",
   /*
     The walls on screen, as every wall tool's gate is — not the stored ones (user, 2026-09-29: it was

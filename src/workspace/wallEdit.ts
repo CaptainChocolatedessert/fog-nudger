@@ -1105,10 +1105,10 @@ function end(): void {
   invalidate();
   const result = applyDraw(graph, from, to, MIN_WALL_PX * lastPerPixel);
   if (!result) {
-    say("Wall too short.");
+    say("Segment too short.");
     return;
   }
-  commit(result, describeDraw(result.overlaps), "drawing a wall", graph, result.overlaps > 0);
+  commit(result, describeDraw(result.overlaps), "drawing a wall segment", graph, result.overlaps > 0);
 }
 
 /**
