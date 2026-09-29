@@ -3108,11 +3108,68 @@ body, and a hint loses its keys and examples.
 100 for now. Grid squares were considered, and so was *Thinnest stroke to keep* as the GM's own
 minimum wall width, judged fragile because some maps barely respond to that setting. **Mend is the
 interesting case**, since it already prints pixels on the line under each slider.
+
+#### Applied the same day
+
+**Across the whole surface, in six commits** (2026-09-29), each through `tsc`, the suite and a build:
+the user's edits as written, adjusted by the rules, and the Walls band, the web page and the shared
+pieces by the rules alone. **Nothing of it has been in a room**; the user reviews it live.
+
+**Renamed**, for reading the rest of this record, which keeps the names each passage was written with:
+
+| was | is |
+|---|---|
+| *Open the workspace* · *Remove ours* · *Clear everything* | *Workspace* · *Remove all Fog Nudger items from this scene* · *Clear all Fog Nudger data from this scene* |
+| *Put on the map* · *Stop writing* · *Exit anyway* · *Controls* | *Update scene* · *Stop* · *Cancel update and exit* · *Hide controls* / *Show controls* |
+| *Suppress* · *Gaps* · *Suppress blobs* · *Prune the dead ends* | *Suppress ink* · *Fill gaps* · *Suppress marks* · *Prune dead ends* |
+| *Ink strictness* · *Texture blur* · *Detail window* · *Linework* | *Ink contrast threshold* · *Despeckle* · *Contrast window* · *Filters* |
+| *Preview fill* · *Going* · the *Rooms* switch | *Region opacity* · *Deleted* · *Regions* |
+| *Largest gap to look for* · *Same-wall distance* | *Largest gap to highlight* · *Smallest ink distance for a gap* (Mend: *wall distance*) |
+| *Size* (marks, regions) · *Length* · Straighten's own slider | *Largest mark / region to highlight* · *Longest dead end to highlight* · *Amount* |
+| the brushes' *Draw* / *Erase* · a *Suppress region* mark | *Paint* / *Erase* with the layer's name · a *cross* |
+
+**Decided while building, for checking:**
+
+- ***Remove all Fog Nudger items* confirms** (user: *"confirm with a 'permanent' note"*): *Permanently
+  remove all Fog Nudger items from this scene?*, one line — *Saved walls and wall edits go too.* — and
+  *Remove*. Its note and result sentence were the only places that said the walls go.
+- ***Clear*, not the text pass's *Remove*, for all the data**, by rule 15 and the user's own
+  *"permanently clear"*: *Permanently clear all Fog Nudger data from this scene?*
+- **The unlock sentence claims manual wall edits in the one case they may not exist** — a base missing
+  or for another map, which the gate reads as *assume it was edited*. The wording it replaced said only
+  what the comparison measures, true in every case; the user's is plainer in the ordinary one.
+- **The yellow number's unit is declared per control** (`Control.unit`) and printed by a new pure
+  module, `workspace/readout.ts`, with tests — six mutations, six caught. The contrast window prints
+  its width (twice the radius it stores, plus one); the mark tool's span prints pixels rather than a
+  place; the lines that repeated a brush width or a gap size under the slider went.
+- **The status line reports actions, not the pipeline.** No ink share, no room summary, no
+  dropped-walls note and no CHECK FAILED — all in `dev.log` still, the dropped count added to the
+  derive's line. A reading or derive takes down only its own working message (`unsay`); the
+  slider-drag message went, and the pending-edit flag that protected it with it.
+- **Saving is not announced**: the ink's *saving… / saved …* and the walls' *saving…*. Failures still
+  are, in the warning style; a too-large ink layer says *too large to store*, its sizes in the log.
+- **Ctrl is said once where a plain drag does not pan** — under the brush pair (*Shift to toggle.
+  Ctrl to pan.*), and in Draw's, Draw chain's and *Suppress region*'s hints — by rule 7, though the
+  text pass had cut it from the brush hints. Draw's hint drops Escape, whose meaning is the ordinary
+  one.
+- **Counts**: *Fill gaps* and the three ringed wall tools say how many they found and took; *Suppress
+  marks* says what it took, not how many it found, as the user's edit had it.
+- **Move and Draw say a wall left lying along another, as a warning**, until that case is prevented
+  (§10) — the one count they keep. How many walls a crossing split went.
+- ***No walls to write. Scene left unchanged.*** rather than the text pass's *"the scene is current"*,
+  which is not so there. **Found while building, not changed:** a push with nothing to emit leaves the
+  previous fog in the scene, so a GM who erases every wall and updates keeps the old fog.
+- **Two *Done* buttons in *Suppress marks***, the text pass's other find: its drawer added one and the
+  ink tools' shared head gave it another. The drawer's went.
+
+**Checked from a desk:** `tsc`, 1,167 tests in 83 files, a build; the panel at its 320px width and the
+bar at 1280px in the browser pane (Chromium, outside Owlbear, where nothing past the start-up line
+runs). Everything else — whether each message reads right where it appears — is the live review's.
 ---
 
 ## 8. Testing and diagnostic practice
 
-**1,165 tests across 82 files** (measured 2026-09-24), all pure — everything that needs a DOM or a scene is not tested, which
+**1,167 tests across 83 files** (measured 2026-09-29), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3752,11 +3809,12 @@ section. The published site runs the derive's worker (checked from a desk after 
 - **Is *The Maps Of Arden Vul 015* a different drawing style from the Grottoes?** `dev.log` shows it
   worked on the same day, before the Grottoes. If it is, it is the second map below, already in hand.
 
-**The user's pass over the interface text came back half done, and that was enough (2026-09-28).**
-They edited up to the end of the Ink band; the style was read off those edits and agreed as **§7a's
-*The text rules***, and the whole surface is being brought to them — their edits as written, adjusted
-by the rules, and everything else by the rules alone, then reviewed live (user: *"I don't need an
-exhaustive review before you do it"*). `text-pass/` (gitignored) holds `Text pass - Fog Nudger.docx` —
+**First, waiting on the user: a live look at the new text (2026-09-29).** Their pass over the
+interface text came back half done, and that was enough: the style was read off their edits and
+agreed as **§7a's *The text rules***, and the whole surface was brought to them the same day — their
+edits as written, adjusted by the rules, and everything else by the rules alone (user: *"I don't need
+an exhaustive review before you do it"*). §7a's *Applied the same day* has the renames and what was
+decided while building; feedback arrives in chat, and a rule it changes goes into §7a with it. `text-pass/` (gitignored) holds `Text pass - Fog Nudger.docx` —
 244 items taken from commit `e1eb078` — and `text-pass-baseline.json`, which ties each item to the file
 and line it came from. `python text-pass/tools/read_edits.py "<the docx>"
 text-pass/text-pass-baseline.json` lists every tracked change and comment by item. **Apply by the old
@@ -3936,13 +3994,13 @@ for the reason *The trace worker* gives.
   was tuned on line-drawn maps, and the record has called this the most informative next step since
   2026-09-13. **It needs no build**, only a map — and possibly one is already in hand (the Arden Vul
   question above).
-- **The code still says `speckles`** where the GM sees *Suppress blobs*, the way `dissolve` stayed when
+- **The code still says `speckles`** where the GM sees *Suppress marks*, the way `dissolve` stayed when
   its tool became *Erase loop*. A rename would touch four modules and a layer id for no behaviour.
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**7 commits are not pushed** (measured 2026-09-25 with `git rev-list --count origin/main..main`: 6
-before the commit that writes this line, which makes it 7). **A push deploys**, so it waits for the
+**27 commits are not pushed** (measured 2026-09-29 with `git rev-list --count origin/main..main`:
+26 before the commit that writes this line, which makes it 27). **A push deploys**, so it waits for the
 user to want the public build to have them.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
@@ -6357,7 +6415,7 @@ closed outright.
 | `trace/planarGraph.ts` | the crossing predicate and the planarity check |
 | `trace/planarOps.ts` | the edits — add a wall, move a vertex, merge two, erase one or several, split walls where a new wall will land — and the two queries the tools aim with |
 | `workspace/chainGesture.ts` | **what a click means while a chain is being drawn**: append, close, join or finish |
-| `trace/inkPatches.ts` | **what *Suppress blobs* offers and takes**: lumps of ink under a span, and the pixels one covers including what it encloses |
+| `trace/inkPatches.ts` | **what *Suppress marks* offers and takes**: lumps of ink under a span, and the pixels one covers including what it encloses |
 | `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
@@ -6402,14 +6460,16 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
 - **Shell** — `shell.ts` (transform, input, canvas stack, chrome, the way out, `withEscapeHatch`,
   `whileWorking`) · `drawer.ts` (**the drawer**: which group's settings *or* which tool's controls are
   showing — never both — and rendering that one thing) · `reading.ts` (the mask request cycle,
-  subscribed to by the layers — abandoning a reading for a newer one, locking *Gaps* and *Suppress
-  blobs* while the ink is re-read, and `inkSettled`, the first of the two waits a push makes) · `regions.ts` (the derive cycle — abandoning a derive for a newer one,
+  subscribed to by the layers — abandoning a reading for a newer one, locking *Fill gaps* and *Suppress
+  marks* while the ink is re-read, and `inkSettled`, the first of the two waits a push makes) · `regions.ts` (the derive cycle — abandoning a derive for a newer one,
   locking the wall tools while one runs, and the wait a push asks for — and `showingSaved`, the one
   predicate deciding which graph is on screen) · `stage.ts` (the stored graph, the hand-edit count and
   undo)
 - **Map and push** — `mapPicker.ts` · `mapSource.ts` · `pushAction.ts` (the bar's commit, the close
   hook, and `commitDerivation` — **where the save button went**) · `workspaceControl.ts`
-- **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `recompute.ts`
+- **Controls** — `settingRows.ts` (a row, its ghost mark and the discard warning) · `readout.ts` (**the
+  number beside a slider** — its unit with a space, off at zero, a place for the Walls tools — pure and
+  tested) · `recompute.ts`
   (**what a settings change invalidates** — the one place the three stages are spent, shared by a
   slider's release and a group's Defaults) · `settingsState.ts`
   (working and *applied* settings) · `ghostMark.ts` (where a slider's ghost goes — pure and tested) · `colourRows.ts` (the five colour
