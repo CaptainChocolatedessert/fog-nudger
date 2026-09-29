@@ -3178,6 +3178,9 @@ runs). Everything else — whether each message reads right where it appears —
   scene's state now and follows every change; the foot is only the result of a press**, hidden until
   there is one and cleared when the scene goes. The mirror case went with it: after a scene closed,
   the top went on saying *Scene open.*
+- **The purple band in the tool drawers is gone** (user: *"distracting"*): a rule down the left and a
+  faint purple fill under a tool's hint and controls, which made them one block. A tool's drawer holds
+  nothing else, so the band set them apart from nothing.
 ---
 
 ## 8. Testing and diagnostic practice

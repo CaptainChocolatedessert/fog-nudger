@@ -657,9 +657,6 @@
       */
       #tool-hint {
         margin: 0 0 0.9rem;
-        padding: 0.45rem 0.6rem;
-        border-left: 2px solid #bb99ff;
-        background: rgba(187, 153, 255, 0.09);
         font-size: 0.8rem;
         color: #c2c7e4;
       }
@@ -667,18 +664,16 @@
         display: none;
       }
       /*
-        The tool's own controls, sharing the hint's left rule so the two read as one block about the
-        thing in hand rather than as a hint and then some unrelated sliders.
+        The tool's own controls, under its hint, and plain like the rest of the drawer.
 
-        Pulled up under the hint by a negative margin matching the hint's own bottom, so a tool with
-        a hint and controls shows one bordered band and a tool with only a hint shows the same band
-        shorter. `:empty` is what makes that work with no tool selected at all.
+        **The two were one band until 2026-09-29**: a purple rule down the left and a faint purple
+        fill, shared by the hint and the controls — pulled up under the hint by a negative margin —
+        so they read as one block about the thing in hand. It went in the live review of the text
+        pass (user: *"distracting"*). With the drawer holding one thing at a time, the tool's hint and
+        controls are the drawer, so nothing else is there for a band to set them apart from.
       */
       #tool-controls:not(:empty) {
-        margin: -0.9rem 0 0.9rem;
-        padding: 0.45rem 0.6rem 0.1rem;
-        border-left: 2px solid #bb99ff;
-        background: rgba(187, 153, 255, 0.09);
+        margin: 0 0 0.9rem;
       }
       #tool-controls .row:last-child {
         margin-bottom: 0.5rem;
