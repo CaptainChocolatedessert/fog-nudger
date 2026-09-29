@@ -152,16 +152,6 @@ let leaving = false;
 let closing = false;
 
 /**
- * Whether a slider is mid-drag with its value not yet applied.
- *
- * It lives with the state line rather than with the controls because the state line is the only
- * thing that reads it: the mask on screen is the last *applied* reading, which is worth keeping
- * visible, but it must not be mistaken for the value the slider is now showing. This is what stops
- * a reading that lands mid-drag from quietly overwriting the message that says so.
- */
-let pendingEdit = false;
-
-/**
  * What a plain left-drag does, which the **open step** decides.
  *
  * Every step pans today, so this looks like ceremony — it is not. Painting is the next thing built
@@ -303,20 +293,18 @@ export function say(text: string, tone: "" | "working" | "bad" = ""): void {
 }
 
 /**
- * Report something finished, unless a slider has since been picked up.
+ * Take a working message down once its work is over — and only that message.
  *
- * The race is real and reachable on the first open: a mask started at load can land while a slider
- * is already being dragged, and the plain success message would replace "release to update" with
- * "ink 7.2%" — announcing as current a figure for a value the GM is in the middle of moving away
- * from. The pending message wins, because it is the one that is still true.
+ * A reading or a derive says it is running and then has nothing to report, since the result is the
+ * picture (text rules, 2026-09-29: no ink share, no room summary). Clearing the line outright would
+ * also wipe whatever a tool said in the meantime, so this clears it only if it still says `text`.
+ *
+ * `sayIfSettled` and a pending-edit flag were here: they kept a landing reading from overwriting
+ * *slider moved — release to update*, and went with that message, which the ghost mark on the
+ * slider's own track already says.
  */
-export function sayIfSettled(text: string, tone: "" | "working" | "bad" = ""): void {
-  if (pendingEdit) return;
-  say(text, tone);
-}
-
-export function setPendingEdit(pending: boolean): void {
-  pendingEdit = pending;
+export function unsay(text: string): void {
+  if (stateLine?.textContent === text) say("");
 }
 
 /** The map's name, at the top of the workspace's controls. Set by the map source when one loads. */
@@ -905,7 +893,7 @@ export function setCloseAction(action: () => Promise<void>, stop?: () => void): 
  * How long a scene write may run before the sheet offers a way out of it.
  *
  * A full push on the test map is a couple of seconds, which reads as working. Past this it reads as
- * a hang, so the sheet says what is happening and reveals **Exit anyway** — the fourth exit, and the
+ * a hang, so the sheet says what is happening and reveals **Cancel update and exit** — the fourth exit, and the
  * reason the wait needs no arbitrary cap.
  *
  * **An earlier version dismissed automatically at twelve seconds.** That decides for the GM, and it
@@ -933,7 +921,7 @@ const STOP_GRACE_MS = 2_000;
  * It was, until 2026-09-07, and a room found the hole that made. The notice, the button, the stop
  * request and the grace period were all inside the close sequence — so they covered **closing** and
  * nothing else. Every other push had none of it: the two buttons at the foot of Walls, and the
- * editor's *Put on the map*, call the push directly and disable themselves for its duration. A GM
+ * editor's *Update scene*, call the push directly and disable themselves for its duration. A GM
  * who pressed *Edit the walls* on a graph too large to write got a sheet reading "saving, then
  * opening the editor…", two dead buttons, and no way out at all.
  *
@@ -948,8 +936,8 @@ const STOP_GRACE_MS = 2_000;
  * knows which was wanted. `close` reads `bailed` and goes anyway; a button reads it and re-enables
  * itself.
  *
- * The label is the caller's for the same reason: "Exit anyway" is right when leaving is what happens
- * next, and a lie when it is not.
+ * The label is the caller's for the same reason: "Cancel update and exit" is right when leaving is what
+ * happens next, and a lie when it is not.
  */
 export async function withEscapeHatch(
   work: Promise<void>,
@@ -969,7 +957,7 @@ export async function withEscapeHatch(
     exitAnyway = () => {
       bailed = true;
       options.stop();
-      say("stopping the write…", "working");
+      say("Stopping the update…", "working");
       resolve("bailed");
     };
   });
@@ -1047,8 +1035,8 @@ async function close(): Promise<void> {
 
     const { bailed, unwound } = await withEscapeHatch(pushing, {
       stop: () => onCloseStop?.(),
-      label: "Exit anyway",
-      notice: "still writing to the scene — Exit anyway leaves it partly done",
+      label: "Cancel update and exit",
+      notice: "Still updating the scene…",
     });
 
     if (bailed) {
@@ -1100,9 +1088,10 @@ document.getElementById("toggle-panel")?.addEventListener("click", (event) => {
   if (button instanceof HTMLButtonElement) {
     const showing = !panel?.classList.contains("hidden");
     button.setAttribute("aria-pressed", String(showing));
-    // The tooltip says what pressing it will do, so it has to swap with the state. It was
-    // permanently "Hide the controls", including while they were hidden.
-    button.title = showing ? "Hide the controls" : "Show the controls";
+    // The label says what pressing it will do, so it swaps with the state (text pass, 2026-09-29).
+    // It was *Controls*, with the swap in a tooltip that was permanently "Hide the controls" until
+    // it was fixed; with the label saying it, a tooltip would only repeat it.
+    button.textContent = showing ? "Hide controls" : "Show controls";
   }
   dirty = true;
 });

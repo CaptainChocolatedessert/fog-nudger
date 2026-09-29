@@ -187,7 +187,7 @@ function rebuild(suppress: PaintLayer | null, ink: PaintLayer | null): void {
     // On the state line as well as the log, matching the other two map-sized layers. A layer that
     // fails to allocate and says nothing is a GM looking at a surface that has quietly stopped
     // showing their own work.
-    say("could not allocate the paint overlay", "bad");
+    say("Out of memory.", "bad");
     return;
   }
   painted = bitmap;

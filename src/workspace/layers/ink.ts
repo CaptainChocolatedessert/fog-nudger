@@ -108,7 +108,7 @@ export function registerInkLayer(): void {
     lastMask = inkToDraw();
     const bitmap = rasterise(lastMask!, currentSettings().overlay.inkColour, painted);
     if (!bitmap) {
-      say("could not allocate the mask image", "bad");
+      say("Out of memory.", "bad");
       return false;
     }
     painted = bitmap;

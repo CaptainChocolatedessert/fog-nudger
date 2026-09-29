@@ -26,7 +26,7 @@ import { maskForOverlay, type MaskForOverlay, type MaskOutcome } from "../pipeli
 import { currentPaint } from "./paintState";
 import { currentSettings, markApplied } from "./settingsState";
 import { MaskRequests, shouldPaint } from "./maskRequest";
-import { invalidate, isClosing, say, sayIfSettled, whileWorking } from "./shell";
+import { invalidate, isClosing, say, unsay, whileWorking } from "./shell";
 
 /**
  * A step taking a reading.
@@ -83,7 +83,7 @@ export function isAbandoned(error: unknown): boolean {
     *"lock them"*), as the wall tools do during a derive. A paint-only recompose does not lock them:
     it cannot change the base, and they already compose the paint in hand themselves.
   - **A push** commits the walls of the last derive that landed, and a derive starts only once the ink
-    it is made from has landed — so *Put on the map* pressed straight after an ink slider would find no
+    it is made from has landed — so *Update scene* pressed straight after an ink slider would find no
     derive to wait for and push the walls of the settings just left. `inkSettled` is what it waits on
     first.
 */
@@ -132,7 +132,6 @@ function settleIfIdle(): void {
 
 /** The last reading's headline figures, so the two paths that report them cannot word it differently. */
 let lastInkShare: number | null = null;
-let lastReused = false;
 
 /*
   The gap counts were here, and they went with the search (2026-09-05).
@@ -222,16 +221,15 @@ function publish(result: MaskForOverlay, generation: number): boolean {
     }
   }
 
+  // The share of ink goes to the log only (text rules, 2026-09-29): the picture is the result, and
+  // a percentage is a number nobody acts on.
   lastInkShare = shareOfInk(result.mask);
-  lastReused = result.reused;
-  sayReading();
+  unsay(READING);
   return true;
 }
 
-function sayReading(): void {
-  if (lastInkShare === null) return;
-  sayIfSettled(`ink ${(lastInkShare * 100).toFixed(1)}%${lastReused ? " (cached)" : ""}`);
-}
+/** The one working message a reading puts up, so the landing can take down exactly that. */
+const READING = "Reading the map…";
 
 /** How a reading was arrived at, for the log. */
 function describeReuse(result: MaskForOverlay): string {
@@ -264,7 +262,7 @@ async function refreshMask(): Promise<void> {
   recomposeWanted = false;
   inFlight = true;
   invalidate();
-  say("reading the map…", "working");
+  say(READING, "working");
 
   // No copy. `Settings` is readonly through and through and `setSettings` replaces the whole object
   // rather than writing into it, so the reference taken here is already a snapshot of what was
@@ -311,7 +309,7 @@ async function refreshMask(): Promise<void> {
       recomposeWanted = true;
     } else if (requests.fail(generation)) {
       const detail = describeError(error);
-      say(`reading failed: ${detail}`, "bad");
+      say(`Reading failed: ${detail}.`, "bad");
       devLog("error", "workspace: reading the map failed", detail);
       console.error("Fog Nudger — workspace could not read the map", error);
     }
@@ -337,10 +335,10 @@ async function refreshMask(): Promise<void> {
  */
 export function describeMaskFailure(outcome: MaskOutcome & { ok: false }): string {
   return outcome.reason === "no-map"
-    ? "no map chosen — pick one under Map"
-    : // Matches `runTrace`'s wording for the same failure. The console is where the detail is, and
-      // it is genuinely there in a production build now.
-      `could not read pixels from "${outcome.mapName}" — see the console`;
+    ? "No map chosen."
+    : // Matches `runTrace`'s wording for the same failure. The detail is in the console, which the
+      // text rules keep out of what a GM reads.
+      `Could not read "${outcome.mapName}".`;
 }
 
 /**

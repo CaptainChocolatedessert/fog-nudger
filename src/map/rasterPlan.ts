@@ -70,7 +70,7 @@
  *
  * A 9299×5692 map (52.9 megapixels) was loaded in a room. It caps at factor 2 to 4649×2846, or 13.2
  * — inside the budget, and **the first time this path has ever run**. Closing the workspace then took
- * long enough that the GM used the Exit anyway button.
+ * long enough that the GM used the Cancel update and exit button.
  *
  * **The arithmetic above bounds the RASTER and says nothing about the decoded SOURCE.** `loadImage`
  * holds an `HTMLImageElement` for the full-size image while `drawToPixels` scales it into the capped

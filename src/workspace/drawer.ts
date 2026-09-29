@@ -506,7 +506,7 @@ function defaultsButton(step: Step): HTMLElement {
   button.textContent = "Defaults";
   button.addEventListener("click", () => {
     if (isStepDefault(currentSettings(), step.id)) {
-      say(`${step.title} is already at its defaults.`);
+      say(`${step.title} already at defaults.`);
       return;
     }
     setSettings(resetStep(currentSettings(), step.id));
@@ -514,7 +514,7 @@ function defaultsButton(step: Step): HTMLElement {
     void persistSettings();
     // Wholesale, because every row in this step is now showing a value it does not hold.
     renderPanel();
-    say(`${step.title} back to defaults.`);
+    say(`${step.title} returned to defaults.`);
   });
 
   const row = document.createElement("div");

@@ -43,7 +43,7 @@ import {
   persistSettings,
   setSettings,
 } from "./settingsState";
-import { invalidate, say, setPendingEdit } from "./shell";
+import { invalidate } from "./shell";
 
 /**
  * The track a control's slider runs over: its declared limits, and nothing else.
@@ -408,10 +408,10 @@ export function settingRow(control: Control): HTMLElement {
       away from and therefore the thing worth seeing. Blanking here would mean adjusting blind,
       which is the complaint that produced this shape.
 
-      What it must not do is look current, so the state line says the slider is ahead of the map.
+      What it must not do is look current, and the ghost mark on the track says so: it stays at the
+      value the picture was computed from while the handle moves away. The state line said it too,
+      *slider moved — release to update*, until the text rules of 2026-09-29.
     */
-    setPendingEdit(true);
-    say("slider moved — release to update", "working");
   });
 
   input.addEventListener("change", () => {
@@ -426,10 +426,8 @@ export function settingRow(control: Control): HTMLElement {
     for (const step of stepsOf(control.name)) workOn(sideOfStep(step));
     const position = Number(input.value);
     if (position === placed) {
-      // Nothing moved. Say so and stop, rather than writing a value the track happens to mean here
-      // and paying for a recompute that would arrive at the same picture.
-      setPendingEdit(false);
-      say("");
+      // Nothing moved. Stop, rather than writing a value the track happens to mean here and paying
+      // for a recompute that would arrive at the same picture.
       return;
     }
     /*
@@ -452,7 +450,6 @@ export function settingRow(control: Control): HTMLElement {
     */
     const current = fromSlider(position, limits, scale);
     setSettings(writeParameter(currentSettings(), control.name, current));
-    setPendingEdit(false);
 
     recomputeFor([control.name]);
     void persistSettings();

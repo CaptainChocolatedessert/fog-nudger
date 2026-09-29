@@ -443,7 +443,7 @@ function readingIdentity(map: ImageItem, dpi: number, settings: Settings): strin
  * pixels the GM painted.
  */
 export function probeMapFraction(u: number, v: number): string {
-  if (!cachedMask) return "Nothing read yet in this session — wait for the ink, then click again.";
+  if (!cachedMask) return "Nothing read yet.";
 
   const { rawField, mask, paint, name } = cachedMask;
   const line = describePoint(readPoint(rawField, mask, u * mask.width, v * mask.height, paint));
@@ -1364,7 +1364,7 @@ export async function runTrace(
     // that here would only make the panel's one line unreadable.
     return {
       ok: false,
-      message: "No map to trace — see dev.log for which case this was, or pick one above.",
+      message: "No map chosen.",
     };
   }
 
@@ -1384,7 +1384,7 @@ export async function runTrace(
   if (!resolved) {
     return {
       ok: false,
-      message: `Could not read pixels from "${map.name || "map"}" — see the console.`,
+      message: `Could not read "${map.name || "map"}".`,
     };
   }
   const mask = resolved.stage;

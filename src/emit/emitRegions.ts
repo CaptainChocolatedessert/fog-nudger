@@ -184,13 +184,11 @@ interface PushSource {
   readonly walls: readonly { readonly edge: number; readonly points: readonly Point[] }[];
   /** One line for the log, saying which source produced this and what it found. */
   readonly note: string;
-  /** What the GM is told the push was made from, before the counts of what reached the scene. */
-  readonly summary: string;
 }
 
 async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
   const map = await resolveTraceMap();
-  if (!map) return "No map is nominated — nothing to put on the map.";
+  if (!map) return "No map chosen.";
   const [bounds, dpi] = await Promise.all([readMapBounds(map), readGridDpi()]);
   // The image's own pixel size, which is what graph units are defined against — not the world box,
   // which a GM may have stretched out of proportion. The trace takes the same figure from the decoded
@@ -214,14 +212,16 @@ async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
     mapId: map.id,
     regions: emission.regions,
     walls: emission.walls,
+    /*
+      The check stays here and nowhere a GM reads (text rules, 2026-09-29). It said which source the
+      push came from and whether Euler's identity held, and a GM can act on neither: the identity
+      fails legitimately on two walls lying along each other, and otherwise only on a fault of ours,
+      which the region fills already show. What is wanted instead is that the doubled-wall case
+      cannot arise at all — DESIGN.md §10's resume point carries it.
+    */
     note:
       `emit: from the wall graph — ${emission.regions.length} rooms, ` +
       `${emission.suppressed} suppressed, ${emission.walls.length} wall lines, ${check}`,
-    // Says *which* of the two sources this came from, because in stage two a GM has every reason
-    // to want it confirmed that what went out was their editing rather than a fresh read.
-    summary: emission.faces.eulerHolds
-      ? `Put your edited walls on the map`
-      : `Put your edited walls on the map — but the graph failed its check, see dev.log`,
   };
 }
 
@@ -233,7 +233,7 @@ export async function pushToFog(
   // Cleared here rather than by the caller: a stop belongs to one push, and a request that arrived
   // while nothing was running must not silently abort the next one.
   stopRequested = false;
-  if (!(await OBR.scene.isReady())) return "No scene open — nothing to trace.";
+  if (!(await OBR.scene.isReady())) return "No scene open.";
 
   let source: PushSource;
   if (saved) {
@@ -257,7 +257,7 @@ export async function pushToFog(
     if (!outcome.ok) return outcome.message;
     const built = await wallGraphSource(outcome.run.walls.graph);
     if (typeof built === "string") return built;
-    source = { ...built, summary: outcome.run.summary };
+    source = built;
   }
   devLog("info", source.note);
 
@@ -317,10 +317,9 @@ export async function pushToFog(
       "emit: nothing was emittable, so the scene still holds the previous run's fog — it no longer " +
         "matches the settings on screen",
     );
-    return (
-      "Traced, but there was nothing to put on the map. The scene was left as it was, so it still " +
-      "holds the previous run — see dev.log."
-    );
+    // Not "the scene is current", which the text pass proposed: the previous fog is still there and
+    // no longer matches the walls, which is exactly what the log line above warns about.
+    return "No walls to write. Scene left unchanged.";
   }
 
   // Ours go before the replacements arrive. See the note above on why this order.
@@ -334,7 +333,7 @@ export async function pushToFog(
     } catch (error) {
       const detail = describeError(error);
       devLog("error", `emit: could not clear ${existing.length} of our items — ${detail}`);
-      return `Could not clear the previous run: ${detail}. Nothing new was written.`;
+      return `Update failed: ${detail}. Nothing updated.`;
     }
     devLog("info", `emit: cleared ${existing.length} of our items before writing`);
   }
@@ -367,10 +366,7 @@ export async function pushToFog(
       console.error(`Fog Nudger — push failed after ${written} shapes: ${detail}`);
       devLog("error", `emit: stopped after ${written} of ${shapes.length} shapes — ${detail}`);
       forgetPushed();
-      return (
-        `Stopped after ${written} of ${shapes.length} shapes: ${detail}. ` +
-        `The scene holds a partial result — push again once the cause is dealt with.`
-      );
+      return `Update failed: ${detail}. Scene partly updated.`;
     }
     written += batch.length;
     // Pacing ahead of the limiter rather than only reacting to it. A backoff recovers from a
@@ -405,10 +401,7 @@ export async function pushToFog(
       const detail = describeError(error);
       devLog("error", `emit: stopped after ${walls} of ${lines.length} wall segments — ${detail}`);
       forgetPushed();
-      return (
-        `Pushed ${written} regions, then stopped after ${walls} of ${lines.length} wall ` +
-        `segments: ${detail}. The scene holds a partial result.`
-      );
+      return `Update failed: ${detail}. Scene partly updated.`;
     }
     walls += batch.length;
     if (index < wallBatches.length - 1) await pause(BATCH_PAUSE_MS);
@@ -416,11 +409,14 @@ export async function pushToFog(
 
   lastPushed = fingerprint ?? null;
   devLog("info", `emit: pushed ${written} shapes and ${walls} wall segments onto the FOG layer`);
+  // Counted in Owlbear's words, since this is about the scene: shapes and lines (text rules).
   return (
-    `${source.summary}. On the map: ${written} regions` +
-    (walls > 0 ? ` and ${walls} wall segments` : "") +
-    (skipped.length > 0 ? `, skipped ${skipped.length} over the cap` : "") +
-    `.`
+    `Updated scene. ${written} shape${written === 1 ? "" : "s"}` +
+    (walls > 0 ? ` and ${walls} line${walls === 1 ? "" : "s"}` : "") +
+    "." +
+    (skipped.length > 0
+      ? ` Skipped ${skipped.length} shape${skipped.length === 1 ? "" : "s"} too large to write.`
+      : "")
   );
 }
 

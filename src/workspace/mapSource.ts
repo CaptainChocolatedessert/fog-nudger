@@ -38,6 +38,13 @@ import { clearInkProfiles } from "./inkProfiles";
 import { openOnOwlbearsView, say, setMapImage, setMapName } from "./shell";
 
 /**
+ * One sentence for every stored document that would not decode — the painting, the wall edits, the
+ * crosses (text rules, 2026-09-29). Which one it was is in the console; a GM's next move is the same
+ * whichever it was.
+ */
+const SAVED_DATA_LOST = "Some saved data could not be restored.";
+
+/**
  * Load whatever map the scene currently nominates, and take a reading of it.
  *
  * **It took an `opening` flag until 2026-09-20**, which moved the GM to the Ink step when a map was
@@ -76,7 +83,7 @@ export async function loadNominatedMap(): Promise<void> {
   if (map) {
     const early = await loadPaint(map.id);
     if (early.corrupt) {
-      say("some saved painting could not be read and has been ignored — see the console", "bad");
+      say(SAVED_DATA_LOST, "bad");
     }
   }
 
@@ -101,7 +108,7 @@ export async function loadNominatedMap(): Promise<void> {
     // answer one step away; "unreadable" is a map that *is* chosen and drawn, whose pixels would not
     // come back — telling that GM to pick a map is advice they cannot act on.
     say(describeMaskFailure(outcome), "bad");
-    setMapName(outcome.reason === "no-map" ? "No map chosen." : `${outcome.mapName} — unreadable.`);
+    setMapName(outcome.reason === "no-map" ? "No map chosen" : `${outcome.mapName} (unreadable)`);
     setMapImage(null);
     /*
       And drop the shapes on the two ink sliders, for the gap marks' reason one line up: they
@@ -134,13 +141,13 @@ export async function loadNominatedMap(): Promise<void> {
   */
   startOn(wallsEdited());
   if (stage.corrupt) {
-    say("the saved wall editing could not be read and has been ignored — see the console", "bad");
+    say(SAVED_DATA_LOST, "bad");
   }
   // After the stage, which clears the undo history for this map: marks are another document of the
   // same map, and their history went with it.
   const marked = await loadMarks(result.mapId);
   if (marked.corrupt) {
-    say("the saved suppression marks could not be read and have been ignored — see the console", "bad");
+    say(SAVED_DATA_LOST, "bad");
   }
 
   /*
@@ -154,7 +161,7 @@ export async function loadNominatedMap(): Promise<void> {
   if (result.mapId !== map?.id) {
     const paint = await loadPaint(result.mapId);
     if (paint.corrupt) {
-      say("some saved painting could not be read and has been ignored — see the console", "bad");
+      say(SAVED_DATA_LOST, "bad");
     }
     if (paint.present) requestRecompose();
   }
@@ -192,7 +199,7 @@ export async function loadNominatedMap(): Promise<void> {
     void openOnOwlbearsView(result.bounds);
   };
   image.onerror = () => {
-    say("the map image would not load", "bad");
+    say("Map image did not load.", "bad");
     devLog("error", "workspace: the map image failed to load");
   };
 
@@ -202,7 +209,7 @@ export async function loadNominatedMap(): Promise<void> {
   if (result.mapUrl) {
     image.src = result.mapUrl;
   } else {
-    say("the scene gives no image for this map", "bad");
+    say("Scene has no image for this map.", "bad");
     devLog("error", `workspace: "${result.mapName}" resolved with no image URL`);
   }
 

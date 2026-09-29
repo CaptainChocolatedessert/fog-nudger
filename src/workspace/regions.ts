@@ -56,7 +56,7 @@ import {
   wallSegments,
   type WallFaces,
 } from "../trace/wallFaces";
-import { wallRuns, type WallGraph } from "../trace/wallGraph";
+import type { WallGraph } from "../trace/wallGraph";
 import { graphsDiffer } from "../trace/wallGraphDiff";
 import { noteGraph } from "./graphScale";
 import { MaskRequests, shouldPaint } from "./maskRequest";
@@ -64,7 +64,7 @@ import { currentPaint } from "./paintState";
 import { isAbandoned, onReading } from "./reading";
 import { currentMarks, onMarksChange } from "./regionMarks";
 import { currentSettings } from "./settingsState";
-import { invalidate, say, whileWorking } from "./shell";
+import { invalidate, say, unsay, whileWorking } from "./shell";
 import { wallGraph, wallsEdited } from "./stage";
 
 /**
@@ -117,14 +117,9 @@ let walls: readonly PreviewWall[] = [];
  * uses, so the picture and the document are the same thing rather than two renderings of one idea —
  * which is what makes handing off to the editor a continuation rather than a surprise.
  *
- * It is also where the dropped-segment counts come from. Simplification can collapse a room thinner
- * than its tolerance into a doubled wall, and the derivation drops what is left; reporting that here
- * puts the warning in front of the GM while the slider that caused it is still on screen.
- *
  * `null` in the editor, where the stored graph is the document and nothing derives one.
  */
 let preview: WallGraph | null = null;
-let previewDropped = 0;
 
 /**
  * Told whenever a derive starts or ends, so whoever depends on what the wall tools may touch can
@@ -158,7 +153,7 @@ const settledWaiters: (() => void)[] = [];
  *
  * **For the push, and new with the worker** (user, 2026-09-24). Both pushes commit the last derivation
  * that *landed*, and while the derive blocked the page nothing could press one between a reading and
- * its walls. Off the page, *Put on the map* or closing can arrive mid-derive, and without this the
+ * its walls. Off the page, *Update scene* or closing can arrive mid-derive, and without this the
  * table would get the walls of the settings the GM had just moved away from.
  */
 export function derivationSettled(): Promise<void> {
@@ -350,13 +345,6 @@ function showFaces(graph: WallGraph, faces: WallFaces): WallFaces {
   return emitted;
 }
 
-/** "3 rooms", and how many are suppressed when any are — the figure a GM checks a mark against. */
-function describeRooms(emitted: WallFaces, faces: WallFaces, noun: string): string {
-  const count = `${emitted.faces.length} ${noun}${emitted.faces.length === 1 ? "" : "s"}`;
-  const suppressed = faces.faces.length - emitted.faces.length;
-  return suppressed === 0 ? count : `${count} (${suppressed} suppressed)`;
-}
-
 export function currentRegions(): readonly PreviewRegion[] {
   return regions;
 }
@@ -366,10 +354,8 @@ export function regionsShowing(): boolean {
   return shouldPaint(requests.current());
 }
 
-/** The last figures, for the state line. */
-let lastSummary = "";
-/** Whether that summary is bad news, so re-saying it keeps its tone. */
-let lastSummaryOk = true;
+/** The one working message a derive puts up, so its landing can take down exactly that. */
+const CALCULATING = "Calculating walls…";
 
 /*
   `partitionCheck` was here, and it is gone with the thing that needed it.
@@ -465,7 +451,6 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
     what arrives here is already free of hairs, and the push's own trace gets the same graph.
   */
   preview = from.graph;
-  previewDropped = from.dropped;
   /*
     Measured from the graph the Prune tool will act on — after the derive's automatic prune, before
     anything the tool takes.
@@ -477,36 +462,23 @@ function publish(from: NonNullable<typeof derivation>, generation: number): void
   noteGraph(from.graph);
 
   const faces = buildWallFaces(from.graph);
-  const emitted = showFaces(from.graph, faces);
+  showFaces(from.graph, faces);
 
   /*
-    The same figures the editor says, in the same order, because they now describe the same object.
+    Nothing on the state line but the end of the working message (text rules, 2026-09-29).
 
-    The dropped count is on the line because it is a room the map has and the document will not:
-    smoothing can fit both walls of a very thin room to the same line, closing it up, and the derivation
-    drops what that leaves. Saying so here rather than only at the save is the point — the slider
-    that caused it is on screen at this moment, and afterwards it is one mode away.
-
-    Euler's identity is on it for a related reason. A doubled wall is exactly what that check fails
-    on, and in this mode there are no hand edits to make such a state a legal one to pass through —
-    so a failure here means the derivation produced something a traversal cannot mean anything over,
-    which is worth a red line rather than a log entry nobody reads.
+    It used to carry the room and wall counts, the walls dropped when smoothing closes a thin room
+    up, and CHECK FAILED when Euler's identity did not hold. A GM acts on none of those from the
+    line: the regions and walls are drawn, and a check failure is either a doubled wall — which is
+    to be prevented rather than reported, DESIGN.md §10 — or a fault of ours. All of it is in the
+    log line below, the dropped count included.
   */
-  const rooms = describeRooms(emitted, faces, "region");
-  lastSummary =
-    `${rooms} · ${wallRuns(from.graph).length} walls in ` +
-    `${from.graph.edges.length} segments · ${from.graph.nodes.length} points` +
-    (previewDropped === 0
-      ? ""
-      : ` · ${previewDropped} wall${previewDropped === 1 ? "" : "s"} dropped — ` +
-        "smoothing has closed a thin room up") +
-    (faces.eulerHolds ? "" : " · CHECK FAILED, see the log");
-  lastSummaryOk = previewDropped === 0 && faces.eulerHolds;
-  say(lastSummary, lastSummaryOk ? "" : "bad");
+  unsay(CALCULATING);
   devLog(
-    "info",
+    faces.eulerHolds ? "info" : "warn",
     `workspace: partition ${generation} — ${from.collinear} points dropped as exactly ` +
-      `collinear, which costs nothing; ${describeWallFaces(faces)}`,
+      `collinear, which costs nothing; ${from.dropped} walls dropped as coincident or of no ` +
+      `length; ${describeWallFaces(faces)}`,
   );
   invalidate();
 }
@@ -561,7 +533,7 @@ async function derive(): Promise<void> {
   inFlight = controller;
   invalidate();
   tellDeriveChange();
-  say("deriving the regions…", "working");
+  say(CALCULATING, "working");
 
   /*
     No copy. `Settings` is readonly through and through and `setSettings` replaces the whole object
@@ -637,7 +609,7 @@ async function derive(): Promise<void> {
       devLog("info", `workspace: partition ${generation} waited on ink that newer ink replaced`);
     } else if (requests.fail(generation)) {
       const detail = describeError(error);
-      say(`deriving failed: ${detail}`, "bad");
+      say(`Wall calculation failed: ${detail}.`, "bad");
       devLog("error", "workspace: deriving the regions failed", detail);
       console.error("Fog Nudger — workspace could not derive the regions", error);
     }
@@ -677,9 +649,7 @@ function clearPartition(): void {
   preview = null;
   noteGraph(null);
   requests.fulfil(generation);
-  lastSummary = "no walls saved for this map yet";
-  lastSummaryOk = true;
-  say(lastSummary);
+  say("No walls for this map yet.");
   invalidate();
 }
 
@@ -688,18 +658,12 @@ function derivePartition(graph: WallGraph): void {
   const result = buildWallFaces(graph);
   if (!requests.fulfil(generation)) return;
 
-  const emitted = showFaces(graph, result);
+  showFaces(graph, result);
   noteGraph(graph);
   preview = null;
 
-  const rooms = describeRooms(emitted, result, "room");
-  const points = graph.nodes.length;
-  lastSummary =
-    `${rooms} · ${wallRuns(graph).length} walls in ${graph.edges.length} segments · ${points} points` +
-    (result.eulerHolds ? "" : " · CHECK FAILED, see the log");
-  lastSummaryOk = result.eulerHolds;
-  say(lastSummary, result.eulerHolds ? "" : "bad");
-  devLog("info", `workspace: saved partition — ${describeWallFaces(result)}`);
+  // The counts and the check go to the log alone, for the reason `publish` gives.
+  devLog(result.eulerHolds ? "info" : "warn", `workspace: saved partition — ${describeWallFaces(result)}`);
   invalidate();
 }
 

@@ -116,7 +116,7 @@ async function commitDerivation(): Promise<boolean> {
   /*
     A derive still running is for the ink on screen, and the one that landed before it is for ink the
     GM has since changed — so wait for it (2026-09-24). While the derive blocked the page nothing could
-    press a push between a reading and its walls; in a worker the close and *Put on the map* both can.
+    press a push between a reading and its walls; in a worker the close and *Update scene* both can.
     Hand edits stop derives altogether, so this costs a GM with work in the walls nothing.
 
     **And the ink first, since the ink moved to a worker as well** (2026-09-24). A derive starts only
@@ -144,7 +144,7 @@ async function commitDerivation(): Promise<boolean> {
     return true;
   } catch (error) {
     const detail = describeError(error);
-    say(`could not save the walls: ${detail}`, "bad");
+    say(`Update failed: ${detail}.`, "bad");
     devLog("error", "workspace: committing the derivation failed", detail);
     console.error("Fog Nudger — committing the derivation failed", error);
     return false;
@@ -172,7 +172,7 @@ export async function pushOnClose(): Promise<void> {
     return;
   }
 
-  say("putting it on the map…", "working");
+  say("Updating scene…", "working");
   try {
     await persistSettings();
     const message = await pushToFog(mark, wallGraph() ?? undefined);
@@ -182,7 +182,7 @@ export async function pushOnClose(): Promise<void> {
     // shell catches too, so this is belt-and-braces rather than the only guard — but it is the one
     // that keeps the failure attributable, since the shell cannot say what was being written.
     const detail = describeError(error);
-    say(`could not write to the scene: ${detail}`, "bad");
+    say(`Update failed: ${detail}.`, "bad");
     devLog("error", "workspace: pushing on close failed", detail);
     console.error("Fog Nudger — pushing on close failed", error);
   }
@@ -215,7 +215,7 @@ async function pushCurrent(): Promise<boolean> {
     more.
 
     **The label differs from the close path's on purpose.** Stopping here hands the surface back
-    rather than leaving, so "Exit anyway" would be a lie about what the button does.
+    rather than leaving, so "Cancel update and exit" would be a lie about what the button does.
   */
   let message = "";
   const pushing = pushToFog(mark, wallGraph() ?? undefined).then((said) => {
@@ -224,8 +224,8 @@ async function pushCurrent(): Promise<boolean> {
 
   const { bailed, unwound } = await withEscapeHatch(pushing, {
     stop: requestPushStop,
-    label: "Stop writing",
-    notice: "still writing to the scene — stopping leaves it partly done",
+    label: "Stop",
+    notice: "Update in progress. Stopping leaves a partial update.",
   });
 
   if (!bailed) {
@@ -247,7 +247,7 @@ async function pushCurrent(): Promise<boolean> {
       ? "workspace: the push stopped cleanly at the GM's request"
       : "workspace: the push had not stopped when the grace ran out; a write may still be in flight",
   );
-  say("stopped — the map is partly written, so push again when you are ready", "bad");
+  say("Stopped. Scene partly updated.", "bad");
   return false;
 }
 
@@ -298,15 +298,13 @@ async function mayBeTooLarge(): Promise<boolean> {
   const items = currentRegions().length + currentWalls().length;
   if (items < LARGE_PUSH_ITEMS) return true;
 
+  // The body is the one consequence the title does not say (text rules, DESIGN.md §7a). It used to
+  // name the counts, Straighten and Prune as the cure, and that a stop leaves a partial write; the
+  // counts are in the title, and the rest is advice, which a message no longer carries.
   return confirmAction({
-    title: `Put ${items.toLocaleString()} items on the map?`,
-    body: [
-      `${currentRegions().length} rooms and ${currentWalls().length} wall segments — large enough ` +
-        "that the write may stall, or Owlbear may refuse it outright.",
-      "Straighten and Prune under Walls cut the count and undo puts them back. You can stop the " +
-        "write partway through and push again later.",
-    ],
-    confirmLabel: "Put it on the map",
+    title: `Put ${items.toLocaleString()} items in the scene?`,
+    body: ["Writing a large number of items may be slow."],
+    confirmLabel: "Continue",
   });
 }
 
@@ -337,11 +335,11 @@ export function renderPushAction(): void {
   const run = async (): Promise<void> => {
     try {
       if (!(await mayBeTooLarge())) return;
-      say("putting it on the map…", "working");
+      say("Updating scene…", "working");
       await pushCurrent();
     } catch (error) {
       const detail = describeError(error);
-      say(`could not write to the scene: ${detail}`, "bad");
+      say(`Update failed: ${detail}.`, "bad");
       devLog("error", "workspace: push failed", detail);
       console.error("Fog Nudger — push failed", error);
     } finally {

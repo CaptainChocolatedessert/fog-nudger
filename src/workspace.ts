@@ -408,7 +408,7 @@ renderPushAction();
   The second argument is how to give up on it. A push deletes our old fog before writing the new, so
   the sheet has to stay up until the write lands or the layer can be left half-replaced -- which
   means a stalled write would hold a GM on an opaque sheet. `requestPushStop` is what the shell's
-  Exit anyway button calls, and it lives here rather than in the shell for the same reason
+  Cancel update and exit button calls, and it lives here rather than in the shell for the same reason
   `pushOnClose` does: the shell owns the way out and must not know what leaving writes.
 */
 setCloseAction(async () => {
@@ -507,7 +507,7 @@ onApplied(() => {
 start();
 // Drawn now, disabled, from the defaults — see `controlsLive`.
 renderPanel();
-say("waiting for Owlbear…", "working");
+say("Waiting for Owlbear Rodeo…", "working");
 
 async function run(): Promise<void> {
   try {
@@ -534,7 +534,7 @@ async function run(): Promise<void> {
 OBR.onReady(() => {
   void run().catch((error: unknown) => {
     const detail = describeError(error);
-    say(`Workspace failed: ${detail}`, "bad");
+    say(`Workspace failed: ${detail}.`, "bad");
     devLog("error", "workspace: failed to start", detail);
   });
 });

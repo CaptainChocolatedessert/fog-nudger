@@ -860,7 +860,7 @@
          not also hide the way out.
 
          **Bottom right, and it has a ground** (user, 2026-09-14). Two things were wrong with the
-         top. *Put on the map* and *Close* are a confirm-and-leave pair, and the bottom right is
+         top. *Update scene* and *Close* are a confirm-and-leave pair, and the bottom right is
          where a dialog puts those — this modal is far closer to a dialog than to a window. And
          along the bottom it closes the L with the rail rather than competing for the top edge.
 
@@ -1201,7 +1201,7 @@
         <!-- The middle track, so the buttons are centred on the window rather than on whatever is
              left of it after the message. -->
         <div id="bar-actions">
-          <p id="map-name" title="The map being traced">Loading…</p>
+          <p id="map-name">Loading…</p>
           <div id="history-row">
             <button class="history" id="undo" disabled title="Nothing to undo"></button>
             <button class="history" id="redo" disabled title="Nothing to redo"></button>
@@ -1221,12 +1221,12 @@
             the foot of a section. Closing pushes too — this is the mid-session case, a change a
             table is waiting on without giving up the surface.
           -->
-          <button class="chip" id="push">Put on the map</button>
+          <button class="chip" id="push">Update scene</button>
           <span class="bar-split" aria-hidden="true"></span>
-          <button class="chip" id="fit" title="Fit the whole map">Fit</button>
-          <button class="chip" id="toggle-panel" title="Hide the controls" aria-pressed="true">Controls</button>
+          <button class="chip" id="fit" title="Show the whole map">Fit</button>
+          <button class="chip" id="toggle-panel" aria-pressed="true">Hide controls</button>
           <button class="chip" id="close">Close (Esc)</button>
-          <button class="chip urgent" id="exit-anyway" hidden>Exit anyway</button>
+          <button class="chip urgent" id="exit-anyway" hidden>Cancel update and exit</button>
         </div>
       </div>
 

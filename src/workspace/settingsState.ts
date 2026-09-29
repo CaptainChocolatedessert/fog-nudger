@@ -145,7 +145,7 @@ export async function persistSettings(): Promise<void> {
     await writeSettings(settings);
   } catch (error) {
     devLog("error", "workspace: could not save settings", describeError(error));
-    reportFailure?.("could not save your settings — this tuning will not survive a reload");
+    reportFailure?.("Fog Nudger data not saved to scene.");
   }
 }
 

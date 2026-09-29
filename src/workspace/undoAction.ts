@@ -61,8 +61,8 @@ interface Direction {
 }
 
 const DIRECTIONS: readonly Direction[] = [
-  { id: "undo", verb: "Undo", present: "undoing", past: "undid", label: undoLabel, run: undoLast },
-  { id: "redo", verb: "Redo", present: "redoing", past: "redid", label: redoLabel, run: redoLast },
+  { id: "undo", verb: "Undo", present: "Undoing", past: "Undid", label: undoLabel, run: undoLast },
+  { id: "redo", verb: "Redo", present: "Redoing", past: "Redid", label: redoLabel, run: redoLast },
 ];
 
 const buttons = new Map<string, HTMLButtonElement>();
@@ -125,10 +125,10 @@ async function run(direction: Direction): Promise<void> {
   say(`${direction.present}…`, "working");
   try {
     const label = await direction.run();
-    say(label === null ? `nothing to ${direction.verb.toLowerCase()}` : `${direction.past} ${label}`);
+    say(label === null ? `Nothing to ${direction.verb.toLowerCase()}.` : `${direction.past} ${label}.`);
   } catch (error) {
     const detail = describeError(error);
-    say(`could not ${direction.verb.toLowerCase()}: ${detail}`, "bad");
+    say(`${direction.verb} failed: ${detail}.`, "bad");
     devLog("error", `workspace: ${direction.verb.toLowerCase()} failed`, detail);
     console.error(`Fog Nudger — ${direction.verb.toLowerCase()} failed`, error);
   } finally {

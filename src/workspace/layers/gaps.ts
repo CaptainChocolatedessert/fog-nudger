@@ -102,7 +102,7 @@ function rebuild(marks: readonly GapMark[]): void {
     // On the state line as well as in the log, matching the other map-sized layers. This layer
     // exists to warn, and a warning that fails quietly is the failure the surface was built to
     // prevent — the log is explicitly not a channel to the GM. The rings still draw; see the painter.
-    say("could not allocate the gap fill — rings only", "bad");
+    say("Out of memory.", "bad");
     return;
   }
   painted = bitmap;
