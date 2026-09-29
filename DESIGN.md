@@ -74,7 +74,8 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **mend** | a proposed wall that closes a gap in the graph, and the act of accepting one. Once accepted it is an ordinary drawn wall. **Not a bridge** — a mend usually closes a loop and splits a region in two, which is the opposite of what a bridge is. |
 | **dissolve** | the operation behind the tool *Erase loop*, and still its name in the code: removing the walls around a region with one click: every wall between it and anything outside it, and every wall with it on both sides. **The walls of closed regions inside it stay.** The region merges with every neighbour at once. |
 | **chain** | the GM-facing word for everything joined to one wall — the connected component through shared vertex ids, which *Erase chain* takes. It branches and can hold loops, so it is not a chain in the narrow sense, and on a real map it is usually every wall there is. |
-| **mark** | a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. |
+| **mark** | in this record and the code, a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. **The GM sees it as a *cross***, since the text rules of 2026-09-29 gave *mark* on the surface to something drawn on the map image (§7a). |
+| **highlight** | the surface's word for any signal a tool draws on the map — a ring, a red preview, a dashed proposal. |
 | **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. |
 | **collapse** | taking a small region out with *Collapse small regions*: its walls go, and a new vertex at the average of its **connections** — the outline vertices with a wall running elsewhere — is joined to each, so nothing outside it moves. **Not Straighten's *collapse guard***, which is about a closed run fitting to a point, the failure that guard prevents. |
 | **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten*, and only Straighten since *Prune the dead ends* became ringed on 2026-09-22. Not a setting: nothing is stored, and the handle reads as *how much more*. |
@@ -3004,6 +3005,109 @@ that layer ever gets a switch, and whether the panel's three notes now say enoug
 that was cut are all a room's questions. **If more turns up worth cutting, it is a fifth batch of the
 same kind, not a second pass on the same footing** — the whole surface has now been read against this
 rule once.
+
+### The text rules — 2026-09-29
+
+**A third pass, the user's own, in Word with Track Changes** (2026-09-25 to 09-28). They edited 110
+of the 149 items up to the end of the Ink band and left 17 comments; the Walls band, the web page and
+the shared pieces were left for rules to reach. The style was read off those edits and agreed in chat
+on 2026-09-29, and **these rules apply to any text a GM reads, including text written later**.
+`text-pass/` (gitignored) holds the document and its reader.
+
+They keep the rule of 2026-09-09 — a line survives only if it says something the label and the
+readout cannot — and go further in three places: a message says only what happened, a dialog loses its
+body, and a hint loses its keys and examples.
+
+**Content**
+
+1. A message says what happened, then stops: no advice, reason or next step, no reassurance about
+   what was kept, and no mention of saving, undo, the console or the log.
+2. A message says one thing. Nothing follows a ` · ` or a dash; a second part that must stay is its
+   own sentence.
+3. A number appears only when it counts what the action did — no totals, remainders, sizes or
+   percentages that nobody acts on.
+4. A diagnostic reaches the screen only if it matters to the GM, and then as a warning (user: *"If
+   this is important surface it to the user as a warning. Otherwise they don't need to know."*).
+   Otherwise it stays in the log — and where its cause can be fixed, fix it rather than warn.
+5. A failure names what failed, then the error's own words: `Update failed: <detail>.`
+6. A hint is one sentence: the gesture and what it does. No examples, and no description of what the
+   highlight shows.
+7. Anything a GM cannot discover by looking — a modifier key, another way to finish — is said once,
+   where it applies. **The point probe is the exception**: a click with Pan reports what is under the
+   pointer, and nothing says so (user: *"if they notice it in the status bar, they can use it"*).
+8. A line under a slider appears only when the label cannot say what the number measures. It defines,
+   and never says which way to move.
+9. Never name a colour; say what the thing drawn in it means.
+
+**Voice**
+
+10. Messages read as headlines and labels drop articles: leave out *the*, *a* and *is/was* wherever
+    the sense survives.
+11. No *you*, *your*, *my*, *our* or *ours*. What the extension made is Fog Nudger's: *Fog Nudger
+    items*, *Fog Nudger data*.
+12. No contractions: *do not*, *could not*.
+
+**Words**
+
+13. The GM's word, or the standard image-editing word where one exists — opacity, contrast,
+    threshold, despeckle, filter — and never the code's: trace, derive, dissolve, nominate, push.
+14. Tools and buttons name the action and its object: *Fill gaps*, *Suppress ink*, *Clear ink
+    suppression*. A name settled with the user in a naming step is not renamed by these rules.
+15. One verb for an action everywhere it appears — tooltip, button, status line and undo. Brushes
+    *paint*; wall tools *draw*; writing to Owlbear is *update*; destroying stored data is *clear*, and
+    nothing else uses that word.
+16. The fixed nouns:
+    - ***map*** is the image in the workspace and ***scene*** is Owlbear's. What Fog Nudger writes
+      into the scene is counted as *shapes* and *lines*.
+    - ***mark*** is something drawn on the map image, and ***ink*** is what the walls are calculated
+      from: the map's marks as read, plus the GM's paint.
+    - ***highlight*** is any signal a tool draws on the map — a ring, a red preview, a dashed proposal.
+    - ***region*** is a space the walls enclose.
+    - ***cross*** is what *Suppress region* places (user: a pin was considered, and it is unclear
+      whether a pin's head or its point is the position). The code keeps *mark*, as it keeps
+      `dissolve` and `speckles`.
+    - ***edits*** is work the GM did by hand, never *changes*.
+    - ***spot*** is held for a filter that tests shape, which nothing does yet. Every size-based tool
+      measures how far a piece of ink extends, so a squiggle qualifies as readily as a dot, and what a
+      tool highlights and what a click takes are one kind of thing with one definition in the code.
+17. A button that takes everything highlighted is *\<Verb\> every highlighted \<thing\>*, and its
+    undo *\<verb\>ing multiple \<things\>*.
+18. The extension description and the web page: Fog Nudger creates walls for Owlbear Rodeo's fog, and
+    Dynamic Fog is mentioned only as compatible.
+
+**Dialogs**
+
+19. The title is a question naming the action and its object. If undo cannot reach the action, the
+    title says *Permanently*, and there is no separate "can't be undone".
+20. The confirm button is the title's verb alone, or *Continue* when the dialog only warns; the other
+    is always *Cancel*. **This reverses batch 1 above**, which made confirm buttons specific *"so a
+    button reads on its own if the title above it is not"*.
+21. No body, unless the action has a consequence its name does not say; then one sentence saying it.
+
+**Sliders and numbers**
+
+22. A slider's label says what it limits: *Largest gap to highlight*.
+23. The yellow number shows the slider's one unit and reads *off* at zero. Where the value means
+    nothing to a GM it shows a place from 1 to 100 instead — every Walls tool, for now (below). Never a
+    second unit beside it.
+24. A space between a number and its unit, except before `%`: `12 px`, `40%`.
+25. Counts agree in number: *1 gap*, *2 gaps*.
+
+**Capitalisation and punctuation**
+
+26. Sentence case everywhere. Names exactly: Fog Nudger, Owlbear Rodeo, Dynamic Fog.
+27. A message ends in a period and a label does not. Messages are the status line, the panel's
+    result line, hints, dialog bodies, the line under a slider and a tooltip that instructs; labels
+    are buttons, slider labels, titles, tool tooltips and the names of layers and colours.
+28. Work in progress ends in `…`, one character, instead of a period. A title that asks ends in `?`.
+29. Exceptions: undo labels stay lower case, because they sit inside a sentence (*Undo painting ink
+    suppression*); the yellow number is a value (`12 px`, `off`); the point probe's coordinates and
+    luminance keep the code's terms.
+
+**Parked with them** (user, 2026-09-29): **a unit for the Walls tools**, which keep a place from 1 to
+100 for now. Grid squares were considered, and so was *Thinnest stroke to keep* as the GM's own
+minimum wall width, judged fragile because some maps barely respond to that setting. **Mend is the
+interesting case**, since it already prints pixels on the line under each slider.
 ---
 
 ## 8. Testing and diagnostic practice
@@ -3648,20 +3752,36 @@ section. The published site runs the derive's worker (checked from a desk after 
 - **Is *The Maps Of Arden Vul 015* a different drawing style from the Grottoes?** `dev.log` shows it
   worked on the same day, before the Grottoes. If it is, it is the second map below, already in hand.
 
-**The user's own pass over the interface text is out with them (2026-09-25).** `text-pass/`
-(gitignored) holds `Text pass - Fog Nudger.docx` — every piece of text a GM can read, 244 items taken
-from commit `e1eb078`, opening with Track Changes on — and `text-pass-baseline.json`, which ties each
-item to the file and line it came from. When it comes back, `python text-pass/tools/read_edits.py
-"<the docx>" text-pass/text-pass-baseline.json` lists every tracked change and comment by item, and
-says whether anything was edited with tracking off. **Apply by the old wording, not the line
-numbers**, since the code will have moved in between, and change every copy an item cites — a tool's
-name, for one, is also stored in its group declaration. Word renames paragraph styles when it saves,
-which is why the reader goes by style name. `tools/` also holds the generator and its item list, to
-build the document again. The *Claude's note* lines inside it are observations for the user to act on
-or ignore, not decisions.
+**The user's pass over the interface text came back half done, and that was enough (2026-09-28).**
+They edited up to the end of the Ink band; the style was read off those edits and agreed as **§7a's
+*The text rules***, and the whole surface is being brought to them — their edits as written, adjusted
+by the rules, and everything else by the rules alone, then reviewed live (user: *"I don't need an
+exhaustive review before you do it"*). `text-pass/` (gitignored) holds `Text pass - Fog Nudger.docx` —
+244 items taken from commit `e1eb078` — and `text-pass-baseline.json`, which ties each item to the file
+and line it came from. `python text-pass/tools/read_edits.py "<the docx>"
+text-pass/text-pass-baseline.json` lists every tracked change and comment by item. **Apply by the old
+wording, not the line numbers**, and change every copy an item cites — a tool's name, for one, is also
+stored in its group declaration. Word renames paragraph styles when it saves, which is why the reader
+goes by style name.
 
 **Next, needing a design conversation first** (the rhythm in the operating notes — *well defined?*, the
 one question, a picture if it is geometric, name and glyph, a numbered plan):
+
+- **Superimposed walls must not happen** (user, 2026-09-29: *"If the check fails, fix it rather than
+  warning."*). Euler's identity fails legitimately on two walls lying along each other, which §5 calls a
+  legal intermediate state — *reported, never fixed* — and which this makes a thing to prevent. Where
+  they arise: Move and Draw report *N walls lie along another* when an edit leaves one, and the build
+  drops coincident segments from fitting. What *fix* means — merge the pair, refuse the edit, or
+  something else — is the design question. Until then the check is a log line only, off the screen by
+  the text rules.
+- **Never start a write that will have to skip a shape** (user, in the text pass: *"We should never do
+  a write that requires skipping, if it can be predicted."*). *Skipped N over the cap* reports rooms
+  still over Owlbear's 8,192-command cap after the escalation ladder, which the derive knows before any
+  write begins.
+- **What the grid-square figures do on a grid that is not square** (user, 2026-09-29, a note for
+  later). Owlbear's grid types are square, hex vertical, hex horizontal, isometric and dimetric
+  (`GridType` in the SDK), and nothing here has been checked on the last four. It matters most to the
+  parked unit for the Walls tools (§7a), where grid squares are one candidate.
 
 - **The stroke slider's ticks must sit where the result changes, and they sit between the changes**
   (user, 2026-09-25: *"the ticks in the thinnest line slider need to correspond to where the result will
