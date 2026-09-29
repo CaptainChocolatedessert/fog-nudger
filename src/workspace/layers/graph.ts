@@ -35,7 +35,8 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { nodeDegrees, type WallGraph } from "../../trace/wallGraph";
+import { nodeDegrees, type WallEdge, type WallGraph } from "../../trace/wallGraph";
+import { carryDoors, placeDoors, pointAlong, type Door } from "../../trace/doors";
 import type { PrunePiece } from "../../trace/prunePieces";
 import { colourFor } from "../palette";
 import { addPainter, type Painter } from "../shell";
@@ -73,6 +74,9 @@ import {
   pendingChain,
   pendingWall,
   snapTarget,
+  doorToolInHand,
+  doorView,
+  type DoorView,
 } from "../wallEdit";
 
 /** The palette's structure colour, kept distinct from the six room colours. */
@@ -136,6 +140,13 @@ const MERGE_RADIUS = 6;
 const eraseColour = () => colourFor("destructive");
 const ERASE_WIDTH_PX = 5;
 const drawColour = () => colourFor("additive");
+/**
+ * Doors: green, half as wide again as a wall, cased like one, with **butt** ends so the green is
+ * exactly the door's length (user, 2026-09-29). Removal is drawn red at Erase's 5, and the width is
+ * what separates the two for a red-green colour-blind GM — the palette note on `door` has the measure.
+ */
+const doorColour = () => colourFor("door");
+const DOOR_WIDTH_PX = 3;
 
 /*
   **There is no cap on how many handles are drawn, since 2026-09-22.**
@@ -420,6 +431,13 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     context.restore();
   }
 
+  /*
+    The doors, over the walls they sit on and under every highlight a tool draws. A door on a wall the
+    gesture is carrying is re-placed the way the release will re-place it — keeping its place on the map —
+    so the drop never moves it by surprise.
+  */
+  paintDoors(context, graph, x, y, at, dragged?.id ?? null, doorView());
+
   // The walls the gesture is carrying, over the rest, so what is moving is never in doubt.
   if (dragged !== null) {
     context.beginPath();
@@ -455,6 +473,99 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   }
   context.restore();
 };
+
+/**
+ * Every door, and what *Create door* would do to one — in screen pixels, like a wall.
+ *
+ * A door being dragged is drawn at its new place, dashed, rather than at its old one; a door a click
+ * would remove is drawn red at Erase's width; and with the tool in hand every door's two ends are marked
+ * as the handles they are, the one under the pointer grown. **Only against the graph the tool looked at**,
+ * since the view names segments by index.
+ */
+function paintDoors(
+  context: CanvasRenderingContext2D,
+  graph: WallGraph,
+  x: (units: number) => number,
+  y: (units: number) => number,
+  at: (id: number) => Vector2 | undefined,
+  dragged: number | null,
+  view: DoorView | null,
+): void {
+  const live = view && view.graph === graph ? view : null;
+  const hidden = live?.placing?.replacing ?? null;
+  const hiddenEdge = live?.placing?.placement.edge ?? null;
+
+  const ends = (edge: WallEdge, door: Door): [Vector2, Vector2] | null => {
+    const from = at(edge.a);
+    const to = at(edge.b);
+    return from && to ? [pointAlong(from, to, door.start), pointAlong(from, to, door.end)] : null;
+  };
+  const stroke = (pairs: readonly [Vector2, Vector2][], colour: string, width: number, dashed: boolean): void => {
+    if (pairs.length === 0) return;
+    context.save();
+    context.lineCap = "butt";
+    if (dashed) context.setLineDash([6, 4]);
+    context.beginPath();
+    for (const [p, q] of pairs) {
+      context.moveTo(x(p.x), y(p.y));
+      context.lineTo(x(q.x), y(q.y));
+    }
+    context.strokeStyle = WALL_CASING;
+    context.lineWidth = width + 2;
+    context.stroke();
+    context.strokeStyle = colour;
+    context.lineWidth = width;
+    context.stroke();
+    context.restore();
+  };
+
+  // Every door as it stands, a moved wall's re-placed as the release will place them.
+  const standing: [Vector2, Vector2][] = [];
+  const marked: { readonly edge: number; readonly door: number; readonly p: Vector2; readonly q: Vector2 }[] = [];
+  graph.edges.forEach((edge, index) => {
+    if (!edge.doors || edge.doors.length === 0) return;
+    const moved = dragged !== null && (edge.a === dragged || edge.b === dragged);
+    const from = at(edge.a);
+    const to = at(edge.b);
+    const doors = moved && from && to ? placeDoors(carryDoors(graph.nodes, edge), from, to) : edge.doors;
+    doors.forEach((door, d) => {
+      if (index === hiddenEdge && d === hidden) return;
+      const pair = ends(moved ? { a: edge.a, b: edge.b } : edge, door);
+      if (!pair) return;
+      standing.push(pair);
+      marked.push({ edge: index, door: d, p: pair[0], q: pair[1] });
+    });
+  });
+  stroke(standing, doorColour(), DOOR_WIDTH_PX, false);
+
+  if (live?.placing) {
+    const edge = graph.edges[live.placing.placement.edge];
+    const pair = edge ? ends(edge, live.placing.placement.door) : null;
+    if (pair) stroke([pair], doorColour(), DOOR_WIDTH_PX, true);
+  }
+  if (live?.removing) {
+    const edge = graph.edges[live.removing.edge];
+    const door = edge?.doors?.[live.removing.door];
+    const pair = edge && door ? ends(edge, door) : null;
+    if (pair) stroke([pair], eraseColour(), ERASE_WIDTH_PX, false);
+  }
+
+  if (!doorToolInHand()) return;
+  context.save();
+  context.lineWidth = 1.5;
+  for (const { edge, door, p, q } of marked) {
+    for (const [which, point] of [["start", p], ["end", q]] as const) {
+      const grown = live?.end?.edge === edge && live.end.door === door && live.end.end === which;
+      context.beginPath();
+      context.arc(x(point.x), y(point.y), grown ? HOVER_RADIUS : HANDLE_RADIUS, 0, Math.PI * 2);
+      context.fillStyle = grown ? ACTIVE_FILL : HANDLE_FILL;
+      context.fill();
+      context.strokeStyle = grown ? ACTIVE_RIM : doorColour();
+      context.stroke();
+    }
+  }
+  context.restore();
+}
 
 /**
  * A handle at every point of the graph — in **screen** space, so it stays grabbable at any zoom.

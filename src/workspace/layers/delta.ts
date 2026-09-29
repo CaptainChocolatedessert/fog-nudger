@@ -90,13 +90,15 @@ export function showWallDelta(on: boolean): boolean {
     */
     devLog(
       "info",
-      `delta: ${showing.added.length} walls of yours would go and ${showing.removed.length} ` +
-        "erased ones would come back if the walls were derived again",
+      `delta: ${showing.added.length} walls of yours would go, ${showing.addedDoors.length} doors ` +
+        `would go and ${showing.removed.length} erased ones would come back if the walls were derived again`,
     );
   }
   for (const listener of listeners) listener();
   invalidate();
-  return showing !== null && showing.added.length + showing.removed.length > 0;
+  return (
+    showing !== null && showing.added.length + showing.removed.length + showing.addedDoors.length > 0
+  );
 }
 
 /** Screen pixels. Wider than a wall line, because this is drawn to be found rather than aimed at. */
@@ -133,9 +135,15 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     everything being deleted when it is being replaced. Cyan last means amber shows only where no new
     wall lies over it. The names are the diff's, which run the other way — see this file's notes.
   */
+  /*
+    **Doors last, in what-goes amber** (2026-09-29): a rebuild takes every door, and a door usually sits
+    on a wall the GM never touched — which is drawn in neither colour — so drawing them last is what
+    keeps them from being covered where a wall does come back over them.
+  */
   for (const [segments, role] of [
     [delta.added, "subtractive"],
     [delta.removed, "additive"],
+    [delta.addedDoors, "subtractive"],
   ] as const) {
     if (segments.length === 0) continue;
     trace(segments);

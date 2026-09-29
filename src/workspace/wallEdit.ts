@@ -1,6 +1,6 @@
 /**
  * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, collapsing a small
- * region, dissolving a region, suppressing one, and spanning an opening.
+ * region, dissolving a region, suppressing one, spanning an opening, and creating a door.
  *
  * **The first things in this project that change the GM's own work rather than a setting.** Every
  * control before them turns a number and re-derives; these change the graph, and it stays changed
@@ -70,6 +70,20 @@ import {
   type Grab,
 } from "./dragGesture";
 import { describeMends, mendAt } from "./mendGesture";
+import {
+  doorTargetAt,
+  dragDoorEnd,
+  isSecondClick,
+  placeDoor,
+  removeDoor,
+  slideDoor,
+  stretchFrom,
+  wholeSegment,
+  type DoorPlacement,
+  type DoorTarget,
+  type MadeDoor,
+} from "./doorGesture";
+import { pointAlong } from "../trace/doors";
 import { describeCollapses, describePrunes, ringAt } from "./ringGesture";
 import {
   currentPrunePieces,
@@ -120,7 +134,8 @@ export type WallTool =
   | "collapse"
   | "dissolve"
   | "suppressRegion"
-  | "span";
+  | "span"
+  | "door";
 
 /**
  * How close a press has to be to a vertex to grab it, to a wall to erase it, and to a vertex to
@@ -317,6 +332,90 @@ let spanTarget: { readonly span: Span; readonly graph: WallGraph } | null = null
 let spanPoint: MapPoint | null = null;
 let spanFrame = 0;
 
+/**
+ * Creating a door: what the press landed on, where, and the graph it was found on.
+ *
+ * `doorGesture.ts` decides what each press means; this holds the gesture while it runs. Nothing is
+ * written until the release, as with every wall tool, and the layer draws what would happen meanwhile.
+ */
+let doorPress: { readonly target: DoorTarget; readonly at: Vector2; readonly graph: WallGraph } | null = null;
+/** The door a drag would leave, and which door on that segment it replaces, if any. */
+let doorDrag: { readonly placement: DoorPlacement; readonly replacing: number | null } | null = null;
+/**
+ * Whether the press has travelled far enough to be a drag: the shortest door, 5 screen pixels — Draw's
+ * shortest wall — so a smaller movement is a click.
+ */
+let doorTravelled = false;
+/** The second click of a double-click on the door the first just made: taken, and ignored. */
+let doorEcho = false;
+/** What is under the pointer with no press, and the graph it was found on — for the preview. */
+let doorHover: { readonly target: DoorTarget; readonly graph: WallGraph } | null = null;
+/** The door the last click made, so the second click of a double-click can be recognised. */
+let madeDoor: MadeDoor | null = null;
+
+/** What the door tool would do where the pointer is, for the layer to draw before it happens. */
+export interface DoorView {
+  readonly graph: WallGraph;
+  /** A door a click would remove, drawn red. */
+  readonly removing: { readonly edge: number; readonly door: number } | null;
+  /** The door a click or drag would leave, drawn dashed, and the door on its segment it replaces. */
+  readonly placing: { readonly placement: DoorPlacement; readonly replacing: number | null } | null;
+  /** The end of a door the pointer would take hold of, drawn grown. */
+  readonly end: { readonly edge: number; readonly door: number; readonly end: "start" | "end" } | null;
+}
+
+/** What a click on `target` would do, drawn: a whole segment, a removal, or an end to take hold of. */
+function doorViewOf(graph: WallGraph, target: DoorTarget): DoorView {
+  if (target.kind === "wall") {
+    const placed = wholeSegment(graph, target.edges[0]!);
+    return { graph, removing: null, placing: placed ? { placement: placed, replacing: null } : null, end: null };
+  }
+  // A click on an end removes the door as a click inside it does, so it is drawn red there too.
+  return {
+    graph,
+    removing: { edge: target.edge, door: target.door },
+    placing: null,
+    end: target.kind === "end" ? target : null,
+  };
+}
+
+/** What the door tool would do, or `null` with another tool in hand or nothing under the pointer. */
+export function doorView(): DoorView | null {
+  if (tool !== "door") return null;
+  if (doorPress) {
+    if (doorDrag) {
+      const target = doorPress.target;
+      return { graph: doorPress.graph, removing: null, placing: doorDrag, end: target.kind === "end" ? target : null };
+    }
+    return doorTravelled ? null : doorViewOf(doorPress.graph, doorPress.target);
+  }
+  return doorHover ? doorViewOf(doorHover.graph, doorHover.target) : null;
+}
+
+/** Whether the door tool is in hand, which is when every door's ends are marked as things to grab. */
+export function doorToolInHand(): boolean {
+  return tool === "door";
+}
+
+function sameDoorTarget(left: DoorTarget | null, right: DoorTarget | null): boolean {
+  if (left === null || right === null) return left === right;
+  if (left.kind === "wall" || right.kind === "wall") {
+    return left.kind === "wall" && right.kind === "wall" && left.edges[0] === right.edges[0];
+  }
+  return (
+    left.kind === right.kind &&
+    left.edge === right.edge &&
+    left.door === right.door &&
+    (left.kind !== "end" || right.kind !== "end" || left.end === right.end)
+  );
+}
+
+/** Save a door edit — a graph with one segment's doors changed — through the path every wall edit takes. */
+function commitDoor(next: WallGraph, message: string, undoLabel: string, from: WallGraph): void {
+  if (next === from) return;
+  commit({ graph: next, splits: 0, overlaps: 0 }, message, undoLabel, from);
+}
+
 function spanAt(graph: WallGraph, point: MapPoint): { readonly span: Span; readonly graph: WallGraph } | null {
   const span = findSpan(
     graph,
@@ -476,6 +575,8 @@ export function setTool(next: WallTool): void {
   hoveredPrune = false;
   hoveredRegion = null;
   markTarget = null;
+  doorHover = null;
+  madeDoor = null;
   dropSpan();
   setGrabTarget(false);
   /*
@@ -608,6 +709,10 @@ function clearGesture(): void {
   chainClosed = false;
   chainOnSegment = null;
   chainLanding = null;
+  doorPress = null;
+  doorDrag = null;
+  doorTravelled = false;
+  doorEcho = false;
 }
 
 function start(point: MapPoint): boolean {
@@ -642,6 +747,29 @@ function start(point: MapPoint): boolean {
 
   if (tool === "suppressRegion") {
     markTarget = markTargetAt(point);
+    invalidate();
+    return true;
+  }
+
+  /*
+    Create door takes a press on a door's end, a door, or a wall, in that order, and pans anywhere else
+    — `doorGesture.ts` has the order and why. The second click of a double-click on the door the first
+    just made is taken and ignored, so it neither pans nor removes what the first made.
+  */
+  if (tool === "door") {
+    const target = doorTargetAt(
+      graph,
+      { x: point.x, y: point.y },
+      LAND_RADIUS_PX * point.perPixel,
+      GRAB_RADIUS_PX * point.perPixel,
+    );
+    if (!target) return false;
+    if (isSecondClick(graph, madeDoor, performance.now(), target)) {
+      madeDoor = null;
+      doorEcho = true;
+      return true;
+    }
+    doorPress = { target, at: { x: point.x, y: point.y }, graph };
     invalidate();
     return true;
   }
@@ -895,6 +1023,25 @@ function move(point: MapPoint): void {
     return;
   }
 
+  if (tool === "door") {
+    const press = doorPress;
+    if (!press || press.graph !== graph) return;
+    const at = { x: point.x, y: point.y };
+    const shortest = MIN_WALL_PX * point.perPixel;
+    if (!doorTravelled && Math.hypot(at.x - press.at.x, at.y - press.at.y) < shortest) return;
+    doorTravelled = true;
+    const target = press.target;
+    const placement =
+      target.kind === "wall"
+        ? stretchFrom(graph, target.edges, press.at, at)
+        : target.kind === "end"
+          ? dragDoorEnd(graph, target.edge, target.door, target.end, at, shortest)
+          : slideDoor(graph, target.edge, target.door, press.at, at);
+    doorDrag = placement ? { placement, replacing: target.kind === "wall" ? null : target.door } : null;
+    invalidate();
+    return;
+  }
+
   if (!anchor) return;
   const held = onMap(point);
   reach = drawPoint(
@@ -929,7 +1076,7 @@ function escape(): boolean {
     say("Chain cancelled.");
     return true;
   }
-  if (!anchor && !grab && !pressedMend && !pressedCollapse && !pressedPrune) return false;
+  if (!anchor && !grab && !pressedMend && !pressedCollapse && !pressedPrune && !doorPress) return false;
   cancel();
   say("Cancelled.");
   return true;
@@ -1036,6 +1183,49 @@ function end(): void {
     if (!target || dragged || target.graph !== graph) return;
     commit(applySpan(graph, target.span), "Spanned an opening.", "spanning an opening", graph);
     dropSpan();
+    return;
+  }
+
+  if (tool === "door") {
+    const press = doorPress;
+    const drag = doorDrag;
+    const dragged = doorTravelled;
+    const echo = doorEcho;
+    clearGesture();
+    invalidate();
+    // The second click of a double-click, or a press on walls a derive has since replaced.
+    if (echo || !press || press.graph !== graph) return;
+    const target = press.target;
+    if (!dragged) {
+      if (target.kind === "wall") {
+        const placed = wholeSegment(graph, target.edges[0]!);
+        if (!placed) return;
+        const edge = graph.edges[placed.edge]!;
+        const a = graph.nodes[edge.a]!;
+        const b = graph.nodes[edge.b]!;
+        madeDoor = {
+          time: performance.now(),
+          ends: [pointAlong(a, b, placed.door.start), pointAlong(a, b, placed.door.end)],
+        };
+        commitDoor(placeDoor(graph, placed), "Created a door.", "creating a door", graph);
+      } else {
+        commitDoor(removeDoor(graph, target.edge, target.door), "Removed a door.", "removing a door", graph);
+      }
+      return;
+    }
+    if (!drag) return;
+    const length = drag.placement.door.end - drag.placement.door.start;
+    if (target.kind === "wall" && length < MIN_WALL_PX * lastPerPixel) {
+      say("Door too short.");
+      return;
+    }
+    const [message, label] =
+      target.kind === "wall"
+        ? ["Created a door.", "creating a door"]
+        : target.kind === "end"
+          ? ["Resized a door.", "resizing a door"]
+          : ["Moved a door.", "moving a door"];
+    commitDoor(placeDoor(graph, drag.placement, drag.replacing ?? undefined), message, label, graph);
     return;
   }
 
@@ -1157,6 +1347,7 @@ function commit(
       hovered = null;
       hoveredEdge = null;
       hoveredRegion = null;
+      doorHover = null;
       dropSpan();
       if (lastPointer) hover({ ...lastPointer, perPixel: lastPerPixel, modifier: false });
       invalidate();
@@ -1174,7 +1365,8 @@ function hover(point: MapPoint | null): void {
       !hoveredPrune &&
       hoveredRegion === null &&
       markTarget === null &&
-      spanTarget === null
+      spanTarget === null &&
+      doorHover === null
     ) {
       return;
     }
@@ -1185,6 +1377,7 @@ function hover(point: MapPoint | null): void {
     hoveredPrune = false;
     hoveredRegion = null;
     markTarget = null;
+    doorHover = null;
     dropSpan();
     setGrabTarget(false);
     invalidate();
@@ -1213,6 +1406,22 @@ function hover(point: MapPoint | null): void {
   */
   if (tool === "span") {
     scheduleSpan(point);
+    return;
+  }
+
+  // A crosshair wherever a press would act, and what it would do drawn first; the hand elsewhere.
+  if (tool === "door") {
+    const target = doorTargetAt(
+      graph,
+      { x: point.x, y: point.y },
+      LAND_RADIUS_PX * point.perPixel,
+      GRAB_RADIUS_PX * point.perPixel,
+    );
+    setGrabTarget(target !== null);
+    if (doorHover?.graph === graph && sameDoorTarget(target, doorHover.target)) return;
+    if (target === null && doorHover === null) return;
+    doorHover = target ? { target, graph } : null;
+    invalidate();
     return;
   }
 

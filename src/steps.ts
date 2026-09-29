@@ -440,6 +440,20 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "edit",
     hint: "Click an opening to wall it straight across.",
   },
+  /*
+    **Create door** (user, 2026-09-29): a door is a stretch of one wall segment that Dynamic Fog opens
+    and closes at the table, written onto the shape or line carrying its wall on every update. After
+    *Span opening*, the other doorway tool. `edit`: it takes a press on a door's end, a door or a wall,
+    and anywhere else the press pans. The hint carries the four gestures, since none can be found by
+    looking; `workspace/doorGesture.ts` has what each does.
+  */
+  {
+    id: "door",
+    label: "Create door",
+    band: "walls",
+    drag: "edit",
+    hint: "Click a wall segment to make it a door, or drag along it. Click a door to remove it, or drag it or its ends.",
+  },
 ];
 
 
@@ -886,6 +900,7 @@ const COLOUR_STEP: StepId = "view";
 export const COLOUR_KEYS = [
   "inkColour",
   "structureColour",
+  "doorColour",
   "additiveColour",
   "subtractiveColour",
   "destructiveColour",

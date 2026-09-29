@@ -52,6 +52,15 @@ export const PALETTE_DEFAULTS = {
   structure: "#1d4ed8",
 
   /**
+   * Doors: a stretch of a wall Dynamic Fog opens at the table (user, 2026-09-29), drawn half as wide
+   * again as a wall. **Green, and the cost is known**: under a red-green colour-vision simulation it
+   * comes out olive, close to the red a click that would remove it draws — so the removal highlight is
+   * wider as well as red, and the width is what tells them apart there. Fuchsia, the other candidate,
+   * came out a mid blue beside the walls' own. A door is none of the other five categories.
+   */
+  door: "#16a34a",
+
+  /**
    * Anything being added: ink the GM drew, a gap proposal, an end that would attach.
    *
    * **Attach is cyan and not green**, which an earlier draft had. Green for *will attach* against red
@@ -90,7 +99,7 @@ export const PALETTE_DEFAULTS = {
 export type PaletteRole = keyof typeof PALETTE_DEFAULTS;
 
 /** Every adjustable role, in the order a GM meets them. `casing` is not one — see below. */
-export const PALETTE_ROLES = ["ink", "structure", "additive", "subtractive", "destructive"] as const;
+export const PALETTE_ROLES = ["ink", "structure", "door", "additive", "subtractive", "destructive"] as const;
 
 export type AdjustableRole = (typeof PALETTE_ROLES)[number];
 
@@ -108,6 +117,7 @@ export type AdjustableRole = (typeof PALETTE_ROLES)[number];
 export const ROLE_LABELS: Readonly<Record<AdjustableRole, string>> = {
   ink: "Ink",
   structure: "Walls",
+  door: "Doors",
   additive: "Added",
   // "Covered" until 2026-09-10: the verb the Suppress tool used before both paint tools became Draw
   // and Erase. Named for the tool now, the way "Added" is named for Add ink.

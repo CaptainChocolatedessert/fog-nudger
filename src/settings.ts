@@ -291,6 +291,8 @@ export interface OverlaySettings {
    * is most likely to have already chosen.
    */
   readonly structureColour: string;
+  /** Doors (2026-09-29), the sixth colour. */
+  readonly doorColour: string;
   readonly additiveColour: string;
   readonly subtractiveColour: string;
   readonly destructiveColour: string;
@@ -387,6 +389,7 @@ export const DEFAULT_SETTINGS: Settings = {
     */
     inkColour: PALETTE_DEFAULTS.ink,
     structureColour: PALETTE_DEFAULTS.structure,
+    doorColour: PALETTE_DEFAULTS.door,
     additiveColour: PALETTE_DEFAULTS.additive,
     subtractiveColour: PALETTE_DEFAULTS.subtractive,
     destructiveColour: PALETTE_DEFAULTS.destructive,
@@ -893,6 +896,7 @@ export function normaliseSettings(raw: unknown): Settings {
     overlay: {
       inkColour: normaliseColour(overlay.inkColour, o.inkColour),
       structureColour: normaliseColour(overlay.structureColour, o.structureColour),
+      doorColour: normaliseColour(overlay.doorColour, o.doorColour),
       additiveColour: normaliseColour(overlay.additiveColour, o.additiveColour),
       subtractiveColour: normaliseColour(overlay.subtractiveColour, o.subtractiveColour),
       destructiveColour: normaliseColour(overlay.destructiveColour, o.destructiveColour),

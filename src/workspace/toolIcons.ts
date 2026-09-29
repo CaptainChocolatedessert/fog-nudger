@@ -206,6 +206,17 @@ const ICONS: Readonly<Record<string, string>> = {
   */
   span: '<path d="M5 3v7M5 14v7M19 3v7M19 14v7" /><circle cx="5" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /><path d="M7 12h10" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />',
   /*
+    **Create door**: a plain door — a tall rectangle, a floor line and a solid knob (user, 2026-09-29,
+    chosen from four drawn large and in the band at strip size, resting and armed).
+
+    **The cost, chosen:** it draws an object rather than the map, which the strip had done only for the
+    bin, an act — so a verb here may read as an act — and it shows no wall. Ruled out: a box in a wall
+    between vertex rings; a floor-plan swing, which implied a hinge and a direction the tool does not
+    set; and Span's own picture with a door bar in the middle, hard to tell from Span one row above and
+    better kept for the later *Span door*.
+  */
+  door: '<rect x="6" y="3" width="12" height="18" rx="1" /><path d="M3 21h18" /><circle cx="14.6" cy="12.4" r="1" fill="currentColor" stroke="none" />',
+  /*
     A bin, and the one glyph here that **is drawn twice** — at the foot of Ink and at the foot of
     Walls, for *Clear ink edits* and *Clear wall edits* (user, 2026-09-20, from four candidates at
     strip size).
