@@ -429,7 +429,7 @@ export async function removeOurs(): Promise<string> {
   if (!(await OBR.scene.isReady())) return "No scene open.";
 
   const ours = await ourItems();
-  if (ours.length === 0) return "Nothing of ours in this scene.";
+  if (ours.length === 0) return "No Fog Nudger items in this scene.";
 
   try {
     await writeWithBackoff(
@@ -439,11 +439,11 @@ export async function removeOurs(): Promise<string> {
   } catch (error) {
     const detail = describeError(error);
     console.error(`Fog Nudger — removing our shapes failed: ${detail}`);
-    return `Could not remove: ${detail}`;
+    return `Remove failed: ${detail}.`;
   }
 
   devLog("info", `emit: removed ${ours.length} of our shapes`);
-  return `Removed ${ours.length}. Nothing the GM drew was touched.`;
+  return `Removed ${ours.length} item${ours.length === 1 ? "" : "s"}.`;
 }
 
 /** Split a list into batches of at most `size`. */

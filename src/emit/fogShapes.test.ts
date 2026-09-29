@@ -92,7 +92,7 @@ describe("stageShapes", () => {
 
   it("names an item so a list of hundreds is still readable", () => {
     const [shape] = stageShapes([region()], options).shapes;
-    expect(shape!.name).toBe("Fog Nudger — region 1 (4.3 sq)");
+    expect(shape!.name).toBe("Fog Nudger region 1");
   });
 
   it("carries the fill and stroke it was given, rather than deciding them", () => {

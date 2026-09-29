@@ -81,23 +81,24 @@ export async function clearOurScene(): Promise<Cleared> {
 /**
  * The same, worded for the panel's result line.
  *
- * **What it names is what went**, and it names the map choice and the settings explicitly because
- * those are the two a GM does not expect: their tuning is gone, and the extension will ask which
- * image to read next time as though it had never seen this scene.
+ * **It says what happened and stops** (text rules, 2026-09-29, DESIGN.md §7a). It used to list what
+ * went — the map choice and the settings being the two a GM does not expect — and that list is the
+ * confirmation's title now: *all Fog Nudger data*, asked before anything goes rather than reported
+ * after.
  */
 export async function clearEverything(): Promise<string> {
   if (!(await OBR.scene.isReady())) return "No scene open.";
 
   try {
     const { items, keys } = await clearOurScene();
-    if (items === 0 && keys === 0) return "Nothing of ours in this scene.";
-    return (
-      `Cleared ${items} item${items === 1 ? "" : "s"} and everything stored — walls, painted ink, ` +
-      "settings and the map choice. Anything you drew by hand is untouched."
-    );
+    if (items === 0 && keys === 0) return "No Fog Nudger data in this scene.";
+    // Stored data with no items in the scene is the case a GM asked about in the text pass: it is
+    // cleared like any other, and the count is left out rather than printed as a zero.
+    if (items === 0) return "Cleared everything stored.";
+    return `Cleared ${items} item${items === 1 ? "" : "s"} and everything stored.`;
   } catch (error) {
     const detail = describeError(error);
     console.error(`Fog Nudger — clearing the scene failed: ${detail}`);
-    return `Could not clear: ${detail}`;
+    return `Clear failed: ${detail}.`;
   }
 }

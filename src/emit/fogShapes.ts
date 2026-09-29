@@ -218,9 +218,10 @@ export function stageShapes(
       regionId: region.id,
       position: region.placed.position,
       commands,
-      // Named for Outliner, with the size in it. Hundreds of these land in one scene and a list of
-      // identical names is a list nobody can use; the size is also how the outside is recognised.
-      name: `Fog Nudger — region ${region.id} (${region.squares.toFixed(1)} sq)`,
+      // Named for Outliner. Hundreds of these land in one scene and a list of identical names is a
+      // list nobody can use. The size in grid squares stays in the provenance below and left the
+      // name with the text rules (DESIGN.md §7a), which keep a second unit out of what a GM reads.
+      name: `Fog Nudger region ${region.id}`,
       provenance: {
         run: options.run,
         map: options.mapId,

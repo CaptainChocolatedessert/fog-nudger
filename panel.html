@@ -50,21 +50,6 @@
       }
       button:hover:not(:disabled) { border-color: var(--accent); }
       button:disabled { opacity: 0.5; cursor: default; }
-      .field {
-        display: block;
-        font-size: 0.7rem;
-        color: var(--dim);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.25rem;
-      }
-      /*
-        Standing explanation, as against an answer. Kept dim and small: it must not compete with
-        #result, which is where the answer to the last thing the GM clicked appears.
-      */
-      .note { color: var(--dim); font-size: 0.8em; }
-      .note em { font-style: normal; color: var(--text); }
-
       .actions { margin: 0.5rem 0 0.2rem; }
       /* Kept with the buttons it styles: `quiet` was *Close probe*, the one control here that
          undoes rather than does. It comes back with any unwired button that needs the same. */
@@ -96,54 +81,39 @@
       walls, and lets those walls be corrected by hand — all on one surface, because the work loop
       crosses between them constantly.
     -->
-    <div class="actions">
-      <button id="open-workspace" disabled>Open the workspace</button>
-    </div>
     <!--
-      One note, down from three (2026-09-09).
-
-      Two of them described the workspace: what it is for, that it is full-screen, that the same
-      surface edits walls afterwards. All of that is behind a button labelled "Open the workspace"
-      and is discovered by pressing it. What survives is the one thing a GM cannot discover safely,
-      because discovering it means having already lost a hand edit.
+      Three buttons and no notes (text rules, 2026-09-29, DESIGN.md §7a). The notes under them went,
+      and so did the two headings: what a note said that the name does not — that the saved walls go
+      with the first, that nothing comes back from the second — is said by each button's
+      confirmation instead, at the moment it applies.
     -->
-    <p class="note">
-      Saving replaces everything this extension has put on the map. If you hand-edit one of its
-      shapes in Owlbear, <strong>that edit is gone the next time you save.</strong>
-    </p>
-
-    <p class="field">Our fog</p>
     <div class="actions">
-      <button id="remove" disabled>Remove ours</button>
+      <button id="open-workspace" disabled>Workspace</button>
     </div>
-    <!-- Kept, halved. "Remove ours" does not say that the saved walls go too, and that is the
-         destructive half of what the button does. -->
-    <p class="note">
-      Takes out our fog <em>and the saved walls behind it</em>. Anything you drew by hand stays.
-    </p>
+
+    <!-- Confirms (user, 2026-09-29): it takes the saved walls, hand edits and all, and undo lives in
+         the workspace, so nothing on this page can bring them back. -->
+    <div class="actions">
+      <button id="remove" disabled>Remove all Fog Nudger items from this scene</button>
+    </div>
 
     <!--
-      Start over, armed behind a second press (user, 2026-09-13: "we need a way to delete all
-      metadata and start over ... it should clear everything").
+      Start over, behind a confirmation (user, 2026-09-13: "we need a way to delete all metadata and
+      start over ... it should clear everything").
 
       **On the panel rather than the workspace**, and the argument that decided it is that the
       workspace is the thing being reset: a reset living inside it is unreachable in exactly the case
-      that needs it, a workspace that will not open because of what is stored. Beside *Remove ours*
-      as well, so the destructive pair is in one place.
+      that needs it, a workspace that will not open because of what is stored. Beside the remove
+      button as well, so the destructive pair is in one place.
 
       **It asks with the same dialog the workspace asks with** (2026-09-13). This was briefly a pair
       of armed buttons, on the reasoning that a sandboxed iframe cannot rely on `confirm()` — true of
       the *browser's* dialog, and beside the point, because `confirmDialog.ts` is ours and is plain
       DOM. Dangerous actions on this surface ask in one way.
     -->
-    <p class="field">Start over</p>
     <div class="actions">
-      <button id="clear" disabled>Clear everything</button>
+      <button id="clear" disabled>Clear all Fog Nudger data from this scene</button>
     </div>
-    <p class="note">
-      Removes our fog, the saved walls, the ink you painted, your settings and the map choice.
-      Anything you drew by hand stays. <strong>This can't be undone.</strong>
-    </p>
 
     <!--
       The Diagnostics band was here, and it is gone (user, 2026-09-09): *"Remove everything except

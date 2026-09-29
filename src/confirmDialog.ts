@@ -101,9 +101,14 @@ function ensureStyles(): void {
 }
 
 export interface ConfirmOptions {
+  /** The question, naming the action and what it acts on — *Permanently* when undo cannot reach it. */
   readonly title: string;
-  /** Paragraphs. Plain text: every caller interpolates counts, and none of them wants markup. */
-  readonly body: readonly string[];
+  /**
+   * Paragraphs, and usually none: the text rules (DESIGN.md §7a) give a dialog a body only when the
+   * action has a consequence its title does not say, and then one sentence saying it. Plain text:
+   * callers interpolate counts, and none of them wants markup.
+   */
+  readonly body?: readonly string[];
   readonly confirmLabel: string;
   /** Marks the confirming button as the destructive one, which is what colours it. */
   readonly destructive?: boolean;
@@ -144,7 +149,7 @@ export function confirmAction(options: ConfirmOptions): Promise<boolean> {
     heading.textContent = options.title;
     panel.append(heading);
 
-    for (const paragraph of options.body) {
+    for (const paragraph of options.body ?? []) {
       const p = document.createElement("p");
       // `textContent`, not `innerHTML`: these carry counts and a map's name, and a map's name is
       // GM-editable text from the scene.

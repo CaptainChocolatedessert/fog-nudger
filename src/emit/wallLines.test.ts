@@ -55,8 +55,8 @@ describe("wall lines", () => {
   it("names each segment for the wall it came from, and in order", () => {
     const { lines } = stageWallLines([STUB], OPTIONS);
     expect(lines.map((line) => line.name)).toEqual([
-      "Fog Nudger — wall 7.1",
-      "Fog Nudger — wall 7.2",
+      "Fog Nudger wall 7.1",
+      "Fog Nudger wall 7.2",
     ]);
     expect(lines.map((line) => line.provenance.segment)).toEqual([1, 2]);
   });

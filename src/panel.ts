@@ -140,23 +140,20 @@ const running = new Set<HTMLButtonElement>();
  * cannot rely on `confirm()` — true of the *browser's* dialog, and beside the point: `confirmAction`
  * is ours and is plain DOM, and it carries its own styles so this page can draw it too.
  *
- * It names what goes, because two of the five are the ones a GM does not expect: their tuning, and
- * the map choice that makes the extension ask which image to read as though it had never seen the
- * scene. A declined dialog says so rather than saying nothing, which is what a GM who backed out of
- * a destructive button is checking for.
+ * **The title carries it all, and there is no body** (text rules, 2026-09-29, DESIGN.md §7a). The
+ * body used to list what goes — the tuning and the map choice being the two a GM does not expect —
+ * and to say it could not be undone. *All Fog Nudger data* covers the first, and *Permanently* in
+ * the title is the second: undo lives in the workspace, so nothing on this page is expected to reach
+ * back. A declined dialog says so rather than saying nothing, which is what a GM who backed out of a
+ * destructive button is checking for.
  */
 async function askThenClear(): Promise<string> {
   const ok = await confirmAction({
-    title: "Clear everything?",
-    body: [
-      "Removes our fog, your walls, painted ink, settings and map choice. Anything you drew by hand " +
-        "in Owlbear stays.",
-      "This can't be undone.",
-    ],
-    confirmLabel: "Clear everything",
+    title: "Permanently clear all Fog Nudger data from this scene?",
+    confirmLabel: "Clear",
     destructive: true,
   });
-  if (!ok) return "Nothing was cleared.";
+  if (!ok) return "Nothing cleared.";
   return clearEverything();
 }
 
@@ -172,7 +169,7 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
       .then((message) => reportResult(message, "ok"))
       .catch((error: unknown) => {
         const detail = describeError(error);
-        reportResult(`Failed: ${detail}`, "bad");
+        reportResult(`Failed: ${detail}.`, "bad");
         console.error(`Fog Nudger — probe failed: ${detail}`);
       })
       .finally(() => {
@@ -193,20 +190,32 @@ function wireButton(id: string, run: () => Promise<string>): HTMLButtonElement |
  * actual content goes.
  */
 /**
- * Take our fog out of the scene, and the saved walls with it.
+ * Take our fog out of the scene, and the saved walls with it — asked first.
+ *
+ * **It confirms since 2026-09-29** (user: *"confirm with a 'permanent' note"*). The walls it takes
+ * carry every hand edit, and undo lives in the workspace, so nothing on this page brings them back.
+ * The note under the button used to say the walls go too, and the result line repeated it; the
+ * dialog's one line says it now, at the moment it applies, and neither of the others does.
  *
  * **The walls go too, and that is the user's answer to where discarding lives** (2026-09-05: *"the
  * panel has a way to clear objects that we own. the workspace doesn't need to provide that."*). The
- * workspace therefore has no discard of its own — what it has is a prompt that replaces the graph
- * when a setting would rebuild it, and removing the walls altogether is this.
+ * workspace has had a discard of its own since 2026-09-20, *Clear wall edits*, which puts the walls
+ * back to a fresh derivation and is one step of undo; this is the wider one, and the permanent one.
  *
- * Without it the two halves would disagree: the fog would go and the next push would put the same
- * walls straight back, which is a "remove" that does not remove.
+ * Without the walls the two halves would disagree: the fog would go and the next push would put the
+ * same walls straight back, which is a "remove" that does not remove.
  */
-async function removeEverythingOfOurs(): Promise<string> {
+async function askThenRemove(): Promise<string> {
+  const ok = await confirmAction({
+    title: "Permanently remove all Fog Nudger items from this scene?",
+    body: ["Saved walls and wall edits go too."],
+    confirmLabel: "Remove",
+    destructive: true,
+  });
+  if (!ok) return "Nothing removed.";
   const message = await removeOurs();
   await clearWallGraph();
-  return `${message} The saved wall editing for this scene was cleared too.`;
+  return message;
 }
 
 function applyTheme(theme: unknown): void {
@@ -251,7 +260,7 @@ OBR.onReady(async () => {
       seeing the map.
     */
     wireButton("open-workspace", openWorkspace),
-    wireButton("remove", removeEverythingOfOurs),
+    wireButton("remove", askThenRemove),
     wireButton("clear", askThenClear),
   ];
 

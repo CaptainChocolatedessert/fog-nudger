@@ -137,7 +137,7 @@ export function stageWallLines(
         end: { x: to.x - from.x, y: to.y - from.y },
         // Named for the Outliner. Hundreds land in one scene, and which wall a segment belongs to
         // is the only thing worth reading there.
-        name: `Fog Nudger — wall ${wall.edge}.${i}`,
+        name: `Fog Nudger wall ${wall.edge}.${i}`,
         provenance: {
           run: options.run,
           map: options.mapId,

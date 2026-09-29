@@ -59,9 +59,7 @@ function workspaceUrl(): string {
  * the boundary protected is real and is now a count rather than a place; see `stage.ts`.
  */
 export async function openWorkspace(): Promise<string> {
-  if (!(await OBR.scene.isReady())) {
-    return "No scene open — the workspace reads the scene's map.";
-  }
+  if (!(await OBR.scene.isReady())) return "No scene open.";
 
   const url = workspaceUrl();
   devLog("info", `workspace: opening at ${url}`);
@@ -74,5 +72,5 @@ export async function openWorkspace(): Promise<string> {
     hidePaper: true,
   });
 
-  return "Workspace open. Escape or the Close button comes back.";
+  return "Workspace open.";
 }
