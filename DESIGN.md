@@ -3123,7 +3123,7 @@ that setting. **Collapse's size keeps its place from 1 to 100** (user), being an
 
 **Across the whole surface, in six commits** (2026-09-29), each through `tsc`, the suite and a build:
 the user's edits as written, adjusted by the rules, and the Walls band, the web page and the shared
-pieces by the rules alone. **Nothing of it has been in a room**; the user reviews it live.
+pieces by the rules alone, then reviewed live in a room the same day (below).
 
 **Renamed**, for reading the rest of this record, which keeps the names each passage was written with:
 
@@ -3178,7 +3178,9 @@ pieces by the rules alone. **Nothing of it has been in a room**; the user review
 bar at 1280px in the browser pane (Chromium, outside Owlbear, where nothing past the start-up line
 runs). Everything else — whether each message reads right where it appears — is the live review's.
 
-**The live review, as it arrives** (user, 2026-09-29):
+**The live review** (user, 2026-09-29), called finished the same day — the major elements seen, the
+rest to be met as it comes up. Not seen in it: the extension description, which shows only after a
+push and on a fresh add, since Owlbear keeps the first; the web page; most failure messages.
 
 - **The panel**: *Open workspace* rather than *Workspace*, and its three buttons full width with their
   labels centred, one to a row.
@@ -3789,22 +3791,19 @@ next section.
 text into rules — §7a's *The text rules* — applied them to the whole surface, and then took a live
 review in a room: the panel, the tool drawers' purple band, highlights drawn on top, the Walls tools as
 a verb and a noun with their lengths in pixels, and the map-edge toggle's gate. §7a's *Applied the same
-day* has the renames, what was decided while building, and every review finding so far. **The live
-review is not finished** — the user was still working through the surface when the session ended.
+day* has the renames, what was decided while building, and every review finding. **The live review
+is finished** (user, 2026-09-29: the major UI elements reviewed; the rest will be seen as it comes up).
+A later finding goes into §7a's review list, and into the rules if it changes one.
 
 **Do this first:**
 
-1. **Carry on the live review.** Each finding goes into §7a's review list at once, and into the rules
-   if it changes one. Not yet seen by anyone: the extension description (only after a push, and only
-   on a fresh add, since Owlbear keeps the first), the web page (the dev server's front page), and most
-   of the confirmations and failure messages.
-2. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
+1. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
    stopped by the user after 312 of 479 shapes (`dev.log`). Every update deletes ours before writing,
    so one complete update replaces it.
-3. ***Update scene* pressed straight after a reading release** — blur, threshold or window, pressed
+2. ***Update scene* pressed straight after a reading release** — blur, threshold or window, pressed
    before the new ink lands — must write the new setting's walls: it waits on `inkSettled`, then the
    derive. Still not in any log.
-4. **A cleanup the text rules left** (found by grep on 2026-09-29, not yet swept). No control has a
+3. **A cleanup the text rules left** (found by grep on 2026-09-29, not yet swept). No control has a
    `derive` line any more, so `Control.derive`, the derived half of the hint painter in
    `settingRows.ts`, `Measured.pxPerSquare` and `lastPixelsPerSquare` have no reader, and
    `probeWorldPoint` in `pipeline.ts` has no caller. Run the export sweep before deleting — the
@@ -3995,9 +3994,8 @@ for the reason *The trace worker* gives.
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**35 commits are not pushed** (measured 2026-09-29 with `git rev-list --count origin/main..main`:
-34 before the commit that writes this line, which makes it 35). **A push deploys**, so it waits for
-the user to want the public build to have them.
+**Everything is pushed** as of 2026-09-29, with the commit that writes this line; the push deploys
+the text rules and the ink worker, which the resume point's public-build check above then applies to.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
