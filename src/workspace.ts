@@ -167,27 +167,16 @@ registerRegionInvalidation();
 registerDefaultSeeds();
 
 /*
-  The canvas stack, in draw order.
-
-  Ink first, gaps over it: invented pixels sit on top of read ones rather than under them. Which of
-  them is on screen at any moment is the open step's call, declared in `steps.ts` — this only says
-  what exists and in what order.
+  The canvas stack, in draw order: what the map already holds first — the ink, the GM's paint, the
+  regions, the walls — and every highlight a tool draws over all of it. Which of them is on screen at
+  any moment is decided elsewhere; this only says what exists and in what order.
 */
 registerInkLayer();
 /*
-  Over the ink and under the gaps, which is the order the three compose in.
-
-  A pixel the GM suppressed and the repair then filled **is** ink downstream — suppression runs
-  before the gap search — so the purple has to sit over the amber or the picture would claim a
-  removal the mask did not make. Added ink is drawn by the same painter and wins over suppression
-  within it, matching its place at the end of the composition.
+  Over the ink, which is the order the two compose in. Added ink is drawn by the same painter and wins
+  over suppression within it, matching its place at the end of the composition.
 */
 registerPaintLayer();
-registerGapsLayer();
-/*
-  Over the paint and under the partition: a fill preview says what the ink is about to lose, so it
-  belongs with the other marks on the ink rather than over the rooms those marks would change.
-*/
 /*
   The partition, under the graph in both modes.
 
@@ -197,8 +186,16 @@ registerGapsLayer();
   cause, in both modes.
 */
 registerRegionsLayer();
-// Last, so the graph sits over the rooms it makes rather than under them.
+// Last of the map's own, so the graph sits over the rooms it makes rather than under them.
 registerGraphLayer();
+/*
+  **Every highlight from here down, over everything the map holds** (user, 2026-09-29: *"That sort of
+  mark should always be on top."*). The speckle rings found it first, a week earlier; the gap rings
+  still drew under the regions and the walls, from when the only thing over the ink was the gaps' own
+  fill. A pixel the gap repair would fill **is** ink downstream — suppression composes before the
+  search — so the fill still sits over the amber paint, which is the constraint the old place kept.
+*/
+registerGapsLayer();
 // Over the walls, so a proposed mend sits on top of the break it would close.
 registerMendsLayer();
 // And the small regions on offer, over the walls a collapse would take.
@@ -206,16 +203,15 @@ registerCollapsesLayer();
 // And the rings round the dead ends Prune would take, over the red the walls layer draws.
 registerPrunesLayer();
 /*
-  Last, so the delta draws over the walls it is about.
+  The delta over the walls it is about.
 
   Under them it would be the wrong way round: the marks say *these are the ones at stake*, and
   the blue centreline they lie exactly on top of would hide most of each one.
 */
 registerDeltaLayer();
 /*
-  The speckle rings last of all, so they sit over the walls and the regions (room, 2026-09-22: *"The red
-  rings need to draw above everything else. They're currently under the walls."*). They are a proposal
-  about ink, and every other layer here is something the map already holds.
+  The speckle rings, over the walls and the regions (room, 2026-09-22: *"The red rings need to draw
+  above everything else. They're currently under the walls."*) — the first case of the rule above.
 */
 registerSpecklesLayer();
 // The two answers the delta is drawn for, in the bar rather than in a box over the map.

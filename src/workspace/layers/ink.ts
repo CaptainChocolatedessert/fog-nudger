@@ -98,7 +98,7 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
   context.drawImage(painted.canvas, view.x, view.y, drawWidth, drawHeight);
 };
 
-/** Wire the layer up. Called in draw order, which is what puts the ink under the gaps. */
+/** Wire the layer up. Called in draw order, which is what puts the ink under everything else. */
 export function registerInkLayer(): void {
   addPainter("ink", paint);
   onReading((result) => {

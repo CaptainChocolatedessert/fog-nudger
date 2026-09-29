@@ -2831,6 +2831,12 @@ visibility, and the two stop competing.
 ochres, muted greens and blues. Saturated **cyan, magenta and violet essentially never occur in it**,
 which makes them the safest families.
 
+**And a highlight draws over everything the map holds** (user, 2026-09-29: *"That sort of mark should
+always be on top."*). The canvas stack is the ink, the GM's paint, the regions and the walls, and
+then every ring, preview and proposal a tool draws. The speckle rings were moved there on 2026-09-22;
+the gap rings still drew under the regions and walls until the rule was stated, from when the only
+thing over the ink was the gaps' own fill.
+
 #### Two axes, not one list
 
 - **Hue** says what kind of thing it is.
@@ -3181,6 +3187,8 @@ runs). Everything else — whether each message reads right where it appears —
 - **The purple band in the tool drawers is gone** (user: *"distracting"*): a rule down the left and a
   faint purple fill under a tool's hint and controls, which made them one block. A tool's drawer holds
   nothing else, so the band set them apart from nothing.
+- **The Fill gaps rings drew under the regions and the walls**; every highlight draws on top now,
+  which is a rule of §7a's markup palette.
 ---
 
 ## 8. Testing and diagnostic practice
