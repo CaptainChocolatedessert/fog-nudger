@@ -101,25 +101,6 @@ describe("readouts that depend on a measurement", () => {
   });
 
   /*
-    The two graph-derived controls say nothing at all without a raster.
-
-    They are stored in graph units, and turning that back into pixels needs the raster the
-    last reading used. Until one lands the readout goes quiet rather than inventing one. Both are
-    checked, because two controls sharing a formatter is exactly where one of them gets left behind.
-  */
-  it("says nothing in pixels when no raster has been read", () => {
-    // The spur limit was one of these until 2026-09-18, when pruning became an amount in the Walls
-    // drawer; the mend tool's two are what is left stored in graph units.
-    for (const control of CONTROLS.filter((control) => control.name.startsWith("mend"))) {
-      expect(control.derive!(4e-4, MEASURED_NONE)).toBe("");
-      expect(control.derive!(4e-4, MEASURED_MAP)).toContain("px");
-      // Empty rather than "off": their own `format` says so beside the label, and a hint that
-      // repeated it would print "off" twice in one row.
-      expect(control.derive!(0, MEASURED_MAP)).toBe("");
-    }
-  });
-
-  /*
     These four ask to report where the handle is rather than what the value is.
 
     Their stored unit is graph units, which is the graph's own and not a number a GM can hold on to —
@@ -127,11 +108,14 @@ describe("readouts that depend on a measurement", () => {
     readout is for is remembering a setting and coming back to it, which a position on the track
     serves. The rendering itself is `settingRows`; what belongs here is that the declaration asks.
   */
-  it("asks for a position readout on every control stored in graph units", () => {
+  it("asks for a pixel readout on every control stored in graph units", () => {
+    // Pixels since 2026-09-29 (user), a place from 1 to 100 before. What they print, and the place
+    // standing in before a reading, is `readout.test.ts`'.
     const mendControls = CONTROLS.filter((control) => control.name.startsWith("mend"));
     expect(mendControls).toHaveLength(2);
     for (const control of mendControls) {
-      expect(control.readout, control.name).toBe("position");
+      expect(control.readout, control.name).toBe("pixels");
+      expect(control.derive, control.name).toBeUndefined();
     }
   });
 
@@ -182,22 +166,6 @@ describe("readouts that depend on a measurement", () => {
     expect(stroke.derive).toBeUndefined();
   });
 
-  it("uses the measurement it is handed rather than a constant", () => {
-    /*
-      The regression for the hardcoded-`0.111` bug: a readout that multiplied by one map's measured
-      ink width, inside a control meant for any map. That readout is gone, and the principle is not:
-      two different measurements must produce two different sentences, or the number in them is not
-      coming from the measurement.
-    */
-    // The two stored in graph units report against the raster.
-    for (const control of CONTROLS.filter((control) => control.name.startsWith("mend"))) {
-      const small = control.derive!(4e-4, { pxPerSquare: 51, rasterPerUnit: 1600 });
-      const large = control.derive!(4e-4, { pxPerSquare: 51, rasterPerUnit: 3300 });
-      expect(small, control.name).not.toBe(large);
-    }
-    // The gap width checked the grid density the same way until its line went with the text rules;
-    // that a control at zero reads *off* is `readout.test.ts`' now, where the number is printed.
-  });
 });
 
 describe("the control declaration", () => {

@@ -3058,7 +3058,9 @@ body, and a hint loses its keys and examples.
 13. The GM's word, or the standard image-editing word where one exists — opacity, contrast,
     threshold, despeckle, filter — and never the code's: trace, derive, dissolve, nominate, push.
 14. Tools and buttons name the action and its object: *Fill gaps*, *Suppress ink*, *Clear ink
-    suppression*. A name settled with the user in a naming step is not renamed by these rules.
+    suppression*. A name settled with the user in a naming step is not renamed by these rules. **The
+    Walls tools are a verb and a noun** (user, 2026-09-29: *"Mend gaps. Draw wall."*) — plural where a
+    tool highlights many and a click takes one, singular where a click makes or takes one thing.
 15. One verb for an action everywhere it appears — tooltip, button, status line and undo. Brushes
     *paint*; wall tools *draw*; writing to Owlbear is *update*; destroying stored data is *clear*, and
     nothing else uses that word.
@@ -3094,8 +3096,10 @@ body, and a hint loses its keys and examples.
 
 22. A slider's label says what it limits: *Largest gap to highlight*.
 23. The yellow number shows the slider's one unit and reads *off* at zero. Where the value means
-    nothing to a GM it shows a place from 1 to 100 instead — every Walls tool, for now (below). Never a
-    second unit beside it.
+    nothing to a GM it shows a place from 1 to 100 instead. Never a second unit beside it. **Walls
+    lengths print in pixels** (user, 2026-09-29) — Mend's two, Straighten's and Prune's — converted from
+    graph units by the last reading's raster, with the place standing in before one; Collapse's area
+    is the open case (below).
 24. A space between a number and its unit, except before `%`: `12 px`, `40%`.
 25. Counts agree in number: *1 gap*, *2 gaps*.
 
@@ -3110,10 +3114,10 @@ body, and a hint loses its keys and examples.
     suppression*); the yellow number is a value (`12 px`, `off`); the point probe's coordinates and
     luminance keep the code's terms.
 
-**Parked with them** (user, 2026-09-29): **a unit for the Walls tools**, which keep a place from 1 to
-100 for now. Grid squares were considered, and so was *Thinnest stroke to keep* as the GM's own
-minimum wall width, judged fragile because some maps barely respond to that setting. **Mend is the
-interesting case**, since it already prints pixels on the line under each slider.
+**A unit for the Walls tools, settled the same day in part** (user): pixels, for the lengths, which
+Mend already printed on a line under each slider. Grid squares were considered, and so was *Thinnest
+stroke to keep* as the GM's own minimum wall width, judged fragile because some maps barely respond to
+that setting. **Still open: Collapse's size is an area**, and prints a place from 1 to 100.
 
 #### Applied the same day
 
@@ -3132,6 +3136,7 @@ pieces by the rules alone. **Nothing of it has been in a room**; the user review
 | *Preview fill* · *Going* · the *Rooms* switch | *Region opacity* · *Deleted* · *Regions* |
 | *Largest gap to look for* · *Same-wall distance* | *Largest gap to highlight* · *Smallest ink distance for a gap* (Mend: *wall distance*) |
 | *Size* (marks, regions) · *Length* · Straighten's own slider | *Largest mark / region to highlight* · *Longest dead end to highlight* · *Amount* |
+| *Mend* · *Straighten* · *Move* · *Draw* · *Erase* · *Span* | *Mend gaps* · *Straighten walls* · *Move point* · *Draw wall* · *Erase segment* · *Span opening* |
 | the brushes' *Draw* / *Erase* · a *Suppress region* mark | *Paint* / *Erase* with the layer's name · a *cross* |
 
 **Decided while building, for checking:**
@@ -3189,6 +3194,11 @@ runs). Everything else — whether each message reads right where it appears —
   nothing else, so the band set them apart from nothing.
 - **The Fill gaps rings drew under the regions and the walls**; every highlight draws on top now,
   which is a rule of §7a's markup palette.
+- **The Walls tools became a verb and a noun**, and their lengths print in pixels (rules 14 and 23).
+- **The map-edge toggle was disabled on a map whose walls were a fresh derivation** — after an
+  unlock, here. It was gated on the *stored* walls where every wall tool is gated on the walls on
+  screen and adopts the derivation on its first edit; it does the same now.
+- **The Show drawer's switches were smaller than *Show all***; they take the drawer's size now.
 ---
 
 ## 8. Testing and diagnostic practice

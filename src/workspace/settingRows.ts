@@ -256,7 +256,14 @@ export function settingRow(control: Control): HTMLElement {
   label.htmlFor = `control-${control.name}`;
   const readout = document.createElement("span");
   readout.className = "value";
-  readout.textContent = readoutText(control, value, toSlider(value, limits, scale), limits, scale);
+  readout.textContent = readoutText(
+    control,
+    value,
+    toSlider(value, limits, scale),
+    limits,
+    scale,
+    lastRasterPerGraphUnit(),
+  );
   /*
     **The per-row lock went on 2026-09-20**, with the rest of the per-control gate.
 
@@ -339,7 +346,14 @@ export function settingRow(control: Control): HTMLElement {
 
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = readoutText(control, current, Number(input.value), limits, scale);
+    readout.textContent = readoutText(
+      control,
+      current,
+      Number(input.value),
+      limits,
+      scale,
+      lastRasterPerGraphUnit(),
+    );
     paintHint(current);
 
     if (kind === "display" || kind === "tool") {

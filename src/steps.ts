@@ -318,7 +318,7 @@ export const TOOLS: readonly ToolChoice[] = [
   */
   {
     id: "straighten",
-    label: "Straighten",
+    label: "Straighten walls",
     band: "walls",
     drag: "pan",
     hint: "Drag the slider to straighten walls.",
@@ -328,10 +328,14 @@ export const TOOLS: readonly ToolChoice[] = [
     ring and declines everything else, which falls through to a pan. Its hint is its group's blurb,
     because it has controls of its own and the blurb is the line above them.
   */
-  { id: "mend", label: "Mend", band: "walls", drag: "edit", hint: "" },
+  /*
+    **Walls tools are a verb and a noun** (user, 2026-09-29: *"Mend gaps. Draw wall."*) — plural where
+    the tool highlights many and a click takes one, singular where a click makes or takes one thing.
+  */
+  { id: "mend", label: "Mend gaps", band: "walls", drag: "edit", hint: "" },
   {
     id: "move",
-    label: "Move",
+    label: "Move point",
     band: "walls",
     drag: "edit",
     // Joining is drawn before the drop, so it needs no sentence; Shift is drawn nowhere.
@@ -339,7 +343,7 @@ export const TOOLS: readonly ToolChoice[] = [
   },
   {
     id: "draw",
-    label: "Draw",
+    label: "Draw wall",
     band: "walls",
     drag: "edit",
     /*
@@ -353,7 +357,7 @@ export const TOOLS: readonly ToolChoice[] = [
   },
   {
     id: "erase",
-    label: "Erase",
+    label: "Erase segment",
     band: "walls",
     drag: "edit",
     hint: "Click a wall segment to erase it.",
@@ -429,7 +433,7 @@ export const TOOLS: readonly ToolChoice[] = [
   */
   {
     id: "span",
-    label: "Span",
+    label: "Span opening",
     band: "walls",
     drag: "edit",
     hint: "Click an opening to wall it straight across.",
@@ -673,7 +677,7 @@ export const STEPS: readonly Step[] = [
     groups: [
       {
         tool: "mend",
-        title: "Mend",
+        title: "Mend gaps",
         /*
           Mechanics only, as the ink tool's is. It does not name a colour: the palette is retunable
           and a word for a hue is a copy nothing can keep honest.
@@ -719,7 +723,7 @@ export const STEPS: readonly Step[] = [
       */
       {
         tool: "straighten",
-        title: "Straighten",
+        title: "Straighten walls",
         blurb: "",
         parameters: [],
       },

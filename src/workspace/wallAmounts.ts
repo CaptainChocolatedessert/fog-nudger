@@ -51,6 +51,8 @@ import { invalidate, say } from "./shell";
 import { saveEditedWalls, wallsEdited } from "./stage";
 import { workOn } from "./subject";
 import { doneRow } from "./doneAction";
+import { graphUnitsInPixels } from "./readout";
+import { lastRasterPerGraphUnit } from "../pipeline";
 
 /**
  * The track's step. Its floor is `TRACK_FLOOR`, shared with Prune's and pinned for the reason given
@@ -268,8 +270,12 @@ function refresh(): void {
       rather than the handle**: a latch voided by an undo or a derive leaves the handle where the GM left
       it and aims nothing, and saying "off" there is the same loud answer the note gives.
     */
+    // In pixels since 2026-09-29 (user), the place standing in only before a reading.
     const place = Math.max(1, Math.round((Number(slider.value) / SLIDER_STEPS) * 100));
-    readout.textContent = latch.straighten > 0 ? String(place) : "off";
+    readout.textContent =
+      latch.straighten > 0
+        ? (graphUnitsInPixels(latch.straighten, lastRasterPerGraphUnit()) ?? String(place))
+        : "off";
   }
 
   const note = document.getElementById(NOTE_ID);

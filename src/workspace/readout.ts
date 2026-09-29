@@ -23,13 +23,35 @@ import type { Control } from "../controls";
 import { formatValue, positionReadout, type Scale, type ScaleLimits } from "../sliderScale";
 import { tickIndex } from "./tickMarks";
 
+/**
+ * A length in graph units as raster pixels, the unit the Ink band's sliders print — or `null` before a
+ * reading has given a raster to count in. One decimal under ten pixels, where a whole number would
+ * print several stops the same.
+ */
+export function graphUnitsInPixels(value: number, rasterPerUnit: number | null): string | null {
+  if (rasterPerUnit === null || !(rasterPerUnit > 0)) return null;
+  const px = value * rasterPerUnit;
+  return `${px < 10 ? px.toFixed(1) : Math.round(px)} px`;
+}
+
 export function readoutText(
   control: Control,
   value: number,
   position: number,
   limits: ScaleLimits,
   scale: Scale,
+  /** Raster pixels per graph unit, for a control stored in graph units that prints pixels. */
+  rasterPerUnit: number | null = null,
 ): string {
+  /*
+    Stored in graph units and printed in pixels (user, 2026-09-29: *"Let's have the slider just report
+    px directly"*), where it printed a place from 1 to 100 with the pixels on a line underneath.
+    Before a reading there is no raster to count in, and the place stands in.
+  */
+  if (control.readout === "pixels") {
+    if (value <= 0) return "off";
+    return graphUnitsInPixels(value, rasterPerUnit) ?? String(positionReadout(position));
+  }
   // A whole percentage. The one control that asks is the region opacity, stepped in twos, so a
   // decimal would only ever print zero. (It had one while the blob tolerance, stepped in halves,
   // was the control asking.)

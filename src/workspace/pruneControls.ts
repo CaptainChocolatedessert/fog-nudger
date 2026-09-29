@@ -13,7 +13,9 @@
  * DOM only. What the button does is `wallEdit`'s, because pruning is an edit.
  */
 
-import { SLIDER_STEPS, fromSlider, toSlider } from "../sliderScale";
+import { lastRasterPerGraphUnit } from "../pipeline";
+import { SLIDER_STEPS, fromSlider, toSlider, type ScaleLimits } from "../sliderScale";
+import { graphUnitsInPixels } from "./readout";
 import { currentToolDrawer } from "./drawer";
 import { spurTop } from "./graphScale";
 import { pruneLimits } from "./pruneScale";
@@ -26,8 +28,12 @@ import { pruneEveryDeadEndShown } from "./wallEdit";
 let frameAsked = false;
 let pending = 0;
 
-function readoutFor(position: number): string {
-  return position > 0 ? String(Math.max(1, Math.round((position / SLIDER_STEPS) * 100))) : "off";
+/** The length in pixels, as Straighten's and Mend's print (user, 2026-09-29), the place before a reading. */
+function readoutFor(position: number, limits: ScaleLimits | null): string {
+  if (position <= 0) return "off";
+  const place = String(Math.max(1, Math.round((position / SLIDER_STEPS) * 100)));
+  if (!limits) return place;
+  return graphUnitsInPixels(fromSlider(position, limits, "log"), lastRasterPerGraphUnit()) ?? place;
 }
 
 export function renderPruneControls(rows: HTMLElement): void {
@@ -53,13 +59,13 @@ export function renderPruneControls(rows: HTMLElement): void {
   slider.value = String(position);
   slider.disabled = limits === null;
   label.htmlFor = slider.id = "prune-length";
-  readout.textContent = readoutFor(position);
+  readout.textContent = readoutFor(position, limits);
 
   slider.addEventListener("input", () => {
     if (!limits) return;
     workOn("walls");
     pending = Number(slider.value);
-    readout.textContent = readoutFor(pending);
+    readout.textContent = readoutFor(pending, limits);
     if (frameAsked) return;
     frameAsked = true;
     requestAnimationFrame(() => {

@@ -91,7 +91,7 @@ export interface Control {
    * fixed reference range, is stable forever and puts the handle at the far right while the readout
    * says 78, which is wrong in a way you can see.
    */
-  readonly readout?: "position" | "percent";
+  readonly readout?: "position" | "percent" | "pixels";
   /**
    * The unit the number beside the label is printed in — `12 px` — and `off` at zero on a track that
    * starts there (text rules, 2026-09-29: the yellow number carries the slider's one unit, and there
@@ -183,10 +183,6 @@ export interface Control {
  * unit stays graph units regardless — that is what keeps the setting from depending on a
  * measurement — and this is the readout being generous where it can.
  */
-function inRasterPixels(value: number, { rasterPerUnit }: Measured): string {
-  if (rasterPerUnit === null || rasterPerUnit <= 0) return "";
-  return `${(value * rasterPerUnit).toFixed(1)} px`;
-}
 
 /*
   `brushReadout` was here: a brush width in pixels, and in grid squares where a run had measured the
@@ -334,8 +330,7 @@ export const CONTROLS: readonly Control[] = [
     label: "Largest gap to highlight",
     scale: "log",
     hint: "",
-    readout: "position",
-    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
+    readout: "pixels",
   },
   {
     name: "mendTravelGraphUnits",
@@ -343,7 +338,6 @@ export const CONTROLS: readonly Control[] = [
     scale: "log",
     // The ink tool's sentence asked of the walls, as the label is.
     hint: "Shortest path from one side of a gap to the other, along walls.",
-    readout: "position",
-    derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
+    readout: "pixels",
   },
 ];

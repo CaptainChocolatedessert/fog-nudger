@@ -37,7 +37,8 @@ import { addFrameWalls, alreadyFramed, removeFrameWalls } from "../trace/frameWa
 import type { GraphExtent } from "../trace/graphUnits";
 import { compactNodes, type WallGraph } from "../trace/wallGraph";
 import { mapExtent, say } from "./shell";
-import { wallGraph, saveEditedWalls } from "./stage";
+import { editableGraph } from "./regions";
+import { saveEditedWalls } from "./stage";
 import { workOn } from "./subject";
 import type { BandAct } from "./bandActs";
 
@@ -70,7 +71,12 @@ export const FRAME_ACT: BandAct = {
   */
   label: "Toggle walls around the map edge",
   glyph: "frame",
-  gate: () => wallGraph() !== null,
+  /*
+    The walls on screen, as every wall tool's gate is — not the stored ones (user, 2026-09-29: it was
+    disabled on a map whose walls were a fresh derivation). A press adopts the derivation as the
+    document, the way a first edit with any tool does.
+  */
+  gate: () => editableGraph() !== null,
   run: frameTheMapEdge,
 };
 
@@ -92,7 +98,7 @@ async function frameTheMapEdge(): Promise<void> {
 }
 
 async function run(): Promise<void> {
-  const graph = wallGraph();
+  const graph = editableGraph();
   if (!graph) {
     say("No walls for this map yet.", "bad");
     return;
@@ -118,7 +124,7 @@ async function putItOn(graph: WallGraph, extent: GraphExtent): Promise<void> {
   busy = true;
   say("Adding edge walls…", "working");
   try {
-    await saveEditedWalls(framed.graph, "adding walls around the map edge");
+    await saveEditedWalls(framed.graph, "adding walls around the map edge", graph);
     devLog(
       "info",
       `workspace: walled the map's edge — ${framed.splits} existing segments split where they met ` +
@@ -162,7 +168,7 @@ async function takeItOff(graph: WallGraph, extent: GraphExtent): Promise<void> {
   busy = true;
   say("Removing edge walls…", "working");
   try {
-    await saveEditedWalls(tidy, "removing walls around the map edge");
+    await saveEditedWalls(tidy, "removing walls around the map edge", graph);
     devLog("info", `workspace: unwalled the map's edge — ${bare.removed} walls along an edge removed`);
     say("Removed walls around the map edge.");
   } catch (error) {

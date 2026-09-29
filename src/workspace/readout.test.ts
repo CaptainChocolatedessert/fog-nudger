@@ -9,7 +9,10 @@
  *
  * **Six mutations, six caught** (2026-09-29, run before this was written): the space before the unit
  * dropped, the off state removed, off tied to the track's floor instead of to zero, `shown` ignored,
- * the percentage given back its decimal, and a space put before the percent sign.
+ * the percentage given back its decimal, and a space put before the percent sign. **Five more, five
+ * caught**, on the pixel readout added the same day: the raster ignored, the decimal under ten
+ * dropped, off at zero removed, a zero raster accepted, and nothing in place of the pixels before a
+ * reading.
  */
 
 import { describe, expect, it } from "vitest";
@@ -17,7 +20,7 @@ import { describe, expect, it } from "vitest";
 import { CONTROLS, type Control } from "../controls";
 import { DEFAULT_SETTINGS, readParameter, SETTING_LIMITS } from "../settings";
 import { toSlider } from "../sliderScale";
-import { readoutText } from "./readout";
+import { graphUnitsInPixels, readoutText } from "./readout";
 
 function control(name: Control["name"]): Control {
   const found = CONTROLS.find((candidate) => candidate.name === name);
@@ -60,6 +63,26 @@ describe("the number beside a slider", () => {
   it("prints the region opacity as a whole percentage, with no space before the sign", () => {
     expect(printed(control("fillOpacity"), 0.22)).toBe("22%");
     expect(printed(control("fillOpacity"), 1)).toBe("100%");
+  });
+
+  it("prints a length stored in graph units as pixels, against the raster it is handed", () => {
+    // Mend's two (user, 2026-09-29). Two rasters, two answers: the number has to come from the
+    // raster, which is the regression the hardcoded-ink-width bug left behind as a principle.
+    const reach = control("mendReachGraphUnits");
+    const limits = SETTING_LIMITS.mendReachGraphUnits;
+    const at = (raster: number | null): string =>
+      readoutText(reach, 4e-3, toSlider(4e-3, limits, "log"), limits, "log", raster);
+    expect(at(3300)).toBe("13 px");
+    expect(at(1600)).toBe("6.4 px");
+    expect(at(null)).toMatch(/^\d+$/);
+    expect(readoutText(reach, 0, 0, limits, "log", 3300)).toBe("off");
+  });
+
+  it("gives one decimal under ten pixels and none above", () => {
+    expect(graphUnitsInPixels(1e-3, 3300)).toBe("3.3 px");
+    expect(graphUnitsInPixels(1e-2, 3300)).toBe("33 px");
+    expect(graphUnitsInPixels(1e-2, null)).toBeNull();
+    expect(graphUnitsInPixels(1e-2, 0)).toBeNull();
   });
 
   it("prints every control's default as a number and a unit, a place, a percentage or off", () => {
