@@ -120,16 +120,16 @@ describe("the step declaration", () => {
     }
   });
 
-  it("gives every step a unique id and a title, and almost none of them a blurb", () => {
+  it("gives every step a unique id and a title, and none of them a blurb", () => {
     /*
       **The blurb assertion was inverted on 2026-09-09**, the same way the control hint's was, and
       for the same reason: demanding a paragraph under every heading is a test that makes the prose
       mandatory and the naming optional.
 
-      The rule now is that a title carries the step, and a blurb has to say something no label in the
-      step can. Exactly one does — View, because "Preview fill" cannot also state what the emitted
-      shape looks like. Pinned at one rather than a cap: a second would mean the argument was made
-      twice, and it should have to be made here first.
+      The rule is that a title carries the step, and a blurb has to say something no label in the
+      step can. View's was the last, saying an emitted room is opaque with no outline, and it went
+      with the text rules of 2026-09-29. Pinned at none: a first would mean the argument was made
+      again, and it should have to be made here first.
 
       Mutation-tested with the control-hint test: six mutations, six caught.
     */
@@ -137,7 +137,7 @@ describe("the step declaration", () => {
     for (const step of STEPS) {
       expect(step.title.length).toBeGreaterThan(0);
     }
-    expect(STEPS.filter((step) => step.blurb.length > 0).map((step) => step.id)).toEqual(["view"]);
+    expect(STEPS.filter((step) => step.blurb.length > 0).map((step) => step.id)).toEqual([]);
   });
 
   it("has exactly one persistent group, which is the one that is never entered", () => {

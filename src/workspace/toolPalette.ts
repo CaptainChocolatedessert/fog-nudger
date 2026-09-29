@@ -312,16 +312,20 @@ function cover(): HTMLButtonElement {
   lid.className = "cover";
   lid.dataset.opens = COVER_ANCHOR;
   /*
-    The wording has to survive the case the gate is deliberately loud about.
+    The user's wording from the text pass (2026-09-29): the tooltip says what a press does, and the
+    screen-reader label adds the cost, since it has no drawer to read it in.
 
-    `wallsEdited` reads "nothing stored, a base for another map, or a base that will not decode" as
-    *assume it was edited* — so a scene whose nominated map has gone missing raises this over the
-    picker. Saying "your wall edits" there would assert something that may not be true; saying what
-    the comparison actually measures is true in every case it fires.
+    **One case it does not survive, stated.** `wallsEdited` reads "nothing stored, a base for another
+    map, or a base that will not decode" as *assume it was edited*, so a scene whose nominated map has
+    gone missing raises this over the picker — and "lose manual wall edits" then claims edits that
+    may not exist. The wording before it said only what the comparison measures, which was true in
+    every case it fired; this is plainer in the ordinary one, which is what it was chosen for.
   */
-  lid.title =
-    "These are not the walls the trace derived — press to see what changing the map or the ink would cost";
-  lid.setAttribute("aria-label", "Show what changing the map or the ink would cost");
+  lid.title = "Click to unlock.";
+  lid.setAttribute(
+    "aria-label",
+    "Click to unlock. This will regenerate walls and lose manual wall edits.",
+  );
   lid.addEventListener("click", reviewFromCover);
   return lid;
 }
@@ -587,8 +591,8 @@ export function render(): void {
       */
       const glyph = toolIcon(step.id === "map" ? "map" : "params");
       if (glyph) opener.append(glyph);
-      const name = step.id === "map" ? "Choose the map" : `${step.title} settings`;
-      opener.title = shut ? "Choose a map first" : name;
+      const name = step.id === "map" ? "Choose map" : `${step.title} settings`;
+      opener.title = shut ? "Choose a map first." : name;
       opener.setAttribute("aria-label", name);
       opener.setAttribute("aria-pressed", String(currentPanel() === step.id));
       opener.dataset.opens = `params:${step.id}`;

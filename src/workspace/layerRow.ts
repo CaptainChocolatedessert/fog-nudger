@@ -53,15 +53,16 @@ import { invalidate, setActiveLayers } from "./shell";
  */
 const NAMES: Readonly<Record<LayerId, string>> = {
   ink: "Ink",
-  paint: "Your edits",
+  paint: "Ink edits",
   gaps: "Gaps",
-  speckles: "Blobs",
+  speckles: "Marks",
   mends: "Mend proposals",
   collapses: "Small regions",
   prunes: "Dead ends",
-  regions: "Rooms",
+  // A space the walls enclose is a region (text rules, 2026-09-29); it was *Rooms* here alone.
+  regions: "Regions",
   graph: "Walls",
-  delta: "Your wall changes",
+  delta: "Wall edits",
 };
 
 /**
@@ -86,7 +87,12 @@ export function renderLayerRow(body: HTMLElement): void {
     With four layers on from the moment a map is chosen, turning them off one at a time is four
     presses to see the image you are tracing — and seeing it plainly is the state this surface most
     needs. The button says which way it would go, because a toggle that does not is a coin flip.
+
+    **Below the switches, which share the drawer's width between them** (user, text pass
+    2026-09-29). In line with them it read as a fourth switch.
   */
+  const switches = document.createElement("div");
+  switches.className = "layer-switches";
   const all = document.createElement("button");
   all.type = "button";
   all.className = "chip quiet";
@@ -95,7 +101,6 @@ export function renderLayerRow(body: HTMLElement): void {
     if (anyLayerHidden(showing)) showAllLayers();
     else hideAllLayers(showing);
   });
-  host.append(all);
 
   for (const layer of showing) {
     const button = document.createElement("button");
@@ -110,8 +115,9 @@ export function renderLayerRow(body: HTMLElement): void {
       toggleLayer(layer);
       invalidate();
     });
-    host.append(button);
+    switches.append(button);
   }
+  host.append(switches, all);
 }
 
 export function registerLayerRow(redraw: () => void): void {

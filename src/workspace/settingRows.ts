@@ -22,9 +22,7 @@ import {
 } from "../settings";
 import type { SettingName } from "../settings";
 import {
-  formatValue,
   fromSlider,
-  positionReadout,
   SLIDER_STEPS,
   toSlider,
   type Scale,
@@ -33,7 +31,8 @@ import {
 import { onInkProfiles, profileFor, unwatchInkProfiles, watchInkProfiles } from "./inkProfiles";
 import { ghostPosition } from "./ghostMark";
 import { recomputeFor } from "./recompute";
-import { tickIndex, tickPositions } from "./tickMarks";
+import { readoutText } from "./readout";
+import { tickPositions } from "./tickMarks";
 import { sideOfStep, workOn } from "./subject";
 import { stepsOf } from "../steps";
 import {
@@ -60,43 +59,6 @@ function trackFor(name: SettingName): ScaleLimits {
   return SETTING_LIMITS[name];
 }
 
-/**
- * The number beside the label.
- *
- * A control may ask to report **where its handle is** rather than what its value is, because two of
- * them store graph units and neither that nor any spelling of it is a number a GM can hold
- * on to. Everything else takes the shared formatter, which knows about steps and off positions and
- * should not be bypassed for taste.
- *
- * **A control with `stepFor` reports its tick instead of either.** The raw value is a guess in a unit
- * (ink widths) nobody can feel, and the track position is not the count that matters — what changed
- * as the handle moved is how many of the control's own, measured stops it crossed, and that is what
- * the tick marks under it now count too. The two are meant to agree: the number says how many ticks
- * back the handle sits, and the marks say where they are.
- */
-function format(
-  control: Control,
-  value: number,
-  position: number,
-  limits: ScaleLimits,
-  scale: Scale,
-): string {
-  // A percentage of black-to-white, which is the only unit tone has that a GM can picture. One
-  // decimal, because the step is half a percent and a whole number would make half the stops print
-  // the same thing.
-  if (control.readout === "percent") return `${(value * 100).toFixed(1)}%`;
-  if (control.stepFor) {
-    // Off is a state rather than a tick, on the same argument the position readout below makes —
-    // true here specifically because a radius of zero is where this filter is exactly a no-op.
-    if (value <= 0) return "off";
-    return String(tickIndex(value, limits));
-  }
-  if (control.readout !== "position") return formatValue(value, limits, scale);
-  // Off is a state rather than a place on the track, and it is the one thing about these controls
-  // that a number would obscure rather than convey.
-  if (value <= 0) return "off";
-  return String(positionReadout(position));
-}
 
 /**
  * An empty shape, and the two paths that draw it.
@@ -294,7 +256,7 @@ export function settingRow(control: Control): HTMLElement {
   label.htmlFor = `control-${control.name}`;
   const readout = document.createElement("span");
   readout.className = "value";
-  readout.textContent = format(control, value, toSlider(value, limits, scale), limits, scale);
+  readout.textContent = readoutText(control, value, toSlider(value, limits, scale), limits, scale);
   /*
     **The per-row lock went on 2026-09-20**, with the rest of the per-control gate.
 
@@ -377,7 +339,7 @@ export function settingRow(control: Control): HTMLElement {
 
   input.addEventListener("input", () => {
     const current = fromSlider(Number(input.value), limits, scale);
-    readout.textContent = format(control, current, Number(input.value), limits, scale);
+    readout.textContent = readoutText(control, current, Number(input.value), limits, scale);
     paintHint(current);
 
     if (kind === "display" || kind === "tool") {

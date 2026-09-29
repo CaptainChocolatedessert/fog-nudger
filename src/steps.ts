@@ -247,7 +247,9 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Pan",
     band: "navigate",
     drag: "pan",
-    hint: "Drag to pan. Click without dragging to check what's under the pointer.",
+    // The click that reports what is under the pointer goes unmentioned, by the text rules' one
+    // deliberate exception (user, 2026-09-29): a GM who notices it in the status line can use it.
+    hint: "Drag to pan.",
   },
   { id: "suppress", label: "Suppress", band: "ink", drag: "brush", hint: "" },
   { id: "ink", label: "Add ink", band: "ink", drag: "brush", hint: "" },
@@ -772,6 +774,7 @@ export const STEPS: readonly Step[] = [
       place, one axis over. A persistent group is never navigated to, so it answers that objection
       rather than reintroducing it.
     - **"Put on the map" to the end of Walls**, which is now the step that shows what it writes.
+      (It is *Update scene*, in the bar, since.)
   */
   {
     id: "view",
@@ -783,13 +786,11 @@ export const STEPS: readonly Step[] = [
       and View is not part of it.
     */
     /*
-      The one step blurb kept, cut to the half a label cannot carry.
-
-      "Preview fill" and "Preview outline" say these are local to this canvas. What they cannot say
-      is what the *emitted* shape looks like instead \u2014 and a GM who assumes a tinted preview means a
-      tinted fog shape has assumed something false about the thing this tool exists to produce.
+      No blurb since the text rules of 2026-09-29. It said the fill is a preview and an emitted room
+      is opaque with no outline — true, and not something a GM needs in order to set the opacity,
+      which is what this group is for.
     */
-    blurb: "Preview only \u2014 an emitted room is fully opaque and has no outline.",
+    blurb: "",
     /*
       No layers of its own, and that is what a persistent group means rather than an oversight.
 

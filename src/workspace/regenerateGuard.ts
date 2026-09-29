@@ -151,25 +151,11 @@ export function coverIsUp(): boolean {
  */
 export function reviewFromCover(): void {
   up = true;
-  const marked = showWallDelta(true);
-  // The state line still narrates, because it is the surface's running commentary and this is an
-  // event. What it is not any more is where the *answer* lives.
-  say(
-    marked
-      ? `${COVER_SUBJECT} would rebuild these walls — look at what changes, then choose`
-      : `${COVER_SUBJECT} would rebuild these walls`,
-  );
+  // Nothing on the state line (text rules, 2026-09-29): the drawer asks the question and the map
+  // shows what it would cost, and a third copy of it in the corner said nothing new.
+  showWallDelta(true);
   announce();
 }
-
-/**
- * What the question is about, in the one place the state line and the drawer both read it from.
- *
- * **The cause rather than a control.** Every per-control mark named the thing it sat on, because it
- * sat on one; the cover sits over a whole side, and what that side does is the rework's own
- * sentence — the walls come from the ink, so changing the ink makes new walls.
- */
-const COVER_SUBJECT = "Changing the map or the ink";
 
 /**
  * Whether the question is up. A boolean, and it did not used to be.
@@ -204,7 +190,6 @@ export function keepWallChanges(): void {
   if (!up) return;
   up = false;
   showWallDelta(false);
-  say("kept your wall changes — nothing was touched");
   announce();
 }
 
@@ -228,7 +213,7 @@ export async function acceptRegenerate(): Promise<void> {
     await discardWalls();
   } catch (error) {
     const detail = describeError(error);
-    say(`could not discard the walls, so nothing changed: ${detail}`, "bad");
+    say(`Wall regeneration failed: ${detail}.`, "bad");
     console.error("Fog Nudger — discarding the walls failed", error);
     return;
   }
@@ -260,9 +245,7 @@ export function reviewBody(): HTMLElement {
 
   const said = document.createElement("p");
   said.className = "sub";
-  said.innerHTML =
-    `<b>${COVER_SUBJECT}</b> rebuilds these walls from the map. Hand edits go with them; painted ` +
-    "ink stays — it feeds the rebuild.";
+  said.textContent = "Unlocking will regenerate walls and lose manual wall edits.";
   body.append(said);
 
   /*
@@ -274,8 +257,10 @@ export function reviewBody(): HTMLElement {
   */
   const legend = document.createElement("p");
   legend.className = "review-legend";
+  // What the GM added is what a regenerate deletes, and what they erased is what it adds back —
+  // so *additions* wear the additive colour and *deletions* the subtractive one, as the marks do.
   legend.innerHTML =
-    'On the map: <b class="going">what goes</b> · <b class="coming">what comes back</b>';
+    'See the map for <b class="coming">additions</b> and <b class="going">deletions</b>.';
   body.append(legend);
 
   // Keep first, destroy second: a drawer that has just appeared under the cursor should meet a
@@ -285,13 +270,13 @@ export function reviewBody(): HTMLElement {
   // The ordinary chip, filled, which on this surface is what a default answer looks like. Not
   // `quiet` — that is styled under `.step-actions` and would be a class doing nothing here.
   keep.className = "chip";
-  keep.textContent = "Keep my changes";
+  keep.textContent = "Do not unlock";
   keep.addEventListener("click", keepWallChanges);
 
   const go = document.createElement("button");
   go.type = "button";
   go.className = "chip urgent";
-  go.textContent = "Generate them again";
+  go.textContent = "Unlock and regenerate walls";
   go.addEventListener("click", () => void acceptRegenerate());
 
   body.append(keep, go);

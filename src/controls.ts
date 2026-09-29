@@ -93,6 +93,18 @@ export interface Control {
    */
   readonly readout?: "position" | "percent";
   /**
+   * The unit the number beside the label is printed in — `12 px` — and `off` at zero on a track that
+   * starts there (text rules, 2026-09-29: the yellow number carries the slider's one unit, and there
+   * is never a second beside it). Where this is set, `derive` is not: a line under the slider saying
+   * the same number again was the second unit the rules took away.
+   */
+  readonly unit?: "px";
+  /**
+   * What the number beside the label shows, where that is not the stored value itself. Only the
+   * window has one: it stores a radius, and what a GM can picture is the window's width.
+   */
+  readonly shown?: (value: number) => number;
+  /**
    * Draw the distribution this control acts on, rising off its own rail.
    *
    * Only the two ink filters have one, and that is a decision rather than a starting point: each is
@@ -144,13 +156,15 @@ export interface Control {
  * Where a name was doing too little the **name changed** rather than being propped up by a sentence.
  * The old note here defended the hints on the grounds that a direction is not guessable — raising
  * Sauvola's `k` finds *less* ink, and "sensitivity" suggests the opposite. That argument was right
- * about the problem and wrong about the fix: the control is called **strictness** now, and a
- * stricter threshold finding less ink needs no explaining. Likewise the spur limit, which is *the
- * longest dead end to remove* because "spur" is this project's word and not a GM's.
+ * about the problem and wrong about the fix: the control is the **Ink contrast threshold** now
+ * (text pass, 2026-09-29), and a higher threshold finding less ink needs no explaining. Likewise the
+ * spur limit, which was *the longest dead end to remove* because "spur" is this project's word and
+ * not a GM's.
  *
- * **Three hints survive**, and each says something neither a name nor a number can: that a gap
- * proposal is not applied until it is accepted, and which way the same-wall distance leans — once for
- * the ink tool and once for the mend tool, which asks the same question of the walls.
+ * **Two hints survive**, one for each gap tool, and both define rather than steer (text rules,
+ * 2026-09-29): what the distance under the label measures — the shortest path from one side of a
+ * gap to the other, through the ink or along the walls. Which way to move it went, and so did the
+ * gap search's warning that a proposal is not applied until accepted, which the highlight says.
  *
  * One list rather than one per surface: which stage a control belongs to is read from the stage
  * declaration in `settings.ts`, which is the same declaration the pipeline's cache invalidation
@@ -171,22 +185,14 @@ export interface Control {
  */
 function inRasterPixels(value: number, { rasterPerUnit }: Measured): string {
   if (rasterPerUnit === null || rasterPerUnit <= 0) return "";
-  return `${(value * rasterPerUnit).toFixed(1)}px`;
+  return `${(value * rasterPerUnit).toFixed(1)} px`;
 }
 
-/**
- * What a brush width says, shared by the two brushes.
- *
- * A width in raster pixels means nothing on its own — a GM has no feel for what a pixel of *this*
- * map is — so it is reported in grid squares where a run has measured the density, and left as bare
- * pixels where none has. The nullable measurement is why: before a first reading there is no density
- * and a readout that invented one would be a guess in the voice of a measurement.
- */
-function brushReadout(value: number, { pxPerSquare }: Measured): string {
-  const px = `${Math.round(value)}px across`;
-  if (pxPerSquare === null || pxPerSquare <= 0) return px;
-  return `${px}, ${(value / pxPerSquare).toFixed(2)} of a square`;
-}
+/*
+  `brushReadout` was here: a brush width in pixels, and in grid squares where a run had measured the
+  density. It went with the text rules of 2026-09-29 — one unit, on the number beside the label, and
+  pixels need no second (user: *"pixels is already clear"*).
+*/
 
 /**
  * The stroke filter's step, in ink widths — see `Control.stepFor`.
@@ -202,25 +208,32 @@ function strokeFilterStep(inkWidthPx: number | null): number {
 }
 
 export const CONTROLS: readonly Control[] = [
+  /*
+    The two halves of one threshold first, then the blur (user, text pass 2026-09-29): the contrast
+    threshold and its window are Sauvola's two parameters, and a GM tunes them together.
+  */
   {
     name: "sauvolaK",
-    // "Strictness" rather than "threshold" or "sensitivity", which is the whole of the direction
-    // hint this used to carry: a stricter reading keeping only decisively dark pixels is guessable,
-    // and a higher *sensitivity* finding less ink is not.
-    label: "Ink strictness",
+    // Sauvola's `k`, which sets how far below its neighbourhood's average a pixel must be to count as
+    // ink — furthest where the neighbourhood is flat. "Threshold" says the direction: a higher one
+    // demands more contrast and finds less ink. It was *Ink strictness* until the text pass.
+    label: "Ink contrast threshold",
     hint: "",
-  },
-  {
-    name: "blurSigma",
-    label: "Texture blur",
-    hint: "",
-    derive: (value) => `${value.toFixed(2)} px`,
   },
   {
     name: "sauvolaRadiusPx",
-    label: "Detail window",
+    label: "Contrast window",
     hint: "",
-    derive: (value) => `${Math.round(value) * 2 + 1} px across`,
+    unit: "px",
+    shown: (value) => Math.round(value) * 2 + 1,
+  },
+  {
+    name: "blurSigma",
+    // Named for what it is for, in the image editor's word: the blur is how texture and specks are
+    // kept out of the reading. It was *Texture blur*.
+    label: "Despeckle",
+    hint: "",
+    unit: "px",
   },
   {
     name: "minStrokeInkWidths",
@@ -235,31 +248,29 @@ export const CONTROLS: readonly Control[] = [
   {
     name: "minIslandPx",
     profile: true,
+    // *Mark* is the surface's word for something drawn on the map image (text rules, 2026-09-29), and
+    // the tool that suppresses them one by one measures them with the same definition.
     label: "Smallest mark to keep",
     hint: "",
-    derive: (value) => (value <= 0 ? "off" : `under ${Math.round(value)}px across goes`),
+    unit: "px",
   },
   {
     name: "gapFillPx",
-    label: "Largest gap to look for",
-    // One of the two hints kept. Not a direction — the label and the readout give that — but the
-    // one fact a GM must not learn by surprise: past a doorway's width the search proposes
-    // doorways, and nothing about a proposal reaches the ink until it is accepted.
-    hint: "Ringed, never added until you accept it. Past a doorway's width it proposes doorways.",
-    derive: (value, { pxPerSquare }) => {
-      if (value <= 0) return "off";
-      if (pxPerSquare === null || pxPerSquare <= 0) return `${Math.round(value)}px`;
-      return `${Math.round(value)}px, ${(value / pxPerSquare).toFixed(2)} of a square`;
-    },
+    label: "Largest gap to highlight",
+    // The hint that stood here — ringed, never added until accepted, and past a doorway's width it
+    // proposes doorways — went with the text rules: the highlight says the first, and the second is
+    // what a GM sees the moment the handle passes a doorway.
+    hint: "",
+    unit: "px",
   },
   {
     name: "gapTravelPx",
-    label: "Same-wall distance",
-    // The other one kept. No name found says what "along the ink" means here, and the direction is
-    // genuinely backwards: a *shorter* distance proposes *more*.
-    hint: "How far apart a gap's two banks may be measured <b>along the ink</b>. Lower proposes more.",
-    derive: (value) =>
-      value <= 0 ? "propose every gap" : `${Math.round(value)}px along the ink`,
+    label: "Smallest ink distance for a gap",
+    // Kept, and rewritten to define rather than steer (text pass, 2026-09-29): no label says what
+    // this distance is measured along, which is the one thing a GM cannot see. It used to add which
+    // way the setting leans; the map says that as the handle moves.
+    hint: "Shortest path from one side of a gap to the other, through ink.",
+    unit: "px",
   },
   /*
     `spurPruneGraphUnits` was here, labelled *Longest dead end to remove*, and it went on 2026-09-18
@@ -274,20 +285,22 @@ export const CONTROLS: readonly Control[] = [
     name: "suppressBrushPx",
     label: "Brush width",
     hint: "",
-    derive: brushReadout,
+    unit: "px",
   },
   {
     name: "inkBrushPx",
     label: "Brush width",
     hint: "",
-    derive: brushReadout,
+    unit: "px",
   },
   {
     name: "fillOpacity",
-    label: "Preview fill",
-    // "Preview" is the whole of the old sentence: it says this is how the rooms are drawn here and
-    // nowhere else. What an emitted shape looks like is stated once, under the View heading.
+    // The image editor's word, and the percentage it is always given in (user, text pass). It was
+    // *Preview fill*, with a note under the View heading saying an emitted shape is opaque — which
+    // went with the text rules, as a fact a GM never needs in order to set this.
+    label: "Region opacity",
     hint: "",
+    readout: "percent",
   },
   /*
     `strokeSquares` was here, labelled *Preview outline*, and it went on 2026-09-24: the region fills
@@ -311,9 +324,14 @@ export const CONTROLS: readonly Control[] = [
     questions asked of the walls instead of the ink. Positions on a log track like the other graph
     controls, with the pixels beside them where a reading has given a raster to count in.
   */
+  /*
+    Both keep a place from 1 to 100 and the pixels on the line under them, which is a second unit the
+    text rules would otherwise take away: a unit for the Walls tools is parked (user, 2026-09-29), and
+    Mend, already printing pixels, is the case that question is about.
+  */
   {
     name: "mendReachGraphUnits",
-    label: "Largest gap to look for",
+    label: "Largest gap to highlight",
     scale: "log",
     hint: "",
     readout: "position",
@@ -321,14 +339,10 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     name: "mendTravelGraphUnits",
-    label: "Same-wall distance",
+    label: "Smallest wall distance for a gap",
     scale: "log",
-    /*
-      The one hint the mend tool has, and the ink tool's same-wall hint earns its place for the same
-      reason: no name says what "along the walls" means, and the direction runs backwards — a shorter
-      distance proposes more. Same label, same trap, same sentence.
-    */
-    hint: "How far apart a gap's two sides may be measured <b>along the walls</b>. Lower proposes more.",
+    // The ink tool's sentence asked of the walls, as the label is.
+    hint: "Shortest path from one side of a gap to the other, along walls.",
     readout: "position",
     derive: (value, measured) => (value <= 0 ? "" : inRasterPixels(value, measured)),
   },

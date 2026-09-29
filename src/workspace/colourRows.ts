@@ -101,7 +101,7 @@ function colourRow(role: AdjustableRole): HTMLElement {
   const top = document.createElement("div");
   top.className = "top";
   const label = document.createElement("label");
-  label.textContent = ROLE_LABELS[role].name;
+  label.textContent = ROLE_LABELS[role];
 
   const picker = document.createElement("input");
   picker.type = "color";
@@ -113,12 +113,7 @@ function colourRow(role: AdjustableRole): HTMLElement {
   picker.addEventListener("change", () => void persistSettings());
 
   top.append(label, picker);
-
-  const hint = document.createElement("p");
-  hint.className = "hint";
-  hint.textContent = ROLE_LABELS[role].means;
-
-  row.append(top, hint);
+  row.append(top);
   return row;
 }
 

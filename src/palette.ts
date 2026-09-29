@@ -95,19 +95,23 @@ export const PALETTE_ROLES = ["ink", "structure", "additive", "subtractive", "de
 export type AdjustableRole = (typeof PALETTE_ROLES)[number];
 
 /**
- * What each role is called where a GM can see it, and what it marks.
+ * What each role is called where a GM can see it.
  *
  * Named by **what it means** rather than by the layer it happens to appear on, which is the whole
  * point of grouping the pickers this way: adjusting for a map with an unusual tint should move one
  * control and have everything additive follow, rather than hunting three layers for three hues that
  * have to agree.
+ *
+ * **The name is all there is since 2026-09-29.** Each carried a line saying what it marks, and the
+ * text rules took them: the name says it, and the marks on the map say the rest.
  */
-export const ROLE_LABELS: Readonly<Record<AdjustableRole, { name: string; means: string }>> = {
-  ink: { name: "Ink", means: "what counts as a mark on the map" },
-  structure: { name: "Walls", means: "the walls, drawn over the linework itself" },
-  additive: { name: "Added", means: "ink you drew, gaps proposed, an end that would attach" },
+export const ROLE_LABELS: Readonly<Record<AdjustableRole, string>> = {
+  ink: "Ink",
+  structure: "Walls",
+  additive: "Added",
   // "Covered" until 2026-09-10: the verb the Suppress tool used before both paint tools became Draw
   // and Erase. Named for the tool now, the way "Added" is named for Add ink.
-  subtractive: { name: "Suppressed", means: "ink you marked to ignore" },
-  destructive: { name: "Going", means: "what the next click would remove" },
+  subtractive: "Suppressed",
+  // "Going" until the text pass (2026-09-29), in the same tense as the other four.
+  destructive: "Deleted",
 };

@@ -77,13 +77,27 @@ describe("every control's readout", () => {
 });
 
 describe("readouts that depend on a measurement", () => {
-  const gapFill = CONTROLS.find((control) => control.name === "gapFillPx")!;
   const stroke = CONTROLS.find((control) => control.name === "minStrokeInkWidths")!;
 
-  it("drops the grid-square clause when there is no pixel density", () => {
-    expect(gapFill.derive!(12, MEASURED_NONE)).not.toContain("of a square");
-    expect(gapFill.derive!(12, { ...MEASURED_NONE, pxPerSquare: 0 })).not.toContain("of a square");
-    expect(gapFill.derive!(12, MEASURED_MAP)).toContain("of a square");
+  it("speaks in no grid squares, which the text rules took out", () => {
+    // A second unit beside pixels, gone on 2026-09-29 (user: *"pixels is already clear"*). Swept
+    // over every derived line at a density a grid square would have used.
+    for (const control of CONTROLS) {
+      if (!control.derive) continue;
+      for (const value of sampleValues(control.name)) {
+        expect(control.derive(value, MEASURED_MAP), control.name).not.toContain("square");
+      }
+    }
+  });
+
+  it("gives a control with a unit no derived line, since that would be a second unit", () => {
+    const withUnit = CONTROLS.filter((control) => control.unit);
+    expect(withUnit.length).toBeGreaterThan(0);
+    for (const control of withUnit) expect(control.derive, control.name).toBeUndefined();
+    // `shown` rewrites the number the unit sits on, so it means nothing without one.
+    for (const control of CONTROLS.filter((control) => control.shown)) {
+      expect(control.unit, control.name).toBeDefined();
+    }
   });
 
   /*
@@ -138,10 +152,12 @@ describe("readouts that depend on a measurement", () => {
   it("leaves every other control to the shared formatter", () => {
     // Named rather than counted, for the reason the hint test gives: a cap is a slot something slips
     // into, where naming means the next one has to be argued for here.
+    // The region opacity is the one percentage (user, text pass 2026-09-29).
     const named = new Set([
       "spurPruneGraphUnits",
       "mendReachGraphUnits",
       "mendTravelGraphUnits",
+      "fillOpacity",
     ]);
     for (const control of CONTROLS) {
       if (named.has(control.name)) continue;
@@ -179,23 +195,8 @@ describe("readouts that depend on a measurement", () => {
       const large = control.derive!(4e-4, { pxPerSquare: 51, rasterPerUnit: 3300 });
       expect(small, control.name).not.toBe(large);
     }
-    for (const control of [gapFill]) {
-      const coarse = control.derive!(12, { pxPerSquare: 20, rasterPerUnit: 3300 });
-      const fine = control.derive!(12, { pxPerSquare: 80, rasterPerUnit: 3300 });
-      expect(coarse, control.name).not.toBe(fine);
-    }
-  });
-
-  it("says a control that is off is off, whatever has been measured", () => {
-    // Zero is off, and it has to read as off rather than as "0px, 0.00 of a square" — a GM scanning
-    // for which controls are doing something reads the readout, not the slider position.
-    // Not the two stored in graph units: they say "off" through `format` instead, which the
-    // raster test above pins. A control cannot be in both lists without saying it twice.
-    for (const control of [gapFill]) {
-      for (const measured of [MEASURED_NONE, MEASURED_MAP]) {
-        expect(control.derive!(0, measured), control.name).toBe("off");
-      }
-    }
+    // The gap width checked the grid density the same way until its line went with the text rules;
+    // that a control at zero reads *off* is `readout.test.ts`' now, where the number is printed.
   });
 });
 
@@ -219,11 +220,12 @@ describe("the control declaration", () => {
       whatever it liked as long as prose underneath explained it.
 
       What the surface needs is the opposite: a label that carries the control on its own, and a
-      hint only where nothing else can say the thing. Three qualify today, and they are named.
+      hint only where nothing else can say the thing. Two qualify today, and they are named: the two
+      gap tools' distances, which say what they are measured along — through the ink, along the walls.
 
-      **The third arrived on 2026-09-16** with the mend tool, and its argument is in `controls.ts`: the
-      mend tool's same-wall distance has the ink tool's label and the ink tool's backwards direction,
-      so it has the ink tool's sentence.
+      **The gap search's own hint went on 2026-09-29** with the text rules, which also rewrote the
+      other two to define rather than steer. The mend tool's had arrived on 2026-09-16 on the argument
+      that it asks the ink tool's question of the walls, so it has the ink tool's sentence.
 
       **Named rather than counted, and the cap was tried first.** A `<= 3` against two hints passed a
       mutation that added a third, which is precisely the change this exists to stop: one free slot
@@ -237,7 +239,7 @@ describe("the control declaration", () => {
       expect(control.label.length, control.name).toBeGreaterThan(0);
     }
     const hinted = CONTROLS.filter((control) => control.hint.length > 0).map((it) => it.name);
-    expect(hinted).toEqual(["gapFillPx", "gapTravelPx", "mendTravelGraphUnits"]);
+    expect(hinted).toEqual(["gapTravelPx", "mendTravelGraphUnits"]);
   });
 
   it("names each parameter at most once", () => {

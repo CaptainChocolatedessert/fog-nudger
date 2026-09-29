@@ -125,7 +125,13 @@ describe("describePoint", () => {
     }
   });
 
-  it("sends a GM to the erase brush rather than the threshold for ink they drew", () => {
+  /*
+    The messages were cut to the verdict on 2026-09-29 (text rules): which of the four decided the
+    point, and nothing about which control to reach for. Naming the layer is what is left, and it is
+    still the part that matters — a painted pixel read as the reading's verdict sends a GM to the
+    wrong slider.
+  */
+  it("names the added ink rather than the reading for ink the GM drew", () => {
     // Ink over a *pale* pixel, which is the case that would otherwise read as the binariser going
     // wrong: the tone flatly contradicts the verdict, and only naming the layer explains it.
     const line = describePoint(
@@ -135,14 +141,11 @@ describe("describePoint", () => {
       }),
     );
 
-    expect(line).toContain("YOU DREW");
-    expect(line).toContain("Add ink");
-    // Every one of the ink message's clauses points at the wrong control here.
-    expect(line).not.toContain("binariser is wrong");
-    expect(line).not.toContain("gap repair");
+    expect(line).toContain("is added ink.");
+    expect(line).not.toContain("calculated ink");
   });
 
-  it("sends a GM to the erase brush rather than the threshold for ink they suppressed", () => {
+  it("names the suppression rather than the reading for ink the GM suppressed", () => {
     /*
       The more valuable of the pair, and the reason it is worth a kind of its own.
 
@@ -157,10 +160,8 @@ describe("describePoint", () => {
       }),
     );
 
-    expect(line).toContain("YOU SUPPRESSED");
-    // The tool's name in the strip, which was *Suppress ink* until the brushes merged.
-    expect(line).toContain("brush under Suppress.");
-    expect(line).toContain("moving it will not bring the mark back");
+    expect(line).toContain("is ink suppression.");
+    expect(line).not.toContain("is not ink.");
   });
 
   it("calls a suppressed pixel the GM drew back over ink, not suppressed", () => {
@@ -177,8 +178,8 @@ describe("describePoint", () => {
       }),
     );
 
-    expect(line).toContain("YOU DREW");
-    expect(line).not.toContain("YOU SUPPRESSED");
+    expect(line).toContain("is added ink.");
+    expect(line).not.toContain("ink suppression");
   });
 
   it("ignores a paint layer that is not this raster rather than mis-indexing it", () => {
@@ -194,22 +195,17 @@ describe("describePoint", () => {
       }),
     );
 
-    expect(line).not.toContain("YOU SUPPRESSED");
+    // Asserted both ways, since an absence alone is satisfied by a message that says nothing.
+    expect(line).not.toContain("ink suppression");
+    // The reading's own verdict for that pale pixel, which is what a mis-indexed layer would replace.
+    expect(line).toContain("is not ink.");
   });
 
-  it("flags ink that has no business being ink", () => {
-    // The case worth shouting about: a near-white pixel called ink means the binariser is wrong
-    // there, and saying only "it is ink" would bury that under a true but useless statement.
-    const white = buildField(5, 5, () => 0.95);
-    const line = describePoint(readPoint(white, mask, 2, 2));
-    expect(line).toContain("nearly white");
-  });
-
-  it("does not cry wolf over ink that is genuinely dark", () => {
-    const line = describePoint(readPoint(field, mask, 2, 2));
-    expect(line).toContain("expected answer");
-    expect(line).not.toContain("nearly white");
-  });
+  /*
+    Two tests were here for the ink verdict's comment — that a near-white pixel called ink means the
+    binariser is wrong there, and that a dark one is the expected answer. The comment went with the
+    text rules (user, 2026-09-29), and the luminance it was judged from is still printed.
+  */
 
   it("says something in every case", () => {
     for (const [x, y] of [
@@ -217,7 +213,7 @@ describe("describePoint", () => {
       [2, 2],
       [-1, -1],
     ]) {
-      expect(describePoint(readPoint(field, mask, x!, y!)).length).toBeGreaterThan(20);
+      expect(describePoint(readPoint(field, mask, x!, y!))).toMatch(/ is (calculated ink|not ink|outside the map)/);
     }
   });
 });

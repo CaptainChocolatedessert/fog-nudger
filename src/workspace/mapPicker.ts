@@ -90,11 +90,13 @@ function drawRows(
   selected: string,
 ): void {
   for (const map of maps) {
+    // Both states said, either way (user, text pass 2026-09-29): a line that names a state only when
+    // it holds leaves the GM inferring the other from an absence.
     const notes = [
-      `${map.pixelWidth}x${map.pixelHeight} px`,
-      map.locked ? "locked" : "",
-      map.visible ? "" : "hidden",
-    ].filter(Boolean);
+      `${map.pixelWidth} × ${map.pixelHeight} px`,
+      map.locked ? "locked" : "not locked",
+      map.visible ? "not hidden" : "hidden",
+    ];
     container.append(mapRow(map.id, map.name, notes.join(", "), map.id === selected));
   }
 }
@@ -120,7 +122,7 @@ async function refreshMaps(): Promise<void> {
       // go on offering them on the next rebuild.
       known = null;
       const empty = document.createElement("p");
-      empty.textContent = "No MAP-layer image in this scene.";
+      empty.textContent = "No map found.";
       empty.className = "sub";
       container.append(empty);
     } else {
@@ -154,9 +156,7 @@ async function refreshMaps(): Promise<void> {
       if (nominated && !maps.some((map) => map.id === nominated)) {
         const stale = document.createElement("p");
         stale.className = "sub";
-        stale.innerHTML =
-          "The map saved for this scene is <b>not in it any more</b>, so the largest one is being " +
-          "traced instead. Pick a row to make that choice stick.";
+        stale.textContent = "Previous map not found. Default selected.";
         container.append(stale);
       }
     }
@@ -174,7 +174,7 @@ async function refreshMaps(): Promise<void> {
     );
   } catch (error) {
     const detail = describeError(error);
-    say(`could not list the scene's maps: ${detail}`, "bad");
+    say(`Map listing failed: ${detail}.`, "bad");
     devLog("error", "workspace: listing maps failed", detail);
     console.error("Fog Nudger — listing maps failed", error);
   }
@@ -196,7 +196,7 @@ export function renderMapPicker(body: HTMLElement): void {
     const input = event.target;
     if (!(input instanceof HTMLInputElement) || !input.checked) return;
 
-    say("changing the map…", "working");
+    say("Changing map…", "working");
     void nominateMap(input.value)
       // A different map is a different everything: a different image to draw, a different reading,
       // and a different place in the world to sit. The mask cache is keyed on map identity, so this
@@ -204,7 +204,7 @@ export function renderMapPicker(body: HTMLElement): void {
       .then(() => loadNominatedMap())
       .catch((error: unknown) => {
         const detail = describeError(error);
-        say(`could not change the map: ${detail}`, "bad");
+        say(`Map change failed: ${detail}.`, "bad");
         devLog("error", "workspace: nominating a map failed", detail);
         console.error("Fog Nudger — nominating a map failed", error);
       });

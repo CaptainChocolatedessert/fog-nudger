@@ -710,9 +710,20 @@
       */
       #layer-row {
         display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.4rem;
         margin: 0 0 0.9rem;
+      }
+      /* The switches share the drawer's width, and Show all / Hide all sits under them (user,
+         2026-09-29): in line with them it read as one more switch. */
+      .layer-switches {
+        display: flex;
+        gap: 0.25rem;
+        align-self: stretch;
+      }
+      .layer-switches button.layer {
+        flex: 1 1 0;
       }
       #layer-row:empty {
         display: none;

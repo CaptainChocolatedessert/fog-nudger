@@ -633,7 +633,7 @@ export function renderPanel(): void {
 
   if (title) {
     title.textContent = showingReview()
-      ? "Rebuild these walls?"
+      ? "Unlock?"
       : showingLayers()
         ? "Show"
         : (step?.title ?? tool?.label ?? "");

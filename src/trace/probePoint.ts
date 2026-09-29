@@ -164,44 +164,32 @@ export function readPoint(
 }
 
 /**
- * One line a human can act on, naming what would have to be true for each outcome.
+ * One line saying what decided the point.
  *
  * Says something in every case, including the dull one: "not ink" over a gap a GM is asking about
  * says the gap is in the reading, before any wall was fitted to it.
+ *
+ * **Cut to the verdict on 2026-09-29** (the text rules, DESIGN.md §7a). Each case used to add which
+ * control would change it and why — the erase brush and not a slider for painted ink, the brush
+ * and not the threshold for suppression — and the ink case added whether its luminance made the
+ * verdict plausible. What is left names which of the four decided it, which is what the point probe
+ * is for; the coordinates and the luminance keep the code's words, the rules' one exception.
  */
 export function describePoint(reading: PointReading): string {
   const at = `raster (${reading.x}, ${reading.y})`;
   const tone =
     reading.luminance === null ? "" : ` luminance ${reading.luminance.toFixed(3)}`;
 
-  /** The binariser verdict, which is worth shouting about only when the tone contradicts it. */
-  const inkTone =
-    reading.luminance !== null && reading.luminance > 0.8
-      ? ` That luminance is nearly white, which a local threshold should not call ink — if this is ` +
-        `a flat area rather than fine linework, the binariser is wrong here.`
-      : ` It is dark enough for that to be the expected answer.`;
-
   switch (reading.kind) {
     case "outside-raster":
-      return `${at} is outside the map image entirely — the point did not land on the traced map.`;
+      return `${at} is outside the map.`;
     case "ink":
-      return `${at}${tone} is INK, read from the map.${inkTone}`;
+      return `${at}${tone} is calculated ink, read from the map.`;
     case "added-ink":
-      return (
-        `${at}${tone} is ink YOU DREW, on the added-ink layer. The map's own reading does not decide ` +
-        `this and no filter can remove it — added ink goes in last of everything. To change it, use ` +
-        `the erase brush under Add ink rather than any slider.`
-      );
+      return `${at}${tone} is added ink.`;
     case "suppressed":
-      return (
-        `${at}${tone} is not ink because YOU SUPPRESSED it, whatever the map says here. The ` +
-        `threshold is not what did this and moving it will not bring the mark back — use the erase ` +
-        `brush under Suppress.`
-      );
+      return `${at}${tone} is ink suppression.`;
     case "space":
-      return (
-        `${at}${tone} is not ink — the reading called it ground, and neither of your layers ` +
-        `touched it.`
-      );
+      return `${at}${tone} is not ink.`;
   }
 }
