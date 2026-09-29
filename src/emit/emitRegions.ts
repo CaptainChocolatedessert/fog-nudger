@@ -89,12 +89,21 @@ const BATCH_PAUSE_MS = 120;
 const RETRY_BACKOFF_MS = [250, 750, 2_000] as const;
 
 /**
- * What the scene last received, so a look-and-close does not rewrite every fog item in it.
+ * What the scene last received, so a close straight after an update does not rewrite it all again.
  *
- * The map's identity plus the settings that produced the result. Held in memory rather than in
- * scene metadata deliberately: it is an optimisation, and the safe direction when it is lost is to
- * push again. Stale in the other direction is not possible, because anything that changes the
- * result also changes this string.
+ * The fingerprint `pushAction.ts` builds: the map's id, every setting, the stored walls and their doors,
+ * the paint and the crosses. Held in memory, so the safe direction when it is lost is to push again.
+ *
+ * **It is lost at every opening** (checked 2026-09-29): the workspace is a fresh page each time it opens,
+ * so this starts empty and every close pushes — the skip's log line appears nowhere in `dev.log` from
+ * 09-18 to 09-29. What it saves is only a close after an *Update scene* in the same opening. It said a
+ * look-and-close rewrote nothing, which was never true of this page.
+ *
+ * **And it is not complete, which is harmless only while it is lost that often**: the map's
+ * placement is not in it — only the item's id — and neither is the scene's fog colour, and both
+ * change what a push writes. Kept in the scene, it would leave a moved map's fog where it was; the
+ * user decided not to keep it (2026-09-29), since opening and closing resetting the doors is
+ * consistent with every other in-scene edit.
  */
 let lastPushed: string | null = null;
 

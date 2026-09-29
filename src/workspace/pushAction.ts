@@ -158,10 +158,13 @@ async function commitDerivation(): Promise<boolean> {
  * GM is looking at an opaque surface. Hence the status line: it has to be evidently working rather
  * than saved.
  *
- * **The status is said after the fingerprint check, not before**, and that ordering is the whole of
- * requirement 4. Opening the workspace to glance at something and closing it is the common case, and
- * it pushes nothing — announcing "putting it on the map…" and then vanishing would put a flicker on
- * every close that did no work, which reads as the tool doing something it did not do.
+ * **The status is said after the fingerprint check, not before**, so a close that skips says nothing
+ * rather than flickering an "updating" it does not do.
+ *
+ * **A look-and-close does push** (checked 2026-09-29), though this said the opposite: each opening is a
+ * fresh page, so the fingerprint `emitRegions.ts` holds is empty at every close and the skip is reached
+ * only by a close straight after an *Update scene*. That also resets every door to its state in the
+ * workspace, which the user accepted as consistent with every other in-scene edit.
  */
 export async function pushOnClose(): Promise<void> {
   if (!controlsLive()) return;

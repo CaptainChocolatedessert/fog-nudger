@@ -84,6 +84,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **the trace worker** | where the three heavy jobs run off the page: **the derive**, **the ink profiles** and, since 2026-09-24, **the ink** — the reading and the recompose — one worker each, so none waits behind another. A newer job abandons the running one by terminating its worker, and a worker that cannot be had means the job runs on the page, said once in the log. What stays on the page is decoding the map, once per image. |
 | **the automatic prune** | the dead ends every derive removes before handing the graph over: runs with a free end of up to **two measured ink widths**. Computed, never chosen, and nothing when no width was measured. Distinct from the **Prune** tool, which takes more on request. |
 | **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
+| **door** | a stretch of one wall segment that Dynamic Fog opens and closes at the table, made with *Create door* and stored **on the segment** as two distances from its first end. Written onto our items as Dynamic Fog's own record on every update. §10's *Doors*. Its length along the wall is its *stretch* — *span* is Span opening's word. |
 
 ### The stages — and the surface words for them are **retired**
 
@@ -362,9 +363,10 @@ That module imports no SDK, which is why the constants can be tested headlessly.
   regardless of which drawing it hangs off or who created it.
 
   Two consequences. **A wall represented twice needs only one door**, so two adjacent rooms sharing a
-  boundary are cut by one door spanning both. And **doors can be left to Dynamic Fog entirely** — a
-  GM adding them with its own tool afterwards cuts our walls with nothing emitted by us. Doors are
-  off this project's critical path by choice rather than by postponement.
+  boundary are cut by one door spanning both. And a door made with Dynamic Fog's own tool on one of our
+  items goes with that item at the next update — which is why **doors are ours since 2026-09-29**: made
+  with *Create door* and written onto our items as Dynamic Fog's own records on every update (§10's
+  *Doors*).
 - **Lights are the exception.** `LightReactor` filters on `rodeo.owlbear.dynamic-fog/light` being
   present in metadata. **There is no metadata-free route to a light.** Walls are free; lights are
   gated behind a private namespace. Do not assume symmetry.
@@ -407,7 +409,8 @@ room boundary covers, plus doors. So does ours. Three things follow:
   boundaries run along the same wall. That duplication is inherent in the requirement that rooms
   reveal *independently*.
 - **We are not obliged to use Owlbear's tools to produce it**, only to produce what they would have.
-- **Doors are the human's last step and they can stay that way.**
+- **Doors are the human's last step** — made in the workspace since 2026-09-29, and opened and closed
+  at the table with Dynamic Fog (§10's *Doors*).
 
 ### Fog the rooms, not the rock
 
@@ -599,7 +602,8 @@ extension. There is no `localStorage` use at all.
   and Dynamic Fog's tools edit drawings and would ignore a `WALL` item entirely, so the output would
   be geometry nobody can nudge — which defeats the project.
 - **Mimicking Dynamic Fog's private format for walls.** Unnecessary — there is no private format for
-  walls to mimic (§2). It remains the shape of any eventual *door* work.
+  walls to mimic (§2). It is the shape the door work took: our items carry Dynamic Fog's own door
+  records (§10's *Doors*).
 - **Bundling a stub into its room as a second subpath of one `Path`.** Fill would ignore the open
   subpath and the stroke would give correct walls, so the two could not be separated by a whole-item
   move. Declined because a **bent** stub, implicitly closed for filling, encloses and reveals a
@@ -1441,6 +1445,9 @@ fall out. **Node ids are the only identity the document has.**
   graphs from it are **refused rather than converted** (user, 2026-09-16) — the only scenes holding one
   are the author's, and converting needs the aspect a version 3 document never recorded. *Remove ours*
   in the panel clears one.
+
+  **Format version 5 adds doors** (2026-09-29): the same bytes followed by each door, as its segment's
+  index and two float32 distances. A version 4 graph **converts**, as one with no doors.
 - **float32, quantised with `Math.fround` on the way in**, so the round trip is exact rather than
   nearly so and nothing downstream needs a tolerance for storage having moved a number.
 - **Segments, not polylines**, so **every vertex is a node** and a junction cannot hide at an interior
@@ -1936,7 +1943,11 @@ graph is the document, and staging was the last place still treating the scene a
 - **One filled `PATH` per face not suppressed**, on `FOG`, `visible: true`, `fillOpacity: 1`,
   `fillRule: "evenodd"`, no stroke.
 - **One `LINE` per segment of every wall no emitted face boundary covers** (§3's bridge criterion), on `FOG`,
-  `visible: true`, no fill anywhere, at the scene's own fog stroke width and colour.
+  `visible: true`, no fill anywhere, in the scene's own fog colour and at **zero** stroke width
+  (`ACCEPTED_WALL_STROKE`, confirmed in a room on 2026-08-30 — a zero-width line still makes a wall).
+  This said the scene's stroke width until 2026-09-29, which the code has not written since August.
+- **Each item carries the doors on its walls**, in Dynamic Fog's `rodeo.owlbear.dynamic-fog/doors` key,
+  written closed — §10's *Doors*.
 
 **A fitted polyline of n points becomes n − 1 items**, so a wall is several Outliner entries and
 nudging one segment in Owlbear moves only that segment.
@@ -2854,7 +2865,8 @@ cannot recur.
 | **Structure** | blue | the wall graph, cased |
 | **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed, a collapse's star, and every ring a click is aimed at |
 | **Subtractive** | amber | your suppression, and the marks that suppress a region |
-| **Destructive** | red | **reserved** — erase target, the walls a dissolve or a collapse would take, a mark a click would remove, doomed spurs, nothing else |
+| **Destructive** | red | **reserved** — erase target, the walls a dissolve or a collapse would take, a mark a click would remove, doomed spurs, a door a click would remove, nothing else |
+| **Doors** | green | doors on the walls, and one being dragged out, dashed. Half as wide again as a wall: under a red-green colour-vision simulation this green and the removal red both come out olive, so the width is what tells them apart (2026-09-29) |
 | **Rooms** | a generated cycle | not semantic |
 
 **Red earns its alarm value by being rare.** It did three jobs — default ink, emitted wall lines in
@@ -2875,7 +2887,7 @@ promise.
 red for *will remove* — the classic unreadable pair. Folding attach into the additive family fixes it
 and is more correct anyway, since a snap target *is* an addition.
 
-**Five pickers, grouped by category rather than by layer**, so adjusting for an unusually tinted map
+**Six pickers — five until doors, 2026-09-29 — grouped by category rather than by layer**, so adjusting for an unusually tinted map
 moves one control and everything additive follows. They adjust the **core** hue only; the casing is
 not adjustable at all, because it is the part doing the visibility work and tinting it would let a GM
 tune away the mechanism the hues rely on.
@@ -3208,7 +3220,7 @@ push and on a fresh add, since Owlbear keeps the first; the web page; most failu
 
 ## 8. Testing and diagnostic practice
 
-**1,167 tests across 83 files** (measured 2026-09-29), all pure — everything that needs a DOM or a scene is not tested, which
+**1,219 tests across 86 files** (measured 2026-09-29, after doors), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3787,23 +3799,24 @@ next section.
 
 ### Where to pick this up
 
-**Nothing is half-built.** The session of 2026-09-29 turned the user's Word pass over the interface
-text into rules — §7a's *The text rules* — applied them to the whole surface, and then took a live
-review in a room: the panel, the tool drawers' purple band, highlights drawn on top, the Walls tools as
-a verb and a noun with their lengths in pixels, and the map-edge toggle's gate. §7a's *Applied the same
-day* has the renames, what was decided while building, and every review finding. **The live review
-is finished** (user, 2026-09-29: the major UI elements reviewed; the rest will be seen as it comes up).
-A later finding goes into §7a's review list, and into the rules if it changes one.
+**Doors are built and wait for a room** (2026-09-29). *Create door* went from the recorded plan to built
+in one session: the gesture, the drawing, the name and the glyph were settled in chat, then four
+commits — doors on the graph, the gesture rules, Dynamic Fog's records on the items an update writes,
+and the tool. *Doors* below has all of it, what was decided while building, and what only a room can
+check. Earlier the same day the text rules were applied and their live review finished (§7a).
 
 **Do this first:**
 
-1. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
+1. **Doors in a room** — the four checks under *What only a room can check* in *Doors* below, the table
+   one first, since it is the premise nothing from a desk can reach. Read `dev.log`'s update line for the doors written before
+   recording the result.
+2. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
    stopped by the user after 312 of 479 shapes (`dev.log`). Every update deletes ours before writing,
    so one complete update replaces it.
-2. ***Update scene* pressed straight after a reading release** — blur, threshold or window, pressed
+3. ***Update scene* pressed straight after a reading release** — blur, threshold or window, pressed
    before the new ink lands — must write the new setting's walls: it waits on `inkSettled`, then the
    derive. Still not in any log.
-3. **A cleanup the text rules left** (found by grep on 2026-09-29, not yet swept). No control has a
+4. **A cleanup the text rules left** (found by grep on 2026-09-29, not yet swept). No control has a
    `derive` line any more, so `Control.derive`, the derived half of the hint painter in
    `settingRows.ts`, `Measured.pxPerSquare` and `lastPixelsPerSquare` have no reader, and
    `probeWorldPoint` in `pipeline.ts` has no caller. Run the export sweep before deleting — the
@@ -3892,168 +3905,6 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
   later). Owlbear's grid types are square, hex vertical, hex horizontal, isometric and dimetric
   (`GridType` in the SDK), and nothing here has been checked on the last four. It matters most to the
   parked unit for the Walls tools (§7a), where grid squares are one candidate.
-- **Doors — read on 2026-09-25, not designed.** What Dynamic Fog's source says:
-  - **A door is not an item.** It is a record in the metadata of the fog drawing it was cut into,
-    `rodeo.owlbear.dynamic-fog/doors`: `{ open, start, end }`, each end a contour index and a distance
-    along that contour of the drawing's own path. One contour only. Made by dragging along a drawing's
-    edge in the fog tool's Door mode; a click toggles it, rewriting that metadata.
-  - **An open door touches nothing in the fog layer.** Dynamic Fog strokes that stretch of the path at
-    the drawing's stroke width plus 20 and subtracts it from the local walls it derives — every wall in
-    the scene, whichever drawing it came from. Closed, it cuts nothing. Any door change rebuilds every
-    wall. It works on an open `LINE` as well as a closed shape (user).
-  - **So our push destroys doors.** It deletes all our items and writes new ones, and a door lives on
-    the item. §2's *"doors can be left to Dynamic Fog entirely"* holds only until the next push.
-    **Every close pushes, not only the first** (checked 2026-09-29): each opening of the workspace is a
-    fresh page — `dev.log` shows the shim installing on every one — so `lastPushed` starts empty every
-    time, and the skip's own log line, *closing with nothing to push*, appears **nowhere** in `dev.log`,
-    09-18 to 09-29. So opening and closing the workspace alone rewrites the scene and would wipe them. Copying the records across would not help: contour indices and distances do
-    not survive a re-derive.
-  - **Paths discussed, none chosen.** Keep doors in our document and write Dynamic Fog's records on
-    each push (depends on a private format that may change); leave their metadata alone and stop
-    replacing items that did not change (keeps doors only where nothing moved — limited, the user
-    judged, since Straighten moves coordinates); or take over Dynamic Fog's job. **The last one was
-    tested at its root the same day: the shared scene refuses a `WALL` item** (§2), so walls — and
-    therefore doors that open them — exist only through something running on every client. The user's
-    thought, explicitly not a decision: prep-only use beside Dynamic Fog, with doors lost on a push, or
-    optional play-time features of ours for a GM who wants doors kept through edits.
-  - **What taking over would cost — sized, then parked (user, 2026-09-25).** Dynamic Fog is about 3,300
-    lines of code (counted): ~220 for the runtime that keeps each client's walls and lights in step
-    with the scene, ~670 plus CanvasKit for walls from drawings, ~760 for doors, ~800 for lights,
-    mostly a React menu. **Reasoned:** the wall half mostly falls away here, since our walls are already
-    centrelines and an open door is a stretch left out — a new 1,500–2,500 lines in all, lights about a
-    third. **Replacing it means replacing all of it**: Dynamic Fog derives walls from every fog drawing,
-    our rooms must be fog drawings to be revealable, so with it installed its walls would block every
-    doorway ours opened. The standing cost is testing — all of it is SDK-bound, so every check is a
-    room with a GM and a player client.
-  - **An idea, not the plan (user, 2026-09-25): doors of our own, written through Dynamic Fog's
-    simplest record.** Keep each door in our document, **attached to a wall in the graph** so it follows
-    that wall through Straighten and edits — the user ruled out doors floating at a map position as
-    not good enough long term. Place them with a wall tool of ours. On every push write each door as
-    **its own short `LINE` on the fog layer** carrying a Dynamic Fog record over its whole length —
-    contour 0, from 0 to the line's length. Why a line of its own works, read from their source:
-    subtraction is global, the door's stretch stroked at the carrier's width plus 20 — with **butt**
-    ends, not square as this said until 2026-09-29: `stroke` is passed a width alone and CanvasKit's
-    `Path.prototype.stroke` defaults the cap to `Butt`, read in `canvaskit.js` 0.39.1 — so it opens whatever wall lies under it — our room outlines and our wall lines alike — and closed,
-    the carrier's own wall only duplicates the doorway's. What it buys over writing onto a room shape:
-    no reproducing Dynamic Fog's contour order and path measure, no choosing between the two rooms that
-    share the wall, and no door split across the one-item-per-segment wall lines. Costs: one item per
-    door; still Dynamic Fog's private format, though its simplest form; and reading back a door a GM
-    made at the table *on a room shape* would still need that contour arithmetic — left for later, and
-    small if our tool is where doors are placed and Dynamic Fog's is used only to open and close them.
-    It is also a narrow exception to *nothing is ever read back out of the scene*: the carriers' open
-    state, and doors made with Dynamic Fog's tool, are read in when the workspace opens.
-  - **The doors plan so far (user, 2026-09-26) — being designed, replacing the idea above.**
-    - **We make doors**, with workspace tools; they are stored with the rest of our data and survive
-      pushes. **A push writes each as a Dynamic Fog record attached to our emitted shapes and lines**,
-      exactly as Dynamic Fog would, so a GM editing it in the scene meets an ordinary door; no carrier
-      lines. We match their storage from their source: contour = ring order in our path, distance along
-      it from the ring's first point in item units (ours are at scale 1); a line is contour 0. One record
-      suffices for a wall two rooms share (subtraction is global). **We choose each ring's start point,
-      so none falls inside a door** — Dynamic Fog cuts from the smaller distance to the larger.
-      **Checked 2026-09-29 and nothing to choose**: a door never crosses a vertex, and a ring starts at
-      one. A door on a ring's closing segment runs to the ring's full length, which is measurable because
-      our rings end in `CLOSE` and Dynamic Fog measures with `ContourMeasureIter(path, false, 1)`, which
-      counts a closing segment only when the contour is closed. A marker is `{ index, distance }`, and a
-      door whose two ends name different contours is refused with a console warning. **The cut has butt
-      ends** — it stops at the door's ends, (stroke width + 20) wide across the wall.
-    - **Dynamic Fog handles doors at the table.** A push resets every door to our stored state, closed
-      by default — acceptable, or a door-state setting in the workspace later. **Nothing is read back**:
-      a door made or toggled in the scene is lost at the next push, as every in-scene edit to our items
-      is.
-    - **A door belongs to one specific wall and never jumps to another.** Erasing its wall kills it. A
-      rebuild from the ink kills it, as it kills every hand edit — preserving edits across a rebuild is a
-      possible future feature set, for doors and more.
-    - **A door is a span along its wall, not vertices of its own** — door ends as vertices were ruled
-      out because they nail the door to the map: moving the far end of a long wall would kink it at the
-      door, and Straighten could not straighten through it. **One rule after every edit: the door keeps
-      its map position and length, re-projected onto what survives of its wall.** That needs each edit
-      to report which old segments became which new ones — Move and Erase keep them; splits and
-      Straighten would have to report it. Whether they do yet is unchecked.
-    - **A door stays within one segment (agreed 2026-09-26).** From Dynamic Fog's source, a record can
-      span vertices along one contour but never across items — and we emit a free-standing wall one
-      `LINE` per segment, so a door over one of its vertices would be two doors toggled separately.
-      Whether a vertex could be crossed would then depend on whether the wall goes out as a ring edge
-      or a line, invisible to the GM and changing with any edit. So: **Move** an end of its segment and
-      the door is re-projected at its length, as near as it was; **if the segment is now shorter than
-      the door, the door shrinks to fit**; **Straighten** only merges segments, so a door stays inside
-      one; **a new vertex landing inside a door**, or a piece of it erased, **removes the door** — undo
-      brings it back.
-    - *Not now:* door **areas** not tied to walls, applying to any wall passing through them at a push —
-      steadier in a way, but they can span a vertex and give odd results.
-    - **Placing a door (user, 2026-09-29): press on a wall and drag along it**, and the door is the
-      stretch dragged, held to that one segment — Dynamic Fog's own gesture. **The segment is chosen
-      again on every move**, from those in reach of the press, as the one nearest the pointer — so a
-      press on a vertex can pop between its segments as the drag starts. **A plain click on bare wall
-      takes the whole segment** (user, 2026-09-29, replacing Shift-click and double-click the same day):
-      the commonest door is a doorway walled by *Span opening*, which is one segment, so the click is
-      the whole gesture. The cost: a press meant to start a drag that barely moves makes a
-      whole-segment door, which undo takes back.
-    - **Editing one (user, 2026-09-29):** a click inside a door removes it; a drag from either end
-      moves that end; **a drag from inside it, away from its ends, slides the whole door along its
-      segment**, held within the segment; a new door dragged over an existing one merges into one
-      door. Two doors that do not overlap may share a segment.
-    - **Stored on the segment itself, not in a list beside the graph** (2026-09-29, decided in the
-      design). Checked: an edit reports only the new graph and two counts, never which old segments
-      became which new ones, so a door kept apart would have to be found again afterwards by geometry —
-      a matching tolerance, which §5's identity rule forbids. As a property of its segment, a door
-      belongs to that wall by construction and goes when it goes; only the places that rebuild a
-      segment — a split, a move, Straighten, compaction — have to carry it across.
-    - **Starting numbers, fixed, each borrowed from a tool already in use**: a press reaches a wall
-      within 8 screen pixels (Erase and the landings); a door's end is grabbed within 9 (Move's
-      vertex); the shortest door is 5 (Draw's shortest wall); end marks are the vertex handle's 3,
-      growing to 5 when grabbable. A double-click is the browser's own click count, so no interval of
-      ours.
-    - **Named *Create door*, and placed after *Span opening*** in the Walls band (user, 2026-09-29):
-      true of the click and the drag alike, and no other tool uses *create*. *Draw door* was agreed
-      first and replaced once a click became the plain gesture (user: *"The gesture isn't a draw, it's
-      just a click"*). Ruled out: *Span door* and *Toggle door*, kept for the two later tools; *Mark
-      door*, since *mark* is a fixed noun for something on the map image; *Cut door*, which sounds as
-      if the wall goes; *Place door* and *Add door*, verbs the Walls band does not use.
-    - **Its glyph is a plain door** (user, 2026-09-29): a tall rectangle, a floor line and a solid
-      knob. Chosen from four drawn large and in the band at 18 px, resting and armed: a box in a wall
-      between vertex rings, a floor-plan swing, and *Span opening*'s picture with a door bar in the
-      middle. **The cost, chosen:** it draws an object rather than the map, which the strip had done
-      only for the bin, an act — so a verb may read as an act — and it shows no wall. The swing
-      implied a hinge and a direction the tool does not set, and Span's sibling was hard to tell from
-      Span one row above it and suits the later *Span door* better.
-    - **A second click on the door the first just made, within the double-click interval, is
-      ignored**, so a double-click on bare wall leaves one door rather than making and removing it.
-      Decided in the design (2026-09-29), not asked.
-    - **Drawn green, 3 px, over the wall** (user, 2026-09-29) — `#16a34a`, cased white like a wall,
-      butt ends so the green is exactly the door's length: half as wide again as a wall, and a new
-      palette category, since a door is none of the five. **A click that would remove one draws it red
-      at 5 px**, Erase's width. Chosen from four drawn over a mock map (an outlined bar, a break with
-      jambs, a new hue at wall width, a thick wall-blue bar) and then green against fuchsia. **The
-      cost, stated and accepted:** under a red-green colour-vision simulation (Machado's deuteranopia
-      matrix, computed) the green comes out olive, about (149, 137, 80), and the removal red a darker
-      olive, (143, 127, 26) — §7a's *"classic unreadable pair"* — so the width is what tells them
-      apart there. Fuchsia failed the other way, coming out a mid blue beside the walls' own.
-      **Following the palette's rules, not separately chosen:** dashed while being dragged out,
-      amber in the review before a rebuild, its two ends marked while the tool is in hand, and a sixth
-      colour row in View.
-    - **A door is a wall edit** (user, 2026-09-29) — forced rather than chosen, since a rebuild kills
-      doors and the cover exists to stop that happening unasked. So it is stored in the wall document,
-      a map with only doors placed raises the cover, each place, removal or end drag is one undo step,
-      and the review before a rebuild draws the doors that would go as well as the walls. The stored
-      format moves to version 5, and a version 4 graph **converts** — it simply has no doors — rather
-      than being refused as version 3 was.
-    - **Later, a tool for opening and closing doors in the workspace** (user, 2026-09-29), so a push
-      can write a door open. **Toggling lives only there**, never on a double-click in the placing
-      tool, so no click has to wait out the double-click interval before it acts.
-    - **Later, a tool of its own: Span with a door** (user, 2026-09-29) — a click in an open doorway
-      puts Span's wall across it as a door, in one act.
-    - **Later: reading door states back from the scene** (user, 2026-09-29), but only where nothing has
-      to be inferred — for example our own doors, known by their metadata, on items nothing in the
-      scene has changed since the push that wrote them. A narrow exception to *nothing is read back*.
-  - ~~**Cheap either way:** stop the needless first-close push, by keeping the last-push fingerprint
-    somewhere that outlives the page.~~ **Not doing it** (user, 2026-09-29): opening and closing the
-    workspace resets every door to its state in the workspace, which is consistent with every other
-    in-scene edit, and the eventual answer is reading door states back rather than preserving them. It
-    would also have needed a fuller fingerprint: it holds the map item's **id** alone, so the map's
-    placement and the scene's fog style change what a push writes without changing it — which is
-    harmless only while every close pushes. `emitRegions.ts` says *"anything that changes the result
-    also changes this string"* and `pushAction.ts` that a look-and-close *"pushes nothing"*; both are
-    false today.
 
 **When the public build is next pushed**, check the ink job the way the derive's was checked: take the
 worker's path out of the deployed bundle, fetch it, and run an ink job from it in the browser pane on
@@ -4064,12 +3915,14 @@ for the reason *The trace worker* gives.
 
 - **Emit shapes and free-standing lines at the scene's fog stroke width** (user, 2026-09-29: *"I
   checked and the line width of fog items does matter for visibility. We should emit shapes and free
-  lines at the user's selected width for fog shapes."*). Lines already take the scene's width; shapes
-  carry none. **Held for one question**, because it reverses §2's measured decision —
-  `ACCEPTED_STROKE_WIDTH = 0`, confirmed in a room by lighting a wall from both sides, on the ground
-  that a stroked outline leaves *"a strip of map nobody can ever see"* down every shared wall. What
-  the check showed decides the change: whether it is the GM seeing the items in Owlbear, or what
-  players can see, and on shapes or on lines.
+  lines at the user's selected width for fog shapes."*). **Both carry none today**:
+  `ACCEPTED_STROKE_WIDTH = 0` for shapes, confirmed in a room by lighting a wall from both sides, and
+  `ACCEPTED_WALL_STROKE = 0` for lines, confirmed on 2026-08-30. The chat that raised this was told
+  lines took the scene's width, from §6's wording, which was wrong — read the constants.
+  **Held for one question**, because it reverses both measured decisions, on the ground that a stroked
+  outline leaves *"a strip of map nobody can ever see"* down every wall. What the check showed decides
+  the change: whether it is the GM seeing the items in Owlbear, or what players can see. It also widens
+  every door's cut, which is the stroke plus 20.
 
 - **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
   *the scene has not finished loading* look the same, since the map list is briefly empty on load.
@@ -4083,8 +3936,10 @@ for the reason *The trace worker* gives.
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**Everything is pushed** as of 2026-09-29, with the commit that writes this line; the push deploys
-the text rules and the ink worker, which the resume point's public-build check above then applies to.
+**Not pushed: the doors, six commits** (2026-09-29) with the one that writes this line —
+`git rev-list --count origin/main..main` said five just before it. Push once a room has confirmed them — and
+note that until then the published build refuses the version 5 walls the dev build saves (*Doors*,
+costs). The public-build check above still applies to the push after.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
@@ -4399,6 +4254,149 @@ The record called the missing prune a regression for a day — *"the trace prune
 *"the first thing a GM should see is the graph as fitting produced it, hairs and all"*. So a fresh map
 was never pruned unless the GM had set a limit. That argument was about a handle reaching the longest
 wall on the map; it does not describe a fixed two ink widths.
+
+### Doors — built 2026-09-29, not yet in a room
+
+***Create door***, after *Span opening* in the Walls band. A door is a stretch of one wall segment that
+Dynamic Fog opens and closes at the table: made in the workspace, kept with the walls, and written on
+every update onto the shape or line carrying its wall, exactly as Dynamic Fog stores one (user,
+2026-09-26). Designed in chat and built the same day in four commits. **Nothing of it has been in a
+room**, and the whole premise — that Dynamic Fog opens a record we wrote — is read from its source and
+never run.
+
+#### What Dynamic Fog does with a door — read from its source
+
+- **A door is not an item.** It is an entry in `rodeo.owlbear.dynamic-fog/doors` in the metadata of the
+  fog drawing it was cut into: `{ open, start, end }`, each end `{ index, distance }` — a contour of the
+  drawing's own path, and a distance along it. Made by dragging along a drawing's edge in the fog tool's
+  Door mode; a click toggles `open`.
+- **Found with CanvasKit's `ContourMeasureIter(path, false, 1)`**: contours in path order, a closed
+  contour measured round its closing side, a contour of no length skipped. Two ends on different
+  contours are refused with a console warning (`PathHelpers.getSkPathBetween`).
+- **Open, the stretch is cut from every wall in the scene**, whichever drawing it came from: stroked at
+  the drawing's stroke width plus 20, with **butt** ends — `stroke` is given a width alone and CanvasKit
+  defaults the cap to `Butt`, read in `canvaskit.js` 0.39.1; this record said square until the day. Closed,
+  it cuts nothing. It works on an open `LINE` as well as a closed shape (user). **Every item of ours
+  carries zero stroke**, so every cut is 20 world units wide.
+- **So an update destroys a door made on our items at the table**, since it deletes our items and writes
+  new ones — as it does every in-scene edit to them.
+
+#### As built
+
+- **The gestures** (user) — `workspace/doorGesture.ts`, pure and tested:
+  - a click on bare wall makes a door across the whole segment — the commonest door is a doorway walled
+    by *Span opening*, one segment, so the click is the whole gesture;
+  - a drag along a wall makes the stretch dragged, on whichever wall within reach of the press is nearest
+    the pointer, **chosen again on every move** — a press on a vertex pops between its walls as the drag
+    starts;
+  - a click on a door, or on one of its ends, removes it; a drag from an end moves that end; a drag from
+    inside slides the door along its segment;
+  - a door made or moved over another on its segment merges with it, and two that do not overlap may
+    share one;
+  - the second click of a double-click on the door the first just made is ignored.
+- **Stored on its segment, not beside the graph** — `WallEdge.doors`: distances from the segment's `a`
+  end, graph units, float32, sorted, never overlapping. An edit reports only the new graph and two
+  counts, never which old segments became which new ones (checked), so a door kept apart would have to be
+  found again by geometry — the matching tolerance §5 forbids. On the segment it belongs to that wall by
+  construction and goes when the wall goes. The places that rebuild a segment carry it — the crossing
+  sweep behind adding, moving, merging and Straighten, `splitEdgesAt`, and `compactNodes` — and anything
+  that only filters the edge list keeps the objects, doors and all. `trace/doors.ts`.
+- **One rule after an edit moves a segment**: the door keeps its place on the map and its length — its
+  midpoint projected onto the new segment, slid inward to fit, shrunk only when the segment is now
+  shorter than it. A new vertex strictly inside a door removes it; a cut exactly at its end leaves it
+  whole. A Straighten chord gathers the doors of every segment it replaces.
+- **Within one segment**, because a free-standing wall goes out one `LINE` per segment: a door across a
+  vertex would be two doors toggled separately, and whether one could cross depended on how its wall
+  happened to be emitted.
+- **A door is a wall edit** (user). The stored format is version 5, and version 4 reads as having no
+  doors. The base-versus-document comparison counts doors, so a door alone raises the cover, is one step
+  of undo, and the review before a rebuild draws the doors it would take — amber, over the walls.
+- **The records** — `emit/doorRecords.ts`. A wall that goes out as a line carries its own, at contour 0
+  from its `a` end. A wall on a room's outline goes on the first emitted room (largest first) whose rings
+  cover it, at its ring's place among the room's subpaths and its distance from the ring's first point,
+  closing side included. One record is enough for a wall two rooms share, since the cut is global.
+  **Written closed**, on every update; nothing is read back.
+- **Drawn** green, `#16a34a` — a sixth palette role and a sixth colour row in View — 3 px and cased, with
+  butt ends; red at Erase's 5 px where a click would remove it; dashed while being dragged; its ends
+  marked as handles while the tool is in hand. The glyph is a plain door.
+
+#### Decided while building, for checking
+
+- **The double-click interval is ours, 500 ms** — not the browser's click count, which the design took:
+  a pointer press does not carry one (the Pointer Events specification sets `detail` to 0 on
+  `pointerdown`), and a page cannot read the system's setting. 500 is Windows' default.
+- **A click on a door's end removes the door**, as a click inside it does, so both draw it red; the end is
+  still grown, for the drag.
+- **An end dragged back past the other stops** at the shortest door, 5 screen pixels, on its own side,
+  rather than turning the door inside out.
+- **A drag along bare wall shorter than 5 pixels says *Door too short.***, Draw's rule; under 5 pixels of
+  movement a press is a click.
+- **Each record is held within its side.** A door's float32 end can round a hair past the vertex it
+  reaches, and a record running past a vertex would carry into the next side. Found by the oracle, at
+  three millionths of a world unit.
+- **Words**: *Created a door.*, *Removed a door.*, *Resized a door.*, *Moved a door.*, and undo *creating
+  a door* and so on. The hint: *Click a wall segment to make it a door, or drag along it. Click a door to
+  remove it, or drag it or its ends.*
+- **A shared wall's door rides on the first room** in emission order, largest first. Nothing chooses
+  otherwise.
+- **The walls' line list is rebuilt from the traversal** to carry each wall's doors, in the order the
+  preview draws them — a test pins it. And **faces hand out each ring's half-edges**
+  (`WallFace.ringHalfEdges`), which is how the records know which segment each side of a ring is.
+
+#### Checked from a desk
+
+- **The model**, over random graphs and every kind of edit, against an oracle working from geometry
+  alone: a door survives exactly when one segment of the new graph still holds both its ends, and a
+  moved door's place is found by a golden-section search rather than a projection. **28 mutations, 28
+  caught**, two after fixtures written for them.
+- **The gestures**: 17 mutations, 17 caught, one after a fixture.
+- **The records**, against an oracle that walks the written path commands the way `ContourMeasureIter`
+  does, on a map placed out of proportion: 12 mutations, 11 caught and one equivalent.
+- **In the browser pane**, outside Owlbear: the workspace loads with *Create door* in the strip and no
+  console errors — all a page outside a room can show.
+
+#### What only a room can check
+
+1. **How the tool feels** — the reach, the pop at a vertex, ends against sliding, the hint.
+2. **A door opening at the table** with Dynamic Fog, from a GM and a player client: on a wall two rooms
+   share, on a free-standing wall, on a hole's ring, and on a ring's closing side. `dev.log`'s update line
+   now counts the doors written.
+3. **A door through Move and Straighten**, keeping its place.
+4. **The cover** rising for a door alone, and the review drawing doors amber.
+
+#### Costs, stated
+
+- **Dynamic Fog's private format.** If it changes, our records are ignored and nothing says so.
+- **Every update closes every door, and every close is an update** (checked 2026-09-29): each opening of
+  the workspace is a fresh page, so the last-update fingerprint starts empty and a close always pushes —
+  the skip's own log line, *closing with nothing to push*, appears nowhere in `dev.log` from 09-18 to
+  09-29. So opening and closing the workspace mid-session closes the doors at the table (user: accepted,
+  as consistent with every other in-scene edit).
+- **A shared wall's door lives on one room's item**: deleting that item by hand in the scene takes the
+  door until the next update.
+- **A door made at the table is lost** at the next update, like every in-scene edit to our items.
+- **The published build refuses version 5.** Until it is pushed, a scene whose walls the dev build has
+  saved reads as unreadable there — and an edit made there would write version 4 over them, doors and all.
+
+#### Later (user, 2026-09-29)
+
+- **A tool for opening and closing doors in the workspace**, so an update can write one open. Toggling
+  lives only there, never on a double-click in *Create door*.
+- ***Span door***: a click in an open doorway walls it and makes the wall a door, in one act.
+- **Reading door states back from the scene** where nothing has to be inferred — our own doors, known by
+  their metadata, on items nothing has changed since the update that wrote them.
+- *Not now*: door **areas** not tied to walls, which could span a vertex.
+
+#### Paths not taken
+
+Leaving unchanged items alone so Dynamic Fog's own records survive — limited, the user judged, since
+Straighten moves coordinates. Taking over Dynamic Fog's job — the shared scene refuses a `WALL` item
+(measured 2026-09-25), so walls exist only through code on every client; sized at 1,500–2,500 new lines
+(reasoned) and it means replacing all of Dynamic Fog. Each door as a `LINE` of its own carrying a record —
+the simplest record, but a GM at the table meets an extra line that is not a wall. Door ends as vertices,
+which would pin the wall to the map. And keeping the last-update fingerprint in the scene so a
+look-and-close keeps the doors (user: not now) — it would also need the map's placement and the fog
+colour, which it lacks.
 
 ### The workflow rework — designed in full 2026-09-18, part built
 
@@ -6441,8 +6439,8 @@ the sibling, and chosen as the option least likely to need changing rather than 
   something permissive later stays easy; the reverse direction is the one that gets stuck.
 - **The coupling that would have forced it has mostly dissolved.** What this project emits is a standard
   item type on a standard layer, which is no closer a relationship to Dynamic Fog than using the SDK is.
-  The exception is any eventual door work, which would write into its namespace — still interoperation
-  rather than derivation, but the closest this project gets.
+  The exception is the door work, which writes into its namespace since 2026-09-29 — still
+  interoperation rather than derivation, but the closest this project gets.
 ---
 
 ## Appendix A: the code map
@@ -6500,6 +6498,7 @@ closed outright.
 | `workspace/chainGesture.ts` | **what a click means while a chain is being drawn**: append, close, join or finish |
 | `trace/inkPatches.ts` | **what *Suppress marks* offers and takes**: lumps of ink under a span, and the pixels one covers including what it encloses |
 | `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
+| `trace/doors.ts` | **doors on their segments**: distances from the segment's first end, and the one rule that re-places them when an edit moves or splits a segment — kept place and length, slid inward, shrunk to fit, removed by a vertex inside |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first; `mendForFreeEnd` answers the same question for one end alone, reach ignored |
@@ -6517,7 +6516,8 @@ closed outright.
 out so it can be tested · `map/placement.ts`, `map/placeRegions.ts`, `map/rasterPlan.ts` raster-to-world
 placement, reused at a raster the size of the map's extent because that *is* graph-unit space · `emit/fogShapes.ts` the shape items
 and the four emission constants · `emit/wallLines.ts` the wall `LINE`s · `emit/wallEmission.ts` the
-wall graph's faces placed in the world · `emit/emitRegions.ts` batch it into the scene ·
+wall graph's faces placed in the world · `emit/doorRecords.ts` each door as Dynamic Fog's record, on the
+item carrying its wall · `emit/emitRegions.ts` batch it into the scene ·
 `geometry/ring.ts` ring maths · `wallGraphStore.ts`, `inkPaintStore.ts` and `regionMarksStore.ts` the
 three metadata documents — the first holds **two** keys, the document and the graph as the trace last
 derived it ·
@@ -6570,6 +6570,8 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
   untouched**) · `mendGesture.ts` (a mend's ring and which one a click lands in — pure and tested) ·
+  `doorGesture.ts` (**what a press means with *Create door***: an end, a door or a wall, the stretch a
+  drag makes, sliding, removal, and the ignored second click — pure and tested) ·
   `paintControls.ts` (the tool in hand, drawn into **its own drawer**) · `mendControls.ts` (the mend
   tool's drawer) · `collapseControls.ts` (*Collapse small regions*' drawer: the size, back at its start every opening, and the button) · `ringGesture.ts` (the ring round what *Collapse small regions* and *Prune the dead ends* would take, and which one a click lands in — shared, pure and tested) · `pruneControls.ts` (Prune's drawer: the length, back at its start every opening, and the button) · `pruneScale.ts` (the length's track and the start of four ink widths — pure and tested) · `pruneSearch.ts` (the dead-end search, following the walls on screen and the handle as it moves) · `collapseScale.ts` (the size's track, off then log up to the whole map, and the start of eight square ink widths — pure and tested) · `collapseSearch.ts` (the search, following the walls on screen and the handle as it moves) · `markControls.ts` (*Suppress region*'s drawer, which is one button and no
   settings) · `paintState.ts` · `gapSearch.ts` · `mendSearch.ts` (the mend search, following the
