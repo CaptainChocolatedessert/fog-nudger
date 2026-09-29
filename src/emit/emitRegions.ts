@@ -37,6 +37,7 @@ import { readRegionMarks } from "../regionMarksStore";
 import { describeWallFaces } from "../trace/wallFaces";
 import type { WallGraph } from "../trace/wallGraph";
 import { graphExtent } from "../trace/graphUnits";
+import { DYNAMIC_FOG_DOORS_KEY } from "./doorRecords";
 import { wallEmission } from "./wallEmission";
 import {
   ACCEPTED_FILL_OPACITY,
@@ -221,7 +222,10 @@ async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
     */
     note:
       `emit: from the wall graph — ${emission.regions.length} rooms, ` +
-      `${emission.suppressed} suppressed, ${emission.walls.length} wall lines, ${check}`,
+      `${emission.suppressed} suppressed, ${emission.walls.length} wall lines, ` +
+      `${emission.doors.placed} doors, ${check}` +
+      // Every door's wall goes out on some item, so this should never print. Said if it does.
+      (emission.doors.unplaced > 0 ? ` — ${emission.doors.unplaced} DOORS ON NO ITEM` : ""),
   };
 }
 
@@ -499,7 +503,11 @@ function wallLineItem(line: WallLineSpec): Item {
     .layer(EMITTED_LAYER)
     .visible(EMITTED_VISIBLE)
     .name(line.name)
-    .metadata({ [WALL_KEY]: line.provenance })
+    .metadata({
+      [WALL_KEY]: line.provenance,
+      // The doors on this wall, in Dynamic Fog's own record — the one key here that is not ours.
+      ...(line.doors ? { [DYNAMIC_FOG_DOORS_KEY]: line.doors } : {}),
+    })
     .build();
 }
 
@@ -521,7 +529,10 @@ function fogShapeItem(shape: FogShapeSpec): Item {
     .visible(EMITTED_VISIBLE)
     .position(shape.position)
     .name(shape.name)
-    .metadata({ [REGION_KEY]: shape.provenance })
+    .metadata({
+      [REGION_KEY]: shape.provenance,
+      ...(shape.doors ? { [DYNAMIC_FOG_DOORS_KEY]: shape.doors } : {}),
+    })
     .build();
 }
 

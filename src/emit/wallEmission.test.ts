@@ -108,6 +108,28 @@ describe("placing the wall graph", () => {
     expect(walls[0]!.points[1]!.y).toBeCloseTo(0, 6);
   });
 
+  it("numbers the walls in the traversal's order, the order the preview draws them in", () => {
+    // Two stubs, so the order has something to be wrong about. Written when the wall list was rebuilt
+    // to carry doors, and a mutation reversing it survived.
+    const twoStubs = graphOf(
+      [
+        [0.25, 0.125],
+        [0.75, 0.125],
+        [0.75, 0.375],
+        [0.25, 0.375],
+        [0.5, 0.25],
+        [0.6, 0.25],
+      ],
+      [...loop([0, 1, 2, 3]), [0, 4], [2, 5]],
+    );
+    const { walls, faces } = wallEmission(twoStubs, BOUNDS, DPI, EXTENT);
+    expect(walls.map((wall) => wall.edge)).toEqual([0, 1]);
+    expect(faces.walls).toEqual([4, 5]);
+    // The first line is the first uncovered segment, the stub from vertex 0.
+    expect(walls[0]!.points[0]!.x).toBeCloseTo(1200, 6);
+    expect(walls[1]!.points[0]!.x).toBeCloseTo(1600, 6);
+  });
+
   it("takes a hole out of the area, so a courtyard is not counted as floor", () => {
     const nested = graphOf(
       [

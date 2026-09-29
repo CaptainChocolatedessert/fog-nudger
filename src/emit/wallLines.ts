@@ -37,6 +37,7 @@
 
 import type { Point } from "../map/placement";
 import { key } from "../namespace";
+import type { DoorRecord } from "./doorRecords";
 
 /** Marks a wall line as ours. A separate key from the regions', so the two can be handled apart. */
 export const WALL_KEY = key("wall");
@@ -93,12 +94,19 @@ export interface WallLineSpec {
   readonly provenance: WallProvenance;
   readonly colour: string;
   readonly strokeWidth: number;
+  /** Doors it carries, written into Dynamic Fog's metadata key on the item. */
+  readonly doors?: readonly DoorRecord[];
 }
 
 /** One wall, placed in world coordinates. */
 export interface PlacedWall {
   readonly edge: number;
   readonly points: readonly Point[];
+  /**
+   * Its doors, measured from its first point. Only a wall of one segment can carry them — every wall
+   * the push hands in is — since a door on a line is measured along that one line item.
+   */
+  readonly doors?: readonly DoorRecord[];
 }
 
 export interface WallLineOptions {
@@ -146,6 +154,7 @@ export function stageWallLines(
         },
         colour: options.colour,
         strokeWidth: options.strokeWidth,
+        ...(wall.doors && wall.doors.length > 0 && wall.points.length === 2 ? { doors: wall.doors } : {}),
       });
     }
   }

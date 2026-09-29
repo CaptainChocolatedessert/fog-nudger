@@ -48,6 +48,7 @@ import { ringsToCommands, type PathCommandLike } from "../geometry/ring";
 import { key } from "../namespace";
 import type { Point } from "../map/placement";
 import type { PlacedRegion } from "../map/placeRegions";
+import type { DoorRecord } from "./doorRecords";
 
 /** Marks an item as ours. Everything downstream of emission filters on exactly this. */
 export const REGION_KEY = key("region");
@@ -171,6 +172,8 @@ export interface FogShapeSpec {
   readonly fillOpacity: number;
   readonly strokeWidth: number;
   readonly colour: string;
+  /** Doors it carries, written into Dynamic Fog's metadata key on the item. */
+  readonly doors?: readonly DoorRecord[];
 }
 
 export interface StageOptions {
@@ -188,6 +191,8 @@ export interface StageableRegion {
   readonly placed: PlacedRegion;
   readonly squares: number;
   readonly overCap: boolean;
+  /** Doors on its outline, as Dynamic Fog records (`doorRecords.ts`). */
+  readonly doors?: readonly DoorRecord[];
 }
 
 /**
@@ -231,6 +236,7 @@ export function stageShapes(
       fillOpacity: options.fillOpacity,
       strokeWidth: options.strokeWidth,
       colour: PROPOSAL_COLOURS[shapes.length % PROPOSAL_COLOURS.length]!,
+      ...(region.doors && region.doors.length > 0 ? { doors: region.doors } : {}),
     });
   }
 

@@ -95,6 +95,13 @@ export interface WallFace {
    * wall line instead. Removing a stalk can also *split* a cycle into more than one ring.
    */
   readonly rings: readonly Ring[];
+  /**
+   * Each ring's sides, as the half-edges they were walked along: side `i` of ring `r` runs from its
+   * point `i` to point `i + 1`, closing back to the first, along `ringHalfEdges[r][i]`. What a door
+   * needs to find its place along a ring (`emit/doorRecords.ts`); `sourceEdges` turns a half-edge into
+   * the graph's segment.
+   */
+  readonly ringHalfEdges: readonly (readonly number[])[];
   /** The cycles the rings came from, outer first. Kept for the area and for hit-testing. */
   readonly cycles: readonly WallCycle[];
   /** Doubled signed area, summed over the cycles. Holes are negative, so this is the net. */
@@ -376,6 +383,7 @@ export function buildWallFaces(graph: WallGraph): WallFaces {
 
   const faces: WallFace[] = faceCycles.map((list) => {
     const rings: Ring[] = [];
+    const ringHalfEdges: number[][] = [];
     const ringEdges = new Set<number>();
     for (const index of list) {
       for (const loop of decomposeRings(cycles[index]!, bridgeEdges, originNode, targetNode)) {
@@ -384,6 +392,7 @@ export function buildWallFaces(graph: WallGraph): WallFaces {
           continue;
         }
         rings.push(loop.map((half) => nodes[originNode(half)]!));
+        ringHalfEdges.push(loop);
         for (const half of loop) {
           covered[half >> 1] = 1;
           ringEdges.add(sourceOf[half >> 1]!);
@@ -394,6 +403,7 @@ export function buildWallFaces(graph: WallGraph): WallFaces {
     const doubleArea = faceCycleList.reduce((total, cycle) => total + cycle.doubleArea, 0);
     return {
       rings,
+      ringHalfEdges,
       cycles: faceCycleList,
       doubleArea,
       ringEdges: [...ringEdges].sort((left, right) => left - right),

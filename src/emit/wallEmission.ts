@@ -44,15 +44,18 @@ import {
 import { placeRegions } from "../map/placeRegions";
 import { COMMAND_CAP } from "../trace/simplify";
 import { suppressedRegions, withoutSuppressed } from "../trace/suppression";
-import { buildWallFaces, wallSegments, type WallFaces } from "../trace/wallFaces";
+import { buildWallFaces, type WallFaces } from "../trace/wallFaces";
 import type { GraphExtent } from "../trace/graphUnits";
 import type { WallGraph } from "../trace/wallGraph";
+import { doorRecords, type DoorRecord } from "./doorRecords";
 import type { StageableRegion } from "./fogShapes";
 
 /** A wall the rings do not cover, in world units, as `stageWallLines` wants it. */
 export interface PlacedWall {
   readonly edge: number;
   readonly points: readonly Point[];
+  /** Its doors, as Dynamic Fog records along the line. */
+  readonly doors?: readonly DoorRecord[];
 }
 
 export interface WallEmission {
@@ -62,6 +65,8 @@ export interface WallEmission {
   readonly faces: WallFaces;
   /** Regions left out because a mark suppressed them. */
   readonly suppressed: number;
+  /** Doors written onto the items, and doors whose wall no item carried — which should be none. */
+  readonly doors: { readonly placed: number; readonly unplaced: number };
 }
 
 /**
@@ -101,6 +106,8 @@ export function wallEmission(
     faces.faces.map((face, index) => ({ id: index, rings: face.rings })),
     placement,
   );
+  const world = (point: Vector2) => toWorldPoint(placement, point.x, point.y);
+  const doors = doorRecords(graph, faces, world);
 
   const regions: StageableRegion[] = placed.map((region, index) => {
     const face = faces.faces[index]!;
@@ -109,18 +116,35 @@ export function wallEmission(
     // already in the sum, so a room with a courtyard reports the floor it actually has.
     const worldArea =
       (Math.abs(face.doubleArea) / 2) * (worldWidth / extent.x) * (worldHeight / extent.y);
+    const records = doors.regions.get(index);
     return {
       id: index,
       placed: region,
       squares: squareArea > 0 ? worldArea / squareArea : 0,
       overCap: commandCount(region.rings as readonly Ring[]) > COMMAND_CAP,
+      ...(records ? { doors: records } : {}),
     };
   });
 
-  const walls: PlacedWall[] = wallSegments(graph, faces).map((segment, index) => ({
-    edge: index,
-    points: segment.map((point) => toWorldPoint(placement, point.x, point.y)),
-  }));
+  // The uncovered walls, in `faces.walls` order — what `wallSegments` hands the preview — each with
+  // the doors it carries.
+  const walls: PlacedWall[] = [];
+  for (const index of faces.walls) {
+    const edge = graph.edges[index];
+    const from = edge && graph.nodes[edge.a];
+    const to = edge && graph.nodes[edge.b];
+    if (!from || !to) continue;
+    const records = doors.walls.get(index);
+    walls.push({ edge: walls.length, points: [world(from), world(to)], ...(records ? { doors: records } : {}) });
+  }
 
-  return { regions, walls, faces, suppressed: suppressed.length };
+  let written = 0;
+  for (const list of [...doors.regions.values(), ...doors.walls.values()]) written += list.length;
+  return {
+    regions,
+    walls,
+    faces,
+    suppressed: suppressed.length,
+    doors: { placed: written, unplaced: doors.unplaced },
+  };
 }
