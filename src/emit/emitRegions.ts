@@ -350,10 +350,8 @@ export async function pushToFog(
     if (stopRequested) {
       devLog("warn", `emit: stopped at the GM's request after ${written} of ${shapes.length} shapes`);
       forgetPushed();
-      return (
-        `Stopped at your request after ${written} of ${shapes.length} regions. The map is partly ` +
-        `fogged — push again to finish, which replaces all of it.`
-      );
+      // What the Stop button's own line says (text rules): the counts are in the log above.
+      return "Stopped. Scene partly updated.";
     }
     const items = batch.map(fogShapeItem);
     try {
@@ -387,10 +385,7 @@ export async function pushToFog(
         `emit: stopped at the GM's request after ${written} shapes and ${walls} wall segments`,
       );
       forgetPushed();
-      return (
-        `Stopped at your request: ${written} regions are on the map and ${walls} of ` +
-        `${lines.length} wall segments. Push again to finish, which replaces all of it.`
-      );
+      return "Stopped. Scene partly updated.";
     }
     try {
       await writeWithBackoff(
