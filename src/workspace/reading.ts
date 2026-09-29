@@ -77,7 +77,7 @@ export function isAbandoned(error: unknown): boolean {
   landed and its derive had started. Off the page two things can arrive in between, and each needs
   telling apart from what the page used to guarantee:
 
-  - **Gaps and Suppress blobs** search the reading's base ink with the current paint composed onto it,
+  - **Fill gaps and Suppress marks** search the reading's base ink with the current paint composed onto it,
     so a *re-read* — a reading or filter slider released, which blanks the ink until the new base lands
     — would leave them searching the base being replaced. They lock for that long (user, 2026-09-24:
     *"lock them"*), as the wall tools do during a derive. A paint-only recompose does not lock them:

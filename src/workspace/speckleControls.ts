@@ -1,7 +1,7 @@
 /**
  * *Suppress speckles*' own drawer: the span, and the button that takes every lump ringed.
  *
- * *Prune the dead ends*' drawer in every particular that matters, so the ringed tools read as one kind
+ * *Prune dead ends*' drawer in every particular that matters, so the ringed tools read as one kind
  * of thing. The line above it is the tool's group blurb, which the drawer paints into the hint slot.
  *
  * **A place, not a measurement**: off at the far left and 1 to 100 beyond, as every ringed track reads.

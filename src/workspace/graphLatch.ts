@@ -3,7 +3,7 @@
  *
  * ## It was two amounts until 2026-09-22
  *
- * *Prune the dead ends* shared it, and left to become a ringed tool like Mend (user, 2026-09-22):
+ * *Prune dead ends* shared it, and left to become a ringed tool like Mend (user, 2026-09-22):
  * rings on what it would take, one piece a click, a button for all. Each click there is its own edit,
  * so there is nothing to pin. What follows was written for both and holds for the one; the passage on
  * why one pin carried two amounts rather than two latches is kept because the reason still applies to

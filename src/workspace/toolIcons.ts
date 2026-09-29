@@ -101,7 +101,7 @@ const ICONS: Readonly<Record<string, string>> = {
     same rotation about the same centre.
   */
   /*
-    **Suppress blobs**: two lumps either side of Suppress's own swipe.
+    **Suppress marks** (*Suppress blobs* until 2026-09-29): two lumps either side of Suppress's own swipe.
 
     **Inherited from the tool it replaced** (user, 2026-09-22: *"it should adopt the name and glyph from
     Suppress blob"*), which is right because the GM's question never changed — *this mark on the map is
@@ -238,7 +238,7 @@ const ICONS: Readonly<Record<string, string>> = {
     '<circle cx="6" cy="3.6" r="1.6" /><circle cx="6" cy="20.4" r="1.6" /><path d="M6 5.2 3.9 9.4 8.1 14.6 6 18.8" />' +
     '<circle cx="18" cy="3.6" r="1.6" /><circle cx="18" cy="20.4" r="1.6" /><path d="M18 5.2v13.6" />',
   /*
-    **Prune the dead ends**: a long wall with a stub off it, and a single slash through the stub
+    **Prune dead ends**: a long wall with a stub off it, and a single slash through the stub
     (user, 2026-09-21).
 
     **The slash is Dissolve region's own mark**, and it carries the same rule — *where the mark sits

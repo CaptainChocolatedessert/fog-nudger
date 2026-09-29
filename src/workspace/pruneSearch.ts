@@ -1,5 +1,5 @@
 /**
- * The dead-end search as a tool: run it while *Prune the dead ends* is in hand, and hold what it found.
+ * The dead-end search as a tool: run it while *Prune dead ends* is in hand, and hold what it found.
  *
  * The same shape as `collapseSearch.ts`, deliberately. **The graph** is asked for every time: a new
  * object whenever the walls on screen change, so a search keyed on it re-runs exactly when it must —

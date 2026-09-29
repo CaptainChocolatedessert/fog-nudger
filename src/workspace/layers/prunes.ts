@@ -1,5 +1,5 @@
 /**
- * The rings round each piece *Prune the dead ends* would take.
+ * The rings round each piece *Prune dead ends* would take.
  *
  * **Only the rings.** The walls that go are already drawn red by the walls layer, at a wall's own width
  * and with their handles red too — that preview predates the rings, it is the part rooms asked for, and

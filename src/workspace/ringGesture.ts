@@ -1,6 +1,6 @@
 /**
  * What a click near a ringed proposal *means*, for the two wall tools that ring what they would take:
- * *Collapse small regions* and *Prune the dead ends*. The ring a GM aims at, separated from the events.
+ * *Collapse small regions* and *Prune dead ends*. The ring a GM aims at, separated from the events.
  *
  * ## One module for both, rather than a copy each
  *
@@ -98,12 +98,12 @@ export function ringAt(
 
 /** What the state line says about a small-region search, in one place so its callers cannot word it apart. */
 export function describeCollapses(found: number): string {
-  if (found === 0) return "no regions that small — drag the size up to look for larger ones";
-  return `${found} small region${found === 1 ? "" : "s"} to collapse`;
+  if (found === 0) return "No small regions found.";
+  return `${found} small region${found === 1 ? "" : "s"} found.`;
 }
 
 /** What the state line says about a dead-end search. */
 export function describePrunes(found: number): string {
-  if (found === 0) return "no dead ends that short — drag the length up to look for longer ones";
-  return `${found} dead end${found === 1 ? "" : "s"} to prune`;
+  if (found === 0) return "No dead ends found.";
+  return `${found} dead end${found === 1 ? "" : "s"} found.`;
 }

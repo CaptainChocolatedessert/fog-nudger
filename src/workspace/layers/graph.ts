@@ -193,7 +193,7 @@ const NOTHING_DOOMED: Doomed = { edges: new Set<number>(), vertices: new Set<num
 let doomedFor: { pieces: readonly PrunePiece[]; free: PrunePiece | null; doomed: Doomed } | null = null;
 
 /**
- * What *Prune the dead ends* would take: every piece it has ringed, which is the whole cascade — plus
+ * What *Prune dead ends* would take: every piece it has ringed, which is the whole cascade — plus
  * whatever free-click piece the pointer is over, since that is exactly what a click there would take
  * too (2026-09-24). The rings say what a click takes, the red says it inside each ring, and all of it
  * together — the free target included — is what the button takes, since the button only ever spends

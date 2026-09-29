@@ -1,5 +1,5 @@
 /**
- * The track *Prune the dead ends* draws its length against, and where the handle starts.
+ * The track *Prune dead ends* draws its length against, and where the handle starts.
  *
  * ## Off, then logarithmic up to the longest wall run
  *

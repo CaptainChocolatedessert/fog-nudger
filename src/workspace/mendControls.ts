@@ -29,7 +29,7 @@ export function renderMendControls(rows: HTMLElement): void {
   const all = document.createElement("button");
   all.type = "button";
   all.className = "chip";
-  all.textContent = "Mend every gap shown";
+  all.textContent = "Mend every highlighted gap";
   all.addEventListener("click", () => {
     mendEveryGapShown();
   });

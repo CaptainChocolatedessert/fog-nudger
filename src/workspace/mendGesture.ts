@@ -61,6 +61,6 @@ export function mendAt(
 
 /** What the state line says about a search, in one place so its callers cannot word it apart. */
 export function describeMends(found: number): string {
-  if (found === 0) return "no gaps in the walls found — Largest gap to look for widens the search";
-  return `${found} gap${found === 1 ? "" : "s"} in the walls to mend`;
+  if (found === 0) return "No gaps found.";
+  return `${found} gap${found === 1 ? "" : "s"} found.`;
 }

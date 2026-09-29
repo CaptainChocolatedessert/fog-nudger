@@ -69,13 +69,14 @@ describe("which mend a click lands in", () => {
 });
 
 describe("what the state line says", () => {
-  it("says there are none, and names the control that would change it", () => {
-    expect(describeMends(0)).toContain("no gaps");
-    expect(describeMends(0)).toContain("Largest gap to look for");
+  // What was found and nothing else (text rules, 2026-09-29): the control that would widen the
+  // search went, as advice.
+  it("says there are none rather than saying nothing", () => {
+    expect(describeMends(0)).toBe("No gaps found.");
   });
 
   it("counts them, in the singular for one", () => {
-    expect(describeMends(1)).toBe("1 gap in the walls to mend");
-    expect(describeMends(3)).toBe("3 gaps in the walls to mend");
+    expect(describeMends(1)).toBe("1 gap found.");
+    expect(describeMends(3)).toBe("3 gaps found.");
   });
 });

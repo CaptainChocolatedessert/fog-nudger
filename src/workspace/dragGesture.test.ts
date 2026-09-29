@@ -183,24 +183,23 @@ describe("releasing", () => {
       wording has to survive that, so it says "at the crossing" rather than "it crossed".
     */
     expect(result.splits).toBe(2);
-    expect(describeEdit(false, result.splits, result.overlaps)).toBe(
-      "moved a point · split 2 walls at the crossing",
-    );
+    // The split is on the map as a vertex, and the message no longer counts it (text rules,
+    // 2026-09-29).
+    expect(describeEdit(false, result.overlaps)).toBe("Moved a point.");
   });
 });
 
 describe("saying what happened", () => {
   it("names the operation, and stays quiet when there is nothing to add", () => {
-    expect(describeEdit(false, 0, 0)).toBe("moved a point");
-    expect(describeEdit(true, 0, 0)).toBe("joined two points");
+    expect(describeEdit(false, 0)).toBe("Moved a point.");
+    expect(describeEdit(true, 0)).toBe("Joined two points.");
   });
 
-  it("counts walls in the plural it deserves", () => {
-    // One is reachable: a vertex landing *on* a wall rather than across it splits only that wall.
-    expect(describeEdit(false, 1, 0)).toBe("moved a point · split 1 wall at the crossing");
-    expect(describeEdit(false, 2, 0)).toBe("moved a point · split 2 walls at the crossing");
-    expect(describeEdit(true, 0, 1)).toBe("joined two points · 1 wall lies along another");
-    expect(describeEdit(true, 0, 3)).toBe("joined two points · 3 walls lie along another");
+  it("warns of walls left lying along others, in the plural it deserves", () => {
+    // Its own sentence, which the caller shows as a warning: the case to be prevented rather than
+    // reported, and reported until it is (DESIGN.md §10).
+    expect(describeEdit(true, 1)).toBe("Joined two points. 1 wall overlaps another.");
+    expect(describeEdit(false, 3)).toBe("Moved a point. 3 walls overlap others.");
   });
 });
 
@@ -261,9 +260,7 @@ describe("drawing a wall", () => {
     const result = applyDraw(crossed, from, to)!;
 
     expect(result.splits).toBe(1);
-    expect(describeDraw(result.splits, result.overlaps)).toBe(
-      "drew a wall · split 1 wall at the crossing",
-    );
+    expect(describeDraw(result.overlaps)).toBe("Drew a wall.");
     // The crossing is a real vertex now, met by four walls rather than passed through by two.
     const meeting = result.graph.nodes.findIndex((n) => n.x === documentPoint(0.5, 0.5).x && n.y === documentPoint(0.5, 0.5).y);
     expect(nodeDegrees(result.graph)[meeting]).toBe(4);
@@ -302,9 +299,9 @@ describe("drawing a wall", () => {
   });
 
   it("says what it drew, and stays quiet when there is nothing to add", () => {
-    expect(describeDraw(0, 0)).toBe("drew a wall");
-    expect(describeDraw(2, 0)).toBe("drew a wall · split 2 walls at the crossing");
-    expect(describeDraw(0, 1)).toBe("drew a wall · 1 wall lies along another");
+    expect(describeDraw(0)).toBe("Drew a wall.");
+    expect(describeDraw(1)).toBe("Drew a wall. 1 wall overlaps another.");
+    expect(describeDraw(2)).toBe("Drew a wall. 2 walls overlap others.");
   });
 });
 

@@ -54,7 +54,7 @@ export function renderCollapseControls(rows: HTMLElement): void {
   const top = document.createElement("div");
   top.className = "top";
   const label = document.createElement("label");
-  label.textContent = "Size";
+  label.textContent = "Largest region to highlight";
   const readout = document.createElement("span");
   readout.className = "value";
   top.append(label, readout);
@@ -81,7 +81,8 @@ export function renderCollapseControls(rows: HTMLElement): void {
     requestAnimationFrame(() => {
       frameAsked = false;
       const found = setCollapseSize(fromSlider(pending, limits, "log"));
-      if (found !== null) say(pending > 0 ? describeCollapses(found) : "off — nothing is ringed");
+      // Off says nothing (text rules, 2026-09-29): the highlights going is the answer.
+      if (found !== null) say(pending > 0 ? describeCollapses(found) : "");
       invalidate();
     });
   });
@@ -93,7 +94,7 @@ export function renderCollapseControls(rows: HTMLElement): void {
   const all = document.createElement("button");
   all.type = "button";
   all.className = "chip";
-  all.textContent = "Collapse every region shown";
+  all.textContent = "Collapse every highlighted region";
   all.addEventListener("click", () => {
     collapseEveryRegionShown();
   });

@@ -14,7 +14,7 @@
  *
  * ## Prune shared this until 2026-09-22
  *
- * *Prune the dead ends* was the second amount here, with one pin and one commit for both. It is a
+ * *Prune dead ends* was the second amount here, with one pin and one commit for both. It is a
  * ringed tool now, like Mend (`pruneSearch.ts`): it takes a piece a click, so there is nothing to pin
  * and nothing to apply on the way out. **Straighten stays an amount because it has to** — it changes
  * every wall at once, so there is no piece of it to ring.
@@ -62,8 +62,11 @@ const AMOUNT_STEP = 0.0001;
 const SLIDER_ID = "straighten-amount";
 const READOUT_ID = "straighten-readout";
 const NOTE_ID = "wall-amounts-note";
-/** What the note says with the handle at zero — the one sentence the name cannot carry. */
-const RESTING = "Drag to fit the walls you have.";
+/*
+  `RESTING` was here, the note's sentence with the handle at zero: *Drag to fit the walls you have.* It
+  repeated the hint above it, and went with the text rules of 2026-09-29, as did the note's other
+  sentence — that the result applies on Done or on leaving the tool, and undo takes it back.
+*/
 
 let latch: GraphLatch = NO_LATCH;
 /** Set while a frame is owed a preview, so a drag costs one recompute per frame rather than per pixel. */
@@ -100,7 +103,8 @@ export function renderAmountControls(body: HTMLElement): void {
   top.className = "top";
   const label = document.createElement("label");
   label.htmlFor = SLIDER_ID;
-  label.textContent = "Straighten";
+  // What the slider sets, under a drawer already titled *Straighten* (text rules, 2026-09-29).
+  label.textContent = "Amount";
   const readout = document.createElement("span");
   readout.id = READOUT_ID;
   readout.className = "value";
@@ -229,7 +233,7 @@ async function commit(): Promise<void> {
   try {
     await saveEditedWalls(
       straightened.graph,
-      "straightening the walls",
+      "straightening walls",
       pending.fromDerivation ? pending.base : undefined,
     );
     devLog(
@@ -238,10 +242,10 @@ async function commit(): Promise<void> {
         `${pending.straighten.toExponential(2)} graph units, ${straightened.preserved} runs kept whole ` +
         `rather than collapsed, ${straightened.splits} crossings split`,
     );
-    say(`took ${straightened.removed} points`);
+    say("Straightened walls.");
   } catch (error) {
     const detail = describeError(error);
-    say(`could not save the straightened walls: ${detail}`, "bad");
+    say(`Straighten failed: ${detail}.`, "bad");
     devLog("error", "workspace: straightening failed to save", detail);
     console.error("Fog Nudger — straightening failed to save", error);
   }
@@ -270,14 +274,7 @@ function refresh(): void {
 
   const note = document.getElementById(NOTE_ID);
   if (!note) return;
-  if (!graph) {
-    note.textContent = "No walls yet, so there is nothing to straighten.";
-    return;
-  }
-  // Names leaving as well as the button, because arming another tool commits too.
-  note.textContent = previewOf(latch)
-    ? "Applied on Done, or on leaving the tool. One step of undo takes it back."
-    : RESTING;
+  note.textContent = graph ? "" : "No walls to straighten.";
 }
 
 /** Re-ask the readout when a graph arrives. */

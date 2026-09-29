@@ -17,7 +17,7 @@
  * | *Clear layer* | a brush's own drawer | that one paint layer |
  * | *Clear ink edits* | the foot of the Ink band | **both** paint layers |
  * | *Clear wall edits* | the foot of the Walls band | the wall document, **leaving the marks** |
- * | *Clear all marks* | *Suppress region*'s drawer | the suppression marks |
+ * | *Clear all crosses* | *Suppress region*'s drawer | the suppression marks |
  * | *Clear everything* | the panel | the scene as though the extension never ran |
  *
  * ## The two area-level ones are in the STRIP, not in a drawer — user, 2026-09-20

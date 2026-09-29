@@ -47,7 +47,7 @@
 import { largestBend, longestRun, type WallGraph } from "../trace/wallGraph";
 
 /**
- * Where both graph-derived tracks start — Straighten's and *Prune the dead ends*' — in graph units.
+ * Where both graph-derived tracks start — Straighten's and *Prune dead ends*' — in graph units.
  *
  * **Pinned rather than the smallest thing in the graph**, and the reason is sharp: both delete from the
  * bottom, so the smallest bend and the shortest dead end are the most mobile quantities there are. Prune
@@ -138,7 +138,7 @@ export function bendTop(): number | null {
 }
 
 /**
- * The longest wall **run** in the graph, which is *Prune the dead ends*' track top.
+ * The longest wall **run** in the graph, which is *Prune dead ends*' track top.
  *
  * The longest run rather than the longest spur, and that distinction was learned the hard way.
  * Measuring only runs that have a free end *today* never counts a run sitting between two junctions —

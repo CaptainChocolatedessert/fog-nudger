@@ -299,7 +299,8 @@ export const TOOLS: readonly ToolChoice[] = [
     beside Mend and *Collapse small regions*). `edit`, like them: a press inside a ring takes that piece
     and anything else pans. Its hint is its group's blurb.
   */
-  { id: "prune", label: "Prune the dead ends", band: "walls", drag: "edit", hint: "" },
+  // *Prune dead ends*, without the article, since 2026-09-29: labels drop one (text rules).
+  { id: "prune", label: "Prune dead ends", band: "walls", drag: "edit", hint: "" },
   /*
     **Straighten is a tool, since 2026-09-21** (user): *"They should be distinct tools in the rail"* —
     written of Straighten and Prune together, when both were amounts. Prune became ringed the next day,
@@ -320,7 +321,7 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Straighten",
     band: "walls",
     drag: "pan",
-    hint: "Drag to fit the walls you have. Closing applies it — one step of undo.",
+    hint: "Drag the slider to straighten walls.",
   },
   /*
     The graph's gap tool (user, 2026-09-16). `edit`, like the other three: it takes a press inside a
@@ -333,7 +334,8 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Move",
     band: "walls",
     drag: "edit",
-    hint: "Drag a point to move it. Drop it on another to join them; <b>Shift</b> keeps them apart.",
+    // Joining is drawn before the drop, so it needs no sentence; Shift is drawn nowhere.
+    hint: "Drag a point to move it. Hold <b>Shift</b> to keep it from joining another.",
   },
   {
     id: "draw",
@@ -341,26 +343,27 @@ export const TOOLS: readonly ToolChoice[] = [
     band: "walls",
     drag: "edit",
     /*
-      "This colour", printed in the colour, rather than the colour's name. The palette is retunable,
-      and a hue named in prose is a copy of it nothing can keep honest — the review legend's rule, and
-      the same in every blurb below.
+      The gesture, then what cannot be found by looking (text rules, 2026-09-29): the second way to
+      draw, and the two keys. How an attaching end is drawn went — the mark is on the map — and
+      Escape cancelling a half-drawn wall is the key's ordinary meaning.
     */
     hint:
-      "Drag to draw a wall, or click both ends. An end turns <b class='join-key'>this colour</b> " +
-      "when it will attach; <b>Shift</b> leaves it loose. <b>Ctrl</b> pans, Escape abandons.",
+      "Drag to draw a wall, or click both ends. Hold <b>Shift</b> to keep an end from joining, " +
+      "and <b>Ctrl</b> to pan.",
   },
   {
     id: "erase",
     label: "Erase",
     band: "walls",
     drag: "edit",
-    hint: "Click a wall to remove it, <b>one segment at a time</b>. The highlight shows what would go.",
+    hint: "Click a wall segment to erase it.",
   },
   /*
     Delete the walls around a region with one click (user, 2026-09-16). `edit`, like the others: it
     takes a press inside a region and declines one outside every region, which pans. No controls, so
-    the hint is the only sentence on screen about it — and the second half is the part a GM could not
-    guess, since "around" could as easily mean everything the region touches.
+    the hint is the only sentence on screen about it. It said that regions inside keep their walls,
+    since "around" could as easily mean everything the region touches; the red highlight shows which
+    walls go, and the sentence went with the text rules of 2026-09-29.
   */
   /*
     **Erase, Erase chain and Erase loop are one family** (user, 2026-09-22), named by how much each
@@ -387,49 +390,49 @@ export const TOOLS: readonly ToolChoice[] = [
     label: "Draw chain",
     band: "walls",
     drag: "edit",
-    hint: "Click each corner. Right-click finishes, Esc abandons, and a click on the start closes the shape.",
+    // How it ends is the one thing a GM cannot find by looking, and a plain drag does not pan.
+    hint: "Click each corner. Right-click to finish, or click the start to close. <b>Ctrl</b> to pan.",
   },
   {
     id: "eraseChain",
     label: "Erase chain",
     band: "walls",
     drag: "edit",
-    hint: "Click a wall to remove <b>everything joined to it</b>. The red shows what would go — often the whole map.",
+    hint: "Click a wall to erase everything joined to it.",
   },
   {
     id: "dissolve",
     label: "Erase loop",
     band: "walls",
     drag: "edit",
-    hint: "Click inside a region to remove the walls around it. Regions inside it keep theirs.",
+    hint: "Click a region to erase the walls around it.",
   },
   /*
     Leave a region out of the fog, keeping its walls (user, 2026-09-16). `edit`, and it takes every
-    press, as Draw does: a mark can go anywhere, outside every region too. The hint's second sentence
-    is the consequence a GM would not guess — a suppressed region is fogged for good, like the outside.
+    press, as Draw does: a cross can go anywhere, outside every region too — which is why Ctrl is in
+    the hint. What it placed was a *mark* until the text rules of 2026-09-29 gave that word to the
+    map's own drawing; the code still says mark.
   */
   {
     id: "suppressRegion",
     label: "Suppress region",
     band: "walls",
     drag: "edit",
-    hint:
-      "Click to mark a region — it gets no fog shape and can never be revealed. Walls stay. " +
-      "Click a mark to remove it. <b>Ctrl</b> pans.",
+    hint: "Click a region to suppress it. Click a cross to remove it. <b>Ctrl</b> to pan.",
   },
   /*
     A straight wall across an opening from a click (user, 2026-09-16) — the doorway tool, since Dynamic
     Fog's doors cannot be made from here. `edit`: it takes a press only where it has a wall to place,
-    and anywhere else the press pans. The hint says the wall is shown first, because what a click does
+    and anywhere else the press pans. The hint said the wall is shown first, because what a click does
     here is a search the GM cannot predict — through the click, or snapped to a doorway's ends beside
-    it.
+    it; the preview on the map says so now, the text rules of 2026-09-29 having cut the sentence.
   */
   {
     id: "span",
     label: "Span",
     band: "walls",
     drag: "edit",
-    hint: "Click in an opening to wall it straight across. The wall is drawn before you click.",
+    hint: "Click an opening to wall it straight across.",
   },
 ];
 
@@ -479,12 +482,12 @@ export interface Step {
   readonly id: StepId;
   readonly title: string;
   /**
-   * Shown under the title. May carry markup, and is **empty for all but one step**.
+   * Shown under the title. May carry markup, and is **empty for every step** since 2026-09-29.
    *
    * The default is nothing (user, 2026-09-09): a heading plus the labels under it says what a step
    * is for, and a paragraph at the top of every section is prose a GM scrolls past to reach the
-   * controls. A blurb has to earn its line by saying something no label in the step can — View's
-   * does, because "Preview fill" cannot also say what the emitted shape looks like.
+   * controls. A blurb has to earn its line by saying something no label in the step can. View's was
+   * the last, saying an emitted room is opaque, and it went with the text rules.
    */
   readonly blurb: string;
   /** What the canvas shows while this step is open. */
@@ -675,9 +678,8 @@ export const STEPS: readonly Step[] = [
           Mechanics only, as the ink tool's is. It does not name a colour: the palette is retunable
           and a word for a hue is a copy nothing can keep honest.
         */
-        blurb:
-          "Rings every place the walls stop short and proposes a wall across it. " +
-          "<b>Click inside a ring</b> to mend it, or the button below for all. Dragging pans.",
+        // A wall end with nothing highlighted can be clicked too, and nothing on the map says so.
+        blurb: "Click a gap or a wall end to mend it.",
         parameters: ["mendReachGraphUnits", "mendTravelGraphUnits"],
       },
       /*
@@ -685,7 +687,7 @@ export const STEPS: readonly Step[] = [
 
         `toolHasControls` asks these declarations whether a tool has a drawer, on the argument that a
         tool acquiring its first setting should get one without anything else being told. *Suppress
-        region* has no setting and does have an action — *Clear all marks*, which takes the document
+        region* has no setting and does have an action — *Clear all crosses*, which takes the document
         this tool alone writes — so it wants a drawer for the button rather than for a slider.
 
         Declaring it here rather than keeping a second list in the module that draws the button is the
@@ -722,16 +724,14 @@ export const STEPS: readonly Step[] = [
         parameters: [],
       },
       /*
-        *Prune the dead ends*: one handle and one button, and **no parameter**, as *Collapse small
+        *Prune dead ends*: one handle and one button, and **no parameter**, as *Collapse small
         regions* has — the handle is not stored and is back at its start every opening. The blurb is
         Collapse's with its own nouns, because the gesture is the same.
       */
       {
         tool: "prune",
-        title: "Prune the dead ends",
-        blurb:
-          "Rings every dead end shorter than the length, plus anything it would leave hanging. " +
-          "<b>Click inside a ring</b> to prune it, or the button below for all. Dragging pans.",
+        title: "Prune dead ends",
+        blurb: "Click a dead end to prune it.",
         parameters: [],
       },
       /*
@@ -745,9 +745,7 @@ export const STEPS: readonly Step[] = [
       {
         tool: "collapse",
         title: "Collapse small regions",
-        blurb:
-          "Rings every region smaller than the size. <b>Click inside a ring</b> to collapse it, " +
-          "or the button below for all. Dragging pans.",
+        blurb: "Click a region to collapse it.",
         parameters: [],
       },
     ],

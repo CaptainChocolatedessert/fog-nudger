@@ -46,8 +46,6 @@ import { colourFor } from "../palette";
 import { addPainter, invalidate, say, type Frame, type Painter } from "../shell";
 
 /**
- * Kept in step with `.suppress-key` and `.addink-key` in the page's stylesheet by hand.
- *
  * Amber and cyan are chosen against what is already on this canvas: red-by-default ink, purple gap
  * fills, green skeleton, blue graph handles, and the six cycling region colours. They are also the
  * two that read as opposites, which is what the pair means.

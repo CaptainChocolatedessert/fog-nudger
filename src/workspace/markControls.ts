@@ -40,7 +40,7 @@ export function renderMarkControls(rows: HTMLElement): void {
   // `quiet` is what *Clear layer* wears, which is the tier above this one in the same family: a
   // destructive press that confirms should not be the loudest thing in its own drawer.
   clear.className = "chip quiet";
-  clear.textContent = "Clear all marks";
+  clear.textContent = "Clear all crosses";
   clear.addEventListener("click", () => {
     void clearAllMarks();
   });

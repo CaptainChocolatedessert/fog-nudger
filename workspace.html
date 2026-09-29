@@ -97,20 +97,10 @@
         cursor: crosshair;
       }
       /*
-        Named for what each marks on the canvas, so the prose and the picture agree.
-
-        The values come from `palette.ts` at start-up rather than being written here. They used to be
-        hardcoded hexes beside comments asking whoever changed one to change the other, which is a
-        promise nobody can keep across three layer modules and a stylesheet.
+        `.join-key`, `.gap-key`, `.addink-key` and `.suppress-key` were here: "this colour", printed in
+        the colour, in four hints. The hints stopped naming colours with the text rules of 2026-09-29,
+        and the rules went with the last of them.
       */
-      .join-key,
-      .gap-key,
-      .addink-key {
-        color: var(--additive);
-      }
-      .suppress-key {
-        color: var(--subtractive);
-      }
 
       /* ----------------------------------------------------------------------------------------
          The controls, docked rather than floating.

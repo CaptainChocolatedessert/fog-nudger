@@ -3,7 +3,7 @@
  *
  * ## Why pieces, and why the cascade runs first — user, 2026-09-22
  *
- * *Prune the dead ends* rings what it would take and takes one ring per click, as Mend and *Collapse
+ * *Prune dead ends* rings what it would take and takes one ring per click, as Mend and *Collapse
  * small regions* do. **The whole cascade runs before the rings are placed** (user: *"so the rings and
  * the red marks agree with what will actually happen"*): taking a stub can leave the arm it hung from
  * a dead end too, and a ring drawn only round today's dead ends would be a promise about less than the

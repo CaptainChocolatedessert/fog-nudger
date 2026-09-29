@@ -711,7 +711,7 @@ export function render(): void {
 export function registerToolPalette(): void {
   /*
     Redrawn when a graph arrives or goes, because that is what decides whether the wall tools can do
-    anything. Saving from the ink mode, or *Remove ours* from the panel, both move it — and a strip
+    anything. Saving from the ink mode, or *Remove all Fog Nudger items* from the panel, both move it — and a strip
     left showing three live buttons over a map with no walls would be offering a press that silently
     does nothing.
   */

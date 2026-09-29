@@ -274,7 +274,7 @@ export async function writeCommittedWalls(
 /**
  * Discard the stored graph.
  *
- * **One caller, and it is the panel's "Remove ours"** (user, 2026-09-05: *"the panel has a way to
+ * **One caller, and it is the panel's *Remove all Fog Nudger items*** (then *Remove ours*) (user, 2026-09-05: *"the panel has a way to
  * clear objects that we own. the workspace doesn't need to provide that."*). Neither workspace
  * offers it: the ink mode's save *replaces* the graph, with a confirmation naming what goes, and the
  * editor has no reason to throw away the only thing it holds.

@@ -94,7 +94,7 @@ async function frameTheMapEdge(): Promise<void> {
 async function run(): Promise<void> {
   const graph = wallGraph();
   if (!graph) {
-    say("no walls saved for this map yet", "bad");
+    say("No walls for this map yet.", "bad");
     return;
   }
 
@@ -102,7 +102,7 @@ async function run(): Promise<void> {
   // the image's edge is.
   const extent = mapExtent();
   if (!extent) {
-    say("no map is drawn, so there is no edge to wall", "bad");
+    say("No map chosen.", "bad");
     return;
   }
 
@@ -116,23 +116,22 @@ async function run(): Promise<void> {
 async function putItOn(graph: WallGraph, extent: GraphExtent): Promise<void> {
   const framed = addFrameWalls(graph, extent);
   busy = true;
-  say("walling the edge…", "working");
+  say("Adding edge walls…", "working");
   try {
-    await saveEditedWalls(framed.graph, "walling the map's edge");
+    await saveEditedWalls(framed.graph, "adding walls around the map edge");
     devLog(
       "info",
       `workspace: walled the map's edge — ${framed.splits} existing segments split where they met ` +
         `it, ${framed.cleared} walls already along an edge cleared first, ${framed.overlaps} ` +
         `collinear overlaps left alone`,
     );
-    say(
-      "the map's edge is walled — the outside is a room now" +
-        (framed.splits === 0 ? "" : ` · ${framed.splits} walls joined to it`),
-    );
+    // What it did and nothing more (text rules, 2026-09-29). The walls it joined to are in the log
+    // above, and "the outside is a room now" was the reason the button's old name gave.
+    say("Added walls around the map edge.");
   } catch (error) {
     // The write is what makes it real, so a failure leaves the GM the graph they had.
     const detail = describeError(error);
-    say(`could not save the edge walls: ${detail}`, "bad");
+    say(`Adding edge walls failed: ${detail}.`, "bad");
     devLog("error", "workspace: framing failed to save", detail);
     console.error("Fog Nudger — framing failed to save", error);
   } finally {
@@ -161,14 +160,14 @@ async function takeItOff(graph: WallGraph, extent: GraphExtent): Promise<void> {
   */
   const tidy = compactNodes(bare.graph);
   busy = true;
-  say("taking the edge walls off…", "working");
+  say("Removing edge walls…", "working");
   try {
-    await saveEditedWalls(tidy, "unwalling the map's edge");
+    await saveEditedWalls(tidy, "removing walls around the map edge");
     devLog("info", `workspace: unwalled the map's edge — ${bare.removed} walls along an edge removed`);
-    say(`the map's edge is bare again — ${bare.removed} walls removed`);
+    say("Removed walls around the map edge.");
   } catch (error) {
     const detail = describeError(error);
-    say(`could not save without the edge walls: ${detail}`, "bad");
+    say(`Removing edge walls failed: ${detail}.`, "bad");
     devLog("error", "workspace: unframing failed to save", detail);
     console.error("Fog Nudger — unframing failed to save", error);
   } finally {

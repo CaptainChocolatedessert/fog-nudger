@@ -288,7 +288,7 @@ registerToolContent(renderToolControls);
 registerToolContent(renderMendControls);
 // *Collapse small regions*' size and its button, in the drawer arming the tool opens.
 registerToolContent(renderCollapseControls);
-// *Prune the dead ends*' length and its button. Straighten's handle is `renderAmountControls`, below.
+// *Prune dead ends*' length and its button. Straighten's handle is `renderAmountControls`, below.
 registerToolContent(renderPruneControls);
 registerToolContent(renderSpeckleControls);
 /*

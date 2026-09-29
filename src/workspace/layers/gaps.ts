@@ -40,8 +40,6 @@ import { addPainter, invalidate, say, type Painter } from "../shell";
  * **Fixed rather than a swatch row**, unlike the ink colour. The ring is what carries identification
  * when a colour collides — drawn dark-then-bright over the same path, so it reads against anything
  * underneath, and it is a shape nothing on a map looks like.
- *
- * Kept in step with the `.gap-key` colour in the page stylesheet by hand.
  */
 /*
   Cyan, and the same cyan the added-ink layer uses, because a gap proposal *is* the additive category

@@ -1,7 +1,7 @@
 /**
  * Everything this extension owns in a scene, removed — the "start over" a room asked for.
  *
- * ## Why this is not *Remove ours*
+ * ## Why this is not *Remove all Fog Nudger items*
  *
  * That button deletes our items and clears the saved wall graph, and a room reasonably read it as a
  * full reset (user, 2026-09-13). It is not: the **reading settings**, the **two painted layers** and

@@ -155,25 +155,20 @@ export function applyDrag(graph: WallGraph, grab: Grab, state: DragState): EditR
 /**
  * What the edit did, in the GM's terms.
  *
- * Splits and overlaps are reported rather than hidden. A split is the graph *staying* planar — a
- * wall dragged across another now meets it at a real vertex — and saying so is the difference
- * between a tool that quietly restructured the linework and one that says what it did. An overlap is
- * two walls lying along each other, which splitting cannot separate and which is a legal state to
- * pass through, so it is named and left alone.
- *
- * **A single crossing reports two walls, and the wording has to allow for it.** Both segments are
- * cut where they meet — the one being dragged and the one it ran into — so a move across one wall
- * splits two. An earlier version said "walls it crossed", which is wrong about the half that is its
- * own wall, and would have had a GM looking for a second wall that was never there.
+ * **The overlap is said, and the split is not** (text rules, 2026-09-29). A split is the graph
+ * *staying* planar — a wall dragged across another now meets it at a real vertex — and the vertex is
+ * on the map; saying so was a count nobody acted on. An overlap is two walls lying along each other,
+ * which splitting cannot separate and which the user wants prevented rather than reported (DESIGN.md
+ * §10) — until it is, it is the one thing here worth a warning, and the caller shows it as one.
  */
-export function describeEdit(merged: boolean, splits: number, overlaps: number): string {
-  const head = merged ? "joined two points" : "moved a point";
-  const notes: string[] = [];
-  if (splits > 0) notes.push(`split ${splits} wall${splits === 1 ? "" : "s"} at the crossing`);
-  if (overlaps > 0) {
-    notes.push(`${overlaps} wall${overlaps === 1 ? " lies" : "s lie"} along another`);
-  }
-  return notes.length === 0 ? head : `${head} · ${notes.join(" · ")}`;
+export function describeEdit(merged: boolean, overlaps: number): string {
+  return `${merged ? "Joined two points." : "Moved a point."}${describeOverlaps(overlaps)}`;
+}
+
+/** The warning sentence an edit ends with when it left walls lying along others, or nothing. */
+function describeOverlaps(overlaps: number): string {
+  if (overlaps <= 0) return "";
+  return overlaps === 1 ? " 1 wall overlaps another." : ` ${overlaps} walls overlap others.`;
 }
 
 /**
@@ -275,13 +270,8 @@ export function applyDraw(
  * one is about walls appearing and disappearing, and a single function taking a verb enum would read
  * as one thing happening in four ways when it is four things.
  */
-export function describeDraw(splits: number, overlaps: number): string {
-  const notes: string[] = [];
-  if (splits > 0) notes.push(`split ${splits} wall${splits === 1 ? "" : "s"} at the crossing`);
-  if (overlaps > 0) {
-    notes.push(`${overlaps} wall${overlaps === 1 ? " lies" : "s lie"} along another`);
-  }
-  return notes.length === 0 ? "drew a wall" : `drew a wall · ${notes.join(" · ")}`;
+export function describeDraw(overlaps: number): string {
+  return `Drew a wall.${describeOverlaps(overlaps)}`;
 }
 
 /**

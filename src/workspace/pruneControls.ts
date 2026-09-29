@@ -1,5 +1,5 @@
 /**
- * *Prune the dead ends*' own drawer: the length, and the button that prunes every piece ringed.
+ * *Prune dead ends*' own drawer: the length, and the button that prunes every piece ringed.
  *
  * *Collapse small regions*' drawer in every particular that matters, so the two ringed tools under the
  * one amount read as one kind of thing (user, 2026-09-22: Prune as it was *"feels inconsistent"*). The
@@ -39,7 +39,7 @@ export function renderPruneControls(rows: HTMLElement): void {
   const top = document.createElement("div");
   top.className = "top";
   const label = document.createElement("label");
-  label.textContent = "Length";
+  label.textContent = "Longest dead end to highlight";
   const readout = document.createElement("span");
   readout.className = "value";
   top.append(label, readout);
@@ -65,7 +65,7 @@ export function renderPruneControls(rows: HTMLElement): void {
     requestAnimationFrame(() => {
       frameAsked = false;
       const found = setPruneLength(fromSlider(pending, limits, "log"));
-      if (found !== null) say(pending > 0 ? describePrunes(found) : "off — nothing is ringed");
+      if (found !== null) say(pending > 0 ? describePrunes(found) : "");
       invalidate();
     });
   });
@@ -77,7 +77,7 @@ export function renderPruneControls(rows: HTMLElement): void {
   const all = document.createElement("button");
   all.type = "button";
   all.className = "chip";
-  all.textContent = "Prune every dead end shown";
+  all.textContent = "Prune every highlighted dead end";
   all.addEventListener("click", () => {
     pruneEveryDeadEndShown();
   });

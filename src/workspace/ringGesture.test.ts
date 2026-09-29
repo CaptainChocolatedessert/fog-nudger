@@ -65,15 +65,16 @@ describe("which ring a click lands in", () => {
 });
 
 describe("what the state line says", () => {
-  it("counts small regions, and says what to do when there are none", () => {
-    expect(describeCollapses(1)).toBe("1 small region to collapse");
-    expect(describeCollapses(3)).toBe("3 small regions to collapse");
-    expect(describeCollapses(0)).toMatch(/drag the size up/);
+  // What was found and nothing else (text rules, 2026-09-29): which way to drag went.
+  it("counts small regions, and says when there are none", () => {
+    expect(describeCollapses(1)).toBe("1 small region found.");
+    expect(describeCollapses(3)).toBe("3 small regions found.");
+    expect(describeCollapses(0)).toBe("No small regions found.");
   });
 
   it("counts dead ends the same way", () => {
-    expect(describePrunes(1)).toBe("1 dead end to prune");
-    expect(describePrunes(2)).toBe("2 dead ends to prune");
-    expect(describePrunes(0)).toMatch(/drag the length up/);
+    expect(describePrunes(1)).toBe("1 dead end found.");
+    expect(describePrunes(2)).toBe("2 dead ends found.");
+    expect(describePrunes(0)).toBe("No dead ends found.");
   });
 });

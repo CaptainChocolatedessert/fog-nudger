@@ -153,6 +153,9 @@ const LAND_RADIUS_PX = 8;
  */
 const MIN_WALL_PX = 5;
 
+/** What Collapse, Prune and Mend say when picked up with no walls to search — one copy for three. */
+const NO_WALLS = "No walls to search.";
+
 let tool: WallTool = "move";
 
 /** Moving: the vertex in hand and where it would land. */
@@ -371,24 +374,20 @@ function commitMark(target: MarkTarget): void {
     ? marks.filter((_, index) => index !== target.remove)
     : [...marks, target.place];
   busy = true;
-  say("saving…", "working");
-  void saveMarks(next, removing ? "removing a mark" : "placing a mark")
+  // A *cross* to the GM (text rules, 2026-09-29), which gave *mark* to the map's own drawing.
+  void saveMarks(next, removing ? "removing a cross" : "placing a cross")
     .then(() => {
       if (removing) {
-        say("removed a mark");
+        say("Cross removed.");
         return;
       }
       // The marks listener has re-applied them by now, so the newest mark's state is current.
       const placed = currentMarkStates()[next.length - 1];
-      say(
-        placed?.active
-          ? "placed a mark — that region is suppressed"
-          : "placed a mark outside every region, so it suppresses nothing yet",
-      );
+      say(placed?.active ? "Region suppressed." : "Cross placed outside every region.");
     })
     .catch((error: unknown) => {
       const detail = describeError(error);
-      say(`the mark was not saved: ${detail}`, "bad");
+      say(`Cross not saved: ${detail}.`, "bad");
       devLog("error", "workspace: saving a mark failed", detail);
       console.error("Fog Nudger — saving a suppression mark failed", error);
     })
@@ -434,7 +433,7 @@ function finishChain(graph: WallGraph): void {
   const added = insertEdge(split.graph, run);
   commit(
     { ...added, splits: added.splits + split.splits },
-    `drew a chain of ${walls} wall${walls === 1 ? "" : "s"}`,
+    `Drew a chain of ${walls} wall${walls === 1 ? "" : "s"}.`,
     "drawing a chain",
     graph,
   );
@@ -489,7 +488,7 @@ export function setTool(next: WallTool): void {
   hoveredPruneFreeKey = null;
   if (next === "mend") {
     const found = startMendSearch();
-    say(found === null ? "there are no walls on screen to search" : describeMends(found));
+    say(found === null ? NO_WALLS : describeMends(found));
   } else {
     stopMendSearch();
   }
@@ -500,14 +499,14 @@ export function setTool(next: WallTool): void {
   */
   if (next === "collapse") {
     const found = startCollapseSearch();
-    say(found === null ? "there are no walls on screen to search" : describeCollapses(found));
+    say(found === null ? NO_WALLS : describeCollapses(found));
   } else {
     stopCollapseSearch();
   }
   // And the dead ends, at four ink widths, every time the tool is picked up.
   if (next === "prune") {
     const found = startPruneSearch();
-    say(found === null ? "there are no walls on screen to search" : describePrunes(found));
+    say(found === null ? NO_WALLS : describePrunes(found));
   } else {
     stopPruneSearch();
   }
@@ -926,14 +925,13 @@ function escape(): boolean {
   if (chain.length > 0) {
     // A chain in progress is the one thing here that has two endings, and this is the one that keeps
     // Escape's meaning: nothing was written, so nothing has to be taken back.
-    const placed = chain.length;
     cancel();
-    say(`abandoned a chain of ${placed} point${placed === 1 ? "" : "s"}`);
+    say("Chain cancelled.");
     return true;
   }
   if (!anchor && !grab && !pressedMend && !pressedCollapse && !pressedPrune) return false;
   cancel();
-  say("cancelled");
+  say("Cancelled.");
   return true;
 }
 
@@ -977,9 +975,10 @@ function end(): void {
     if (!result) return;
     commit(
       result,
-      describeEdit(landed.snapTo !== null, result.splits, result.overlaps),
+      describeEdit(landed.snapTo !== null, result.overlaps),
       "moving a point",
       graph,
+      result.overlaps > 0,
     );
     return;
   }
@@ -989,7 +988,7 @@ function end(): void {
     clearGesture();
     invalidate();
     if (target === null) return;
-    commit(removeEdge(graph, target), "erased a wall", "erasing a wall", graph);
+    commit(removeEdge(graph, target), "Erased a wall segment.", "erasing a wall segment", graph);
     hoveredEdge = null;
     return;
   }
@@ -1003,7 +1002,7 @@ function end(): void {
     const count = target.edges.length;
     commit(
       removeEdges(graph, target.edges),
-      `erased a chain of ${count} wall segment${count === 1 ? "" : "s"}`,
+      `Erased a chain of ${count} wall segment${count === 1 ? "" : "s"}.`,
       "erasing a chain",
       graph,
     );
@@ -1019,8 +1018,8 @@ function end(): void {
     const count = target.dissolution.edges.length;
     commit(
       removeEdges(graph, target.dissolution.edges),
-      `dissolved a region, removing ${count} wall segment${count === 1 ? "" : "s"}`,
-      "dissolving a region",
+      `Erased a loop of ${count} wall segment${count === 1 ? "" : "s"}.`,
+      "erasing a loop",
       graph,
     );
     hoveredRegion = null;
@@ -1035,7 +1034,7 @@ function end(): void {
     // A press that travelled was a drag; and a span found on walls a derive has since replaced names
     // walls that are no longer drawn.
     if (!target || dragged || target.graph !== graph) return;
-    commit(applySpan(graph, target.span), "spanned the opening", "spanning an opening", graph);
+    commit(applySpan(graph, target.span), "Spanned an opening.", "spanning an opening", graph);
     dropSpan();
     return;
   }
@@ -1106,10 +1105,10 @@ function end(): void {
   invalidate();
   const result = applyDraw(graph, from, to, MIN_WALL_PX * lastPerPixel);
   if (!result) {
-    say("too short to be a wall, so nothing was added");
+    say("Wall too short.");
     return;
   }
-  commit(result, describeDraw(result.splits, result.overlaps), "drawing a wall", graph);
+  commit(result, describeDraw(result.overlaps), "drawing a wall", graph, result.overlaps > 0);
 }
 
 /**
@@ -1121,9 +1120,11 @@ function end(): void {
  */
 function commit(
   result: EditResult,
-  message: string | (() => string),
+  message: string,
   undoLabel: string,
   from: WallGraph,
+  /** Say it as a warning: an edit that left walls lying along others (DESIGN.md §10). */
+  warn = false,
 ): void {
   /*
     Compacted here and nowhere else, which is what makes renumbering safe.
@@ -1136,17 +1137,17 @@ function commit(
   */
   const graph = compactNodes(result.graph);
   busy = true;
-  say("saving…", "working");
   // `from` is what this edit was applied to. When it is not the stored document — the first edit on
   // a graph that has only ever been a derivation — saving adopts it, which is the commit that used
   // to be a button.
   void saveEditedWalls(graph, undoLabel, from)
     .then(() => {
-      say(typeof message === "function" ? message() : message);
+      say(message, warn ? "bad" : "");
     })
     .catch((error: unknown) => {
       const detail = describeError(error);
-      say(`the edit was not saved and has been undone: ${detail}`, "bad");
+      // Failed and taken back: the walls on screen are what they were before the edit.
+      say(`Edit failed: ${detail}.`, "bad");
       devLog("error", "workspace: saving a wall edit failed", detail);
       console.error("Fog Nudger — saving a wall edit failed", error);
     })
@@ -1387,16 +1388,11 @@ function hover(point: MapPoint | null): void {
 }
 
 /**
- * What the state line says once a mend is saved: how many went in, and how many are still on offer.
- *
- * Computed after the save rather than before, because accepting changes the walls and the search
- * re-runs against them — the count left is the new search's, not the old one's minus what went.
+ * What the state line says once a mend is saved: how many went in. How many were still on offer went
+ * with the text rules of 2026-09-29, which is why this is no longer worked out after the save.
  */
-function mendedMessage(count: number): () => string {
-  return () => {
-    const left = currentMends().length;
-    return `mended ${count} gap${count === 1 ? "" : "s"} · ${left} left`;
-  };
+function mendedMessage(count: number): string {
+  return `Mended ${count} gap${count === 1 ? "" : "s"}.`;
 }
 
 /**
@@ -1410,10 +1406,10 @@ export function mendEveryGapShown(): void {
   const graph = editableGraph();
   const mends: readonly Mend[] = graph ? currentMends() : [];
   if (!graph || mends.length === 0) {
-    say("nothing to mend — no gaps in the walls are on offer");
+    say("Nothing to mend.");
     return;
   }
-  commit(applyMends(graph, mends), mendedMessage(mends.length), "mending every gap shown", graph);
+  commit(applyMends(graph, mends), mendedMessage(mends.length), "mending multiple gaps", graph);
 }
 
 /**
@@ -1428,15 +1424,11 @@ export function refreshMends(): void {
 }
 
 /**
- * What the state line says once small regions are collapsed: how many went, and how many are still on
- * offer at the same size — worked out after the save, against the walls as they now are.
+ * What the state line says once small regions are collapsed: how many went. An early stop — which a
+ * correct collapse cannot produce — is the log's and the console's, which say so in full.
  */
-function collapsedMessage(count: number, stopped = false): () => string {
-  return () => {
-    const left = currentCollapses().length;
-    const took = `collapsed ${count} small region${count === 1 ? "" : "s"} · ${left} left`;
-    return stopped ? `${took} — stopped early, which should not happen; the console has the detail` : took;
-  };
+function collapsedMessage(count: number): string {
+  return `Collapsed ${count} small region${count === 1 ? "" : "s"}.`;
 }
 
 /**
@@ -1454,20 +1446,21 @@ export function collapseEveryRegionShown(): void {
   const graph = editableGraph();
   const size = collapseSize();
   if (!graph || !size || currentCollapses().length === 0) {
-    say("nothing to collapse — no regions that small are on offer");
+    say("Nothing to collapse.");
     return;
   }
   busy = true;
-  say("collapsing…", "working");
+  say("Collapsing…", "working");
   void whileWorking(() => collapseAll(graph, size)).then((all) => {
     busy = false;
     // A derive landing in the frames before the work started would have replaced the walls.
     if (editableGraph() !== graph) {
-      say("the walls changed while collapsing, so nothing was saved", "bad");
+      say("Collapse failed: walls changed.", "bad");
       return;
     }
+    // Every highlighted region grew past the size as its neighbours went; the highlights say so.
     if (all.collapsed === 0) {
-      say("nothing to collapse — each ringed region grew past the size as its neighbours went");
+      say("Nothing to collapse.");
       return;
     }
     if (all.stopped) {
@@ -1483,16 +1476,13 @@ export function collapseEveryRegionShown(): void {
       `workspace: collapsed ${all.collapsed} small regions in ${all.rounds} rounds at ` +
         `${size.toExponential(2)} square graph units`,
     );
-    commit(all, collapsedMessage(all.collapsed, all.stopped), "collapsing every small region shown", graph);
+    commit(all, collapsedMessage(all.collapsed), "collapsing multiple small regions", graph);
   });
 }
 
-/** What the state line says once dead ends are pruned: how many pieces went, and how many are left. */
-function prunedMessage(count: number): () => string {
-  return () => {
-    const left = currentPrunePieces().length;
-    return `pruned ${count} dead end${count === 1 ? "" : "s"} · ${left} left`;
-  };
+/** What the state line says once dead ends are pruned: how many pieces went. */
+function prunedMessage(count: number): string {
+  return `Pruned ${count} dead end${count === 1 ? "" : "s"}.`;
 }
 
 /**
@@ -1507,7 +1497,7 @@ export function pruneEveryDeadEndShown(): void {
   const graph = editableGraph();
   const pieces = graph ? currentPrunePieces() : [];
   if (!graph || pieces.length === 0) {
-    say("nothing to prune — no dead ends that short are on offer");
+    say("Nothing to prune.");
     return;
   }
   const length = pruneLength() ?? 0;
@@ -1516,7 +1506,7 @@ export function pruneEveryDeadEndShown(): void {
     `workspace: pruned ${pieces.length} dead-end pieces ` +
       `(${pieces.reduce((total, piece) => total + piece.edges.length, 0)} segments) at ${length.toExponential(2)} graph units`,
   );
-  commit(applyPrunePieces(graph, pieces), prunedMessage(pieces.length), "pruning every dead end shown", graph);
+  commit(applyPrunePieces(graph, pieces), prunedMessage(pieces.length), "pruning multiple dead ends", graph);
 }
 
 /**

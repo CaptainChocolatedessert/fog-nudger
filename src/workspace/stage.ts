@@ -271,7 +271,7 @@ export async function discardWalls(): Promise<void> {
  * 2026-09-20).
  *
  * That keeps the clear family on one rule: **a clear is one named act, and every named act is
- * undoable** — *Clear layer* already was, *Clear all marks* is by going through `saveMarks`, and
+ * undoable** — *Clear layer* already was, *Clear all crosses* is by going through `saveMarks`, and
  * *Clear everything* is the single exception, which is why it is the one place "this cannot be
  * undone" is true.
  *
