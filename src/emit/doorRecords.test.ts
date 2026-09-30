@@ -177,7 +177,9 @@ describe("door records, measured the way Dynamic Fog measures them", () => {
     }
     expect(doors).toBeGreaterThan(500);
     for (const [kind, count] of Object.entries(reached)) expect(count, kind).toBeGreaterThan(10);
-  });
+    // A long sweep, given its own timeout: under the full suite's load it passes the 5 s default
+    // and reads like a real failure (DESIGN.md §8, *A long sweep needs its own timeout*).
+  }, 30_000);
 
   it("writes nothing when there are no doors", () => {
     const next = seededRandom(5);

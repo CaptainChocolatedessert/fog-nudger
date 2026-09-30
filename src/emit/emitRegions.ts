@@ -41,7 +41,7 @@ import { DYNAMIC_FOG_DOORS_KEY } from "./doorRecords";
 import { wallEmission } from "./wallEmission";
 import {
   ACCEPTED_FILL_OPACITY,
-  ACCEPTED_STROKE_WIDTH,
+  emittedStrokeWidth,
   EMITTED_LAYER,
   EMITTED_VISIBLE,
   planBatches,
@@ -52,7 +52,6 @@ import {
   type StageableRegion,
 } from "./fogShapes";
 import {
-  ACCEPTED_WALL_STROKE,
   stageWallLines,
   WALL_KEY,
   type WallLineSpec,
@@ -100,8 +99,8 @@ const RETRY_BACKOFF_MS = [250, 750, 2_000] as const;
  * look-and-close rewrote nothing, which was never true of this page.
  *
  * **And it is not complete, which is harmless only while it is lost that often**: the map's
- * placement is not in it — only the item's id — and neither is the scene's fog colour, and both
- * change what a push writes. Kept in the scene, it would leave a moved map's fog where it was; the
+ * placement is not in it — only the item's id — and neither are the scene's fog colour and stroke
+ * width, and all three change what a push writes. Kept in the scene, it would leave a moved map's fog where it was; the
  * user decided not to keep it (2026-09-29), since opening and closing resetting the doors is
  * consistent with every other in-scene edit.
  */
@@ -275,14 +274,17 @@ export async function pushToFog(
   devLog("info", source.note);
 
   const runId = new Date().toISOString();
+  // The scene's own fog stroke and colour, so ours look like a GM's; the stroke never under the floor
+  // that keeps doors working (`fogShapes.ts`).
+  const [fogColour, fogStroke] = await Promise.all([OBR.scene.fog.getColor(), OBR.scene.fog.getStrokeWidth()]);
+  const stroke = emittedStrokeWidth(fogStroke);
   const { shapes, skipped } = stageShapes(source.regions, {
     run: runId,
     mapId: source.mapId,
-    // The values an emitted shape must carry, not a review preference. Full opacity or revealed
-    // ground keeps a tint of the fog colour; no outline or Dynamic Fog offsets its walls by half of
-    // one either side of the boundary. Both are explained where they are declared.
+    // Full opacity, or revealed ground keeps a tint of the fog colour; the stroke is the scene's.
+    // Both are explained where they are declared.
     fillOpacity: ACCEPTED_FILL_OPACITY,
-    strokeWidth: ACCEPTED_STROKE_WIDTH,
+    strokeWidth: stroke,
   });
 
   if (skipped.length > 0) {
@@ -294,12 +296,11 @@ export async function pushToFog(
     );
   }
 
-  const fogColour = await OBR.scene.fog.getColor();
   const { lines, dropped } = stageWallLines(source.walls, {
     run: runId,
     mapId: source.mapId,
     colour: fogColour,
-    strokeWidth: ACCEPTED_WALL_STROKE,
+    strokeWidth: stroke,
   });
   if (dropped > 0) {
     devLog("warn", `emit: dropped ${dropped} zero-length wall segments — nothing to select there`);
@@ -497,9 +498,9 @@ function pause(ms: number): Promise<void> {
  * One wall segment, built the way Dynamic Fog's own wall mode builds one.
  *
  * A `LINE` rather than anything with an interior, because Owlbear reads a fog item's interior as
- * revealable ground and a wall must reveal nothing. Onto `FOG` at the scene's own fog colour, so it
- * is indistinguishable from a wall a GM drew by hand — and at zero width, so the two walls Dynamic
- * Fog derives from it coincide on the centreline rather than straddling it.
+ * revealable ground and a wall must reveal nothing. Onto `FOG` at the scene's own fog colour and stroke
+ * width, so it is indistinguishable from a wall a GM drew by hand — and never under 2, below which an
+ * open door anywhere took its wall (`fogShapes.ts`).
  */
 function wallLineItem(line: WallLineSpec): Item {
   return buildLine()

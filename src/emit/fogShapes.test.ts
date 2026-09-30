@@ -5,7 +5,8 @@ import type { PlacedRegion } from "../map/placeRegions";
 import { NAMESPACE } from "../namespace";
 import {
   ACCEPTED_FILL_OPACITY,
-  ACCEPTED_STROKE_WIDTH,
+  EMITTED_STROKE_FLOOR,
+  emittedStrokeWidth,
   EMITTED_LAYER,
   EMITTED_VISIBLE,
   planBatches,
@@ -163,11 +164,20 @@ describe("the four values an emitted item must carry", () => {
     This does not stop the builders drifting from the constants. Nothing here can. It turns three
     values nobody would notice changing into three that fail a test.
   */
-  it("puts them on the fog layer, visible, opaque and unstroked", () => {
+  it("puts them on the fog layer, visible and opaque", () => {
     expect(EMITTED_LAYER, "a DRAWING item derives no walls and fogs nothing").toBe("FOG");
     expect(EMITTED_VISIBLE, "on FOG, false means cleared rather than hidden").toBe(true);
     expect(ACCEPTED_FILL_OPACITY, "below 1 tints revealed ground for players").toBe(1);
-    expect(ACCEPTED_STROKE_WIDTH, "Dynamic Fog strokes the outline; a width is the sliver").toBe(0);
+  });
+
+  it("strokes at the scene's fog width, never below the floor that keeps doors working", () => {
+    // Below 1.25 an open door took most lines' walls with it (measured, fogShapes.ts).
+    expect(EMITTED_STROKE_FLOOR).toBeGreaterThanOrEqual(1.25);
+    expect(emittedStrokeWidth(5)).toBe(5);
+    expect(emittedStrokeWidth(12.5)).toBe(12.5);
+    expect(emittedStrokeWidth(1)).toBe(EMITTED_STROKE_FLOOR);
+    expect(emittedStrokeWidth(0)).toBe(EMITTED_STROKE_FLOOR);
+    expect(emittedStrokeWidth(Number.NaN)).toBe(EMITTED_STROKE_FLOOR);
   });
 });
 

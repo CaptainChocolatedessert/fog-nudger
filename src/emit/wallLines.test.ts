@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ACCEPTED_WALL_STROKE, stageWallLines, type PlacedWall } from "./wallLines";
+import { stageWallLines, type PlacedWall } from "./wallLines";
 
 const OPTIONS = {
   run: "2026-08-30T00:00:00.000Z",
@@ -82,11 +82,9 @@ describe("wall lines", () => {
 });
 
 describe("the emitted stroke width", () => {
-  it("is zero once accepted, so the derived walls sit on the centreline", () => {
-    // Dynamic Fog strokes the item at this width and takes the outline, so the width is the gap
-    // between the two walls it derives. At zero they coincide and each side reveals up to the
-    // centreline — the party seeing half the wall as drawn, rather than a band of fog down it.
-    expect(ACCEPTED_WALL_STROKE).toBe(0);
+  it("is the one it is given, since the push hands in the scene's (fogShapes.ts has the floor)", () => {
+    const { lines } = stageWallLines([{ edge: 0, points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] }], OPTIONS);
+    expect(lines[0]!.strokeWidth).toBe(OPTIONS.strokeWidth);
   });
 
   // "is visible while staged, because a zero-width line cannot be selected" was here, exercising

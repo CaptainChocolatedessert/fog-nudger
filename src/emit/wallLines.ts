@@ -42,38 +42,11 @@ import type { DoorRecord } from "./doorRecords";
 /** Marks a wall line as ours. A separate key from the regions', so the two can be handled apart. */
 export const WALL_KEY = key("wall");
 
-/**
- * The stroke an emitted wall line carries: **none**, confirmed in a room.
- *
- * Dynamic Fog strokes the item at `style.strokeWidth` and takes the outline, so the width is the
- * distance between the two walls it derives — and the band between them can be seen into from
- * neither side.
- *
- * **The earlier reasoning here was wrong** (user, 2026-08-30). It said that band was the wall's own
- * thickness and read correctly as a dark stripe where the map has a wall. It does not: the party
- * should see **half the wall as drawn** from each side, meeting at the centreline. A band of fog W
- * wide down the middle of a wall is not the wall, it is a strip of the map nobody can ever see, and
- * it is unrelated to how thick the wall was actually drawn.
- *
- * At zero the two derived walls coincide *on* the centreline, each side reveals up to it, and the
- * whole drawn wall is visible between them. That is the same thing accepted shapes do, so every
- * emitted item ends up with its walls exactly on the centreline — one rule rather than two.
- *
- * **This was called an experiment until 2026-08-31, and the doubt had already been settled.** The
- * worry was specific and worth keeping: a closed path has its own boundary to stroke at any width,
- * which is why zero is settled for shapes — step 1 measured it — while an open `LINE` has neither, so
- * Skia's stroker at zero might have returned nothing and given no wall at all. **That failure would
- * have been silent**: no error, just sight passing through a free-standing wall.
- *
- * A room answered it on 2026-08-30. Lighting a wall from both sides revealed everything with no fog
- * line down the middle **and the walls still blocked sight**, so a zero-width `LINE` on the `FOG`
- * layer does yield a Dynamic Fog wall. Tiny rendering artefacts sit right on the division, visible
- * only against a deliberately garish fog colour, and the GM called those resolved.
- *
- * Raising this above zero is still the whole of the fix if a future room ever contradicts that — but
- * do not raise it on the strength of the doubt alone, which is what the stale wording invited.
- */
-export const ACCEPTED_WALL_STROKE = 0;
+/*
+  `ACCEPTED_WALL_STROKE`, zero, was here. A wall line takes the same stroke as a room's shape now —
+  the scene's fog stroke width, never under 2 — which `fogShapes.ts` declares with the measurement
+  that ended zero: at zero, an open door anywhere in the scene took the walls of most lines with it.
+*/
 
 export interface WallProvenance {
   /** Which run produced this item. A timestamp, because its job is to be read beside a log. */

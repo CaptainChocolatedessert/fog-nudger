@@ -306,15 +306,18 @@ The consequence that matters is not the count but the **band between the two der
 is unreachable from either side. A shape carrying an outline W wide reveals only to its boundary
 − W/2, so two adjacent rooms sharing a centreline each fall short by half of W.
 
-> **This is why emitted shapes carry no stroke at all** (`ACCEPTED_STROKE_WIDTH = 0`). A band of fog
-> down the middle of a wall is not the wall; it is a strip of map nobody can ever see.
+> **That band is a cost our items pay since 2026-09-29.** A band of fog down the middle of a wall is
+> not the wall; it is a strip of map nobody can ever see — which is why emitted items carried **no
+> stroke** until then. They carry **the scene's fog stroke width, never under 2**, now (`fogShapes.ts`'s
+> `emittedStrokeWidth`), for two reasons that outweighed it: the GM cannot see a zero-width item in
+> Owlbear, which draws fog items by their stroke (user); and **at zero, doors broke walls all over the
+> map** — §10's *Doors* has the measurement.
 
-**Zero is safe and it is measured, not assumed.** A zero-stroke shape produces exactly as many walls
-as a stroked one, and a zero-width `LINE` still yields a working wall — Skia's stroker returns
-something usable at zero rather than nothing. Confirmed in a room by lighting a wall from both sides:
-everything reveals, no fog line down the middle, and the walls still block sight. Tiny rendering
-artefacts sit on the division, visible only under a deliberately garish fog colour, and are accepted
-as cosmetic.
+**Zero looked safe, and the reason it did turned out to be CanvasKit's.** A zero-stroke shape produced
+as many walls as a stroked one and a zero-width `LINE` still made a wall, confirmed in a room by lighting
+a wall from both sides. What made that so: CanvasKit's `Path.prototype.stroke` turns a width of 0 into 1
+(`d.width=d.width||1`), so Dynamic Fog was stroking every "zero-width" item one unit wide — which is also
+what its simplification at a tolerance of 1 then flattened (read 2026-09-29).
 
 **Stroking an open segment yields one contour** — a capsule around the line — so an open `LINE` gives
 one wall where a closed loop gives two.
@@ -326,7 +329,7 @@ one wall where a closed loop gives two.
 | `fillOpacity` | 0.5 | **1** | **match — required** |
 | `visible` | false | **false** | **differ — must be `true`** |
 | `fillRule` | evenodd | nonzero | **differ, deliberately** |
-| `strokeWidth` | 9 | 5 | **0 — see above** |
+| `strokeWidth` | 9 | 5 | **the scene's, never under 2 — see above** (0 until 2026-09-29) |
 
 - **`fillOpacity` must be 1.** Below that, ground the party has *revealed* keeps a translucent tint
   of the fog colour, for GM and players alike.
@@ -1941,11 +1944,11 @@ graph is the document, and staging was the last place still treating the scene a
 ### What goes out
 
 - **One filled `PATH` per face not suppressed**, on `FOG`, `visible: true`, `fillOpacity: 1`,
-  `fillRule: "evenodd"`, no stroke.
+  `fillRule: "evenodd"`, stroked at the scene's fog stroke width and never under 2 (§2; zero until
+  2026-09-29).
 - **One `LINE` per segment of every wall no emitted face boundary covers** (§3's bridge criterion), on `FOG`,
-  `visible: true`, no fill anywhere, in the scene's own fog colour and at **zero** stroke width
-  (`ACCEPTED_WALL_STROKE`, confirmed in a room on 2026-08-30 — a zero-width line still makes a wall).
-  This said the scene's stroke width until 2026-09-29, which the code has not written since August.
+  `visible: true`, no fill anywhere, in the scene's own fog colour and stroke width, never under 2 —
+  the same rule as the shapes. Zero from August until 2026-09-29, while this said the scene's width.
 - **Each item carries the doors on its walls**, in Dynamic Fog's `rodeo.owlbear.dynamic-fog/doors` key,
   written closed — §10's *Doors*.
 
@@ -3807,8 +3810,10 @@ check. Earlier the same day the text rules were applied and their live review fi
 
 **Do this first:**
 
-1. **Doors in a room** — the four checks under *What only a room can check* in *Doors* below, the table
-   one first, since it is the premise nothing from a desk can reach. Read `dev.log`'s update line for the doors written before
+1. **Doors in a room, again** — the first room found doors opening walls all over the map, measured and
+   fixed the same day by giving our items the scene's fog stroke width (*Doors*, *The first room*). Update
+   the scene, open a door, and check that walls elsewhere still block; then the four checks under *What
+   only a room can check*, the table one first. Read `dev.log`'s update line for the doors written before
    recording the result.
 2. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
    stopped by the user after 312 of 479 shapes (`dev.log`). Every update deletes ours before writing,
@@ -3913,17 +3918,6 @@ for the reason *The trace worker* gives.
 
 **Held, with the reason:**
 
-- **Emit shapes and free-standing lines at the scene's fog stroke width** (user, 2026-09-29: *"I
-  checked and the line width of fog items does matter for visibility. We should emit shapes and free
-  lines at the user's selected width for fog shapes."*). **Both carry none today**:
-  `ACCEPTED_STROKE_WIDTH = 0` for shapes, confirmed in a room by lighting a wall from both sides, and
-  `ACCEPTED_WALL_STROKE = 0` for lines, confirmed on 2026-08-30. The chat that raised this was told
-  lines took the scene's width, from §6's wording, which was wrong — read the constants.
-  **Held for one question**, because it reverses both measured decisions, on the ground that a stroked
-  outline leaves *"a strip of map nobody can ever see"* down every wall. What the check showed decides
-  the change: whether it is the GM seeing the items in Owlbear, or what players can see. It also widens
-  every door's cut, which is the stroke plus 20.
-
 - **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
   *the scene has not finished loading* look the same, since the map list is briefly empty on load.
 - **Map styles still untried: scan artefacts, faded colour, a printed grid.** *Arden Vul 015* was the
@@ -3936,8 +3930,8 @@ for the reason *The trace worker* gives.
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**Not pushed: the doors, six commits** (2026-09-29) with the one that writes this line —
-`git rev-list --count origin/main..main` said five just before it. Push once a room has confirmed them — and
+**Not pushed: the doors, seven commits** (2026-09-29) with the one that writes this line —
+`git rev-list --count origin/main..main` said six just before it. Push once a room has confirmed them — and
 note that until then the published build refuses the version 5 walls the dev build saves (*Doors*,
 costs). The public-build check above still applies to the push after.
 
@@ -4276,8 +4270,8 @@ never run.
 - **Open, the stretch is cut from every wall in the scene**, whichever drawing it came from: stroked at
   the drawing's stroke width plus 20, with **butt** ends — `stroke` is given a width alone and CanvasKit
   defaults the cap to `Butt`, read in `canvaskit.js` 0.39.1; this record said square until the day. Closed,
-  it cuts nothing. It works on an open `LINE` as well as a closed shape (user). **Every item of ours
-  carries zero stroke**, so every cut is 20 world units wide.
+  it cuts nothing. It works on an open `LINE` as well as a closed shape (user). **Our items carry the
+  scene's fog stroke width, never under 2**, so a cut is that plus 20.
 - **So an update destroys a door made on our items at the table**, since it deletes our items and writes
   new ones — as it does every in-scene edit to them.
 
@@ -4319,6 +4313,36 @@ never run.
 - **Drawn** green, `#16a34a` — a sixth palette role and a sixth colour row in View — 3 px and cased, with
   butt ends; red at Erase's 5 px where a click would remove it; dashed while being dragged; its ends
   marked as handles while the tool is in hand. The glyph is a plain door.
+
+#### The first room, 2026-09-29: doors opened walls all over the map — found and fixed
+
+**Reported** (user): opening any door made *"certain segments"* throughout the map stop blocking light
+and tokens, with no door icon on them — only while a door was open, and the same segments for every
+door. The update that first carried doors wrote 131 lines, 5 doors and no rooms (`dev.log`).
+
+**Three explanations were offered from reading, and all three were wrong**: that a zero-width line has
+no area, so any open door takes every one; then only the lines near a door; then that the subtraction
+depends on rounding. The user corrected the first two from the room — *"Not all segments are opening.
+Just a few"*, then *"throughout the map"* — and a measurement settled it.
+
+**Measured**, by running Dynamic Fog's own wall steps in the browser pane against the same CanvasKit
+0.39.1 and simplify-js 1.2.4 it ships — `WallHelpers.drawingToPolylines` and `PathHelpers`, step for step:
+
+- **CanvasKit turns a stroke width of 0 into 1**, so our "zero-width" lines were stroked one unit wide.
+- **Dynamic Fog simplifies that outline at a tolerance of 1**, which flattens most one-unit outlines to no
+  width — every horizontal and vertical line, and about half the angled ones.
+- **While any door in the scene is open**, every outline has every open door subtracted from it as an
+  area, and a flat outline comes out of that empty. With the door closed nothing is subtracted, so the
+  flattened outline still stands as a wall — which is why it held until the first door opened.
+- **1,386 of 2,000 random lines lost their whole wall** with a door open 20,000 units away. At a stroke
+  of 1.25 up, **none of 1,500** did. Rooms lost none at any width; the only change there is the
+  subtraction cleaning up loops Skia's stroker leaves inside sharp corners.
+- The subtraction alone never failed: 20,000 lines of every length, checked by its own return value.
+
+**Fixed the same day** (user: non-zero widths wanted anyway, so a GM can see our items in Owlbear): shapes
+and lines carry the scene's fog stroke width, never under 2 — margin over the 1.25 measured. Five
+mutations over the rule, five caught. **The cost is §2's band**, now paid on every wall. **Not yet
+confirmed in a room.**
 
 #### Decided while building, for checking
 

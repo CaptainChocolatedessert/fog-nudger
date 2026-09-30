@@ -613,7 +613,9 @@ describe("doors through random edits, against a geometric oracle", () => {
     // A sweep has to be shown to reach its cases, not only to pass.
     expect(checked).toBeGreaterThan(1500);
     for (const [kind, count] of Object.entries(reached)) expect(count, kind).toBeGreaterThan(20);
-  });
+    // A long sweep, given its own timeout: under the full suite's load it passes the 5 s default
+    // and reads like a real failure (DESIGN.md §8, *A long sweep needs its own timeout*).
+  }, 30_000);
 
   it("Straighten keeps every door near where it was", () => {
     const next = seededRandom(9);
@@ -656,5 +658,7 @@ describe("doors through random edits, against a geometric oracle", () => {
     }
     expect(doorsSeen).toBeGreaterThan(300);
     expect(survived).toBeGreaterThan(doorsSeen * 0.8);
-  });
+    // A long sweep, given its own timeout: under the full suite's load it passes the 5 s default
+    // and reads like a real failure (DESIGN.md §8, *A long sweep needs its own timeout*).
+  }, 30_000);
 });

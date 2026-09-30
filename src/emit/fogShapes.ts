@@ -106,26 +106,40 @@ export const PROPOSAL_COLOURS = [
 export const ACCEPTED_FILL_OPACITY = 1;
 
 /**
- * The outline an accepted fog shape carries: **none**.
+ * The stroke every emitted item carries, shape and line alike: **the scene's fog stroke width, and
+ * never less than `EMITTED_STROKE_FLOOR`** (user, 2026-09-29).
  *
- * Dynamic Fog derives its walls by *stroking* the item's path at `style.strokeWidth` and taking the
- * outline — `WallHelpers.drawingToPolylines`. So a shape with an outline W wide puts one wall at its
- * boundary minus W/2 and another at plus W/2, and the band between them can be seen into from
- * neither side. Two adjacent rooms share a centreline, so each was revealing only to centreline
- * − W/2: the half-wall reveal the whole wall-graph pivot was for, coming up short at both edges.
+ * **It was zero, for a reason that still holds and is now a cost.** Dynamic Fog derives its walls by
+ * stroking an item's path at `style.strokeWidth` and taking the outline, so a width W puts a wall at
+ * the boundary minus W/2 and another at plus W/2, and the band between can be seen into from neither
+ * side: two rooms sharing a centreline each reveal only to W/2 short of it. Zero put both walls on the
+ * centreline, confirmed in a room.
  *
- * **And W was the proposal-outline setting** — a review affordance, there so a GM can tell one
- * proposal from the next, silently deciding where sight is blocked. The same shape of mistake as
- * `fillOpacity`, which is why both are declared here as emission constants rather than taken from a
- * review setting. That pairing used to happen at promotion time; with staging gone there is no later
- * moment to correct them in, which is exactly why they are constants.
+ * **Two things overturned it.** The GM cannot see a zero-width item in Owlbear, which draws fog items by
+ * their stroke (user). And **doors do not work at zero**, measured on 2026-09-29 by running Dynamic Fog's
+ * own wall steps against its own CanvasKit 0.39.1 and simplify-js 1.2.4 in the browser pane:
  *
- * **Zero rather than merely small, and that rests on a measurement**: step 1 found `strokeWidth`
- * free, including zero, with a zero-stroke shape producing exactly as many walls as a stroked one.
- * A closed path has its own boundary to stroke, so there is something there at any width. An open
- * `LINE` does not, which is why the wall lines keep a real width — see `wallLines.ts`.
+ * - CanvasKit turns a stroke width of 0 into 1 (`d.width=d.width||1` in its `Path.prototype.stroke`), so
+ *   a "zero-width" line is stroked one unit wide;
+ * - Dynamic Fog then simplifies the outline at a tolerance of 1, which flattens most of those one-unit
+ *   outlines to no width at all — every horizontal and vertical line, and about half the others;
+ * - and while **any** door in the scene is open it subtracts the door from every outline as an area,
+ *   which leaves nothing of a flat one. **1,386 of 2,000 random lines lost their whole wall** with a
+ *   door open 20,000 units away. A room from a GM reported exactly that: certain segments throughout
+ *   the map, the same ones for every door, open whenever a door is open.
+ *
+ * From a stroke of 1.25 up, **none of 1,500 lines lost its wall**; rooms lost none at any width. The
+ * floor is 2 for margin, so a scene whose fog stroke is set thin cannot bring the fault back.
+ *
+ * **The cost, stated:** a band of fog W wide down every wall, and a door's cut W + 20 wide. Five
+ * mutations over the rule, five caught.
  */
-export const ACCEPTED_STROKE_WIDTH = 0;
+export const EMITTED_STROKE_FLOOR = 2;
+
+/** The stroke width to emit at, given the scene's fog stroke width — see `EMITTED_STROKE_FLOOR`. */
+export function emittedStrokeWidth(sceneStrokeWidth: number): number {
+  return Number.isFinite(sceneStrokeWidth) ? Math.max(sceneStrokeWidth, EMITTED_STROKE_FLOOR) : EMITTED_STROKE_FLOOR;
+}
 
 /**
  * The layer an emitted item lands on, and whether it is visible there.
