@@ -3814,8 +3814,8 @@ next section.
 
 ***Span door* is built and confirmed in a room** (2026-09-30): a click in a doorway walls it and makes
 the wall a door, in one act — §10's *Doors* has it under *Span door*, including that the room is not in
-`dev.log`. Its glyph was moved after the room, the door centred in front of the crossbar; that version
-has been seen only in the browser pane.
+`dev.log`. Its glyph was moved after the room, the door centred in front of the crossbar, and the user
+confirmed that version too.
 
 **Nothing is half-built. Doors are done and confirmed in a room** (2026-09-29). *Create door* went from
 the recorded plan to built in one session — the gesture, the drawing, the name and the glyph settled in
@@ -4456,7 +4456,8 @@ made is the user's report alone, not itemised.
   and in front of it** (user, after the room: the first version stood the door on the bar as its floor).
   The bar stops at the door's sides, since the glyphs are outlines and a bar drawn through would show in
   the door's hollow middle; the side walls sit a unit further out than Span's so the door clears the
-  vertex rings. Seen in the browser pane at 160px and at the strip's 18px beside both neighbours.
+  vertex rings. Seen in the browser pane at 160px and at the strip's 18px beside both neighbours, and
+  **confirmed by the user** (*"Glyph looks good"*, 2026-09-30).
 
 **Decided while building, for checking:**
 
