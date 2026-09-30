@@ -1,6 +1,7 @@
 /**
  * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, collapsing a small
- * region, dissolving a region, suppressing one, spanning an opening, and creating a door.
+ * region, dissolving a region, suppressing one, spanning an opening, spanning one with a door, and
+ * creating a door.
  *
  * **The first things in this project that change the GM's own work rather than a setting.** Every
  * control before them turns a number and re-derives; these change the graph, and it stays changed
@@ -20,7 +21,7 @@
  * ## All but two decide by looking
  *
  * Move takes a press only when a vertex is under it, Erase only when a wall is, Mend, Prune and Collapse
- * small regions only inside a ring, Dissolve only inside a region and Span only where it has a wall to place. So a drag anywhere
+ * small regions only inside a ring, Dissolve only inside a region and the two Spans only where they have a wall to place. So a drag anywhere
  * else still pans, and Ctrl still pans anywhere. **Draw and Suppress region take every press**: a wall
  * has to be able to start on empty map, and a mark can go anywhere — the case the shell's brush branch
  * already anticipated.
@@ -45,7 +46,7 @@ import { devLog } from "../devlog";
 import { describeError } from "../describeError";
 import { compactNodes, documentPoint, type WallGraph } from "../trace/wallGraph";
 import { markAt } from "../trace/suppression";
-import { applySpan, findSpan, type Span } from "../trace/span";
+import { applySpan, applySpanDoor, findSpan, type Span } from "../trace/span";
 import { nearestEdge, nearestNode, removeEdge, removeEdges, type EditResult } from "../trace/planarOps";
 import { connectedEdges } from "../trace/connected";
 import { chainClick, chainRun, chainRunOntoSegment } from "./chainGesture";
@@ -135,7 +136,15 @@ export type WallTool =
   | "dissolve"
   | "suppressRegion"
   | "span"
+  | "spanDoor"
   | "door";
+
+/**
+ * Whether the tool in hand searches for a span: *Span opening*, or *Span door*, which places the same
+ * wall and makes it a door. Everything about finding and previewing the wall is shared; only the
+ * release differs.
+ */
+const spans = (tool: WallTool): boolean => tool === "span" || tool === "spanDoor";
 
 /**
  * How close a press has to be to a vertex to grab it, to a wall to erase it, and to a vertex to
@@ -440,7 +449,7 @@ function scheduleSpan(point: MapPoint): void {
     spanFrame = 0;
     const latest = spanPoint;
     spanPoint = null;
-    if (!latest || tool !== "span") return;
+    if (!latest || !spans(tool)) return;
     const graph = editableGraph();
     spanTarget = graph ? spanAt(graph, latest) : null;
     setGrabTarget(spanTarget !== null);
@@ -455,9 +464,12 @@ function dropSpan(): void {
   spanFrame = 0;
 }
 
-/** The wall a click with Span would place, for the layer to draw before the click. */
-export function pendingSpan(): { readonly span: Span; readonly graph: WallGraph } | null {
-  return spanTarget;
+/**
+ * The wall a click with either Span would place, for the layer to draw before the click — and whether
+ * it would be a door, which is how the layer draws it.
+ */
+export function pendingSpan(): { readonly span: Span; readonly graph: WallGraph; readonly door: boolean } | null {
+  return spanTarget && { ...spanTarget, door: tool === "spanDoor" };
 }
 
 /** What a click with Suppress region would do where the pointer is, for the layer to show first. */
@@ -775,7 +787,7 @@ function start(point: MapPoint): boolean {
   }
 
   // Searched now rather than on the next frame: the press decides between spanning and panning.
-  if (tool === "span") {
+  if (spans(tool)) {
     spanTarget = spanAt(graph, point);
     invalidate();
     return spanTarget !== null;
@@ -1018,7 +1030,7 @@ function move(point: MapPoint): void {
     return;
   }
 
-  if (tool === "span") {
+  if (spans(tool)) {
     scheduleSpan(point);
     return;
   }
@@ -1183,6 +1195,29 @@ function end(): void {
     if (!target || dragged || target.graph !== graph) return;
     commit(applySpan(graph, target.span), "Spanned an opening.", "spanning an opening", graph);
     dropSpan();
+    return;
+  }
+
+  /*
+    Span door: Span opening's wall, made a door from end to end in the same edit — one write, one step
+    of undo (user, 2026-09-29). The same guards as Span's, and one more: a wall that did not come out
+    as one segment places nothing, since a door cannot cross a vertex. No span the search offers has
+    been seen to (`trace/span.ts`).
+  */
+  if (tool === "spanDoor") {
+    const target = spanTarget;
+    const dragged = travelled;
+    clearGesture();
+    invalidate();
+    if (!target || dragged || target.graph !== graph) return;
+    const placed = applySpanDoor(graph, target.span);
+    dropSpan();
+    if (!placed) {
+      say("Span door failed: wall would be split.", "bad");
+      devLog("warn", "workspace: a span door did not come out as one segment, so nothing was placed");
+      return;
+    }
+    commit(placed, "Spanned a door.", "spanning a door", graph);
     return;
   }
 
@@ -1404,7 +1439,7 @@ function hover(point: MapPoint | null): void {
     The wall a click would place, drawn before the click — searched once a frame, so the crosshair and
     the preview arrive together on the frame the search lands.
   */
-  if (tool === "span") {
+  if (spans(tool)) {
     scheduleSpan(point);
     return;
   }

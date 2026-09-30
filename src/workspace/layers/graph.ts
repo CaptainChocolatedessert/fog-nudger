@@ -364,20 +364,26 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
     a span always lands on a wall, and placing it shares a vertex there.
 
     Only against the graph it was found on, as the dissolve highlight is.
+
+    **Span door's is drawn as a door being made** — dashed in the door colour at a door's width, with
+    butt ends — rather than as a wall with a door on it, since the two dashed lines over each other would
+    read as neither. It is the same picture *Create door* draws for a door a click would make.
   */
   const spanning = pendingSpan();
   if (spanning !== null && spanning.graph === graph) {
     const { from, to } = spanning.span;
+    const width = spanning.door ? DOOR_WIDTH_PX : WALL_WIDTH_PX;
     context.save();
     context.setLineDash([6, 4]);
+    if (spanning.door) context.lineCap = "butt";
     context.beginPath();
     context.moveTo(x(from.at.x), y(from.at.y));
     context.lineTo(x(to.at.x), y(to.at.y));
     context.strokeStyle = WALL_CASING;
-    context.lineWidth = WALL_WIDTH_PX + 2;
+    context.lineWidth = width + 2;
     context.stroke();
-    context.strokeStyle = drawColour();
-    context.lineWidth = WALL_WIDTH_PX;
+    context.strokeStyle = spanning.door ? doorColour() : drawColour();
+    context.lineWidth = width;
     context.stroke();
     context.setLineDash([]);
     for (const end of [from, to]) {

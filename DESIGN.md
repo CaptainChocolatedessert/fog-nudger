@@ -76,7 +76,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **chain** | the GM-facing word for everything joined to one wall — the connected component through shared vertex ids, which *Erase chain* takes. It branches and can hold loops, so it is not a chain in the narrow sense, and on a real map it is usually every wall there is. |
 | **mark** | in this record and the code, a point in graph units the GM places with *Suppress region*. It belongs to no wall and survives a rebuild of the walls. **The GM sees it as a *cross***, since the text rules of 2026-09-29 gave *mark* on the surface to something drawn on the map image (§7a). |
 | **highlight** | the surface's word for any signal a tool draws on the map — a ring, a red preview, a dashed proposal. |
-| **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. |
+| **span** | a straight wall placed across an opening from a click: through the click, or near it when that is far shorter. *Span door* places the same wall and makes the whole of it a door. |
 | **collapse** | taking a small region out with *Collapse small regions*: its walls go, and a new vertex at the average of its **connections** — the outline vertices with a wall running elsewhere — is joined to each, so nothing outside it moves. **Not Straighten's *collapse guard***, which is about a closed run fitting to a point, the failure that guard prevents. |
 | **an action with an amount** | a control that applies an operation to the walls *in front of the GM* — *Straighten*, and only Straighten since *Prune the dead ends* became ringed on 2026-09-22. Not a setting: nothing is stored, and the handle reads as *how much more*. |
 | **the latch** | the graph pinned when a drawer opens, so an amount previews against a fixed base instead of against its own last result. Void the moment the document is replaced under it. |
@@ -2869,7 +2869,7 @@ cannot recur.
 | **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed, a collapse's star, and every ring a click is aimed at |
 | **Subtractive** | amber | your suppression, and the marks that suppress a region |
 | **Destructive** | red | **reserved** — erase target, the walls a dissolve or a collapse would take, a mark a click would remove, doomed spurs, a door a click would remove, nothing else |
-| **Doors** | green | doors on the walls, and one being dragged out, dashed. Half as wide again as a wall: under a red-green colour-vision simulation this green and the removal red both come out olive, so the width is what tells them apart (2026-09-29) |
+| **Doors** | green | doors on the walls, and one being dragged out or spanned, dashed. Half as wide again as a wall: under a red-green colour-vision simulation this green and the removal red both come out olive, so the width is what tells them apart (2026-09-29) |
 | **Rooms** | a generated cycle | not semantic |
 
 **Red earns its alarm value by being rare.** It did three jobs — default ink, emitted wall lines in
@@ -3223,7 +3223,7 @@ push and on a fresh add, since Owlbear keeps the first; the web page; most failu
 
 ## 8. Testing and diagnostic practice
 
-**1,220 tests across 86 files** (measured 2026-09-29, at the end of the doors session), all pure — everything that needs a DOM or a scene is not tested, which
+**1,225 tests across 86 files** (measured 2026-09-30, with *Span door*), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3812,6 +3812,12 @@ next section.
 
 ### Where to pick this up
 
+***Span door* is built and waiting for a room** (2026-09-30): a click in a doorway walls it and makes
+the wall a door, in one act — §10's *Doors* has it under *Span door*. **Look at it first**: the dashed
+green preview in a doorway, the click, the door it leaves opening at the table, one undo taking both
+back, and the glyph in the strip between *Span opening* and *Create door*, which the user asked to judge
+after the build rather than before.
+
 **Nothing is half-built. Doors are done and confirmed in a room** (2026-09-29). *Create door* went from
 the recorded plan to built in one session — the gesture, the drawing, the name and the glyph settled in
 chat, then four commits — and the first room found doors opening walls all over the map. That was
@@ -3847,10 +3853,10 @@ keeps the old fog.
 
 **Planned with the user, not built:**
 
-- **Three door features, noted while designing doors** (user, 2026-09-29), each in §10's *Doors* under
-  *Later*: a workspace tool for opening and closing doors, so an update can write one open; *Span
-  door*, which walls a doorway and makes it a door in one click; and reading door states back from
-  the scene where nothing has to be inferred.
+- **Two door features, noted while designing doors** (user, 2026-09-29), each in §10's *Doors* under
+  *Later*: a workspace tool for opening and closing doors, so an update can write one open; and
+  reading door states back from the scene where nothing has to be inferred. The third, *Span door*, is
+  built (2026-09-30).
 - **A warning for a close this large** (user, 2026-09-26):
   - **A persistent note while the walls are too detailed to write quickly**: a red dot and a short note
     beside the status line, live, so Collapse, Prune and Straighten visibly clear it. **No item count
@@ -3949,8 +3955,9 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**Everything is pushed** as of 2026-09-29, with the commit that writes this line: the doors, the stroke
-rule and the record, eight commits. The public-build check at the head of *Do this first* applies to it.
+**Everything up to the doors session is pushed** (2026-09-29): the doors, the stroke rule and the record,
+eight commits, and the public-build check at the head of *Do this first* applies to them. *Span door* is
+committed on 2026-09-30 and **not pushed** — `git rev-list --count origin/main..main` says how many.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
@@ -4268,7 +4275,7 @@ wall on the map; it does not describe a fixed two ink widths.
 
 ### Doors — built and confirmed in a room, 2026-09-29
 
-***Create door***, after *Span opening* in the Walls band. A door is a stretch of one wall segment that
+***Create door***, after *Span opening* and *Span door* in the Walls band. A door is a stretch of one wall segment that
 Dynamic Fog opens and closes at the table: made in the workspace, kept with the walls, and written on
 every update onto the shape or line carrying its wall, exactly as Dynamic Fog stores one (user,
 2026-09-26). Designed in chat and built the same day in four commits. **Confirmed in a room the same
@@ -4423,11 +4430,54 @@ from the GM's.
   4 over it, doors and all. The published build is past that since the push of 2026-09-29; any other old
   copy is not.
 
+#### Span door — built 2026-09-30, not yet in a room
+
+***Span door***, between *Span opening* and *Create door* in the Walls band: a click in an open doorway
+walls it and makes the wall a door, in one act (user, 2026-09-29). Built on the user's go-ahead with no
+plan or glyph check first — *"Go ahead and implement it, and I'll check it after."*
+
+- **Span opening's search, unchanged.** The same wall through or near the click, found once a frame on
+  hover and again on the press; the tools share every line of it and differ only at the release.
+- **`applySpanDoor` in `trace/span.ts`** places the span exactly as `applySpan` does, finds the segment it
+  became by its two ends' coordinates — quantised as the placing quantised them, since an edit never
+  reports which segment is new — and gives it a door from end to end, which is what *Create door* makes
+  of a click on bare wall. One edit, so one scene write and one step of undo.
+- **A wall that does not come out as one segment places nothing**, since a door cannot cross a vertex,
+  and says *Span door failed: wall would be split.* No span the search offers has done so: the door
+  sweep's 963 spans over 150 graphs each came out as one.
+- **The preview is a door being made**: dashed in the door colour at a door's width with butt ends,
+  where Span opening's is a dashed wall — the picture *Create door* draws for a door a click would make.
+  A wall and a door dashed over each other would have read as neither.
+- **The glyph** is Span's picture with a small door standing on the span — the new wall its floor, as
+  the line under *Create door*'s is — in place of the click dot, the side walls a unit further out so the
+  door clears the vertex rings. Seen in the browser pane at 160px and at the strip's 18px beside both
+  neighbours; not yet judged by the user.
+
+**Decided while building, for checking:**
+
+- **Words**, by the text rules' one-verb rule and Span opening's pattern: *Spanned a door.*, undo
+  *spanning a door*, and the hint *Click an opening to wall it straight across as a door.*
+- **Refuse rather than place the wall alone** when it would not come out as one segment — the promise
+  is both or neither.
+- **No handles and no door ends marked** while it is in hand, as for Span opening: nothing is grabbed.
+
+**Checked from a desk:** five new tests — a doorway between two jambs, a corridor whose walls both split,
+the doors already on a landed wall kept or cut by the split's own rule, the refusal, and a sweep checking
+every span's door against the span's own ends in graph units, with everything else exactly what Span
+opening would have placed. **Eight mutations, seven caught** — two only after a fixture: an unquantised
+door survived level spans, whose lengths are already float32, and the refusal needed a hand-built span
+across a wall. The survivor, matching the segment either way round, is kept deliberately. In the browser
+pane, outside Owlbear: the tool in the strip where it belongs, and no console errors.
+
+**What only a room can check:** the preview and the door it leaves, at the table with Dynamic Fog — a
+door made this way is the same record *Create door* writes on a whole segment, so the room of 2026-09-29
+is reasoned to cover it, not seen; and the glyph.
+
 #### Later (user, 2026-09-29)
 
 - **A tool for opening and closing doors in the workspace**, so an update can write one open. Toggling
   lives only there, never on a double-click in *Create door*.
-- ***Span door***: a click in an open doorway walls it and makes the wall a door, in one act.
+- ~~***Span door***~~ — built 2026-09-30, above.
 - **Reading door states back from the scene** where nothing has to be inferred — our own doors, known by
   their metadata, on items nothing has changed since the update that wrote them.
 - *Not now*: door **areas** not tied to walls, which could span a vertex.
@@ -6551,7 +6601,7 @@ closed outright.
 | `trace/probePoint.ts` | the one surviving diagnostic: luminance, ink or not, and which of the GM's layers decided it — **and deliberately not which region**; its header says why |
 | `trace/prunePieces.ts` | **what Prune rings**: the doomed runs grouped into pieces through the vertices that go — each a tree hanging off at most one vertex that stays — and taking them. A free click reuses `findPrunePieces` at the graph's own longest run, ceiling opened rather than a second function |
 | `trace/collapse.ts` | **collapsing small regions**: which regions a size qualifies — area inside the outline, holes included — the two checks that decide whether one is offered, the star, a grid of the walls, and *Collapse all* in rounds, taking only what was ringed; `collapseAt` answers the same per-region check for one point, size ignored |
-| `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph |
+| `trace/span.ts` | **spans**: the wall through or near a click — the exact through search, the near search's two windows, and a grid of the walls built once per graph — and `applySpanDoor`, the same wall placed with a door from end to end |
 | `trace/suppression.ts` | **suppression**: which regions the marks suppress, the traversal as emitted without them, the mark hit test, and the marks' stored codec |
 | `trace/fixtures.ts` | `maskFromRows`, the text-grid fixture builder every pipeline test uses; `randomInk`, straight runs of ink crossing and ending in the open, which the prune and dissolve sweeps derive from; and `randomWallGraph`, the generator whose shapes nest and touch — what the region tools' sweeps need |
 

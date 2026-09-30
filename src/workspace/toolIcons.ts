@@ -40,7 +40,8 @@
  * The rest draw the thing they do to the linework: a brush swiping ink away, a pen laying it down,
  * two heavy strokes of ink ringed where a gap parts them, two ends joined, one struck out, two loose
  * wall ends ringed where a mend would join them, a room with a slash through each of its walls, and
- * the same room crossed in the middle, and a wall across between two others with the click on it.
+ * the same room crossed in the middle, a wall across between two others with the click on it, and the
+ * same wall with a door standing on it.
  * **The two gap tools mirror each other** — ink running into the ring, walls ending in it.
  */
 
@@ -205,6 +206,17 @@ const ICONS: Readonly<Record<string, string>> = {
     point in the map rather than a vertex of the graph.
   */
   span: '<path d="M5 3v7M5 14v7M19 3v7M19 14v7" /><circle cx="5" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /><path d="M7 12h10" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />',
+  /*
+    **Span door**: Span's picture with a door standing in the middle of the span (user, 2026-09-30) —
+    the new wall is the door's floor, as the line under *Create door*'s is, and the door takes the place
+    of the click. Drawn without a glyph check, to be judged in the strip.
+
+    The side walls sit a unit further out than Span's, at 4 and 20, so the door has air between itself
+    and each vertex ring; at Span's 5 and 19 the ring and the door's frame all but touched. **The
+    cost:** the door is half the width of *Create door*'s, so its knob is the smallest mark in the band.
+  */
+  spanDoor:
+    '<path d="M4 3v7M4 14v7M20 3v7M20 14v7" /><circle cx="4" cy="12" r="1.8" /><circle cx="20" cy="12" r="1.8" /><path d="M6 12h12" /><rect x="9" y="3" width="6" height="9" rx="0.6" /><circle cx="12.7" cy="7.9" r="0.9" fill="currentColor" stroke="none" />',
   /*
     **Create door**: a plain door — a tall rectangle, a floor line and a solid knob (user, 2026-09-29,
     chosen from four drawn large and in the band at strip size, resting and armed).

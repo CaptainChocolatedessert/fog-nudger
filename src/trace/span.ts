@@ -1,8 +1,9 @@
 /**
  * Span: the shortest straight wall across an opening, from a click.
  *
- * A GM who wants a wall in a doorway — Dynamic Fog's doors cannot be made from here — clicks in the
- * opening, and the tool finds the wall (user, 2026-09-16).
+ * A GM who wants a wall in a doorway clicks in the opening, and the tool finds the wall (user,
+ * 2026-09-16). *Span door* finds the same wall and makes the whole of it a door in the same act
+ * (`applySpanDoor`, 2026-09-30).
  *
  * ## Two candidates, and a preference for the click
  *
@@ -74,9 +75,10 @@
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
+import { normaliseDoors, segmentLength, withDoors } from "./doors";
 import { segmentMeeting } from "./planarGraph";
 import { insertEdge, splitEdgesAt, type EditResult } from "./planarOps";
-import type { WallGraph } from "./wallGraph";
+import { documentPoint, type WallGraph } from "./wallGraph";
 
 /** How much shorter the near wall has to be to be taken instead of the one through the click. */
 export const NEAR_SHORTER = 2 / 3;
@@ -148,6 +150,49 @@ export function applySpan(graph: WallGraph, span: Span): EditResult {
     graph: added.graph,
     splits: split.splits + added.splits,
     overlaps: added.overlaps,
+  };
+}
+
+/**
+ * Place a span and make the whole of it a door — *Span door*'s one act (user, 2026-09-29: *"a click in
+ * an open doorway walls it and makes the wall a door, in one act"*).
+ *
+ * The span goes in exactly as `applySpan` puts it, and the segment it became gets a door from end to
+ * end, which is what *Create door* makes of a click on bare wall. One edit, so one scene write and one
+ * step of undo.
+ *
+ * **The segment is found by its two ends' coordinates**, quantised as the placing quantised them: an
+ * edit reports only the new graph, never which segment is new. That is the identity rule's exception it
+ * always is — not whether two walls *meet*, but whether a segment is *there* — and it is exact, since
+ * `applySpan` adds the wall by those same coordinates.
+ *
+ * **`null` when the span did not come out as one segment**, and nothing is placed: the promise is a
+ * wall and a door together, and a door cannot cross a vertex. Both sweeps in `span.test.ts` assert it
+ * always does come out as one — the door sweep's 963 spans over 150 graphs, every one given its door —
+ * so this is the guard for a case never yet seen, not a path anything reaches.
+ */
+export function applySpanDoor(graph: WallGraph, span: Span): EditResult | null {
+  const placed = applySpan(graph, span);
+  const from = documentPoint(span.from.at.x, span.from.at.y);
+  const to = documentPoint(span.to.at.x, span.to.at.y);
+  const nodes = placed.graph.nodes;
+  const same = (p: Vector2, q: Vector2): boolean => p.x === q.x && p.y === q.y;
+  const index = placed.graph.edges.findIndex((edge) => {
+    const a = nodes[edge.a]!;
+    const b = nodes[edge.b]!;
+    return (same(a, from) && same(b, to)) || (same(a, to) && same(b, from));
+  });
+  if (index < 0) return null;
+  // A new segment, so it has no doors of its own to merge with: a span never lies along a wall.
+  const segment = placed.graph.edges[index]!;
+  const length = segmentLength(nodes[segment.a]!, nodes[segment.b]!);
+  const doors = normaliseDoors([{ start: 0, end: length }]);
+  return {
+    ...placed,
+    graph: {
+      nodes,
+      edges: placed.graph.edges.map((edge, at) => (at === index ? withDoors(edge.a, edge.b, doors) : edge)),
+    },
   };
 }
 

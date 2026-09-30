@@ -427,11 +427,11 @@ export const TOOLS: readonly ToolChoice[] = [
     hint: "Click a region to suppress it. Click a cross to remove it. <b>Ctrl</b> to pan.",
   },
   /*
-    A straight wall across an opening from a click (user, 2026-09-16) — the doorway tool, since Dynamic
-    Fog's doors cannot be made from here. `edit`: it takes a press only where it has a wall to place,
-    and anywhere else the press pans. The hint said the wall is shown first, because what a click does
-    here is a search the GM cannot predict — through the click, or snapped to a doorway's ends beside
-    it; the preview on the map says so now, the text rules of 2026-09-29 having cut the sentence.
+    A straight wall across an opening from a click (user, 2026-09-16) — the doorway tool, written when
+    Dynamic Fog's doors could not be made from here. `edit`: it takes a press only where it has a wall to
+    place, and anywhere else the press pans. The hint said the wall is shown first, because what a click
+    does here is a search the GM cannot predict — through the click, or snapped to a doorway's ends
+    beside it; the preview on the map says so now, the text rules of 2026-09-29 having cut the sentence.
   */
   {
     id: "span",
@@ -441,11 +441,23 @@ export const TOOLS: readonly ToolChoice[] = [
     hint: "Click an opening to wall it straight across.",
   },
   /*
+    **Span door** (user, 2026-09-29, built 2026-09-30): Span opening's wall, made a door from end to end
+    in the same click — one write and one step of undo. Between the two tools it joins, since it is
+    both. `edit`, as Span is: it takes a press only where there is a wall to place.
+  */
+  {
+    id: "spanDoor",
+    label: "Span door",
+    band: "walls",
+    drag: "edit",
+    hint: "Click an opening to wall it straight across as a door.",
+  },
+  /*
     **Create door** (user, 2026-09-29): a door is a stretch of one wall segment that Dynamic Fog opens
     and closes at the table, written onto the shape or line carrying its wall on every update. After
-    *Span opening*, the other doorway tool. `edit`: it takes a press on a door's end, a door or a wall,
-    and anywhere else the press pans. The hint carries the four gestures, since none can be found by
-    looking; `workspace/doorGesture.ts` has what each does.
+    the two Span tools, the other doorway tools. `edit`: it takes a press on a door's end, a door or a
+    wall, and anywhere else the press pans. The hint carries the four gestures, since none can be found
+    by looking; `workspace/doorGesture.ts` has what each does.
   */
   {
     id: "door",

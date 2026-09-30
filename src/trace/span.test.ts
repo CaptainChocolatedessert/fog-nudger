@@ -13,15 +13,24 @@
  * **Not mutated, because no test can see them and none should**: the early return above, and the
  * grid walk remembering a hit across an empty cell. Both decide how soon a search stops, never what
  * it finds.
+ *
+ * **Span door's placing, `applySpanDoor`: eight mutations, seven caught** (2026-09-30). Two of the seven
+ * only after the first run: the door left unquantised passed fixtures whose spans were level, where a
+ * length is already a float32, so the sweep now asserts it on slanted ones too; and the guard for a span
+ * that does not come out as one segment, which no span `findSpan` offers reaches, has a hand-built span
+ * straight across a wall. **The survivor is kept deliberately**: matching the segment either way round
+ * is equivalent while `insertEdge` adds a wall in the order its points are given, which is a
+ * cross-module fact the match does not lean on.
  */
 
 import { describe, expect, it } from "vitest";
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
+import { doorCount, doorEnds } from "./doors";
 import { randomWallGraph, seededRandom } from "./fixtures";
 import { findCrossings } from "./planarGraph";
-import { applySpan, findSpan, NEAR_SHORTER, type Span } from "./span";
+import { applySpan, applySpanDoor, findSpan, NEAR_SHORTER, type Span } from "./span";
 import { buildWallFaces } from "./wallFaces";
 import { documentPoint, nodeDegrees, type WallGraph } from "./wallGraph";
 
@@ -303,6 +312,81 @@ describe("placing a span", () => {
   });
 });
 
+/** The graph with every door taken off, so what a span door placed can be compared with a span. */
+const withoutDoors = (graph: WallGraph): WallGraph => ({
+  nodes: graph.nodes,
+  edges: graph.edges.map((edge) => ({ a: edge.a, b: edge.b })),
+});
+
+describe("placing a span as a door", () => {
+  it("walls a doorway between its jambs and makes the whole wall a door", () => {
+    const span = findSpan(DOORWAY, at(0.5, 0.503), OPTIONS)!;
+    const placed = applySpanDoor(DOORWAY, span)!;
+    expect(withoutDoors(placed.graph)).toEqual(applySpan(DOORWAY, span).graph);
+    expect(placed.splits).toBe(0);
+    expect(doorCount(placed.graph)).toBe(1);
+    const index = placed.graph.edges.findIndex((edge) => edge.doors);
+    const edge = placed.graph.edges[index]!;
+    expect([edge.a, edge.b].sort()).toEqual([6, 7]);
+    // Exactly the segment's length — between the two float32 jambs, not 0.2 — quantised as a stored
+    // door is.
+    expect(edge.doors).toEqual([{ start: 0, end: Math.fround(Math.fround(0.6) - Math.fround(0.4)) }]);
+  });
+
+  it("puts the door on the wall across a corridor, where both ends split a wall", () => {
+    const span = findSpan(CORRIDOR, at(0.37, 0.42), OPTIONS)!;
+    const placed = applySpanDoor(CORRIDOR, span)!;
+    expect(placed.splits).toBe(2);
+    expect(withoutDoors(placed.graph)).toEqual(applySpan(CORRIDOR, span).graph);
+    const doored = placed.graph.edges.filter((edge) => edge.doors);
+    expect(doored).toHaveLength(1);
+    const [p, q] = doorEnds(placed.graph, doored[0]!, doored[0]!.doors![0]!);
+    expect([p.y, q.y].sort()).toEqual([Math.fround(0.3), Math.fround(0.5)]);
+    expect(p.x).toBeCloseTo(0.37, 6);
+    expect(q.x).toBeCloseTo(0.37, 6);
+  });
+
+  it("keeps the doors already on a wall it lands on, by the split's own rule", () => {
+    // The top wall carries two doors: one the landing at x 0.37 falls strictly inside, which the split
+    // takes, and one further along that it leaves on the right-hand piece.
+    const doored: WallGraph = {
+      nodes: CORRIDOR.nodes,
+      edges: [
+        { a: 0, b: 1, doors: [{ start: Math.fround(0.2), end: Math.fround(0.4) }, { start: Math.fround(0.5), end: Math.fround(0.7) }] },
+        CORRIDOR.edges[1]!,
+      ],
+    };
+    const span = findSpan(doored, at(0.37, 0.42), OPTIONS)!;
+    const placed = applySpanDoor(doored, span)!;
+    expect(doorCount(applySpan(doored, span).graph)).toBe(1);
+    expect(doorCount(placed.graph)).toBe(2);
+  });
+
+  it("places nothing when the wall would not come out as one segment", () => {
+    // Never from `findSpan`, whose walls end at the first wall met: a span built by hand from (0.1, 0.3)
+    // to (0.9, 0.5), straight across a wall standing at x 0.5 — which placing cuts the span at, and a
+    // door cannot cross a vertex.
+    const crossed = graphOf(
+      [
+        [0.1, 0.3],
+        [0.9, 0.5],
+        [0.5, 0.2],
+        [0.5, 0.6],
+      ],
+      [[2, 3]],
+    );
+    const span: Span = {
+      from: { kind: "vertex", node: 0, at: crossed.nodes[0]! },
+      to: { kind: "vertex", node: 1, at: crossed.nodes[1]! },
+      length: 0.82,
+      through: true,
+    };
+    // The control: placed as a plain span, the standing wall is cut where the two cross.
+    expect(applySpan(crossed, span).splits).toBe(1);
+    expect(applySpanDoor(crossed, span)).toBeNull();
+  });
+});
+
 /**
  * The shortest chord through a point by brute force: a ray cast of its own at many angles.
  *
@@ -440,5 +524,62 @@ describe("spans over generated graphs", () => {
     expect(extraSplits, "spans ending on two walls at once").toBeLessThanOrEqual(2);
     expect(through, "spans through the click").toBeGreaterThan(0);
     expect(near, "spans near the click").toBeGreaterThan(0);
+  });
+
+  /*
+    Span door against geometry alone: the door's two ends are measured against the span's own ends in
+    graph units, never by the quantised coordinate match the placing uses to find its segment — and
+    everything but that one door has to be exactly what Span opening would have placed.
+  */
+  it("makes every span a door from end to end, and changes nothing else a span would not", () => {
+    const reached = { through: 0, near: 0, vertexEnds: 0, segmentEnds: 0 };
+    let spans = 0;
+    for (let seed = 1; seed <= 150; seed++) {
+      const graph = randomWallGraph(seededRandom(seed), 3 + (seed % 9));
+      if (graph.edges.length === 0 || findCrossings(graph).length > 0) continue;
+      if (!buildWallFaces(graph).eulerHolds) continue;
+      const next = seededRandom(seed * 7919);
+      for (let click = 0; click < 12; click++) {
+        const vertex = graph.nodes[graph.edges[Math.floor(next() * graph.edges.length)]!.a]!;
+        const point =
+          click % 2 === 0
+            ? at(next() * 1.1 - 0.05, next() * 1.1 - 0.05)
+            : at(vertex.x + (next() - 0.5) * 4 * OPTIONS.near, vertex.y + (next() - 0.5) * 4 * OPTIONS.near);
+        const span = findSpan(graph, point, OPTIONS);
+        if (!span) continue;
+        const where = `seed ${seed}, click ${point.x},${point.y}`;
+        spans += 1;
+        reached[span.through ? "through" : "near"] += 1;
+        for (const end of [span.from, span.to]) reached[end.kind === "vertex" ? "vertexEnds" : "segmentEnds"] += 1;
+
+        const plain = applySpan(graph, span);
+        const doored = applySpanDoor(graph, span);
+        expect(doored, `${where}: no door placed`).not.toBeNull();
+        expect(withoutDoors(doored!.graph), where).toEqual(withoutDoors(plain.graph));
+        expect(doored!.splits, where).toBe(plain.splits);
+        expect(doorCount(doored!.graph), where).toBe(doorCount(plain.graph) + 1);
+
+        const changed = doored!.graph.edges.flatMap((edge, index) =>
+          JSON.stringify(edge.doors ?? []) === JSON.stringify(plain.graph.edges[index]!.doors ?? []) ? [] : [index],
+        );
+        expect(changed, where).toHaveLength(1);
+        const edge = doored!.graph.edges[changed[0]!]!;
+        expect(edge.doors, where).toHaveLength(1);
+        // Quantised as every stored door is — which only a slanted span can tell, since a level one's
+        // length is already a float32.
+        const door = edge.doors![0]!;
+        expect(door.start, where).toBe(0);
+        expect(Math.fround(door.end), `${where}: door not quantised`).toBe(door.end);
+        const [p, q] = doorEnds(doored!.graph, edge, edge.doors![0]!);
+        const near = (a: Vector2, b: Vector2) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
+        const matches =
+          (near(p, span.from.at) && near(q, span.to.at)) || (near(p, span.to.at) && near(q, span.from.at));
+        expect(matches, `${where}: the door is not the span`).toBe(true);
+      }
+    }
+    // 963 spans on 2026-09-30: 861 through the click and 102 near it, 303 ends on a vertex and 1,623
+    // partway along a wall. Every one came out as one segment and took its door.
+    expect(spans).toBeGreaterThan(900);
+    for (const [kind, count] of Object.entries(reached)) expect(count, kind).toBeGreaterThan(0);
   });
 });
