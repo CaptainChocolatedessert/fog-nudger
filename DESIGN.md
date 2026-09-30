@@ -3812,11 +3812,10 @@ next section.
 
 ### Where to pick this up
 
-***Span door* is built and waiting for a room** (2026-09-30): a click in a doorway walls it and makes
-the wall a door, in one act — §10's *Doors* has it under *Span door*. **Look at it first**: the dashed
-green preview in a doorway, the click, the door it leaves opening at the table, one undo taking both
-back, and the glyph in the strip between *Span opening* and *Create door*, which the user asked to judge
-after the build rather than before.
+***Span door* is built and confirmed in a room** (2026-09-30): a click in a doorway walls it and makes
+the wall a door, in one act — §10's *Doors* has it under *Span door*, including that the room is not in
+`dev.log`. Its glyph was moved after the room, the door centred in front of the crossbar; that version
+has been seen only in the browser pane.
 
 **Nothing is half-built. Doors are done and confirmed in a room** (2026-09-29). *Create door* went from
 the recorded plan to built in one session — the gesture, the drawing, the name and the glyph settled in
@@ -4430,11 +4429,16 @@ from the GM's.
   4 over it, doors and all. The published build is past that since the push of 2026-09-29; any other old
   copy is not.
 
-#### Span door — built 2026-09-30, not yet in a room
+#### Span door — built and confirmed in a room, 2026-09-30
 
 ***Span door***, between *Span opening* and *Create door* in the Walls band: a click in an open doorway
 walls it and makes the wall a door, in one act (user, 2026-09-29). Built on the user's go-ahead with no
 plan or glyph check first — *"Go ahead and implement it, and I'll check it after."*
+
+**Confirmed in a room the same day** (user: *"That works nicely"*). **Not in `dev.log`**: the log ends at
+07:37 that morning with a workspace opening on *Lair of the Lamb* and no wall edit after it, and neither
+the dev server nor the log receiver was running by the evening — so which of the room checks below were
+made is the user's report alone, not itemised.
 
 - **Span opening's search, unchanged.** The same wall through or near the click, found once a frame on
   hover and again on the press; the tools share every line of it and differ only at the release.
@@ -4448,10 +4452,11 @@ plan or glyph check first — *"Go ahead and implement it, and I'll check it aft
 - **The preview is a door being made**: dashed in the door colour at a door's width with butt ends,
   where Span opening's is a dashed wall — the picture *Create door* draws for a door a click would make.
   A wall and a door dashed over each other would have read as neither.
-- **The glyph** is Span's picture with a small door standing on the span — the new wall its floor, as
-  the line under *Create door*'s is — in place of the click dot, the side walls a unit further out so the
-  door clears the vertex rings. Seen in the browser pane at 160px and at the strip's 18px beside both
-  neighbours; not yet judged by the user.
+- **The glyph** is Span's picture with a small door in place of the click dot, **centred on the crossbar
+  and in front of it** (user, after the room: the first version stood the door on the bar as its floor).
+  The bar stops at the door's sides, since the glyphs are outlines and a bar drawn through would show in
+  the door's hollow middle; the side walls sit a unit further out than Span's so the door clears the
+  vertex rings. Seen in the browser pane at 160px and at the strip's 18px beside both neighbours.
 
 **Decided while building, for checking:**
 
@@ -4469,9 +4474,9 @@ door survived level spans, whose lengths are already float32, and the refusal ne
 across a wall. The survivor, matching the segment either way round, is kept deliberately. In the browser
 pane, outside Owlbear: the tool in the strip where it belongs, and no console errors.
 
-**What only a room can check:** the preview and the door it leaves, at the table with Dynamic Fog — a
-door made this way is the same record *Create door* writes on a whole segment, so the room of 2026-09-29
-is reasoned to cover it, not seen; and the glyph.
+**What the room was asked to check:** the preview and the door it leaves, at the table with Dynamic
+Fog — a door made this way is the same record *Create door* writes on a whole segment — one undo taking
+back both, and the glyph, which it then moved.
 
 #### Later (user, 2026-09-29)
 
