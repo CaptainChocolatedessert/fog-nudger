@@ -3223,7 +3223,7 @@ push and on a fresh add, since Owlbear keeps the first; the web page; most failu
 
 ## 8. Testing and diagnostic practice
 
-**1,219 tests across 86 files** (measured 2026-09-29, after doors), all pure — everything that needs a DOM or a scene is not tested, which
+**1,220 tests across 86 files** (measured 2026-09-29, at the end of the doors session), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3398,6 +3398,16 @@ invisible. It costs almost nothing to keep.
   algorithm's name is not an explanation.
 - **8-connectivity means single-pixel junctions barely exist.** Every pixel beside a junction is
   itself degree 3+, so a tee traces to eight chains, not three.
+- **Measure another program's behaviour with its own code, every step of it** (2026-09-29). Three
+  explanations of a Dynamic Fog fault were offered from reading its source, each confident, each wrong,
+  and the room's corrections — *"not all segments"*, then *"throughout the map"* — ruled out two of them.
+  Running its wall steps against its own CanvasKit and simplify-js in the browser pane settled it; **the
+  first run left out one step, its simplification, and found nothing**, because that step was the
+  fault. A probe that skips a step of what it copies is evidence about the probe.
+- **An oracle in the consumer's own terms finds what one in ours cannot** (2026-09-29). The door records
+  were checked by walking the written path commands the way Dynamic Fog measures them, rather than by
+  recomputing from the graph — and that is what found a float32 door end rounding a hair past the vertex
+  it reached, which would have carried a door into the next side.
 
 ### Search the whole history of a thing, not the window you suspect
 
@@ -3802,19 +3812,23 @@ next section.
 
 ### Where to pick this up
 
-**Doors are built and wait for a room** (2026-09-29). *Create door* went from the recorded plan to built
-in one session: the gesture, the drawing, the name and the glyph were settled in chat, then four
-commits — doors on the graph, the gesture rules, Dynamic Fog's records on the items an update writes,
-and the tool. *Doors* below has all of it, what was decided while building, and what only a room can
-check. Earlier the same day the text rules were applied and their live review finished (§7a).
+**Nothing is half-built. Doors are done and confirmed in a room** (2026-09-29). *Create door* went from
+the recorded plan to built in one session — the gesture, the drawing, the name and the glyph settled in
+chat, then four commits — and the first room found doors opening walls all over the map. That was
+measured by running Dynamic Fog's own wall code, and fixed the same evening by giving every item we
+write the scene's fog stroke width, never under 2, which also makes our items visible to a GM in
+Owlbear. The second room confirmed the lot (user: *"All tests you asked for passed and doors behave
+properly now"*). §10's *Doors* has all of it. Earlier the same day the text rules were applied and
+their live review finished (§7a).
 
 **Do this first:**
 
-1. **Doors in a room, again** — the first room found doors opening walls all over the map, measured and
-   fixed the same day by giving our items the scene's fog stroke width (*Doors*, *The first room*). Update
-   the scene, open a door, and check that walls elsewhere still block; then the four checks under *What
-   only a room can check*, the table one first. Read `dev.log`'s update line for the doors written before
-   recording the result.
+1. **Check the published build**, which the push of 2026-09-29 deploys — doors, the stroke rule and the
+   ink worker together. Take the ink worker's path out of the deployed bundle, fetch it, and run an ink
+   job from it in the browser pane on the `github.io` origin, the way the derive's was checked; Firefox
+   inside Owlbear's iframe on that origin stays reasoned rather than seen, for the reason *The trace
+   worker* gives. And a scene with doors in it should now open in the published build, which refused
+   version 5 walls until this push — reasoned, since nobody has opened one there.
 2. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
    stopped by the user after 312 of 479 shapes (`dev.log`). Every update deletes ours before writing,
    so one complete update replaces it.
@@ -3833,6 +3847,10 @@ keeps the old fog.
 
 **Planned with the user, not built:**
 
+- **Three door features, noted while designing doors** (user, 2026-09-29), each in §10's *Doors* under
+  *Later*: a workspace tool for opening and closing doors, so an update can write one open; *Span
+  door*, which walls a doorway and makes it a door in one click; and reading door states back from
+  the scene where nothing has to be inferred.
 - **A warning for a close this large** (user, 2026-09-26):
   - **A persistent note while the walls are too detailed to write quickly**: a red dot and a short note
     beside the status line, live, so Collapse, Prune and Straighten visibly clear it. **No item count
@@ -3896,6 +3914,12 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
   drops coincident segments from fitting. What *fix* means — merge the pair, refuse the edit, or
   something else — is the design question. Until then the check is a log line only, off the screen by
   the text rules.
+
+  **Straighten at a large amount produces it too**, seen in `dev.log` on 2026-09-29: on *Goblin Castle*
+  a Straighten at 9.15e-2 graph units took 93 points out and left Euler failing — outward cycles 26
+  against 25 pieces of linework — through every edit after it and into the update at close. **Reasoned,
+  not measured**: two runs between the same pair of junctions each straighten to the same chord, which
+  is a doubled wall. Nothing looked wrong in the room.
 - **Never start a write that will have to skip a shape** (user, in the text pass: *"We should never do
   a write that requires skipping, if it can be predicted."*). *Skipped N over the cap* reports rooms
   still over Owlbear's 8,192-command cap after the escalation ladder, which the derive knows before any
@@ -3911,11 +3935,6 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
   (`GridType` in the SDK), and nothing here has been checked on the last four. It matters most to the
   parked unit for the Walls tools (§7a), where grid squares are one candidate.
 
-**When the public build is next pushed**, check the ink job the way the derive's was checked: take the
-worker's path out of the deployed bundle, fetch it, and run an ink job from it in the browser pane on
-the `github.io` origin. Firefox inside Owlbear's iframe on that origin stays reasoned rather than seen,
-for the reason *The trace worker* gives.
-
 **Held, with the reason:**
 
 - **Orphaned data when the map goes** (§10) — not designed, and it has a hazard: *the map has gone* and
@@ -3930,10 +3949,8 @@ for the reason *The trace worker* gives.
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**Not pushed: the doors, seven commits** (2026-09-29) with the one that writes this line —
-`git rev-list --count origin/main..main` said six just before it. Push once a room has confirmed them — and
-note that until then the published build refuses the version 5 walls the dev build saves (*Doors*,
-costs). The public-build check above still applies to the push after.
+**Everything is pushed** as of 2026-09-29, with the commit that writes this line: the doors, the stroke
+rule and the record, eight commits. The public-build check at the head of *Do this first* applies to it.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
@@ -4249,14 +4266,14 @@ The record called the missing prune a regression for a day — *"the trace prune
 was never pruned unless the GM had set a limit. That argument was about a handle reaching the longest
 wall on the map; it does not describe a fixed two ink widths.
 
-### Doors — built 2026-09-29, not yet in a room
+### Doors — built and confirmed in a room, 2026-09-29
 
 ***Create door***, after *Span opening* in the Walls band. A door is a stretch of one wall segment that
 Dynamic Fog opens and closes at the table: made in the workspace, kept with the walls, and written on
 every update onto the shape or line carrying its wall, exactly as Dynamic Fog stores one (user,
-2026-09-26). Designed in chat and built the same day in four commits. **Nothing of it has been in a
-room**, and the whole premise — that Dynamic Fog opens a record we wrote — is read from its source and
-never run.
+2026-09-26). Designed in chat and built the same day in four commits. **Confirmed in a room the same
+evening** (user: *"All tests you asked for passed and doors behave properly now"*), after the first room
+found doors opening walls across the map and the fix below.
 
 #### What Dynamic Fog does with a door — read from its source
 
@@ -4341,8 +4358,9 @@ Just a few"*, then *"throughout the map"* — and a measurement settled it.
 
 **Fixed the same day** (user: non-zero widths wanted anyway, so a GM can see our items in Owlbear): shapes
 and lines carry the scene's fog stroke width, never under 2 — margin over the 1.25 measured. Five
-mutations over the rule, five caught. **The cost is §2's band**, now paid on every wall. **Not yet
-confirmed in a room.**
+mutations over the rule, five caught. **The cost is §2's band**, now paid on every wall. **Confirmed in
+a room the same evening**: with a door open, walls elsewhere hold. The update line in `dev.log` now
+names the stroke it wrote and the scene's.
 
 #### Decided while building, for checking
 
@@ -4379,14 +4397,16 @@ confirmed in a room.**
 - **In the browser pane**, outside Owlbear: the workspace loads with *Create door* in the strip and no
   console errors — all a page outside a room can show.
 
-#### What only a room can check
+#### What a room checked — all passed, 2026-09-29
 
-1. **How the tool feels** — the reach, the pop at a vertex, ends against sliding, the hint.
-2. **A door opening at the table** with Dynamic Fog, from a GM and a player client: on a wall two rooms
-   share, on a free-standing wall, on a hole's ring, and on a ring's closing side. `dev.log`'s update line
-   now counts the doors written.
-3. **A door through Move and Straighten**, keeping its place.
-4. **The cover** rising for a door alone, and the review drawing doors amber.
+The user reported every check asked for as passed, after the stroke fix. **Asked for**: walls elsewhere
+holding while a door is open; a door opening at the table with Dynamic Fog on a wall two rooms share, on
+a free-standing wall and on a ring's closing side; doors keeping their place through Move and
+Straighten; the cover rising for a door alone and the review drawing doors amber; and how the tool
+feels. **What `dev.log` shows** of it: two updates after the fix, on *Goblin Castle*, writing 5 doors on
+4 rooms and 131 lines, then 10 doors on 4 rooms and 41 lines after a Straighten and a prune.
+**Not asked and not seen**: a door on a hole's ring, and a player client's view reported separately
+from the GM's.
 
 #### Costs, stated
 
@@ -4399,8 +4419,9 @@ confirmed in a room.**
 - **A shared wall's door lives on one room's item**: deleting that item by hand in the scene takes the
   door until the next update.
 - **A door made at the table is lost** at the next update, like every in-scene edit to our items.
-- **The published build refuses version 5.** Until it is pushed, a scene whose walls the dev build has
-  saved reads as unreadable there — and an edit made there would write version 4 over them, doors and all.
+- **A build older than version 5 refuses a version 5 graph**, and an edit made in one would write version
+  4 over it, doors and all. The published build is past that since the push of 2026-09-29; any other old
+  copy is not.
 
 #### Later (user, 2026-09-29)
 

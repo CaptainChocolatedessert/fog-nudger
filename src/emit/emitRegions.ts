@@ -356,7 +356,7 @@ export async function pushToFog(
   devLog(
     "info",
     `emit: pushing ${shapes.length} shapes (${totalCommands(shapes)} commands) in ` +
-      `${batches.length} batches, run ${runId}`,
+      `${batches.length} batches at a stroke of ${stroke} (the scene's is ${fogStroke}), run ${runId}`,
   );
 
   let written = 0;
