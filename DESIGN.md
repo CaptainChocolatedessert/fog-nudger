@@ -3317,6 +3317,12 @@ invisible. It costs almost nothing to keep.
   is a green light about nothing. **Count what it exercised and assert the count**: the replacement
   generator hangs small shapes off existing vertices and asserts that walls were kept, and kept from
   an outer cycle, before it asserts anything else.
+
+  **A sweep extended with a new dimension has to be shown to reach that too** (2026-09-30). The door
+  sweep gained a state for every door and an oracle that settles merges by *closed wins* — and passed,
+  while merging an open door with a closed one only seven times in all its random edits, because its
+  generator was built to reach the old cases. A sweep of its own, squeezing the two together on purpose,
+  reached it 364 times in 400. **Lowering the reach floor would have passed on seven.**
 - **A fixture that is easy to read can be too symmetric to fail.** The mend tool's first two landing
   fixtures — a horizontal wall, then a slanted one picked by hand — both attached with or without the
   step they were written for. A tangent test on a horizontal run cannot detect a search being
@@ -3816,35 +3822,25 @@ next section.
 
 ### Where to pick this up
 
-***Toggle door* is built and waiting for a room** (2026-09-30): a click on a door opens or closes it, the
-next update writes it that way, and every door now wears a marker saying which. §10's *Doors* has it
-under *Toggle door*. **Look at it first**: a door toggled both ways and undone; the marker on every door,
-shrinking with a far zoom; the yellow rim on hover; and an update with a door open, which should open at
-the table — the `emit:` line in `dev.log` counts the open doors. Start the dev server and the log receiver
-from a shell, so the room is in the log this time.
+**Nothing is half-built. The door family is complete and confirmed in rooms** (2026-09-29 and -30):
+*Create door*; *Span door*, where a click in a doorway walls it and makes the wall a door; and *Toggle
+door*, which opens or closes a door so the next update writes it that way, with a marker on every door
+saying which. §10's *Doors* has all three. **The *Toggle door* room is in `dev.log`** (2026-10-01,
+00:31–00:34 UTC, *Lair of the Lamb*): toggles stored as edits that left the graph's size unchanged, a
+close with 13 doors and none open, then a reopening that read the version 6 graph back and closed with
+one open (user: *"All worked correctly"*). The *Span door* room is not in the log.
 
-***Span door* is built and confirmed in a room** (2026-09-30): a click in a doorway walls it and makes
-the wall a door, in one act — §10's *Doors* has it under *Span door*, including that the room is not in
-`dev.log`. Its glyph was moved after the room, the door centred in front of the crossbar, and the user
-confirmed that version too.
-
-**Nothing is half-built. Doors are done and confirmed in a room** (2026-09-29). *Create door* went from
-the recorded plan to built in one session — the gesture, the drawing, the name and the glyph settled in
-chat, then four commits — and the first room found doors opening walls all over the map. That was
-measured by running Dynamic Fog's own wall code, and fixed the same evening by giving every item we
-write the scene's fog stroke width, never under 2, which also makes our items visible to a GM in
-Owlbear. The second room confirmed the lot (user: *"All tests you asked for passed and doors behave
-properly now"*). §10's *Doors* has all of it. Earlier the same day the text rules were applied and
-their live review finished (§7a).
+**All of it is pushed** (2026-09-30), with the commit that writes this line. Storage is **version 6**.
 
 **Do this first:**
 
-1. **Check the published build**, which the push of 2026-09-29 deploys — doors, the stroke rule and the
-   ink worker together. Take the ink worker's path out of the deployed bundle, fetch it, and run an ink
-   job from it in the browser pane on the `github.io` origin, the way the derive's was checked; Firefox
-   inside Owlbear's iframe on that origin stays reasoned rather than seen, for the reason *The trace
-   worker* gives. And a scene with doors in it should now open in the published build, which refused
-   version 5 walls until this push — reasoned, since nobody has opened one there.
+1. **Check the published build**, which the pushes of 2026-09-29 and -30 deploy — doors, the stroke rule,
+   the ink worker, the two new door tools and version 6 storage together. Take the ink worker's path out
+   of the deployed bundle, fetch it, and run an ink job from it in the browser pane on the `github.io`
+   origin, the way the derive's was checked; Firefox inside Owlbear's iframe on that origin stays
+   reasoned rather than seen, for the reason *The trace worker* gives. And open a scene edited in the
+   dev build since 2026-09-30 in the published one: it holds a version 6 graph, which only this push lets
+   the published build read — reasoned, since nobody has opened one there.
 2. **Put the Grottoes scene right.** It holds a partial set again: the close of 2026-09-29 at 17:02 was
    stopped by the user after 312 of 479 shapes (`dev.log`). Every update deletes ours before writing,
    so one complete update replaces it.
@@ -3863,10 +3859,10 @@ keeps the old fog.
 
 **Planned with the user, not built:**
 
-- **Two door features, noted while designing doors** (user, 2026-09-29), each in §10's *Doors* under
-  *Later*: a workspace tool for opening and closing doors, so an update can write one open; and
-  reading door states back from the scene where nothing has to be inferred. The third, *Span door*, is
-  built (2026-09-30).
+- **Reading door states back from the scene** where nothing has to be inferred (user, 2026-09-29) — the
+  last of three door features noted while designing doors, in §10's *Doors* under *Later*; *Span door*
+  and *Toggle door* were the other two. It is what would stop an update putting back a door toggled at
+  the table.
 - **A warning for a close this large** (user, 2026-09-26):
   - **A persistent note while the walls are too detailed to write quickly**: a red dot and a short note
     beside the status line, live, so Collapse, Prune and Straighten visibly clear it. **No item count
@@ -3965,11 +3961,7 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
 - **The walls stay drawn while they rederive** — decided, not held (user, 2026-09-24), and listed here
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
-**Everything up to the doors session is pushed** (2026-09-29): the doors, the stroke rule and the record,
-eight commits, and the public-build check at the head of *Do this first* applies to them. *Span door* and
-*Toggle door* are committed on 2026-09-30 and **not pushed** — `git rev-list --count origin/main..main`
-says how many. **Push before a scene edited in the dev build is opened in the published one**: storage is
-version 6 now, which the published build refuses.
+**Everything is pushed** as of 2026-09-30 — see the head of this section.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
@@ -4496,11 +4488,18 @@ pane, outside Owlbear: the tool in the strip where it belongs, and no console er
 Fog — a door made this way is the same record *Create door* writes on a whole segment — one undo taking
 back both, and the glyph, which it then moved.
 
-#### Toggle door — built 2026-09-30, not yet in a room
+#### Toggle door — built and confirmed in a room, 2026-09-30
 
 ***Toggle door***, after *Create door* in the Walls band: a click on a door opens it if it was closed and
 closes it if it was open, and the next update writes it that way. Designed in chat the same day — the
 state's home, the drawing, the merge rule, the name and the hover — then built on *"a, go ahead"*.
+
+**Confirmed in a room the same evening** (user: *"All worked correctly"* — every check asked for: a door
+toggled both ways and undone, the markers and their shrinking, the hover rim, and a door open at the
+table). **`dev.log` has it** (2026-10-01, 00:31–00:34 UTC, *Lair of the Lamb*): two openings, each a run
+of graph writes of one unchanged size, as toggles and their undos are; the first closing with *13 doors (0
+open)*, the second reading the stored version 6 graph back and closing with *13 doors (1 open)*. The
+marker's look and the open door at the table are the user's report, which a log cannot carry.
 
 **Decided (user, 2026-09-30):**
 
