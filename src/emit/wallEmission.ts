@@ -65,8 +65,11 @@ export interface WallEmission {
   readonly faces: WallFaces;
   /** Regions left out because a mark suppressed them. */
   readonly suppressed: number;
-  /** Doors written onto the items, and doors whose wall no item carried — which should be none. */
-  readonly doors: { readonly placed: number; readonly unplaced: number };
+  /**
+   * Doors written onto the items, how many of those went out open, and doors whose wall no item
+   * carried — which should be none.
+   */
+  readonly doors: { readonly placed: number; readonly open: number; readonly unplaced: number };
 }
 
 /**
@@ -139,12 +142,16 @@ export function wallEmission(
   }
 
   let written = 0;
-  for (const list of [...doors.regions.values(), ...doors.walls.values()]) written += list.length;
+  let open = 0;
+  for (const list of [...doors.regions.values(), ...doors.walls.values()]) {
+    written += list.length;
+    open += list.filter((record) => record.open).length;
+  }
   return {
     regions,
     walls,
     faces,
     suppressed: suppressed.length,
-    doors: { placed: written, unplaced: doors.unplaced },
+    doors: { placed: written, open, unplaced: doors.unplaced },
   };
 }

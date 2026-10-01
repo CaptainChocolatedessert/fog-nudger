@@ -143,8 +143,14 @@ export interface WallGraphBuild {
  * segments that have one are listed, so a map with no doors grows by one byte. A version 4 graph
  * **converts** rather than being refused: its bytes mean exactly what they meant, and it simply has no
  * doors.
+ *
+ * **Version 6 adds whether each door is open** (2026-09-30): one byte after its two distances, 1 open and
+ * 0 closed, and anything else refused. A version 5 graph converts, every door closed — which is what
+ * every update wrote while it was current.
  */
-const FORMAT_VERSION = 5;
+const FORMAT_VERSION = 6;
+/** The last version whose doors have no state, still read: every door closed. */
+const STATELESS_DOOR_VERSION = 5;
 /** The last version with no doors, still read. */
 const DOORLESS_VERSION = 4;
 
@@ -792,6 +798,7 @@ export function encodeWallGraph(graph: WallGraph): string {
       body.varint(index);
       body.float32(door.start);
       body.float32(door.end);
+      body.push(door.open ? 1 : 0);
     }
   });
 
@@ -813,14 +820,17 @@ export function encodeWallGraph(graph: WallGraph): string {
  * Decode the document, or `null` if it is not one this version wrote and can vouch for.
  *
  * Seven refusals: not base64, wrong version, a checksum that does not match, a truncated body, a node
- * id outside the table, a door that is not one — on a segment that does not exist, or with ends out of
- * order or not numbers — and trailing bytes. A version 4 document is read as one with no doors.
+ * id outside the table, a door that is not one — on a segment that does not exist, with ends out of
+ * order or not numbers, or with a state other than open or closed — and trailing bytes. A version 5
+ * document is read with every door closed, and a version 4 one as having no doors.
  */
 export function decodeWallGraph(text: string): WallGraph | null {
   const bytes = fromBase64(text);
   if (!bytes || bytes.length < 5) return null;
   const version = bytes[0];
-  if (version !== FORMAT_VERSION && version !== DOORLESS_VERSION) return null;
+  if (version !== FORMAT_VERSION && version !== STATELESS_DOOR_VERSION && version !== DOORLESS_VERSION) {
+    return null;
+  }
 
   const expected = (bytes[1]! | (bytes[2]! << 8) | (bytes[3]! << 16) | (bytes[4]! << 24)) >>> 0;
   const body = bytes.slice(5);
@@ -849,7 +859,7 @@ export function decodeWallGraph(text: string): WallGraph | null {
     edges.push({ a, b });
   }
 
-  if (version === FORMAT_VERSION) {
+  if (version !== DOORLESS_VERSION) {
     const doorCount = input.varint();
     if (doorCount === null) return null;
     const doors = new Map<number, Door[]>();
@@ -859,7 +869,13 @@ export function decodeWallGraph(text: string): WallGraph | null {
       const end = input.float32();
       if (edge === null || start === null || end === null || edge >= edges.length) return null;
       if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
-      (doors.get(edge) ?? doors.set(edge, []).get(edge)!).push({ start, end });
+      // A version 5 door has no state byte, and was always written closed.
+      const state = version === FORMAT_VERSION ? input.byte() : 0;
+      if (state !== 0 && state !== 1) return null;
+      // `doors.ts`'s one shape — `open: true` or nothing — written out rather than imported, since that
+      // module imports this one.
+      const door: Door = state === 1 ? { start, end, open: true } : { start, end };
+      (doors.get(edge) ?? doors.set(edge, []).get(edge)!).push(door);
     }
     for (const [index, list] of doors) {
       const edge = edges[index]!;

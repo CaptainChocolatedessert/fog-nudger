@@ -84,7 +84,7 @@ Where a term names a type, the type has the same name: `SkeletonGraph`, `WallGra
 | **the trace worker** | where the three heavy jobs run off the page: **the derive**, **the ink profiles** and, since 2026-09-24, **the ink** — the reading and the recompose — one worker each, so none waits behind another. A newer job abandons the running one by terminating its worker, and a worker that cannot be had means the job runs on the page, said once in the log. What stays on the page is decoding the map, once per image. |
 | **the automatic prune** | the dead ends every derive removes before handing the graph over: runs with a free end of up to **two measured ink widths**. Computed, never chosen, and nothing when no width was measured. Distinct from the **Prune** tool, which takes more on request. |
 | **suppressed** | a region holding a mark. It is not emitted, so it stays fogged and can never be revealed, like the outside; its walls stay, and emit by the bridge criterion with it out of the emitted set. |
-| **door** | a stretch of one wall segment that Dynamic Fog opens and closes at the table, made with *Create door* and stored **on the segment** as two distances from its first end. Written onto our items as Dynamic Fog's own record on every update. §10's *Doors*. Its length along the wall is its *stretch* — *span* is Span opening's word. |
+| **door** | a stretch of one wall segment that Dynamic Fog opens and closes at the table, made with *Create door* and stored **on the segment** as two distances from its first end, open or closed — set with *Toggle door*. Written onto our items as Dynamic Fog's own record on every update. §10's *Doors*. Its length along the wall is its *stretch* — *span* is Span opening's word. |
 
 ### The stages — and the surface words for them are **retired**
 
@@ -1451,6 +1451,9 @@ fall out. **Node ids are the only identity the document has.**
 
   **Format version 5 adds doors** (2026-09-29): the same bytes followed by each door, as its segment's
   index and two float32 distances. A version 4 graph **converts**, as one with no doors.
+
+  **Format version 6 adds each door's state** (2026-09-30): one byte after its distances, 1 open and 0
+  closed, anything else refused. A version 5 graph **converts**, every door closed.
 - **float32, quantised with `Math.fround` on the way in**, so the round trip is exact rather than
   nearly so and nothing downstream needs a tolerance for storage having moved a number.
 - **Segments, not polylines**, so **every vertex is a node** and a junction cannot hide at an interior
@@ -1950,7 +1953,8 @@ graph is the document, and staging was the last place still treating the scene a
   `visible: true`, no fill anywhere, in the scene's own fog colour and stroke width, never under 2 —
   the same rule as the shapes. Zero from August until 2026-09-29, while this said the scene's width.
 - **Each item carries the doors on its walls**, in Dynamic Fog's `rodeo.owlbear.dynamic-fog/doors` key,
-  written closed — §10's *Doors*.
+  each open or closed as the workspace holds it — §10's *Doors*. Closed on every update until *Toggle
+  door* (2026-09-30).
 
 **A fitted polyline of n points becomes n − 1 items**, so a wall is several Outliner entries and
 nudging one segment in Owlbear moves only that segment.
@@ -2869,7 +2873,7 @@ cannot recur.
 | **Additive** | cyan | your added ink, gap proposals, a snap target, a span about to be placed, a collapse's star, and every ring a click is aimed at |
 | **Subtractive** | amber | your suppression, and the marks that suppress a region |
 | **Destructive** | red | **reserved** — erase target, the walls a dissolve or a collapse would take, a mark a click would remove, doomed spurs, a door a click would remove, nothing else |
-| **Doors** | green | doors on the walls, and one being dragged out or spanned, dashed. Half as wide again as a wall: under a red-green colour-vision simulation this green and the removal red both come out olive, so the width is what tells them apart (2026-09-29) |
+| **Doors** | green | doors on the walls, and one being dragged out or spanned, dashed — at a wall's width since 2026-09-30, the state carried by a dark grey marker at each door rather than the colour. Under a red-green colour-vision simulation this green and the removal red both come out olive (2026-09-29), so the width tells them apart: removal is drawn at 5 px |
 | **Rooms** | a generated cycle | not semantic |
 
 **Red earns its alarm value by being rare.** It did three jobs — default ink, emitted wall lines in
@@ -3223,7 +3227,7 @@ push and on a fresh add, since Owlbear keeps the first; the web page; most failu
 
 ## 8. Testing and diagnostic practice
 
-**1,225 tests across 86 files** (measured 2026-09-30, with *Span door*), all pure — everything that needs a DOM or a scene is not tested, which
+**1,238 tests across 86 files** (measured 2026-09-30, with *Toggle door*), all pure — everything that needs a DOM or a scene is not tested, which
 is why the gesture *decisions* were pulled out into pure functions after three defects in a row came
 from sequencing left in the event handlers.
 
@@ -3812,6 +3816,13 @@ next section.
 
 ### Where to pick this up
 
+***Toggle door* is built and waiting for a room** (2026-09-30): a click on a door opens or closes it, the
+next update writes it that way, and every door now wears a marker saying which. §10's *Doors* has it
+under *Toggle door*. **Look at it first**: a door toggled both ways and undone; the marker on every door,
+shrinking with a far zoom; the yellow rim on hover; and an update with a door open, which should open at
+the table — the `emit:` line in `dev.log` counts the open doors. Start the dev server and the log receiver
+from a shell, so the room is in the log this time.
+
 ***Span door* is built and confirmed in a room** (2026-09-30): a click in a doorway walls it and makes
 the wall a door, in one act — §10's *Doors* has it under *Span door*, including that the room is not in
 `dev.log`. Its glyph was moved after the room, the door centred in front of the crossbar, and the user
@@ -3955,8 +3966,10 @@ one question, a picture if it is geometric, name and glyph, a numbered plan):
   only so it is not reopened by accident: *The trace worker* has the decision and its two costs.
 
 **Everything up to the doors session is pushed** (2026-09-29): the doors, the stroke rule and the record,
-eight commits, and the public-build check at the head of *Do this first* applies to them. *Span door* is
-committed on 2026-09-30 and **not pushed** — `git rev-list --count origin/main..main` says how many.
+eight commits, and the public-build check at the head of *Do this first* applies to them. *Span door* and
+*Toggle door* are committed on 2026-09-30 and **not pushed** — `git rev-list --count origin/main..main`
+says how many. **Push before a scene edited in the dev build is opened in the published one**: storage is
+version 6 now, which the published build refuses.
 
 #### The trace worker — the derive and the ink profiles, built 2026-09-24
 
@@ -4325,17 +4338,19 @@ found doors opening walls across the map and the fix below.
 - **Within one segment**, because a free-standing wall goes out one `LINE` per segment: a door across a
   vertex would be two doors toggled separately, and whether one could cross depended on how its wall
   happened to be emitted.
-- **A door is a wall edit** (user). The stored format is version 5, and version 4 reads as having no
-  doors. The base-versus-document comparison counts doors, so a door alone raises the cover, is one step
+- **A door is a wall edit** (user). The stored format is version 5 — version 6 since *Toggle door*, which
+  added the state — and version 4 reads as having no doors. The base-versus-document comparison counts doors, so a door alone raises the cover, is one step
   of undo, and the review before a rebuild draws the doors it would take — amber, over the walls.
 - **The records** — `emit/doorRecords.ts`. A wall that goes out as a line carries its own, at contour 0
   from its `a` end. A wall on a room's outline goes on the first emitted room (largest first) whose rings
   cover it, at its ring's place among the room's subpaths and its distance from the ring's first point,
   closing side included. One record is enough for a wall two rooms share, since the cut is global.
-  **Written closed**, on every update; nothing is read back.
+  **Written closed**, on every update, until *Toggle door* (below) gave a door a state; nothing is read
+  back.
 - **Drawn** green, `#16a34a` — a sixth palette role and a sixth colour row in View — 3 px and cased, with
   butt ends; red at Erase's 5 px where a click would remove it; dashed while being dragged; its ends
-  marked as handles while the tool is in hand. The glyph is a plain door.
+  marked as handles while the tool is in hand. The glyph is a plain door. **Since 2026-09-30 the line is
+  a wall's 2 px and every door wears a marker** — *Toggle door*, below.
 
 #### The first room, 2026-09-29: doors opened walls all over the map — found and fixed
 
@@ -4421,13 +4436,15 @@ from the GM's.
   the workspace is a fresh page, so the last-update fingerprint starts empty and a close always pushes —
   the skip's own log line, *closing with nothing to push*, appears nowhere in `dev.log` from 09-18 to
   09-29. So opening and closing the workspace mid-session closes the doors at the table (user: accepted,
-  as consistent with every other in-scene edit).
+  as consistent with every other in-scene edit). **Since *Toggle door*** an update puts each door back to
+  its state in the workspace rather than closing it — the same cost, for a door toggled at the table.
 - **A shared wall's door lives on one room's item**: deleting that item by hand in the scene takes the
   door until the next update.
 - **A door made at the table is lost** at the next update, like every in-scene edit to our items.
 - **A build older than version 5 refuses a version 5 graph**, and an edit made in one would write version
   4 over it, doors and all. The published build is past that since the push of 2026-09-29; any other old
-  copy is not.
+  copy is not. **The same is true one version on**: until it is pushed, the published build refuses a
+  version 6 graph, which every edit in the dev build now writes.
 
 #### Span door — built and confirmed in a room, 2026-09-30
 
@@ -4479,10 +4496,75 @@ pane, outside Owlbear: the tool in the strip where it belongs, and no console er
 Fog — a door made this way is the same record *Create door* writes on a whole segment — one undo taking
 back both, and the glyph, which it then moved.
 
+#### Toggle door — built 2026-09-30, not yet in a room
+
+***Toggle door***, after *Create door* in the Walls band: a click on a door opens it if it was closed and
+closes it if it was open, and the next update writes it that way. Designed in chat the same day — the
+state's home, the drawing, the merge rule, the name and the hover — then built on *"a, go ahead"*.
+
+**Decided (user, 2026-09-30):**
+
+- **The state lives on the door**, open or closed, stored with the walls: a toggle is an ordinary wall
+  edit, one step of undo. New doors — *Create door*, *Span door* — start closed.
+- **Where two doors merge, closed wins**: dragged or slid together in *Create door*, or brought onto one
+  chord by Straighten or onto one segment by a move. A closed door shows less, and the safe direction is
+  showing less.
+- **Every door wears a marker**, the user's idea from Dynamic Fog, which marks its doors with a little
+  door picture, closed or open. Ours are its two pictures in white on its own dark grey (`#3D4051`) disc
+  with a white rim, at the door's middle, **16 px across or the door's own length on screen if that is
+  less**, so a door seen from far out shrinks its marker rather than vanishing under it. **The line stays
+  green and never changes with state**, and drops to a wall's 2 px: the marker carries what the extra
+  width did. Three marker styles were drawn — a dark disc, a white disc, a bare outlined door — and the
+  disc chosen, in grey rather than the green offered.
+- **Hovering a door with the tool turns its marker's rim the highlight yellow** a grabbable vertex wears,
+  saying *this door* and nothing about its state — chosen over showing the state a click would leave,
+  which would show a door the wrong way round while the pointer rests on it.
+- **Named *Toggle door*** for the edge toggle's reason, a name true of both clicks. *Open door* was true
+  of half of them, *Open or close door* the longest label in the band, *Swing door* implied a hinge.
+  Its glyph is the open-door picture drawn in the strip's outline style.
+
+**As built:**
+
+- **`Door.open`** — `true` or absent, never `false`, so a closed door is shaped exactly as every door was
+  before (`makeDoor` in `trace/doors.ts`). `normaliseDoors` settles a merge; `carryDoors`, `placeDoors`
+  and `cutDoors` carry the state through every edit that rebuilds a segment; `dragDoorEnd` and `slideDoor`
+  keep it; `toggleDoor` in `workspace/doorGesture.ts` flips one.
+- **Storage version 6** (§5): one state byte per door. Version 5 reads as all closed.
+- **The records carry the state**, and the update's `emit:` line in `dev.log` says how many doors went out
+  open. The encoded graph is in the update's fingerprint, so a close after a toggle writes.
+- **The press**: *Create door*'s own hit test, a door's end counted as the door; a press that travels does
+  nothing, as with Span. *Opened a door.* / *Closed a door.*, undo *opening a door* / *closing a door*,
+  and the hint *Click a door to open or close it.*
+- **Markers are drawn whatever tool is in hand**, with the walls: on standing doors, on a door being
+  dragged in *Create door* at its new place, and on *Span door*'s dashed preview, closed.
+
+**Decided while building, for checking:**
+
+- **The dashed placement in *Create door* and *Span door*'s preview wear a marker too**, in the state the
+  door will have, so the picture of what a release makes is the door it makes.
+- **A marker under 1 px across is not drawn.**
+- **The marker is drawn over the door's line and under the end handles** *Create door* draws.
+
+**Checked from a desk:** `tsc`, 1,238 tests and a build. The door sweep's geometric oracle now carries
+state and settles its own merges by *closed wins*, and the records' sweep — which walks the written
+paths the way Dynamic Fog measures them — gives its random doors random states and matches each record's.
+**Twenty-one mutations, twenty-one caught**: seven over the model, five over the store, three over the
+records and the update's count, and six over the toggle and the state a drag keeps. The random edits
+merged an open door with a closed one only seven times, so a sweep of its own squeezes the two together
+— 364 merges in 400.
+
+**Costs, stated:**
+
+- **The published build refuses a version 6 graph until it is pushed** — and every edit in the dev build
+  now writes one.
+- **A door toggled at the table is put back** to its workspace state at the next update, as a door made
+  there is lost — the cost *Every update closes every door* already named, in a new shape.
+- **At map zoom markers cover short doors and overlap where doors are close**, and in *Create door* a
+  short door's end handles sit right beside its marker.
+
 #### Later (user, 2026-09-29)
 
-- **A tool for opening and closing doors in the workspace**, so an update can write one open. Toggling
-  lives only there, never on a double-click in *Create door*.
+- ~~**A tool for opening and closing doors in the workspace**~~ — *Toggle door*, built 2026-09-30, above.
 - ~~***Span door***~~ — built 2026-09-30, above.
 - **Reading door states back from the scene** where nothing has to be inferred — our own doors, known by
   their metadata, on items nothing has changed since the update that wrote them.
@@ -6599,7 +6681,7 @@ closed outright.
 | `workspace/chainGesture.ts` | **what a click means while a chain is being drawn**: append, close, join or finish |
 | `trace/inkPatches.ts` | **what *Suppress marks* offers and takes**: lumps of ink under a span, and the pixels one covers including what it encloses |
 | `trace/connected.ts` | **everything joined to one wall**: the connected component through shared vertex ids, which *Erase chain* takes |
-| `trace/doors.ts` | **doors on their segments**: distances from the segment's first end, and the one rule that re-places them when an edit moves or splits a segment — kept place and length, slid inward, shrunk to fit, removed by a vertex inside |
+| `trace/doors.ts` | **doors on their segments**: distances from the segment's first end and whether the door is open, and the one rule that re-places them when an edit moves or splits a segment — kept place, length and state, slid inward, shrunk to fit, removed by a vertex inside, closed wherever two merge |
 | `trace/dissolve.ts` | **dissolving a region**: which region a point is in, and which walls go — the region's walk split into simple loops, each kept or removed by the sign of its area |
 | `trace/frameWalls.ts` | the four walls at the map's extent, taking them off again, and the strict already-framed test |
 | `trace/mends.ts` | **mends**: the graph gap search — candidates per free end, paired across the graph — and accepting them, splits first; `mendForFreeEnd` answers the same question for one end alone, reach ignored |
@@ -6671,7 +6753,7 @@ only. There is no `mode.ts` — the two workspaces merged, and nothing branches 
   `dragGesture.ts`, `paintGesture.ts`, `gapGesture.ts`, `maskRequest.ts` (**what a gesture means —
   pure and tested, which is where the sequencing defects were fixed, and what survived the redesign
   untouched**) · `mendGesture.ts` (a mend's ring and which one a click lands in — pure and tested) ·
-  `doorGesture.ts` (**what a press means with *Create door***: an end, a door or a wall, the stretch a
+  `doorGesture.ts` (**what a press means with *Create door*** — and `toggleDoor`, *Toggle door*'s — an end, a door or a wall, the stretch a
   drag makes, sliding, removal, and the ignored second click — pure and tested) ·
   `paintControls.ts` (the tool in hand, drawn into **its own drawer**) · `mendControls.ts` (the mend
   tool's drawer) · `collapseControls.ts` (*Collapse small regions*' drawer: the size, back at its start every opening, and the button) · `ringGesture.ts` (the ring round what *Collapse small regions* and *Prune the dead ends* would take, and which one a click lands in — shared, pure and tested) · `pruneControls.ts` (Prune's drawer: the length, back at its start every opening, and the button) · `pruneScale.ts` (the length's track and the start of four ink widths — pure and tested) · `pruneSearch.ts` (the dead-end search, following the walls on screen and the handle as it moves) · `collapseScale.ts` (the size's track, off then log up to the whole map, and the start of eight square ink widths — pure and tested) · `collapseSearch.ts` (the search, following the walls on screen and the handle as it moves) · `markControls.ts` (*Suppress region*'s drawer, which is one button and no

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { PathOp, type PathCommandLike } from "../geometry/ring";
 import { createPlacement, toWorldPoint, type Point, type WorldBounds } from "../map/placement";
-import { doorEnds, normaliseDoors, segmentLength, type Door } from "../trace/doors";
+import { doorEnds, makeDoor, normaliseDoors, segmentLength, type Door } from "../trace/doors";
 import { randomWallGraph, seededRandom } from "../trace/fixtures";
 import type { GraphExtent } from "../trace/graphUnits";
 import { documentPoint, type WallEdge, type WallGraph } from "../trace/wallGraph";
@@ -77,11 +77,13 @@ function withRandomDoors(graph: WallGraph, next: () => number): WallGraph {
   const edges: WallEdge[] = graph.edges.map((edge) => {
     const length = segmentLength(graph.nodes[edge.a]!, graph.nodes[edge.b]!);
     if (next() > 0.4 || !(length > 0.02)) return edge;
+    // Open or closed at random, so every record has a state to get right.
+    const open = next() < 0.5;
     // Now and then the whole segment, which is what a click makes and what reaches a ring's closing side.
-    if (next() < 0.25) return { a: edge.a, b: edge.b, doors: normaliseDoors([{ start: 0, end: length }]) };
+    if (next() < 0.25) return { a: edge.a, b: edge.b, doors: normaliseDoors([makeDoor(0, length, open)]) };
     const s = next() * length;
     const e = next() * length;
-    const doors: Door[] = [{ start: Math.min(s, e), end: Math.max(s, e) }];
+    const doors: Door[] = [makeDoor(Math.min(s, e), Math.max(s, e), open)];
     const normalised = normaliseDoors(doors).filter((door) => door.end <= length && door.end - door.start > 1e-3);
     return normalised.length > 0 ? { a: edge.a, b: edge.b, doors: normalised } : edge;
   });
@@ -95,7 +97,7 @@ const near = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) <= 1e-3;
 describe("door records, measured the way Dynamic Fog measures them", () => {
   it("puts every door on exactly one item, at the right place along the right contour", () => {
     const next = seededRandom(31);
-    const reached = { line: 0, ring: 0, hole: 0, closingSide: 0, shared: 0, suppressed: 0 };
+    const reached = { line: 0, ring: 0, hole: 0, closingSide: 0, shared: 0, suppressed: 0, openLine: 0, openRing: 0 };
     let doors = 0;
     for (let seed = 0; seed < 400; seed++) {
       const graph = withRandomDoors(randomWallGraph(next, 3 + Math.floor(next() * 7)), next);
@@ -108,22 +110,22 @@ describe("door records, measured the way Dynamic Fog measures them", () => {
       expect(skipped).toHaveLength(0);
       const { lines } = stageWallLines(emission.walls, { run: "t", mapId: "m", colour: "#000", strokeWidth: 0 });
 
-      // Every door in the graph, as its two ends in the world.
-      const expected: [Point, Point][] = [];
+      // Every door in the graph, as its two ends in the world and its state.
+      const expected: [Point, Point, boolean][] = [];
       for (const edge of graph.edges) {
         for (const door of edge.doors ?? []) {
           const [p, q] = doorEnds(graph, edge, door);
-          expected.push([world(p), world(q)]);
+          expected.push([world(p), world(q), door.open === true]);
         }
       }
       doors += expected.length;
       expect(emission.doors.unplaced).toBe(0);
+      expect(emission.doors.open).toBe(expected.filter(([, , open]) => open).length);
 
-      const found: [Point, Point][] = [];
+      const found: [Point, Point, boolean][] = [];
       const check = (record: DoorRecord, contours: Point[][]) => {
         expect(record.start.index).toBe(record.end.index);
         expect(record.start.distance).toBeLessThanOrEqual(record.end.distance);
-        expect(record.open).toBe(false);
         const contour = contours[record.start.index]!;
         expect(contour).toBeDefined();
         const length = lengthOf(contour);
@@ -140,13 +142,14 @@ describe("door records, measured the way Dynamic Fog measures them", () => {
         if (Math.abs(record.end.distance - length) < 1e-6 && contours.length > 0 && contour.length > 2) {
           reached.closingSide += 1;
         }
-        found.push([pointAt(contour, record.start.distance), pointAt(contour, record.end.distance)]);
+        found.push([pointAt(contour, record.start.distance), pointAt(contour, record.end.distance), record.open]);
       };
       for (const shape of shapes) {
         const contours = contoursOf(shape.position, shape.commands);
         for (const record of shape.doors ?? []) {
           check(record, contours);
           reached.ring += 1;
+          if (record.open) reached.openRing += 1;
           if (record.start.index > 0) reached.hole += 1;
         }
       }
@@ -156,14 +159,17 @@ describe("door records, measured the way Dynamic Fog measures them", () => {
           expect(record.start.index).toBe(0);
           check(record, [contour]);
           reached.line += 1;
+          if (record.open) reached.openLine += 1;
         }
       }
 
-      // Matched one for one, ends either way round.
+      // Matched one for one, ends either way round, and in the same state.
       expect(found).toHaveLength(expected.length);
       const left = [...found];
-      for (const [p, q] of expected) {
-        const at = left.findIndex(([a, b]) => (near(a, p) && near(b, q)) || (near(a, q) && near(b, p)));
+      for (const [p, q, open] of expected) {
+        const at = left.findIndex(
+          ([a, b, written]) => written === open && ((near(a, p) && near(b, q)) || (near(a, q) && near(b, p))),
+        );
         expect(at, `a door from (${p.x}, ${p.y}) to (${q.x}, ${q.y})`).toBeGreaterThanOrEqual(0);
         left.splice(at, 1);
       }
@@ -184,7 +190,7 @@ describe("door records, measured the way Dynamic Fog measures them", () => {
   it("writes nothing when there are no doors", () => {
     const next = seededRandom(5);
     const emission = wallEmission(randomWallGraph(next, 6), BOUNDS, DPI, EXTENT);
-    expect(emission.doors).toEqual({ placed: 0, unplaced: 0 });
+    expect(emission.doors).toEqual({ placed: 0, open: 0, unplaced: 0 });
     expect(emission.regions.every((region) => region.doors === undefined)).toBe(true);
     expect(emission.walls.every((wall) => wall.doors === undefined)).toBe(true);
   });

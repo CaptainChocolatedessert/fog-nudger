@@ -75,6 +75,7 @@ import {
   pendingWall,
   snapTarget,
   doorToolInHand,
+  doorToToggle,
   doorView,
   type DoorView,
 } from "../wallEdit";
@@ -141,12 +142,27 @@ const eraseColour = () => colourFor("destructive");
 const ERASE_WIDTH_PX = 5;
 const drawColour = () => colourFor("additive");
 /**
- * Doors: green, half as wide again as a wall, cased like one, with **butt** ends so the green is
- * exactly the door's length (user, 2026-09-29). Removal is drawn red at Erase's 5, and the width is
- * what separates the two for a red-green colour-blind GM — the palette note on `door` has the measure.
+ * Doors: green, cased like a wall, with **butt** ends so the green is exactly the door's length (user,
+ * 2026-09-29). **At a wall's width since 2026-09-30** (user): it was half as wide again, and the marker
+ * on every door now carries what the width did, so the line need only be told from a wall by its colour.
+ * Removal is drawn red at Erase's 5, so the width still separates the two for a red-green colour-blind
+ * GM — by more than it did — and the palette note on `door` has the measure.
  */
 const doorColour = () => colourFor("door");
-const DOOR_WIDTH_PX = 3;
+const DOOR_WIDTH_PX = WALL_WIDTH_PX;
+
+/**
+ * The marker at every door's middle: Dynamic Fog's own door pictures, closed or open, white on its
+ * dark grey disc with a white rim (user, 2026-09-30) — so a door reads the same in the workspace as at
+ * the table, and the state is the picture alone; the line stays green either way.
+ *
+ * **16 screen pixels across at most, and never wider than the door** (user), so a door seen from far out
+ * shrinks its marker rather than being buried under it. Fixed colours rather than palette roles, like
+ * the casing: it is a picture, not a category.
+ */
+const MARKER_MAX_PX = 16;
+const MARKER_DISC = "#3D4051";
+const MARKER_INK = "#ffffff";
 
 /*
   **There is no cap on how many handles are drawn, since 2026-09-22.**
@@ -395,6 +411,8 @@ const paint: Painter = ({ context, view, drawWidth, drawHeight }) => {
       context.lineWidth = 1.5;
       context.stroke();
     }
+    // A span door is made closed, and wears the marker it will have.
+    if (spanning.door) paintMarker(context, x, y, from.at, to.at, false, false);
     context.restore();
   }
 
@@ -527,7 +545,13 @@ function paintDoors(
 
   // Every door as it stands, a moved wall's re-placed as the release will place them.
   const standing: [Vector2, Vector2][] = [];
-  const marked: { readonly edge: number; readonly door: number; readonly p: Vector2; readonly q: Vector2 }[] = [];
+  const marked: {
+    readonly edge: number;
+    readonly door: number;
+    readonly p: Vector2;
+    readonly q: Vector2;
+    readonly open: boolean;
+  }[] = [];
   graph.edges.forEach((edge, index) => {
     if (!edge.doors || edge.doors.length === 0) return;
     const moved = dragged !== null && (edge.a === dragged || edge.b === dragged);
@@ -539,15 +563,19 @@ function paintDoors(
       const pair = ends(moved ? { a: edge.a, b: edge.b } : edge, door);
       if (!pair) return;
       standing.push(pair);
-      marked.push({ edge: index, door: d, p: pair[0], q: pair[1] });
+      marked.push({ edge: index, door: d, p: pair[0], q: pair[1], open: door.open === true });
     });
   });
   stroke(standing, doorColour(), DOOR_WIDTH_PX, false);
 
+  let placing: { readonly pair: [Vector2, Vector2]; readonly open: boolean } | null = null;
   if (live?.placing) {
     const edge = graph.edges[live.placing.placement.edge];
     const pair = edge ? ends(edge, live.placing.placement.door) : null;
-    if (pair) stroke([pair], doorColour(), DOOR_WIDTH_PX, true);
+    if (pair) {
+      stroke([pair], doorColour(), DOOR_WIDTH_PX, true);
+      placing = { pair, open: live.placing.placement.door.open === true };
+    }
   }
   if (live?.removing) {
     const edge = graph.edges[live.removing.edge];
@@ -555,6 +583,16 @@ function paintDoors(
     const pair = edge && door ? ends(edge, door) : null;
     if (pair) stroke([pair], eraseColour(), ERASE_WIDTH_PX, false);
   }
+
+  // The markers, over every line — a door's own, a moved door's at its new place, and the one under
+  // *Toggle door*'s pointer with the highlighted rim.
+  const toToggle = doorToToggle();
+  const aimed = toToggle && toToggle.graph === graph ? toToggle : null;
+  for (const { edge, door, p, q, open } of marked) {
+    const highlighted = aimed !== null && aimed.edge === edge && aimed.door === door;
+    paintMarker(context, x, y, p, q, open, highlighted);
+  }
+  if (placing) paintMarker(context, x, y, placing.pair[0], placing.pair[1], placing.open, false);
 
   if (!doorToolInHand()) return;
   context.save();
@@ -570,6 +608,73 @@ function paintDoors(
       context.stroke();
     }
   }
+  context.restore();
+}
+
+/**
+ * One door's marker, at the middle of the door from `p` to `q` (graph units): a dark disc with a white
+ * rim and a white door, closed or open — Dynamic Fog's two pictures, drawn in a 16-unit box and scaled.
+ *
+ * **As wide as the door on screen when that is under 16 pixels**, so it shrinks with the zoom instead of
+ * burying a short door. The rim is the highlight yellow when `highlighted`: the door *Toggle door* would
+ * act on.
+ */
+function paintMarker(
+  context: CanvasRenderingContext2D,
+  x: (units: number) => number,
+  y: (units: number) => number,
+  p: Vector2,
+  q: Vector2,
+  open: boolean,
+  highlighted: boolean,
+): void {
+  const px = x(p.x);
+  const py = y(p.y);
+  const qx = x(q.x);
+  const qy = y(q.y);
+  const size = Math.min(MARKER_MAX_PX, Math.hypot(qx - px, qy - py));
+  if (!(size > 1)) return;
+  context.save();
+  context.translate((px + qx) / 2, (py + qy) / 2);
+  const scale = size / 16;
+  context.scale(scale, scale);
+  context.translate(-8, -8);
+
+  // The disc and its rim, the rim inside the 16-unit box so the whole marker is `size` across.
+  context.beginPath();
+  context.arc(8, 8, 7.25, 0, Math.PI * 2);
+  context.fillStyle = MARKER_DISC;
+  context.fill();
+  context.strokeStyle = highlighted ? ACTIVE_FILL : MARKER_INK;
+  context.lineWidth = highlighted ? 2 : 1.5;
+  context.stroke();
+
+  // The floor, then the door: a whole leaf when closed, a narrow one and its frame when open.
+  context.lineCap = "round";
+  context.strokeStyle = MARKER_INK;
+  context.fillStyle = MARKER_INK;
+  context.lineWidth = 1.4;
+  context.beginPath();
+  context.moveTo(3.5, 13);
+  context.lineTo(12.5, 13);
+  context.stroke();
+  if (open) {
+    context.fillRect(5, 3, 3.6, 10);
+    context.lineCap = "butt";
+    context.lineWidth = 1.3;
+    context.beginPath();
+    context.moveTo(8.6, 3.65);
+    context.lineTo(11.2, 3.65);
+    context.lineTo(11.2, 13);
+    context.stroke();
+  } else {
+    context.fillRect(5, 3, 6, 10);
+  }
+  // The knob, cut out of the leaf in the disc's colour.
+  context.beginPath();
+  context.arc(open ? 7.4 : 9.3, 8.3, open ? 0.6 : 0.75, 0, Math.PI * 2);
+  context.fillStyle = MARKER_DISC;
+  context.fill();
   context.restore();
 }
 

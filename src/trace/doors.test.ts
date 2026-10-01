@@ -2,9 +2,11 @@ import type { Vector2 } from "@owlbear-rodeo/sdk";
 import { describe, expect, it } from "vitest";
 
 import {
+  carryDoors,
   cutDoors,
   doorEnds,
   fitDoor,
+  makeDoor,
   normaliseDoors,
   placeDoors,
   segmentLength,
@@ -40,11 +42,14 @@ function oneWall(doors: Door[]): WallGraph {
   };
 }
 
-/** Every door in a graph as its two ends in graph units. */
-function doorPoints(graph: WallGraph): [Vector2, Vector2][] {
-  const out: [Vector2, Vector2][] = [];
+/** A door as the oracle sees it: its two ends in graph units, and whether it is open. */
+type DoorAt = [Vector2, Vector2, boolean];
+
+/** Every door in a graph as its two ends in graph units and its state. */
+function doorPoints(graph: WallGraph): DoorAt[] {
+  const out: DoorAt[] = [];
   for (const edge of graph.edges) {
-    for (const door of edge.doors ?? []) out.push(doorEnds(graph, edge, door));
+    for (const door of edge.doors ?? []) out.push([...doorEnds(graph, edge, door), door.open === true]);
   }
   return out;
 }
@@ -72,6 +77,27 @@ describe("normaliseDoors", () => {
     expect(normaliseDoors([{ start: 0.1, end: 0.5 }, { start: 0.2, end: 0.3 }])).toEqual([
       { start: Math.fround(0.1), end: Math.fround(0.5) },
     ]);
+  });
+
+  it("makes a merged door closed if any door in it was, and open only if all were", () => {
+    const open = (start: number, end: number) => makeDoor(start, end, true);
+    const shut = (start: number, end: number) => makeDoor(start, end, false);
+    // Overlapping, touching, and one inside another — each with a closed door in it — then all open.
+    expect(normaliseDoors([open(0.1, 0.3), shut(0.2, 0.4)])).toEqual([shut(Math.fround(0.1), Math.fround(0.4))]);
+    expect(normaliseDoors([shut(0.1, 0.2), open(0.2, 0.3)])).toEqual([shut(Math.fround(0.1), Math.fround(0.3))]);
+    expect(normaliseDoors([open(0.1, 0.5), shut(0.2, 0.3)])).toEqual([shut(Math.fround(0.1), Math.fround(0.5))]);
+    expect(normaliseDoors([open(0.1, 0.3), open(0.2, 0.4)])).toEqual([open(Math.fround(0.1), Math.fround(0.4))]);
+    // Apart, each keeps its own.
+    expect(normaliseDoors([open(0.1, 0.2), shut(0.3, 0.4)])).toEqual([
+      open(Math.fround(0.1), Math.fround(0.2)),
+      shut(Math.fround(0.3), Math.fround(0.4)),
+    ]);
+  });
+
+  it("holds an open door as `open: true` and a closed one with no state at all", () => {
+    expect(makeDoor(0.1, 0.2, true)).toEqual({ start: 0.1, end: 0.2, open: true });
+    expect(Object.keys(makeDoor(0.1, 0.2, false))).toEqual(["start", "end"]);
+    expect(Object.keys(normaliseDoors([makeDoor(0.1, 0.2, false)])[0]!)).toEqual(["start", "end"]);
   });
 });
 
@@ -119,6 +145,19 @@ describe("placeDoors", () => {
     // A segment only 0.3 long: both doors slide to fit and overlap.
     expect(placeDoors(carried, { x: 0, y: 0 }, { x: 0.3, y: 0 })).toHaveLength(1);
   });
+
+  it("carries each door's state, and a merge of an open door with a closed one is closed", () => {
+    const wall = oneWall([makeDoor(0.1, 0.2, true), makeDoor(0.4, 0.5, false)]);
+    const carried = carryDoors(wall.nodes, wall.edges[0]!);
+    expect(carried.map((door) => door.open === true)).toEqual([true, false]);
+    // Re-placed on the same line, each keeps its state.
+    const kept = placeDoors(carried, wall.nodes[0]!, wall.nodes[1]!);
+    expect(kept.map((door) => door.open === true)).toEqual([true, false]);
+    // Squeezed onto a segment too short to hold them apart, they merge closed.
+    const merged = placeDoors(carried, wall.nodes[0]!, p(0.25, 0.5));
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.open).toBeUndefined();
+  });
 });
 
 describe("cutDoors", () => {
@@ -148,6 +187,12 @@ describe("cutDoors", () => {
   it("holds a door within a piece a rounding step shorter than the cut says", () => {
     const [, second] = cutDoors([{ start: 0.5, end: 1 }], [0.5], [0.5, 0.49]);
     expect(second![0]!.end).toBeCloseTo(0.49, 6);
+  });
+
+  it("keeps each door's state on the piece it lands on", () => {
+    const [first, second] = cutDoors([makeDoor(0.1, 0.2, true), makeDoor(0.4, 0.6, false)], [0.3], [0.3, 0.7]);
+    expect(first![0]!.open).toBe(true);
+    expect(second![0]!.open).toBeUndefined();
   });
 });
 
@@ -286,12 +331,48 @@ describe("storing doors", () => {
           b: 2,
           doors: normaliseDoors([
             { start: 0.01, end: 0.1 },
-            { start: 0.2, end: 0.3 },
+            makeDoor(0.2, 0.3, true),
           ]),
         },
       ],
     };
-    expect(decodeWallGraph(encodeWallGraph(graph))).toEqual(graph);
+    const decoded = decodeWallGraph(encodeWallGraph(graph));
+    expect(decoded).toEqual(graph);
+    // `toEqual` passes a missing key for `undefined`, so the closed door's shape is checked directly.
+    expect(Object.keys(decoded!.edges[1]!.doors![0]!)).toEqual(["start", "end"]);
+    expect(decoded!.edges[1]!.doors![1]!.open).toBe(true);
+  });
+
+  it("writes each door's state as one byte after its two distances, as the layout says", () => {
+    const nodes = [p(0.1, 0.1), p(0.5, 0.1)];
+    const edges = [{ a: 0, b: 1 }];
+    const graph: WallGraph = {
+      nodes,
+      edges: [{ a: 0, b: 1, doors: normaliseDoors([makeDoor(0.05, 0.1, false), makeDoor(0.2, 0.3, true)]) }],
+    };
+    const doors = graph.edges[0]!.doors!;
+    expect(encodeWallGraph(graph)).toBe(
+      versionSix(nodes, edges, [
+        [0, doors[0]!.start, doors[0]!.end, 0],
+        [0, doors[1]!.start, doors[1]!.end, 1],
+      ]),
+    );
+  });
+
+  it("reads a version 5 document with every door closed", () => {
+    const nodes = [p(0.1, 0.1), p(0.5, 0.1)];
+    const edges = [{ a: 0, b: 1 }];
+    const decoded = decodeWallGraph(versionFive(nodes, edges, [[0, 0.1, 0.2]]))!;
+    expect(decoded.edges[0]!.doors).toEqual([{ start: Math.fround(0.1), end: Math.fround(0.2) }]);
+    expect(decoded.edges[0]!.doors![0]!.open).toBeUndefined();
+  });
+
+  it("refuses a door whose state is neither open nor closed", () => {
+    const nodes = [p(0.1, 0.1), p(0.5, 0.1)];
+    const edges = [{ a: 0, b: 1 }];
+    expect(decodeWallGraph(versionSix(nodes, edges, [[0, 0.1, 0.2, 1]]))).not.toBeNull();
+    expect(decodeWallGraph(versionSix(nodes, edges, [[0, 0.1, 0.2, 2]]))).toBeNull();
+    expect(decodeWallGraph(versionSix(nodes, edges, [[0, 0.1, 0.2, 255]]))).toBeNull();
   });
 
   it("reads a version 4 document as one with no doors", () => {
@@ -321,7 +402,8 @@ function bytesFor(
   version: number,
   nodes: readonly Vector2[],
   edges: readonly { a: number; b: number }[],
-  doors: readonly [number, number, number][] | null,
+  /** Each door as its segment, two distances and — from version 6 — its state byte. */
+  doors: readonly (readonly [number, number, number, number?])[] | null,
 ): string {
   const body: number[] = [];
   const varint = (value: number) => {
@@ -349,10 +431,11 @@ function bytesFor(
   }
   if (doors) {
     varint(doors.length);
-    for (const [edge, start, end] of doors) {
+    for (const [edge, start, end, state] of doors) {
       varint(edge);
       float(start);
       float(end);
+      if (state !== undefined) body.push(state);
     }
   }
   let hash = 0x811c9dc5;
@@ -368,6 +451,11 @@ const versionFive = (
   edges: readonly { a: number; b: number }[],
   doors: readonly [number, number, number][],
 ) => bytesFor(5, nodes, edges, doors);
+const versionSix = (
+  nodes: readonly Vector2[],
+  edges: readonly { a: number; b: number }[],
+  doors: readonly [number, number, number, number][],
+) => bytesFor(6, nodes, edges, doors);
 
 /*
   ## The sweep, against an oracle that shares none of the implementation's reasoning
@@ -411,7 +499,9 @@ function withRandomDoors(graph: WallGraph, next: () => number): WallGraph {
       const s = next() * length;
       const e = next() * length;
       const [start, end] = s < e ? [s, e] : [e, s];
-      if (end - start > length * 0.02) doors.push({ start, end });
+      // Open or closed at random, so every edit has states to carry and merges have both to settle.
+      const open = next() < 0.5;
+      if (end - start > length * 0.02) doors.push(makeDoor(start, end, open));
     }
     const normalised = normaliseDoors(doors).filter((door) => door.end <= length);
     return normalised.length > 0 ? { a: edge.a, b: edge.b, doors: normalised } : edge;
@@ -456,36 +546,50 @@ function heldByOneSegment(graph: WallGraph, pair: [Vector2, Vector2]): boolean {
   );
 }
 
-/** Union of overlapping door intervals along one line, as the oracle's own merge. */
-function unionAlong(a: Vector2, b: Vector2, pairs: [Vector2, Vector2][]): [Vector2, Vector2][] {
+/**
+ * Union of overlapping door intervals along one line, as the oracle's own merge — **closed if any door
+ * in a union is**, said here as "a union is open when every door in it is".
+ */
+function unionAlong(a: Vector2, b: Vector2, doors: DoorAt[]): DoorAt[] {
   const length = segmentLength(a, b);
   const along = (point: Vector2) => ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) / length;
-  const intervals = pairs
-    .map(([s, e]) => [along(s), along(e)].sort((x, y) => x - y) as [number, number])
-    .sort((x, y) => x[0] - y[0]);
-  const merged: [number, number][] = [];
+  const intervals = doors
+    .map(([s, e, open]) => {
+      const [low, high] = [along(s), along(e)].sort((x, y) => x - y) as [number, number];
+      return { low, high, members: [open] };
+    })
+    .sort((x, y) => x.low - y.low);
+  const merged: { low: number; high: number; members: boolean[] }[] = [];
   for (const interval of intervals) {
     const last = merged[merged.length - 1];
-    if (last && interval[0] <= last[1] + EPS) last[1] = Math.max(last[1], interval[1]);
-    else merged.push([...interval]);
+    if (last && interval.low <= last.high + EPS) {
+      last.high = Math.max(last.high, interval.high);
+      last.members.push(...interval.members);
+    } else {
+      merged.push({ ...interval, members: [...interval.members] });
+    }
   }
   const at = (d: number): Vector2 => ({ x: a.x + ((b.x - a.x) * d) / length, y: a.y + ((b.y - a.y) * d) / length });
-  return merged.map(([s, e]) => [at(s), at(e)]);
+  for (const { members } of merged) if (members.includes(true) && members.includes(false)) mixedUnions += 1;
+  return merged.map(({ low, high, members }) => [at(low), at(high), members.every((open) => open)]);
 }
 
-/** Every expected pair matched by exactly one actual pair, ends in either order. */
-function assertSameDoors(
-  actual: [Vector2, Vector2][],
-  expected: [Vector2, Vector2][],
-  tolerance = EPS,
-  label = "",
-): void {
+/** How many unions the oracle has made of an open door and a closed one — what the sweep counts as reached. */
+let mixedUnions = 0;
+
+/** Every expected door matched by exactly one actual door, ends in either order, in the same state. */
+function assertSameDoors(actual: DoorAt[], expected: DoorAt[], tolerance = EPS, label = ""): void {
   const left = [...actual];
-  for (const [s, e] of expected) {
+  for (const [s, e, open] of expected) {
     const found = left.findIndex(
-      ([x, y]) => (close(x, s, tolerance) && close(y, e, tolerance)) || (close(x, e, tolerance) && close(y, s, tolerance)),
+      ([x, y, state]) =>
+        state === open &&
+        ((close(x, s, tolerance) && close(y, e, tolerance)) || (close(x, e, tolerance) && close(y, s, tolerance))),
     );
-    expect(found, `${label}: expected a door from (${s.x}, ${s.y}) to (${e.x}, ${e.y}) among ${JSON.stringify(left)}`).toBeGreaterThanOrEqual(0);
+    expect(
+      found,
+      `${label}: expected a${open ? "n open" : " closed"} door from (${s.x}, ${s.y}) to (${e.x}, ${e.y}) among ${JSON.stringify(left)}`,
+    ).toBeGreaterThanOrEqual(0);
     left.splice(found, 1);
   }
   expect(left, `${label}: unexpected doors`).toHaveLength(0);
@@ -560,28 +664,28 @@ function randomEdit(graph: WallGraph, next: () => number): Edit | null {
 }
 
 /** What the oracle expects an edit that moved at most one vertex to leave. */
-function expectedDoors(before: WallGraph, edit: Edit): [Vector2, Vector2][] {
+function expectedDoors(before: WallGraph, edit: Edit): DoorAt[] {
   const after = edit.result.graph;
-  const expected: [Vector2, Vector2][] = [];
+  const expected: DoorAt[] = [];
   before.edges.forEach((edge, index) => {
     if (!edge.doors || edit.removed?.has(index)) return;
-    const pairs = edge.doors.map((door) => doorEnds(before, edge, door));
+    const doors: DoorAt[] = edge.doors.map((door) => [...doorEnds(before, edge, door), door.open === true]);
     const moved = edit.moved;
     const touches = moved && (edge.a === moved.node || edge.b === moved.node);
     if (!touches) {
-      for (const pair of pairs) if (heldByOneSegment(after, pair)) expected.push(pair);
+      for (const door of doors) if (heldByOneSegment(after, [door[0], door[1]])) expected.push(door);
       return;
     }
     const a = edge.a === moved.node ? moved.to : before.nodes[edge.a]!;
     const b = edge.b === moved.node ? moved.to : before.nodes[edge.b]!;
     // A merge that closes a wall up drops it, and its doors with it.
     if (segmentLength(a, b) === 0) return;
-    const placed = pairs
-      .map(([s, e]) =>
-        searchedPlacement(a, b, { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 }, segmentLength(s, e)),
-      )
-      .filter((pair): pair is [Vector2, Vector2] => pair !== null);
-    for (const pair of unionAlong(a, b, placed)) if (heldByOneSegment(after, pair)) expected.push(pair);
+    const placed: DoorAt[] = [];
+    for (const [s, e, open] of doors) {
+      const pair = searchedPlacement(a, b, { x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 }, segmentLength(s, e));
+      if (pair) placed.push([pair[0], pair[1], open]);
+    }
+    for (const door of unionAlong(a, b, placed)) if (heldByOneSegment(after, [door[0], door[1]])) expected.push(door);
   });
   return expected;
 }
@@ -589,7 +693,16 @@ function expectedDoors(before: WallGraph, edit: Edit): [Vector2, Vector2][] {
 describe("doors through random edits, against a geometric oracle", () => {
   it("every edit that rebuilds a segment carries its doors by the rules", () => {
     const next = seededRandom(2029);
-    const reached = { insert: 0, move: 0, merge: 0, split: 0, remove: 0, compact: 0, removedInside: 0, moved: 0 };
+    const reached = {
+      insert: 0,
+      move: 0,
+      merge: 0,
+      split: 0,
+      remove: 0,
+      compact: 0,
+      removedInside: 0,
+      moved: 0,
+    };
     let checked = 0;
     for (let seed = 0; seed < 400; seed++) {
       let graph = withRandomDoors(randomWallGraph(next, 3 + Math.floor(next() * 6)), next);
@@ -617,6 +730,40 @@ describe("doors through random edits, against a geometric oracle", () => {
     // and reads like a real failure (DESIGN.md §8, *A long sweep needs its own timeout*).
   }, 30_000);
 
+  /*
+    The sweep above checks state through every edit, but merges an open door with a closed one only a
+    handful of times (7 on 2026-09-30). This one sets that case up on purpose: one segment, two doors of
+    opposite states, and its far end moved in so the segment shrinks round them — against the same
+    oracle, which settles a union by its own reading of *closed wins*.
+  */
+  it("settles an open door and a closed one squeezed together as closed, by the oracle", () => {
+    const next = seededRandom(77);
+    mixedUnions = 0;
+    let checked = 0;
+    for (let i = 0; i < 400; i++) {
+      const a = p(0.1 + next() * 0.1, 0.5);
+      const b = p(0.8 + next() * 0.1, 0.5 + (next() - 0.5) * 0.1);
+      const length = segmentLength(a, b);
+      const first = next() < 0.5;
+      const cut = 0.3 + next() * 0.4;
+      const doors = normaliseDoors([
+        makeDoor(length * (cut - 0.25), length * (cut - 0.05), first),
+        makeDoor(length * (cut + 0.05), length * (cut + 0.25), !first),
+      ]);
+      const graph: WallGraph = { nodes: [a, b], edges: [{ a: 0, b: 1, doors }] };
+      const f = 0.15 + next() * 0.5;
+      const to = p(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f + (next() - 0.5) * 0.02);
+      const edit: Edit = { kind: "move", result: moveNode(graph, 1, to), moved: { node: 1, to } };
+      if (edit.result.overlaps > 0) continue;
+      assertWellFormed(edit.result.graph);
+      assertSameDoors(doorPoints(edit.result.graph), expectedDoors(graph, edit), 1e-6, `squeeze ${i}`);
+      checked += 1;
+    }
+    expect(checked).toBe(400);
+    // 364 of the 400 merged an open door with a closed one (2026-09-30); the rest kept them apart.
+    expect(mixedUnions, "an open door and a closed one merged").toBeGreaterThan(100);
+  });
+
   it("Straighten keeps every door near where it was", () => {
     const next = seededRandom(9);
     let survived = 0;
@@ -637,11 +784,14 @@ describe("doors through random edits, against a geometric oracle", () => {
       assertWellFormed(result.graph);
       const before = doorPoints(graph);
       const after = doorPoints(result.graph);
-      const mid = ([s, e]: [Vector2, Vector2]) => ({ x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
+      const mid = ([s, e]: readonly [Vector2, Vector2, ...unknown[]]) => ({ x: (s.x + e.x) / 2, y: (s.y + e.y) / 2 });
       // Nothing appears from nowhere: each door afterwards passes within the tolerance of a door's
-      // old midpoint.
-      for (const [s, e] of after) {
-        expect(before.some((old) => distanceToSegment(mid(old), s, e) <= tolerance + EPS)).toBe(true);
+      // old midpoint — **one in its own state**, since a merge is open only when all of it was open and
+      // closed only when some of it was closed.
+      for (const [s, e, open] of after) {
+        expect(
+          before.some((old) => old[2] === open && distanceToSegment(mid(old), s, e) <= tolerance + EPS),
+        ).toBe(true);
       }
       // Nothing vanishes unexplained: each door before survives near its old midpoint, or a vertex of
       // the new graph came near enough to have cut it.

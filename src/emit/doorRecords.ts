@@ -12,8 +12,9 @@
  * contours are refused with a console warning (`PathHelpers.getSkPathBetween`).
  *
  * So a push writes each door **exactly as Dynamic Fog would**, on the item that carries its wall
- * (user, 2026-09-26): a GM editing it at the table meets an ordinary door. Written **closed**, every
- * push, since nothing is read back.
+ * (user, 2026-09-26): a GM editing it at the table meets an ordinary door. **Written open or closed as
+ * the workspace holds it** (2026-09-30, *Toggle door*) — it was closed on every push until then — and
+ * nothing is read back, so a door toggled at the table is put back at the next update.
  *
  * ## Which item, and where along it
  *
@@ -33,7 +34,8 @@
  * **Twelve mutations, eleven caught and one equivalent** — one caught only after a fixture for the
  * order walls are numbered in. The equivalent one counts every ring as a contour: the traversal already
  * drops the rings `ringsToCommands` would, so the guard here decides nothing today and is kept so the
- * two agree across a module boundary if either ever moves.
+ * two agree across a module boundary if either ever moves. **The state added three more, three caught**
+ * (2026-09-30): a line's or a room's record written closed, and the update's count of open doors.
  *
  * Pure: no DOM, no SDK.
  */
@@ -101,7 +103,7 @@ export function doorRecords(
     const length = distance(from, toWorld(graph.nodes[edge.b]!));
     const records = edge.doors.map((door) => {
       const [p, q] = doorEnds(graph, edge, door).map(toWorld) as [Point, Point];
-      return record(0, 0, length, distance(from, p), distance(from, q));
+      return record(door.open === true, 0, 0, length, distance(from, p), distance(from, q));
     });
     walls.set(index, records);
     placed.add(index);
@@ -129,7 +131,7 @@ export function doorRecords(
             const [p, q] = doorEnds(graph, edge, door).map(toWorld) as [Point, Point];
             // Measured from the side's own start, which is the segment's `a` end walked forward and its
             // `b` end walked back — so no direction has to be worked out, only a distance.
-            list.push(record(contour, along, side, distance(from, p), distance(from, q)));
+            list.push(record(door.open === true, contour, along, side, distance(from, p), distance(from, q)));
           }
           regions.set(faceIndex, list);
           placed.add(index);
@@ -148,17 +150,24 @@ export function doorRecords(
 }
 
 /**
- * One record, for a door `from` and `to` along a side of length `side` that starts `along` into its
- * contour.
+ * One record, open or closed, for a door `from` and `to` along a side of length `side` that starts
+ * `along` into its contour.
  *
  * **Held within the side.** A door's end is a float32 distance, which can round a hair past the vertex
  * it reaches — and a record running past a vertex runs into the next side, which is exactly what a door
  * may not do. Found by the oracle, at three millionths of a world unit.
  */
-function record(index: number, along: number, side: number, from: number, to: number): DoorRecord {
+function record(
+  open: boolean,
+  index: number,
+  along: number,
+  side: number,
+  from: number,
+  to: number,
+): DoorRecord {
   const within = (d: number) => along + Math.max(0, Math.min(side, d));
   return {
-    open: false,
+    open,
     start: { index, distance: within(Math.min(from, to)) },
     end: { index, distance: within(Math.max(from, to)) },
   };

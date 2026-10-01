@@ -28,9 +28,22 @@
  * the segment is now shorter than it. A new vertex landing strictly inside it removes it; undo brings it
  * back.
  *
+ * ## Open or closed, and closed wins
+ *
+ * **A door is open or closed** (2026-09-30), set in the workspace with *Toggle door* and written into
+ * Dynamic Fog's record on every update. **`open: true` is the only form an open door takes and absence is
+ * closed**, so a closed door is shaped exactly as every door was before there was a state. Every edit
+ * carries the state with the door. **Where two doors merge, closed wins** (user, 2026-09-30): the merged
+ * door is open only if every door in it was, since a closed door shows less and the safe direction is
+ * showing less.
+ *
  * **Twenty-four mutations** across this module, the carrying in `planarOps.ts` and the store, **twenty-four
  * caught** — one, a decoded door of no length, only after the fixture written for it. The sweep in the
  * tests checks every edit that rebuilds a segment against an oracle that works from geometry alone.
+ * **The state added twelve more, twelve caught** (2026-09-30): seven here — the merge rule, the shape of a
+ * closed door, and the state dropped by normalising, carrying, placing or cutting — and five in the store.
+ * The oracle settles its own merges by *closed wins*; a sweep of its own squeezes an open door and a
+ * closed one together, since the random edits met that case only seven times.
  *
  * Pure: no DOM, no SDK.
  */
@@ -44,6 +57,8 @@ export interface Door {
   readonly start: number;
   /** Distance from the segment's `a` end to the door's farther end. Always greater than `start`. */
   readonly end: number;
+  /** Present, and `true`, only on an open door; absent is closed. */
+  readonly open?: true;
 }
 
 /**
@@ -55,6 +70,12 @@ export interface Door {
 export interface CarriedDoor {
   readonly p: Vector2;
   readonly q: Vector2;
+  readonly open?: true;
+}
+
+/** A door from its two distances and its state, in the one shape a door is held in. */
+export function makeDoor(start: number, end: number, open: boolean | undefined): Door {
+  return open ? { start, end, open: true } : { start, end };
 }
 
 /** The length of a segment, in graph units. */
@@ -82,25 +103,30 @@ export function carryDoors(nodes: readonly Vector2[], edge: WallEdge): CarriedDo
   if (!edge.doors || edge.doors.length === 0) return [];
   const a = nodes[edge.a]!;
   const b = nodes[edge.b]!;
-  return edge.doors.map((door) => ({ p: pointAlong(a, b, door.start), q: pointAlong(a, b, door.end) }));
+  return edge.doors.map((door) => ({
+    p: pointAlong(a, b, door.start),
+    q: pointAlong(a, b, door.end),
+    ...(door.open ? { open: true as const } : {}),
+  }));
 }
 
 /**
  * Doors as distances, quantised, sorted, and with every overlap merged.
  *
  * **Touching counts as overlapping**: two doors meeting end to end are one opening, and as two records
- * they would be toggled separately at the table. A door of no length is dropped.
+ * they would be toggled separately at the table. A door of no length is dropped. **A merged door is
+ * closed if any door in it was** — this module's header has why.
  */
 export function normaliseDoors(doors: readonly Door[]): Door[] {
   const sorted = doors
-    .map((door) => ({ start: documentCoordinate(door.start), end: documentCoordinate(door.end) }))
+    .map((door) => makeDoor(documentCoordinate(door.start), documentCoordinate(door.end), door.open))
     .filter((door) => Number.isFinite(door.start) && Number.isFinite(door.end) && door.end > door.start)
     .sort((left, right) => left.start - right.start || left.end - right.end);
   const merged: Door[] = [];
   for (const door of sorted) {
     const last = merged[merged.length - 1];
     if (last && door.start <= last.end) {
-      if (door.end > last.end) merged[merged.length - 1] = { start: last.start, end: door.end };
+      merged[merged.length - 1] = makeDoor(last.start, Math.max(last.end, door.end), last.open && door.open);
     } else {
       merged.push(door);
     }
@@ -133,10 +159,10 @@ export function placeDoors(carried: readonly CarriedDoor[], a: Vector2, b: Vecto
   const ux = (b.x - a.x) / length;
   const uy = (b.y - a.y) / length;
   const placed: Door[] = [];
-  for (const { p, q } of carried) {
+  for (const { p, q, open } of carried) {
     const centre = ((p.x + q.x) / 2 - a.x) * ux + ((p.y + q.y) / 2 - a.y) * uy;
     const door = fitDoor(centre, segmentLength(p, q), length);
-    if (door) placed.push(door);
+    if (door) placed.push(makeDoor(door.start, door.end, open));
   }
   return normaliseDoors(placed);
 }
@@ -167,7 +193,7 @@ export function cutDoors(
     const length = pieces[piece]!;
     const start = Math.max(0, door.start - offset);
     const end = Math.min(length, door.end - offset);
-    if (end > start) out[piece]!.push({ start, end });
+    if (end > start) out[piece]!.push(makeDoor(start, end, door.open));
   }
   return out.map((list) => normaliseDoors(list));
 }

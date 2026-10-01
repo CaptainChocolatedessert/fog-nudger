@@ -20,12 +20,13 @@
  *
  * Pure: no DOM, no SDK. Distances are in graph units; the caller turns its screen-pixel reaches into
  * them. **Seventeen mutations, seventeen caught** — one, grabbing an end at a wall's reach, only after
- * the fixture written for it.
+ * the fixture written for it. **`toggleDoor` and the state a drag or slide keeps: six more, six caught**
+ * (2026-09-30).
  */
 
 import type { Vector2 } from "@owlbear-rodeo/sdk";
 
-import { doorEnds, normaliseDoors, segmentLength, type Door } from "../trace/doors";
+import { doorEnds, makeDoor, normaliseDoors, segmentLength, type Door } from "../trace/doors";
 import type { WallEdge, WallGraph } from "../trace/wallGraph";
 
 /** What is under a press, in the order it is asked. */
@@ -154,10 +155,10 @@ export function dragDoorEnd(
   const at = along(pointer, a, b);
   if (end === "end") {
     const start = Math.min(current.start, length - shortest);
-    return { edge, door: { start, end: Math.max(at, start + shortest) } };
+    return { edge, door: makeDoor(start, Math.max(at, start + shortest), current.open) };
   }
   const stop = Math.max(current.end, shortest);
-  return { edge, door: { start: Math.min(at, stop - shortest), end: stop } };
+  return { edge, door: makeDoor(Math.min(at, stop - shortest), stop, current.open) };
 }
 
 /** The door slid along its segment by as far as the pointer has moved along it since the press. */
@@ -179,7 +180,7 @@ export function slideDoor(
   const shift = length > 0 ? ((pointer.x - press.x) * dx + (pointer.y - press.y) * dy) / length : 0;
   const size = current.end - current.start;
   const start = Math.max(0, Math.min(length - size, current.start + shift));
-  return { edge, door: { start, end: start + size } };
+  return { edge, door: makeDoor(start, start + size, current.open) };
 }
 
 /** The graph with one segment's doors replaced, every other segment kept as the same object. */
@@ -210,6 +211,22 @@ export function removeDoor(graph: WallGraph, edge: number, door: number): WallGr
     graph,
     edge,
     segment.doors.filter((_, index) => index !== door),
+  );
+}
+
+/**
+ * The graph with one door opened if it was closed and closed if it was open — what *Toggle door* does
+ * (user, 2026-09-30). Its place and every other door are untouched; the graph itself when there is no
+ * such door.
+ */
+export function toggleDoor(graph: WallGraph, edge: number, door: number): WallGraph {
+  const segment = graph.edges[edge];
+  const current = segment?.doors?.[door];
+  if (!segment?.doors || !current) return graph;
+  return withSegmentDoors(
+    graph,
+    edge,
+    segment.doors.map((each, index) => (index === door ? makeDoor(each.start, each.end, !each.open) : each)),
   );
 }
 

@@ -466,6 +466,19 @@ export const TOOLS: readonly ToolChoice[] = [
     drag: "edit",
     hint: "Click a wall segment to make it a door, or drag along it. Click a door to remove it, or drag it or its ends.",
   },
+  /*
+    **Toggle door** (user, 2026-09-29, built 2026-09-30): open or close a door in the workspace, so an
+    update writes it that way. *Toggle*, like the edge walls, because one name has to be true of both
+    clicks. `edit`: it takes a press on a door and pans anywhere else. Toggling lives only here, never on
+    a double-click in *Create door* (user).
+  */
+  {
+    id: "doorToggle",
+    label: "Toggle door",
+    band: "walls",
+    drag: "edit",
+    hint: "Click a door to open or close it.",
+  },
 ];
 
 

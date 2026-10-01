@@ -231,6 +231,14 @@ const ICONS: Readonly<Record<string, string>> = {
   */
   door: '<rect x="6" y="3" width="12" height="18" rx="1" /><path d="M3 21h18" /><circle cx="14.6" cy="12.4" r="1" fill="currentColor" stroke="none" />',
   /*
+    **Toggle door**: the open door from the marker every door wears (user, 2026-09-30) — Dynamic Fog's
+    picture of an open door, a narrow leaf with the frame beside it — drawn in the strip's outline
+    style, the same box as *Create door*'s one row up. The frame's top sits a little below the leaf's,
+    as in the marker, which is what tells it from a closed door with a line down it.
+  */
+  doorToggle:
+    '<rect x="6" y="3" width="7" height="18" rx="1" /><path d="M13 5h5v16" /><path d="M3 21h18" /><circle cx="10.6" cy="12.4" r="1" fill="currentColor" stroke="none" />',
+  /*
     A bin, and the one glyph here that **is drawn twice** — at the foot of Ink and at the foot of
     Walls, for *Clear ink edits* and *Clear wall edits* (user, 2026-09-20, from four candidates at
     strip size).

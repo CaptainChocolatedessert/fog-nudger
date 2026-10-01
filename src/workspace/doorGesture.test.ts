@@ -12,6 +12,7 @@ import {
   removeDoor,
   slideDoor,
   stretchFrom,
+  toggleDoor,
   wholeSegment,
 } from "./doorGesture";
 
@@ -134,6 +135,72 @@ describe("placeDoor and removeDoor", () => {
     const next = removeDoor(CORNER, 0, 0);
     expect(next.edges[0]).toEqual({ a: 0, b: 1 });
     expect(removeDoor(CORNER, 1, 0)).toBe(CORNER);
+  });
+
+  it("merges an open door dragged over a closed one into a closed door", () => {
+    const open = toggleDoor(CORNER, 0, 0);
+    // A second, closed door further along, then the open one slid onto it.
+    const both = placeDoor(open, { edge: 0, door: { start: 0.3, end: 0.35 } });
+    expect(both.edges[0]!.doors!.map((door) => door.open === true)).toEqual([true, false]);
+    const slid = slideDoor(both, 0, 0, p(0.25, 0.5), p(0.4, 0.5))!;
+    expect(slid.door.open).toBe(true);
+    const merged = placeDoor(both, slid, 0);
+    expect(merged.edges[0]!.doors).toHaveLength(1);
+    expect(merged.edges[0]!.doors![0]!.open).toBeUndefined();
+  });
+});
+
+/*
+  Toggle door (2026-09-30): six mutations over the toggle and the state a drag keeps, six caught — the
+  module's header has the count with the others.
+*/
+describe("toggleDoor", () => {
+  /** The corner with a second door on the vertical wall, so a toggle has a neighbour to leave alone. */
+  const TWO: WallGraph = {
+    nodes: CORNER.nodes,
+    edges: [CORNER.edges[0]!, { a: 1, b: 2, doors: [{ start: Math.fround(0.1), end: Math.fround(0.2) }] }],
+  };
+
+  it("opens a closed door and closes an open one, keeping its place", () => {
+    const opened = toggleDoor(TWO, 0, 0);
+    expect(opened.edges[0]!.doors).toEqual([{ start: Math.fround(0.1), end: Math.fround(0.2), open: true }]);
+    const closed = toggleDoor(opened, 0, 0);
+    expect(closed.edges[0]!.doors).toEqual([{ start: Math.fround(0.1), end: Math.fround(0.2) }]);
+    expect(Object.keys(closed.edges[0]!.doors![0]!)).toEqual(["start", "end"]);
+  });
+
+  it("toggles only the door asked for, leaving its neighbours on the segment and every other segment as they were", () => {
+    const pair: WallGraph = {
+      nodes: CORNER.nodes,
+      edges: [
+        {
+          a: 0,
+          b: 1,
+          doors: [
+            { start: Math.fround(0.05), end: Math.fround(0.1) },
+            { start: Math.fround(0.2), end: Math.fround(0.3) },
+          ],
+        },
+        TWO.edges[1]!,
+      ],
+    };
+    const next = toggleDoor(pair, 0, 1);
+    expect(next.edges[0]!.doors!.map((door) => door.open === true)).toEqual([false, true]);
+    expect(next.edges[1]).toBe(pair.edges[1]);
+  });
+
+  it("does nothing where there is no such door", () => {
+    expect(toggleDoor(CORNER, 1, 0)).toBe(CORNER);
+    expect(toggleDoor(CORNER, 0, 1)).toBe(CORNER);
+    expect(toggleDoor(CORNER, 5, 0)).toBe(CORNER);
+  });
+
+  it("keeps a door's state when its end is dragged or it is slid", () => {
+    const opened = toggleDoor(CORNER, 0, 0);
+    expect(dragDoorEnd(opened, 0, 0, "end", p(0.35, 0.52), 0.01)!.door.open).toBe(true);
+    expect(dragDoorEnd(opened, 0, 0, "start", p(0.15, 0.52), 0.01)!.door.open).toBe(true);
+    expect(slideDoor(opened, 0, 0, p(0.25, 0.5), p(0.3, 0.55))!.door.open).toBe(true);
+    expect(dragDoorEnd(CORNER, 0, 0, "end", p(0.35, 0.52), 0.01)!.door.open).toBeUndefined();
   });
 });
 

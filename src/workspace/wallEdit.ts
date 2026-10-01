@@ -1,7 +1,7 @@
 /**
  * The wall tools: moving a point, drawing a wall, erasing one, mending a gap, collapsing a small
- * region, dissolving a region, suppressing one, spanning an opening, spanning one with a door, and
- * creating a door.
+ * region, dissolving a region, suppressing one, spanning an opening, spanning one with a door,
+ * creating a door, and opening or closing one.
  *
  * **The first things in this project that change the GM's own work rather than a setting.** Every
  * control before them turns a number and re-derives; these change the graph, and it stays changed
@@ -79,6 +79,7 @@ import {
   removeDoor,
   slideDoor,
   stretchFrom,
+  toggleDoor,
   wholeSegment,
   type DoorPlacement,
   type DoorTarget,
@@ -137,7 +138,8 @@ export type WallTool =
   | "suppressRegion"
   | "span"
   | "spanDoor"
-  | "door";
+  | "door"
+  | "doorToggle";
 
 /**
  * Whether the tool in hand searches for a span: *Span opening*, or *Span door*, which places the same
@@ -361,6 +363,41 @@ let doorEcho = false;
 let doorHover: { readonly target: DoorTarget; readonly graph: WallGraph } | null = null;
 /** The door the last click made, so the second click of a double-click can be recognised. */
 let madeDoor: MadeDoor | null = null;
+
+/**
+ * Toggle door: the door under the pointer, and the one a press landed on — each with the graph it was
+ * found on. A press is taken only on a door, its ends counted as the door, and the door is toggled on
+ * release; anywhere else the press pans.
+ */
+interface ToggleTarget {
+  readonly graph: WallGraph;
+  readonly edge: number;
+  readonly door: number;
+}
+let toggleHover: ToggleTarget | null = null;
+let togglePress: ToggleTarget | null = null;
+
+/** The door *Toggle door* would act on where the pointer is, by *Create door*'s own hit test. */
+function toggleTargetAt(graph: WallGraph, point: MapPoint): ToggleTarget | null {
+  const target = doorTargetAt(
+    graph,
+    { x: point.x, y: point.y },
+    LAND_RADIUS_PX * point.perPixel,
+    GRAB_RADIUS_PX * point.perPixel,
+  );
+  if (!target || target.kind === "wall") return null;
+  return { graph, edge: target.edge, door: target.door };
+}
+
+/**
+ * The door a click with *Toggle door* would open or close, for the layer to mark — its marker's rim in
+ * the highlight a grabbable vertex wears, which says *this one* and nothing about its state (user,
+ * 2026-09-30, over drawing the state a click would leave).
+ */
+export function doorToToggle(): ToggleTarget | null {
+  if (tool !== "doorToggle") return null;
+  return togglePress ?? toggleHover;
+}
 
 /** What the door tool would do where the pointer is, for the layer to draw before it happens. */
 export interface DoorView {
@@ -589,6 +626,7 @@ export function setTool(next: WallTool): void {
   markTarget = null;
   doorHover = null;
   madeDoor = null;
+  toggleHover = null;
   dropSpan();
   setGrabTarget(false);
   /*
@@ -725,6 +763,7 @@ function clearGesture(): void {
   doorDrag = null;
   doorTravelled = false;
   doorEcho = false;
+  togglePress = null;
 }
 
 function start(point: MapPoint): boolean {
@@ -782,6 +821,14 @@ function start(point: MapPoint): boolean {
       return true;
     }
     doorPress = { target, at: { x: point.x, y: point.y }, graph };
+    invalidate();
+    return true;
+  }
+
+  // A press on a door is taken and toggles it on release; anywhere else the press pans.
+  if (tool === "doorToggle") {
+    togglePress = toggleTargetAt(graph, point);
+    if (!togglePress) return false;
     invalidate();
     return true;
   }
@@ -1088,7 +1135,9 @@ function escape(): boolean {
     say("Chain cancelled.");
     return true;
   }
-  if (!anchor && !grab && !pressedMend && !pressedCollapse && !pressedPrune && !doorPress) return false;
+  if (!anchor && !grab && !pressedMend && !pressedCollapse && !pressedPrune && !doorPress && !togglePress) {
+    return false;
+  }
   cancel();
   say("Cancelled.");
   return true;
@@ -1218,6 +1267,26 @@ function end(): void {
       return;
     }
     commit(placed, "Spanned a door.", "spanning a door", graph);
+    return;
+  }
+
+  /*
+    Toggle door: the door the press landed on opens if it was closed and closes if it was open — one
+    edit, one step of undo, saved like every other. A press that travelled was a drag, as with Span.
+  */
+  if (tool === "doorToggle") {
+    const target = togglePress;
+    const dragged = travelled;
+    clearGesture();
+    invalidate();
+    if (!target || dragged || target.graph !== graph) return;
+    const opening = graph.edges[target.edge]?.doors?.[target.door]?.open !== true;
+    commitDoor(
+      toggleDoor(graph, target.edge, target.door),
+      opening ? "Opened a door." : "Closed a door.",
+      opening ? "opening a door" : "closing a door",
+      graph,
+    );
     return;
   }
 
@@ -1383,6 +1452,7 @@ function commit(
       hoveredEdge = null;
       hoveredRegion = null;
       doorHover = null;
+      toggleHover = null;
       dropSpan();
       if (lastPointer) hover({ ...lastPointer, perPixel: lastPerPixel, modifier: false });
       invalidate();
@@ -1401,7 +1471,8 @@ function hover(point: MapPoint | null): void {
       hoveredRegion === null &&
       markTarget === null &&
       spanTarget === null &&
-      doorHover === null
+      doorHover === null &&
+      toggleHover === null
     ) {
       return;
     }
@@ -1413,6 +1484,7 @@ function hover(point: MapPoint | null): void {
     hoveredRegion = null;
     markTarget = null;
     doorHover = null;
+    toggleHover = null;
     dropSpan();
     setGrabTarget(false);
     invalidate();
@@ -1441,6 +1513,18 @@ function hover(point: MapPoint | null): void {
   */
   if (spans(tool)) {
     scheduleSpan(point);
+    return;
+  }
+
+  // A crosshair over a door, whose marker is highlighted; the hand elsewhere.
+  if (tool === "doorToggle") {
+    const target = toggleTargetAt(graph, point);
+    setGrabTarget(target !== null);
+    const same =
+      target?.graph === toggleHover?.graph && target?.edge === toggleHover?.edge && target?.door === toggleHover?.door;
+    if (same) return;
+    toggleHover = target;
+    invalidate();
     return;
   }
 

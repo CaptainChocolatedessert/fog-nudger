@@ -102,7 +102,8 @@ const RETRY_BACKOFF_MS = [250, 750, 2_000] as const;
  * placement is not in it — only the item's id — and neither are the scene's fog colour and stroke
  * width, and all three change what a push writes. Kept in the scene, it would leave a moved map's fog where it was; the
  * user decided not to keep it (2026-09-29), since opening and closing resetting the doors is
- * consistent with every other in-scene edit.
+ * consistent with every other in-scene edit. Since *Toggle door* (2026-09-30) "resetting" means back to
+ * each door's state in the workspace rather than closed.
  */
 let lastPushed: string | null = null;
 
@@ -231,7 +232,7 @@ async function wallGraphSource(graph: WallGraph): Promise<PushSource | string> {
     note:
       `emit: from the wall graph — ${emission.regions.length} rooms, ` +
       `${emission.suppressed} suppressed, ${emission.walls.length} wall lines, ` +
-      `${emission.doors.placed} doors, ${check}` +
+      `${emission.doors.placed} doors (${emission.doors.open} open), ${check}` +
       // Every door's wall goes out on some item, so this should never print. Said if it does.
       (emission.doors.unplaced > 0 ? ` — ${emission.doors.unplaced} DOORS ON NO ITEM` : ""),
   };
